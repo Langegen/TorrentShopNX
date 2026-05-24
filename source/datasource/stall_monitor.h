@@ -1,0 +1,85 @@
+#pragma once
+// =============================================================================
+// StallMonitor — Мониторинг зависаний и отключение медленных пиров.
+//
+// Проблема: при стриминге пир может "держать" urgent кусок, но качать его
+// со скоростью < 1 KB/s. libtorrent не отключит такого пира — он технически
+// "качает". Мы должны обнаружить это и disconnect_peer() вручную.
+//
+// Вызывается из on_tick (раз в ~1 секунду).
+// =============================================================================
+
+#ifdef TSNX_USE_LIBTORRENT
+
+#include <libtorrent/torrent_handle.hpp>
+#include <libtorrent/peer_info.hpp>
+
+#include <chrono>
+#include <vector>
+
+namespace datasource {
+
+namespace lt = libtorrent;
+
+class StallMonitor {
+public:
+    StallMonitor() = default;
+
+    /// Инициализация с торрент-хэндлом.
+    void init(lt::torrent_handle handle);
+
+    /// Сброс в исходное состояние (при смене торрента/файла).
+    void reset();
+
+    /// Основной метод — вызывается каждую секунду из tick-потока.
+    ///
+    /// Алгоритм:
+    /// 1. Проверяем общую скорость загрузки
+    /// 2. Если < kStallThresholdBps, увеличиваем счётчик stall_ticks_
+    /// 3. Если stall_ticks_ >= kStallTicksBeforeAction:
+    ///    a. Получаем список пиров через get_peer_info()
+    ///    b. Находим пиров со скоростью < 1 KB/s
+    ///    c. Среди них ищем тех, кто "висит" на urgent кусках
+    ///    d. disconnect_peer() для таких пиров
+    ///
+    /// @param urgent_start  первый urgent кусок
+    /// @param urgent_end    последний urgent кусок
+    /// @return количество отключённых пиров
+    int on_tick(int urgent_start, int urgent_end);
+
+    /// Возвращает true если скорость ниже порога >= kStallTicksBeforeAction тиков подряд.
+    bool is_stalled() const;
+
+    /// Сколько миллисекунд мы в состоянии stall (0 если не в stall).
+    int stall_duration_ms() const;
+
+    /// Текущая скорость загрузки (обновляется в on_tick).
+    int download_rate_bps() const { return last_download_rate_; }
+
+private:
+    /// Проверяет, загружает ли пир один из urgent кусков.
+    /// Смотрит downloading_piece_index в peer_info.
+    bool is_peer_on_urgent_piece(const lt::peer_info& pi,
+                                  int urgent_start, int urgent_end) const;
+
+    lt::torrent_handle handle_;
+    bool initialized_ = false;
+
+    int stall_ticks_ = 0;
+    int last_download_rate_ = 0;
+    std::chrono::steady_clock::time_point stall_started_{};
+
+    // --- Конфигурация ---
+    // Порог скорости, ниже которого считаем "stall" (50 KB/s)
+    static constexpr int kStallThresholdBps = 50 * 1024;
+    // Скорость пира, ниже которой считаем его "медленным" (1 KB/s)
+    static constexpr int kSlowPeerThresholdBps = 1 * 1024;
+    // Сколько тиков подряд должен быть stall до начала отключения пиров
+    static constexpr int kStallTicksBeforeAction = 5;
+    // Максимум пиров для отключения за один тик
+    static constexpr int kMaxDisconnectsPerTick = 2;
+};
+
+} // namespace datasource
+
+#endif // TSNX_USE_LIBTORRENT

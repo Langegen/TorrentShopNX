@@ -1,0 +1,51 @@
+# =============================================================================
+# TorrentShopNX Git Ignore Configuration
+# =============================================================================
+
+# Nintendo Switch Build Outputs
+*.nro
+*.elf
+*.nacp
+*.map
+*.lst
+
+# Build Directory
+build/
+obj/
+
+# C++ Compilation Artifacts
+*.o
+*.d
+*.a
+*.so
+*.lib
+*.dll
+
+# Standard Temporary Files
+_NUL
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+
+# IDEs & Editor Configuration
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln
+*.vcxproj
+*.filters
+*.db
+*.opendb
+.vs/
+
+# External Dependencies & Cloned Repositories
+# (fetched by fetch scripts or stored locally)
+_external/
+
+# Third-Party Go TorrServer Source (Not part of the client build)
+# Exclude from client repository to keep repo size clean and lightweight
+TorrServer/

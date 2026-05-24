@@ -1,0 +1,1149 @@
+#include "download_manager.h"
+
+#include <sys/stat.h>
+#include <cstdio>
+#include <cctype>
+#include <algorithm>
+#include <chrono>
+
+#include "../config/config.h"
+#include "../datasource/internal_torrent_engine.h"
+#include "../net/http_client.h"
+#include "../torrent/torrent_engine.h"
+#include "../utils/log.h"
+
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
+namespace download {
+
+static bool isTransferActive(download::DownloadState state) {
+    return state == download::DownloadState::Downloading ||
+           state == download::DownloadState::StreamPreparing ||
+           state == download::DownloadState::StreamInstalling ||
+           state == download::DownloadState::Installing;
+}
+
+static void updateSleepPolicy(bool has_active_transfers) {
+#ifdef __SWITCH__
+    static bool initialized = false;
+    static bool last_keep_awake = false;
+
+    const bool enabled = config::ConfigManager::instance().getKeepAwakeDuringDownloads();
+    const bool keep_awake = enabled && has_active_transfers;
+    if (initialized && keep_awake == last_keep_awake) {
+        return;
+    }
+
+    appletSetMediaPlaybackState(keep_awake);
+    util::logLine(std::string("power: keep-awake ") + (keep_awake ? "enabled" : "disabled"));
+    last_keep_awake = keep_awake;
+    initialized = true;
+#else
+    (void)has_active_transfers;
+#endif
+}
+
+DownloadManager::DownloadManager() = default;
+DownloadManager::~DownloadManager() {
+    stopAllStreamConsumers();
+}
+
+size_t DownloadManager::addToQueue(const std::string& title,
+                                   const std::string& magnet,
+                                   int forced_file_index,
+                                   const std::string& forced_stream_name) {
+    DownloadItem item;
+    item.title = title;
+    item.magnet = magnet;
+    item.forced_file_index = forced_file_index;
+    item.forced_stream_name = forced_stream_name;
+    item.state = DownloadState::Queued;
+    item.installer = installer::StreamInstaller(64 * 1024 * 1024);
+    queue_.push_back(std::move(item));
+    return queue_.size() - 1;
+}
+
+static bool getFileSize(const std::string& path, uint64_t& size_out) {
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) return false;
+    size_out = (uint64_t)st.st_size;
+    return true;
+}
+
+static size_t readChunkToInstaller(const std::string& path, uint64_t& offset, installer::StreamInstaller& installer, size_t max_bytes) {
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return 0;
+    if (std::fseek(f, (long)offset, SEEK_SET) != 0) {
+        std::fclose(f);
+        return 0;
+    }
+
+    static std::vector<unsigned char> buf(1024 * 1024);
+    size_t to_read = max_bytes < buf.size() ? max_bytes : buf.size();
+    size_t n = std::fread(buf.data(), 1, to_read, f);
+    std::fclose(f);
+    if (n > 0) {
+        installer.readChunk(buf.data(), n);
+        offset += n;
+    }
+    return n;
+}
+
+static void replaceAllInPlace(std::string& s, const std::string& from, const std::string& to) {
+    if (from.empty()) return;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+}
+
+static std::string normalizeTorrentLink(std::string link) {
+    // Catalogs often escape query separators; recover a usable magnet URL.
+    replaceAllInPlace(link, "&amp;", "&");
+    replaceAllInPlace(link, "&#38;", "&");
+    replaceAllInPlace(link, "\\u0026", "&");
+    replaceAllInPlace(link, "\\u002F", "/");
+    replaceAllInPlace(link, "\\/", "/");
+    return link;
+}
+
+static std::string extractBtihHash(std::string magnet) {
+    std::transform(magnet.begin(), magnet.end(), magnet.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    const std::string marker = "xt=urn:btih:";
+    size_t pos = magnet.find(marker);
+    if (pos == std::string::npos) return {};
+    pos += marker.size();
+    size_t end = magnet.find('&', pos);
+    if (end == std::string::npos) end = magnet.size();
+    if (end <= pos) return {};
+    return magnet.substr(pos, end - pos);
+}
+
+static bool equalsIgnoreCase(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        unsigned char ca = static_cast<unsigned char>(a[i]);
+        unsigned char cb = static_cast<unsigned char>(b[i]);
+        if (std::tolower(ca) != std::tolower(cb)) return false;
+    }
+    return true;
+}
+
+static int installFilePriority(const std::string& name) {
+    std::string lower = name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    if (lower.size() >= 4 && lower.rfind(".nsp") == lower.size() - 4) return 4;
+    if (lower.size() >= 4 && lower.rfind(".nsz") == lower.size() - 4) return 3;
+    if (lower.size() >= 4 && lower.rfind(".xci") == lower.size() - 4) return 2;
+    if (lower.size() >= 4 && lower.rfind(".xcz") == lower.size() - 4) return 2;
+    if (lower.size() >= 5 && lower.rfind(".pfs0") == lower.size() - 5) return 1;
+    return 0;
+}
+
+static std::string ensureHttpUrl(std::string url) {
+    if (url.empty()) return "http://127.0.0.1:8090";
+    if (url.find("://") == std::string::npos) {
+        url = "http://" + url;
+    }
+    while (!url.empty() && url.back() == '/') {
+        url.pop_back();
+    }
+    return url;
+}
+
+static std::string urlEncodeLocal(const std::string& value) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(value.size() * 3);
+    for (unsigned char c : value) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out.push_back(static_cast<char>(c));
+        } else {
+            out.push_back('%');
+            out.push_back(hex[(c >> 4) & 0x0F]);
+            out.push_back(hex[c & 0x0F]);
+        }
+    }
+    return out;
+}
+
+static uint64_t parseTitleIdFromFileName(const std::string& name) {
+    size_t start = name.find('[');
+    while (start != std::string::npos) {
+        size_t end = name.find(']', start);
+        if (end != std::string::npos && (end - start) == 17) {
+            std::string tid_str = name.substr(start + 1, 16);
+            try {
+                return std::stoull(tid_str, nullptr, 16);
+            } catch (...) {}
+        }
+        start = name.find('[', start + 1);
+    }
+    return 0;
+}
+
+static std::string streamRouteNameFromPath(const std::string& path_or_name, const std::string& fallback) {
+    std::string name = path_or_name;
+    size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) {
+        name = name.substr(slash + 1);
+    }
+    if (name.empty()) {
+        name = fallback;
+    }
+    return name;
+}
+
+static bool chooseInstallFile(const std::vector<torrent::TorrentFileInfo>& files,
+                               int& out_index,
+                               std::string& out_stream_name) {
+    if (files.empty()) return false;
+
+    int chosen_index = -1;
+    std::string chosen_stream_name;
+    unsigned long long chosen_size = 0;
+    int chosen_priority = -1;
+
+    for (const auto& f : files) {
+        const int priority = installFilePriority(f.name);
+        if (priority <= 0) {
+            continue;
+        }
+        if (chosen_index < 0 ||
+            priority > chosen_priority ||
+            (priority == chosen_priority && f.size > chosen_size)) {
+            chosen_priority = priority;
+            chosen_size = f.size;
+            chosen_index = f.index;
+            chosen_stream_name = f.name;
+        }
+    }
+
+    if (chosen_index < 0) {
+        return false;
+    }
+
+    out_index = chosen_index;
+    out_stream_name = chosen_stream_name;
+    return true;
+}
+
+static std::string buildStreamPlayUrl(const std::string& base_url,
+                                      const std::string& route_name,
+                                      const std::string& hash,
+                                      int file_index) {
+    return base_url + "/stream/" + urlEncodeLocal(route_name) + "?link=" + urlEncodeLocal(hash) +
+           "&index=" + std::to_string(file_index) + "&play";
+}
+
+static std::string buildStreamPreloadUrl(const std::string& base_url,
+                                         const std::string& route_name,
+                                         const std::string& hash,
+                                         int file_index) {
+    return base_url + "/stream/" + urlEncodeLocal(route_name) + "?link=" + urlEncodeLocal(hash) +
+           "&index=" + std::to_string(file_index) + "&preload";
+}
+
+static float smoothDownloadSpeedKbps(float displayed_kbps,
+                                     float sampled_kbps,
+                                     std::chrono::steady_clock::time_point last_sample_at,
+                                     std::chrono::steady_clock::time_point now) {
+    if (!(sampled_kbps >= 0.0f)) sampled_kbps = 0.0f;
+    if (!(displayed_kbps >= 0.0f)) displayed_kbps = 0.0f;
+
+    if (last_sample_at.time_since_epoch().count() == 0 || displayed_kbps == 0.0f) {
+        return sampled_kbps;
+    }
+
+    double dt_sec = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_sample_at).count() / 1000.0;
+    if (dt_sec <= 0.0) dt_sec = 0.8;
+
+    // Use a much larger smoothing window (20 seconds) to mask short-term
+    // disk IO bottlenecks which cause libtorrent's network thread to pause and 
+    // the instantaneous speed to drop to 0.
+    const double window_sec = 20.0;
+    double alpha = dt_sec / window_sec;
+    if (alpha < 0.02) alpha = 0.02;
+    if (alpha > 0.15) alpha = 0.15;
+
+    return static_cast<float>(displayed_kbps + (sampled_kbps - displayed_kbps) * alpha);
+}
+
+static constexpr uint64_t kPumpStartOffset = 28ull * 1024ull * 1024ull;
+static constexpr uint64_t kPumpRewindBytes = 1024ull * 1024ull;
+static constexpr uint64_t kPumpChunkBytes = 8ull * 1024ull * 1024ull;
+static constexpr int kPumpTimeoutSec = 6;
+static constexpr size_t kLocalHeaderProbeBytes = 4096;
+static constexpr int kPumpIdleSleepMs = 250;
+static constexpr int kPumpRepreloadEveryZeroReads = 12;
+static constexpr int kPumpRewindEveryZeroReads = 24;
+
+torrent::TorrentManager* DownloadManager::getTorrent() {
+    if (!torrent_) {
+        util::logLine("download: init torrent engine");
+        torrent_.reset(new torrent::TorrentManager());
+    }
+
+    std::string effective_url = ds_manager_.remoteUrl();
+    if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient) {
+        if (torrent::TorrentEngine::instance().start()) {
+            effective_url = torrent::TorrentEngine::instance().serverUrl();
+            ds_manager_.setLocalPort(torrent::TorrentEngine::instance().port());
+        } else {
+            util::logLine("download: local TorrentEngine start failed: " + torrent::TorrentEngine::instance().lastError());
+        }
+    }
+
+    torrent_->setServerUrl(effective_url);
+    return torrent_.get();
+}
+
+void DownloadManager::ensureStreamConsumer(DownloadItem& item) {
+    if (!item.preload_started || item.preload_file_index < 0 || item.torrent_id < 0) return;
+    if (item.stream_consumer_started) return;
+
+    std::string hash = item.torrent_hash;
+    if (hash.empty() && torrent_) {
+        torrent_->getTorrentHash(item.torrent_id, hash);
+    }
+    if (hash.empty()) return;
+
+    const bool local_engine = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    const std::string base_url = ensureHttpUrl(
+        (torrent_ != nullptr && !torrent_->getServerUrl().empty())
+            ? torrent_->getServerUrl()
+            : ds_manager_.remoteUrl());
+    const std::string route_name = streamRouteNameFromPath(item.preload_stream_name, hash);
+    const int torrent_id = item.torrent_id;
+    const int file_index = item.preload_file_index;
+
+    {
+        std::lock_guard<std::mutex> lock(stream_consumers_mtx_);
+        for (const auto& existing : stream_consumers_) {
+            if (existing.torrent_id == torrent_id) {
+                item.stream_consumer_started = true;
+                return;
+            }
+        }
+    }
+
+    auto stop_flag = std::make_shared<std::atomic<bool>>(false);
+    StreamConsumer consumer;
+    consumer.torrent_id = torrent_id;
+    consumer.stop = stop_flag;
+    consumer.worker = std::thread([stop_flag, base_url, route_name, hash, file_index, local_engine]() {
+        net::HttpClient http;
+        net::HttpClient preload_http;
+        http.setKeepAlive(true);
+        const int timeout_sec = local_engine ? 20 : kPumpTimeoutSec;
+        const uint64_t chunk_bytes = local_engine ? (512ull * 1024ull) : kPumpChunkBytes;
+        const uint64_t start_offset = local_engine ? 0ull : kPumpStartOffset;
+        const int repreload_every = local_engine ? 4 : kPumpRepreloadEveryZeroReads;
+        http.setTimeout(timeout_sec);
+        preload_http.setTimeout(3);
+
+        const std::string play_url = buildStreamPlayUrl(base_url, route_name, hash, file_index);
+        const std::string preload_url = buildStreamPreloadUrl(base_url, route_name, hash, file_index);
+
+        uint64_t offset = start_offset;
+        int zero_reads = 0;
+        bool logged_first_success = false;
+
+        while (!stop_flag->load()) {
+            size_t received = 0;
+            int code = http.httpGetStream(play_url, offset, chunk_bytes,
+                                          [&](const void*, size_t n) -> size_t {
+                                              if (stop_flag->load()) return 0;
+                                              received += n;
+                                              return n;
+                                          });
+            if ((code == 200 || code == 206 || code == 0) && received > 0) {
+                if (!logged_first_success) {
+                    util::logLine("download: stream consumer received " + std::to_string(received) +
+                                  " bytes from " + hash + " at offset=" + std::to_string(offset));
+                    logged_first_success = true;
+                }
+                offset += static_cast<uint64_t>(received);
+                zero_reads = 0;
+                continue;
+            }
+
+            ++zero_reads;
+            if ((zero_reads % repreload_every) == 0) {
+                preload_http.httpGet(preload_url);
+            }
+            if (zero_reads == 1 || (zero_reads % 8) == 0) {
+                util::logLine("download: stream consumer waiting hash=" + hash +
+                              " offset=" + std::to_string(offset) +
+                              " code=" + std::to_string(code) +
+                              " zero_reads=" + std::to_string(zero_reads));
+            }
+            if ((zero_reads % kPumpRewindEveryZeroReads) == 0) {
+                if (offset > kPumpRewindBytes) {
+                    offset -= kPumpRewindBytes;
+                } else {
+                    offset = start_offset;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(kPumpIdleSleepMs));
+        }
+    });
+
+    {
+        std::lock_guard<std::mutex> lock(stream_consumers_mtx_);
+        stream_consumers_.push_back(std::move(consumer));
+    }
+
+    item.stream_consumer_started = true;
+    util::logLine("download: stream consumer started hash=" + hash +
+                  " file_index=" + std::to_string(file_index) +
+                  " base_url=" + base_url +
+                  (local_engine ? " mode=local" : " mode=remote"));
+}
+
+void DownloadManager::stopStreamConsumer(int torrent_id) {
+    if (torrent_id < 0) return;
+
+    std::thread worker;
+    std::shared_ptr<std::atomic<bool>> stop_flag;
+
+    {
+        std::lock_guard<std::mutex> lock(stream_consumers_mtx_);
+        for (auto it = stream_consumers_.begin(); it != stream_consumers_.end(); ++it) {
+            if (it->torrent_id != torrent_id) continue;
+            stop_flag = it->stop;
+            worker = std::move(it->worker);
+            stream_consumers_.erase(it);
+            break;
+        }
+    }
+
+    if (stop_flag) {
+        stop_flag->store(true);
+    }
+    if (worker.joinable()) {
+        worker.join();
+    }
+    if (stop_flag) {
+        util::logLine("download: stream consumer stopped torrent_id=" + std::to_string(torrent_id));
+    }
+}
+
+void DownloadManager::stopAllStreamConsumers() {
+    std::vector<std::thread> workers;
+    workers.reserve(stream_consumers_.size());
+    {
+        std::lock_guard<std::mutex> lock(stream_consumers_mtx_);
+        for (auto& consumer : stream_consumers_) {
+            if (consumer.stop) {
+                consumer.stop->store(true);
+            }
+            if (consumer.worker.joinable()) {
+                workers.push_back(std::move(consumer.worker));
+            }
+        }
+        stream_consumers_.clear();
+    }
+    for (auto& worker : workers) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+    for (auto& item : queue_) {
+        item.stream_consumer_started = false;
+    }
+}
+
+bool DownloadManager::startDownload(size_t index) {
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.state != DownloadState::Queued) return false;
+
+    if (item.stream_consumer_started && item.torrent_id >= 0) {
+        stopStreamConsumer(item.torrent_id);
+        item.stream_consumer_started = false;
+    }
+
+    if (item.magnet.empty()) {
+        item.state = DownloadState::Failed;
+        item.error_message = "Empty torrent link";
+        util::logLine("download: empty torrent link for " + item.title);
+        return false;
+    }
+
+    const std::string link = normalizeTorrentLink(item.magnet);
+    const bool local_mode_only = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    std::string local_hash;
+    int id = -1;
+    if (local_mode_only) {
+        local_hash = extractBtihHash(link);
+        if (local_hash.empty()) {
+            item.state = DownloadState::Failed;
+            item.error_message = "Failed to resolve BTIH hash from magnet";
+            util::logLine("download: local client cannot start without BTIH hash for " + item.title);
+            return false;
+        }
+        util::logLine("download: local client queued hash=" + local_hash);
+    } else {
+        id = getTorrent()->addMagnet(link);
+        if (id < 0) {
+            item.state = DownloadState::Failed;
+            item.error_message = "Failed to add torrent to TorrServer";
+            util::logLine("download: failed to add torrent to TorrServer for " + item.title);
+            return false;
+        }
+    }
+
+    item.state = DownloadState::Downloading;
+    item.torrent_id = id;
+    item.preload_started = false;
+    item.preload_file_index = -1;
+    item.preload_stream_name.clear();
+    item.auto_hybrid_started = false;
+    item.stream_consumer_started = false;
+    item.hybrid_installer.reset();
+    item.pump_offset = 0;
+    item.pump_zero_reads = 0;
+    item.pump_last_at = std::chrono::steady_clock::time_point{};
+    item.download_speed_kbps = 0.0f;
+    item.speed_sample_at = std::chrono::steady_clock::time_point{};
+    item.start_time = std::chrono::steady_clock::now();
+    item.error_message.clear();
+    item.torrent_hash.clear();
+
+    if (local_mode_only) {
+        item.torrent_hash = local_hash;
+    } else if (item.torrent_id >= 0) {
+        std::string hash;
+        if (torrent_ && torrent_->getTorrentHash(item.torrent_id, hash)) {
+            item.torrent_hash = hash;
+            util::logLine("download: torrent hash: " + hash);
+        }
+    }
+
+    if (item.torrent_hash.empty()) {
+        item.torrent_hash = extractBtihHash(link);
+        if (item.torrent_hash.empty()) {
+            item.state = DownloadState::Failed;
+            item.error_message = "Failed to resolve BTIH hash from magnet";
+            util::logLine("download: addMagnet failed and BTIH is unavailable for " + item.title);
+            return false;
+        }
+        if (local_mode_only) {
+            util::logLine("download: local client hash=" + item.torrent_hash);
+        } else {
+            util::logLine("download: TorrServer add failed, using local client hash=" + item.torrent_hash);
+        }
+    }
+
+    return true;
+}
+
+void DownloadManager::startNextDownload() {
+    for (size_t i = 0; i < queue_.size(); ++i) {
+        if (queue_[i].state != DownloadState::Queued) continue;
+        if (startDownload(i)) return;
+    }
+}
+
+void DownloadManager::trackProgress() {
+    auto now = std::chrono::steady_clock::now();
+    bool refreshed_torrent_list = false;
+    bool local_hybrid_active = false;
+    for (const auto& item : queue_) {
+        if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
+            item.state == DownloadState::StreamInstalling &&
+            item.hybrid_installer) {
+            local_hybrid_active = true;
+            break;
+        }
+    }
+    if (torrent_) {
+        const auto poll_interval = local_hybrid_active
+            ? std::chrono::milliseconds(5000)
+            : std::chrono::milliseconds(800);
+        if (last_torrent_list_.empty() ||
+            last_torrent_list_poll_.time_since_epoch().count() == 0 ||
+            (now - last_torrent_list_poll_) >= poll_interval) {
+            auto fresh_list = torrent_->getTorrentList();
+            if (!fresh_list.empty()) {
+                last_torrent_list_ = std::move(fresh_list);
+            }
+            last_torrent_list_poll_ = now;
+            refreshed_torrent_list = true;
+        }
+    }
+
+    const auto& list = last_torrent_list_;
+    for (size_t i = 0; i < queue_.size(); ++i) {
+        auto& item = queue_[i];
+        const bool downloading_active =
+            (item.state == DownloadState::Downloading || item.state == DownloadState::StreamInstalling);
+        float hybrid_speed_kbps = -1.0f;
+
+        if (!downloading_active && item.stream_consumer_started && item.torrent_id >= 0) {
+            stopStreamConsumer(item.torrent_id);
+            item.stream_consumer_started = false;
+        }
+
+        if (item.state == DownloadState::Cancelled ||
+            item.state == DownloadState::Completed ||
+            item.state == DownloadState::Failed) {
+            continue;
+        }
+
+        if (item.hybrid_installer && downloading_active) {
+            float install_p = item.hybrid_installer->progress();
+            if (!(install_p >= 0.0f)) install_p = 0.0f;
+            if (install_p > 1.0f) install_p = 1.0f;
+            item.install_progress = install_p;
+
+            float dl_p = item.hybrid_installer->downloadProgress();
+            if (!(dl_p >= 0.0f)) dl_p = 0.0f;
+            if (dl_p > 1.0f) dl_p = 1.0f;
+            item.progress = dl_p;
+            hybrid_speed_kbps = static_cast<float>(item.hybrid_installer->downloadSpeedKbps());
+            if (!(hybrid_speed_kbps >= 0.0f)) hybrid_speed_kbps = 0.0f;
+
+            if (item.hybrid_installer->isFinished()) {
+                if (item.hybrid_installer->hasError()) {
+                    item.state = DownloadState::Failed;
+                    item.error_message = item.hybrid_installer->errorMessage();
+                    item.download_speed_kbps = 0.0f;
+                    item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                    if (item.torrent_id >= 0) {
+                        torrent_->cancelTorrent(item.torrent_id);
+                    }
+                    util::logLine("download: hybrid install failed: " + item.error_message);
+                } else {
+                    item.state = DownloadState::Completed;
+                    item.download_speed_kbps = 0.0f;
+                    item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                    if (item.torrent_id >= 0) {
+                        torrent_->cancelTorrent(item.torrent_id);
+                    } else if (!item.torrent_hash.empty()) {
+                        torrent::TorrentEngine::instance().removeTorrent(item.torrent_hash);
+                    }
+                    util::logLine("download: hybrid install completed: " + item.title);
+                }
+                if (item.stream_consumer_started && item.torrent_id >= 0) {
+                    stopStreamConsumer(item.torrent_id);
+                    item.stream_consumer_started = false;
+                }
+                continue;
+            }
+        }
+
+        if (item.state == DownloadState::StreamPreparing) {
+            startHybridInstall(i);
+            continue;
+        }
+
+        if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
+            item.state == DownloadState::Downloading &&
+            item.forced_file_index >= 0 &&
+            !item.auto_hybrid_started &&
+            !item.hybrid_installer) {
+            item.preload_started = true;
+            item.preload_file_index = item.forced_file_index;
+            item.preload_stream_name = item.forced_stream_name;
+            util::logLine("download: local client starts selected file without HTTP preload hash=" +
+                          item.torrent_hash +
+                          " file_index=" + std::to_string(item.preload_file_index));
+            startHybridInstall(i);
+            continue;
+        }
+
+        if (item.state == DownloadState::Downloading || item.state == DownloadState::StreamInstalling) {
+            bool matched = false;
+            for (const auto& t : list) {
+                bool match = false;
+                if (item.torrent_id >= 0 && t.id == item.torrent_id) {
+                    match = true;
+                } else if (!item.torrent_hash.empty() && !t.hash.empty() &&
+                           equalsIgnoreCase(item.torrent_hash, t.hash)) {
+                    match = true;
+                } else if (item.torrent_id < 0 && !item.title.empty() && t.name == item.title) {
+                    match = true;
+                }
+
+                if (!match) {
+                    continue;
+                }
+
+                matched = true;
+                
+                // If hybrid installer is active, its downloadProgress() is already the overall progress.
+                // Otherwise, fallback to libtorrent's progress.
+                if (!item.hybrid_installer) {
+                    item.progress = t.percent_done;
+                }
+
+                float sampled_speed_kbps = t.download_speed_kbps;
+                if (hybrid_speed_kbps >= 0.0f) {
+                    const bool local_hybrid_stream =
+                        ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
+                        item.state == DownloadState::StreamInstalling &&
+                        item.hybrid_installer != nullptr;
+                    
+                    // In LocalClient mode, we prefer libtorrent's actual network speed (t.download_speed_kbps)
+                    // over the installer's internal reading speed (hybrid_speed_kbps), as the latter
+                    // might drop to 0 when the ring buffer is full even if download is active.
+                    sampled_speed_kbps = local_hybrid_stream
+                        ? t.download_speed_kbps
+                        : std::max(sampled_speed_kbps, hybrid_speed_kbps);
+                }
+                if (refreshed_torrent_list ||
+                    hybrid_speed_kbps >= 0.0f ||
+                    item.speed_sample_at.time_since_epoch().count() == 0) {
+                    item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
+                                                                       sampled_speed_kbps,
+                                                                       item.speed_sample_at,
+                                                                       now);
+                    item.speed_sample_at = now;
+                }
+                if (item.torrent_hash.empty() && !t.hash.empty()) {
+                    item.torrent_hash = t.hash;
+                }
+
+                if (!item.preload_started && item.torrent_id >= 0) {
+                    int chosen_index = -1;
+                    std::string chosen_stream_name;
+
+                    if (item.forced_file_index >= 0) {
+                        chosen_index = item.forced_file_index;
+                        chosen_stream_name = item.forced_stream_name;
+                    } else {
+                        std::vector<torrent::TorrentFileInfo> files;
+                        if (torrent_->getTorrentFiles(item.torrent_id, files) && !files.empty()) {
+                            chooseInstallFile(files, chosen_index, chosen_stream_name);
+                        }
+                    }
+
+                    if (chosen_index >= 0 &&
+                        torrent_->preloadTorrentFile(item.torrent_id, chosen_index, chosen_stream_name)) {
+                        item.preload_started = true;
+                        item.preload_file_index = chosen_index;
+                        item.preload_stream_name = chosen_stream_name;
+                        util::logLine("download: preload started hash=" + item.torrent_hash +
+                                      " file_index=" + std::to_string(chosen_index));
+                    }
+                }
+
+                if (item.preload_started) {
+                    if (item.state == DownloadState::Downloading &&
+                        !item.auto_hybrid_started &&
+                        !item.hybrid_installer) {
+                        if (startHybridInstall(i)) {
+                            item.auto_hybrid_started = true;
+                        }
+                    }
+                    if (item.state == DownloadState::Downloading &&
+                        !item.hybrid_installer &&
+                        ds_manager_.mode() != datasource::DataSourceMode::LocalClient) {
+                        ensureStreamConsumer(item);
+                    }
+                }
+
+                if (!item.hybrid_installer && !item.preload_started &&
+                    !item.stream_ready && item.torrent_id >= 0) {
+                    std::vector<std::string> paths;
+                    std::string name;
+                    if (torrent_->getStreamFiles(item.torrent_id, paths, name)) {
+                        item.stream_ready = true;
+                        item.stream_name = name;
+                        item.stream_files.clear();
+                        for (const auto& p : paths) {
+                            DownloadItem::StreamFile sf;
+                            sf.path = p;
+                            sf.offset = 0;
+                            item.stream_files.push_back(sf);
+                        }
+                        item.stream_index = 0;
+                        item.installer.openStream(item.stream_name);
+                        item.install_total = item.installer.totalSize();
+                        item.install_written = item.installer.writtenSize();
+                    }
+                }
+
+                if (!item.hybrid_installer && !item.preload_started &&
+                    item.stream_ready && !item.stream_done) {
+                    size_t max_bytes = 1024 * 1024;
+                    if (item.stream_index < item.stream_files.size()) {
+                        auto& sf = item.stream_files[item.stream_index];
+                        uint64_t fsize = 0;
+                        if (getFileSize(sf.path, fsize) && fsize > sf.offset) {
+                            readChunkToInstaller(sf.path, sf.offset, item.installer, max_bytes);
+                            item.installer.installChunk();
+                            item.install_total = item.installer.totalSize();
+                            item.install_written = item.installer.writtenSize();
+                            if (item.install_total > 0) {
+                                item.install_progress = (float)((double)item.install_written / (double)item.install_total);
+                            }
+                        } else if (getFileSize(sf.path, fsize) && fsize == sf.offset) {
+                            if (item.progress >= 1.0f || fsize > 0) {
+                                item.stream_index++;
+                            }
+                        }
+                    }
+                    if (item.installer.isComplete()) {
+                        item.stream_done = true;
+                        item.state = DownloadState::Installing;
+                    }
+                }
+
+                if (!item.hybrid_installer && !item.preload_started &&
+                    item.progress >= 1.0f && !item.stream_ready) {
+                    item.state = DownloadState::Installing;
+                }
+                break;
+            }
+
+            if (!matched && item.preload_started &&
+                item.state == DownloadState::Downloading &&
+                !item.hybrid_installer) {
+                ensureStreamConsumer(item);
+            }
+
+            if (!matched && hybrid_speed_kbps >= 0.0f) {
+                item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
+                                                                   hybrid_speed_kbps,
+                                                                   item.speed_sample_at,
+                                                                   now);
+                item.speed_sample_at = now;
+            }
+
+            if (!matched &&
+                item.state == DownloadState::Downloading &&
+                !item.auto_hybrid_started &&
+                !item.hybrid_installer &&
+                ds_manager_.mode() != datasource::DataSourceMode::LocalClient) {
+                if (startHybridInstall(i)) {
+                    item.auto_hybrid_started = true;
+                }
+            }
+        } else if (item.state == DownloadState::Installing) {
+            if (item.install_total > 0) {
+                item.install_progress = (float)((double)item.install_written / (double)item.install_total);
+            }
+            if (item.stream_done || item.stream_ready || (!item.stream_ready && item.progress >= 1.0f)) {
+                item.state = DownloadState::Completed;
+                item.download_speed_kbps = 0.0f;
+                item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                if (item.stream_consumer_started && item.torrent_id >= 0) {
+                    stopStreamConsumer(item.torrent_id);
+                    item.stream_consumer_started = false;
+                }
+            }
+        }
+    }
+
+    bool has_active = false;
+    bool has_queued = false;
+    for (const auto& item : queue_) {
+        if (isTransferActive(item.state)) {
+            has_active = true;
+        } else if (item.state == DownloadState::Queued) {
+            has_queued = true;
+        }
+    }
+
+    if (!has_active && has_queued) {
+        startNextDownload();
+        has_active = hasActiveTransfers();
+    }
+
+    updateSleepPolicy(has_active);
+}
+
+bool DownloadManager::hasActiveTransfers() const {
+    for (const auto& item : queue_) {
+        if (isTransferActive(item.state)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool DownloadManager::startHybridInstall(size_t index) {
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+
+    if (item.state == DownloadState::Queued) {
+        if (!startDownload(index)) {
+            return false;
+        }
+    }
+
+    if (item.state != DownloadState::Downloading &&
+        item.state != DownloadState::StreamPreparing &&
+        item.state != DownloadState::StreamInstalling) {
+        util::logLine("download: hybrid install cannot start in current state=" +
+                      std::to_string(static_cast<int>(item.state)));
+        return false;
+    }
+
+    if (item.hybrid_installer && !item.hybrid_installer->isFinished()) {
+        return true;
+    }
+
+    if (item.torrent_hash.empty()) {
+        item.torrent_hash = extractBtihHash(normalizeTorrentLink(item.magnet));
+    }
+    if (item.torrent_hash.empty()) {
+        util::logLine("download: hybrid install missing torrent hash");
+        return false;
+    }
+
+    const bool local_client_mode = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    const bool has_remote_torrent = (!local_client_mode &&
+                                     item.torrent_id >= 0 &&
+                                     torrent_ != nullptr &&
+                                     torrent_->isServerReachable());
+
+    int install_file_index = item.preload_file_index;
+    std::string install_stream_name = item.preload_stream_name;
+    if (install_file_index < 0) {
+        if (item.forced_file_index >= 0) {
+            install_file_index = item.forced_file_index;
+            install_stream_name = item.forced_stream_name;
+        } else {
+            if (has_remote_torrent) {
+                std::vector<torrent::TorrentFileInfo> files;
+                if (!torrent_->getTorrentFiles(item.torrent_id, files) || files.empty()) {
+                    return false;
+                }
+                if (!chooseInstallFile(files, install_file_index, install_stream_name)) {
+                    util::logLine("download: no installable NSP/NSZ/XCI file found in torrent");
+                    return false;
+                }
+            } else {
+                util::logLine("download: hybrid install requires an explicit file selection in local mode");
+                return false;
+            }
+        }
+
+        if (install_file_index < 0) {
+            util::logLine("download: hybrid install invalid file index");
+            return false;
+        }
+        item.preload_file_index = install_file_index;
+        item.preload_stream_name = install_stream_name;
+    }
+
+    if (!item.preload_started) {
+        if (has_remote_torrent) {
+            if (torrent_->preloadTorrentFile(item.torrent_id, install_file_index, install_stream_name)) {
+                item.preload_started = true;
+                util::logLine("download: preload started for hybrid hash=" + item.torrent_hash +
+                              " file_index=" + std::to_string(install_file_index));
+            } else {
+                util::logLine("download: hybrid install preload failed on remote, switching to internal stream");
+                item.preload_started = true;
+            }
+        } else {
+            item.preload_started = true;
+            util::logLine("download: internal mode, preload skipped");
+        }
+    }
+
+    if (item.stream_consumer_started && item.torrent_id >= 0) {
+        stopStreamConsumer(item.torrent_id);
+        item.stream_consumer_started = false;
+    }
+
+    auto* source = ds_manager_.getSource();
+    if (!source) {
+        util::logLine("download: data source is unavailable");
+        return false;
+    }
+
+    if (item.state == DownloadState::Downloading) {
+        source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
+
+        item.state = DownloadState::StreamPreparing;
+        util::logLine("download: starting async open for hybrid hash=" + item.torrent_hash +
+                      " index=" + std::to_string(install_file_index));
+        
+        item.open_future = std::make_shared<std::future<bool>>(
+            std::async(std::launch::async, [source, hash = item.torrent_hash, idx = install_file_index]() {
+                return source->open(hash, idx);
+            })
+        );
+        return true;
+    }
+
+    if (item.state == DownloadState::StreamPreparing) {
+        if (!item.open_future) {
+            item.state = DownloadState::Failed;
+            item.error_message = "Stream open task lost.";
+            return false;
+        }
+
+        if (item.open_future->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            return true; // Still preparing
+        }
+
+        bool success = item.open_future->get();
+        item.open_future.reset();
+
+        if (!success) {
+            util::logLine("download: failed to open hybrid stream hash=" + item.torrent_hash +
+                          " index=" + std::to_string(install_file_index));
+            item.state = DownloadState::Failed;
+            item.error_message = "Failed to open stream (metadata timeout or error).";
+            return false;
+        }
+
+        item.hybrid_installer = std::make_unique<installer::HybridNspInstaller>();
+
+        installer::InstallConfig config;
+        config.buffer_size = 128 * 1024 * 1024;
+        config.chunk_size = 8 * 1024 * 1024;
+        config.verify_sha256 = true;
+        config.install_ticket = true;
+#ifdef __SWITCH__
+        config.storage = NcmStorageId_SdCard;
+#endif
+
+        item.hybrid_installer->setSourceFileNameHint(install_stream_name);
+        item.hybrid_installer->setHintTitleId(parseTitleIdFromFileName(install_stream_name));
+
+        if (!item.hybrid_installer->start(source, config)) {
+            item.error_message = item.hybrid_installer->errorMessage();
+            util::logLine("download: failed to start hybrid install: " + item.error_message);
+            item.hybrid_installer.reset();
+            item.state = DownloadState::Failed;
+            return false;
+        }
+
+        item.auto_hybrid_started = true;
+        item.state = DownloadState::StreamInstalling;
+        util::logLine("download: hybrid install started for " + item.title +
+                      " (index=" + std::to_string(install_file_index) + ")");
+        return true;
+    }
+
+    return true;
+}
+
+bool DownloadManager::cancelDownload(size_t index) {
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.state == DownloadState::Completed ||
+        item.state == DownloadState::Cancelled) return false;
+
+    if (item.hybrid_installer) {
+        item.hybrid_installer->cancel();
+    }
+
+    if (item.stream_consumer_started && item.torrent_id >= 0) {
+        stopStreamConsumer(item.torrent_id);
+        item.stream_consumer_started = false;
+    }
+
+    if (item.torrent_id >= 0 && torrent_) {
+        torrent_->cancelTorrent(item.torrent_id);
+    }
+    item.state = DownloadState::Cancelled;
+    item.download_speed_kbps = 0.0f;
+    item.speed_sample_at = std::chrono::steady_clock::time_point{};
+    return true;
+}
+
+bool DownloadManager::getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files) {
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.torrent_id < 0) return false;
+    if (!torrent_) return false;
+    return torrent_->getTorrentFiles(item.torrent_id, out_files);
+}
+
+bool DownloadManager::probeTorrentFiles(const std::string& magnet,
+                                        std::vector<torrent::TorrentFileInfo>& out_files,
+                                        std::string* out_error) {
+    out_files.clear();
+    if (out_error) out_error->clear();
+
+    if (magnet.empty()) {
+        if (out_error) *out_error = "Empty magnet link";
+        return false;
+    }
+
+    const std::string link = normalizeTorrentLink(magnet);
+    if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient) {
+        std::vector<datasource::InternalTorrentFileInfo> local_files;
+        std::string probe_err;
+        if (!datasource::InternalTorrentEngine::instance().probeFiles("", link, "", local_files, &probe_err)) {
+            util::logLine("download: local probe failed: " +
+                          (probe_err.empty() ? std::string("unknown error") : probe_err));
+
+            if (out_error) {
+                *out_error = probe_err.empty()
+                    ? "Failed to load torrent file list from local client"
+                    : probe_err;
+            }
+            return false;
+        }
+
+        out_files.reserve(local_files.size());
+        for (const auto& lf : local_files) {
+            torrent::TorrentFileInfo tf;
+            tf.index = lf.index;
+            tf.name = lf.name;
+            tf.size = lf.size;
+            tf.wanted = lf.wanted;
+            out_files.push_back(std::move(tf));
+        }
+
+        return !out_files.empty();
+    }
+
+    int id = getTorrent()->addMagnet(link);
+    if (id < 0) {
+        if (out_error) *out_error = "Failed to add torrent";
+        return false;
+    }
+
+    if (!torrent_ || !torrent_->isServerReachable()) {
+        if (torrent_) torrent_->cancelTorrent(id);
+        if (out_error) *out_error = "TorrServer is unavailable (file list cannot be fetched)";
+        return false;
+    }
+
+    constexpr int kMaxAttempts = 72; // ~18s with 250ms polling.
+    for (int i = 0; i < kMaxAttempts; ++i) {
+        if (torrent_ && torrent_->getTorrentFiles(id, out_files) && !out_files.empty()) {
+            if (torrent_) torrent_->cancelTorrent(id);
+            return true;
+        }
+#ifdef __SWITCH__
+        svcSleepThread(250000000LL);
+#else
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+#endif
+    }
+
+    if (torrent_) torrent_->cancelTorrent(id);
+    if (out_error) *out_error = "Timeout while loading torrent file list";
+    return false;
+}
+
+bool DownloadManager::setFileWanted(size_t index, int file_index, bool wanted) {
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.torrent_id < 0) return false;
+    if (!torrent_) return false;
+    return torrent_->setFileWanted(item.torrent_id, file_index, wanted);
+}
+
+} // namespace download
