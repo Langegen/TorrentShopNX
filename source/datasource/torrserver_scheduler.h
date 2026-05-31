@@ -43,10 +43,10 @@ namespace lt = libtorrent;
 /// Конфигурация 5-зонного планировщика.
 struct SchedulerConfig {
     // === Размеры зон (в кусках) ===
-    int critical_pieces    = 8;    ///< Зона 1: ~2.6 с при 24MB/s, piece=8MB
-    int urgent_pieces      = 16;   ///< Зона 2: ~5 с (было 32)
-    int prefetch_pieces    = 24;   ///< Зона 3: ~8 с (было 120)
-    int speculative_pieces = 16;   ///< Зона 4: ~5 с (было 90)
+    int critical_pieces    = 4;    ///< Зона 1: ~1.3 с при 24MB/s (было 8)
+    int urgent_pieces      = 8;    ///< Зона 2: ~2.6 с (было 16)
+    int prefetch_pieces    = 16;   ///< Зона 3: последовательная загрузка (было 24)
+    int speculative_pieces = 8;    ///< Зона 4: speculative (было 16)
     int tail_pieces        = 2;    ///< Куски позади (кэш-пинне)
 
     // === Дедлайны ===
@@ -56,8 +56,8 @@ struct SchedulerConfig {
 
     // === Stall-режим ===
     int stall_extra_critical   = 0;
-    int stall_extra_urgent     = -12; ///< Сжимаем Urgent зону с 16 до 4 кусков при stall (было -28)
-    int stall_extra_prefetch   = -24; ///< Полностью отключаем Prefetch при stall (с 24 до 0) (было -120)
+    int stall_extra_urgent     = -4;   ///< Сжимаем Urgent зону с 8 до 4 кусков при stall (было -12)
+    int stall_extra_prefetch   = -16;  ///< Полностью отключаем Prefetch при stall (с 16 до 0) (было -24)
     int stall_deadline_step_ms = 50;
 
     // === EDF / EWMA ===
@@ -164,7 +164,8 @@ private:
     /// Назначает deadline_ms = rank * deadline_step_ms (ранг по убыванию скорости).
     void apply_urgent_edf(const PieceRange& range,
                           const std::vector<PeerEwmaStats>& peer_stats,
-                          int deadline_step_ms);
+                          int deadline_step_ms,
+                          int crit_count);
 
     /// Зона 3 Prefetch: последовательная загрузка, priority=4.
     void apply_prefetch(const PieceRange& range);
@@ -192,6 +193,7 @@ private:
     // =========================================================================
 
     void       clear_all_deadlines();
+    void       clear_deadlines_for_removed_pieces(const PieceRange& new_critical, const PieceRange& new_urgent);
     void       set_all_dont_download();
     PieceRange clamp_to_file(const PieceRange& range) const;
     bool       has_window_changed(const SchedulerSnapshot& snap) const;

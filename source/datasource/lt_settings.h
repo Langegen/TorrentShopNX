@@ -34,9 +34,11 @@ inline lt::settings_pack make_streaming_settings_pack(const std::string& bind_ip
     s.set_int(lt::settings_pack::cache_size, 1024);  // 16 MiB в блоках по 16 KiB
 
     // --- Сеть ---
-    s.set_int(lt::settings_pack::max_out_request_queue, 1500);
-    s.set_int(lt::settings_pack::max_allowed_in_request_queue, 2000);
-    s.set_int(lt::settings_pack::connections_limit, 50);
+    s.set_int(lt::settings_pack::max_out_request_queue, 500);
+    s.set_int(lt::settings_pack::request_queue_time, 2);
+    s.set_int(lt::settings_pack::max_allowed_in_request_queue, 9000);
+    s.set_int(lt::settings_pack::connections_limit, 150);
+    s.set_int(lt::settings_pack::connection_speed, 100);
     s.set_int(lt::settings_pack::request_timeout, 30);
     s.set_int(lt::settings_pack::peer_timeout, 90);
     s.set_int(lt::settings_pack::inactivity_timeout, 120);

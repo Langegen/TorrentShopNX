@@ -5,14 +5,21 @@
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_status.hpp>
 #include <libtorrent/peer_info.hpp>
+#include <libtorrent/session.hpp>
+#include <libtorrent/session_handle.hpp>
+#include <libtorrent/torrent.hpp>
+#include <libtorrent/peer_connection.hpp>
+#include <libtorrent/bt_peer_connection.hpp>
+#include <libtorrent/error_code.hpp>
 #include "../utils/log.h"
 
 #include <algorithm>
 
 namespace datasource {
 
-void StallMonitor::init(lt::torrent_handle handle) {
+void StallMonitor::init(lt::torrent_handle handle, std::shared_ptr<lt::session> session) {
     handle_ = std::move(handle);
+    session_ = std::move(session);
     initialized_ = true;
     stall_ticks_ = 0;
     last_download_rate_ = 0;
@@ -22,12 +29,13 @@ void StallMonitor::init(lt::torrent_handle handle) {
 void StallMonitor::reset() {
     initialized_ = false;
     handle_ = {};
+    session_ = nullptr;
     stall_ticks_ = 0;
     last_download_rate_ = 0;
     stall_started_ = {};
 }
 
-int StallMonitor::on_tick(int urgent_start, int urgent_end) {
+int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_state) {
     if (!initialized_ || !handle_.is_valid()) {
         return 0;
     }
@@ -37,20 +45,29 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end) {
     last_download_rate_ = status.download_rate;
 
     // 2. Проверяем порог stall
-    if (last_download_rate_ >= kStallThresholdBps) {
+    if (is_stalled_state) {
+        // Если явно находимся в состоянии Stall, форсируем stall_ticks_
+        // чтобы незамедлительно начать проверку медленных пиров.
+        if (stall_ticks_ < kStallTicksBeforeAction) {
+            stall_ticks_ = kStallTicksBeforeAction;
+        }
+        if (stall_started_.time_since_epoch().count() == 0) {
+            stall_started_ = std::chrono::steady_clock::now();
+        }
+    } else if (last_download_rate_ >= kStallThresholdBps) {
         // Скорость нормальная — сбрасываем счётчик
         stall_ticks_ = 0;
         stall_started_ = {};
         return 0;
+    } else {
+        // Скорость ниже порога — инкрементируем
+        ++stall_ticks_;
+        if (stall_started_.time_since_epoch().count() == 0) {
+            stall_started_ = std::chrono::steady_clock::now();
+        }
     }
 
-    // 3. Скорость ниже порога — инкрементируем
-    ++stall_ticks_;
-    if (stall_started_.time_since_epoch().count() == 0) {
-        stall_started_ = std::chrono::steady_clock::now();
-    }
-
-    // 4. Ждём kStallTicksBeforeAction тиков перед действием
+    // 3. Ждём kStallTicksBeforeAction тиков перед действием
     if (stall_ticks_ < kStallTicksBeforeAction) {
         return 0;
     }
@@ -87,18 +104,21 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end) {
                       " speed=" + std::to_string(pi.down_speed) + " B/s"
                       " pieces=" + std::to_string(pi.num_pieces));
 
-        // В libtorrent 1.2.x нет disconnect_peer().
-        // Используем torrent_handle::connect_peer() с пустым флагом невозможно,
-        // но можно закрыть соединение через peer_info::connection.
-        // Простейший подход: задать peer_limit ниже текущего количества пиров,
-        // что заставит libtorrent отключить "худших" пиров.
-        // Альтернатива: используем handle_.set_max_connections() для принудительного
-        // сокращения, затем восстанавливаем.
-        // Для целевой точечности — логируем и полагаемся на механизм stall.
-        util::logLine("stall_monitor: marking slow peer for eviction " +
-                      pi.ip.address().to_string() + ":" +
-                      std::to_string(pi.ip.port()) +
-                      " speed=" + std::to_string(pi.down_speed) + " B/s");
+        if (session_) {
+            lt::torrent_handle h = handle_;
+            lt::tcp::endpoint ep = pi.ip;
+            session_->get_io_service().post([h, ep]() {
+                if (h.is_valid()) {
+                    auto t = h.native_handle();
+                    if (t) {
+                        auto* peer_conn = t->find_peer(ep);
+                        if (peer_conn) {
+                            peer_conn->disconnect(lt::error_code(lt::errors::peer_banned, lt::libtorrent_category()), lt::operation_t::unknown);
+                        }
+                    }
+                }
+            });
+        }
         ++disconnected;
     }
 

@@ -64,6 +64,8 @@ bool LocalLibtorrentBackend::open(const ContentRequest& request) {
 
     // Инициализировать 5-зонный планировщик
     scheduler_.init(handle_, piece_size_, file_offset_in_torrent_, file_first_piece_, file_last_piece_);
+    stall_monitor_.init(handle_, session_);
+    stall_monitor_initialized_ = true;
 
     set_state(StreamState::FileSelected);
     set_state(StreamState::PrebufferInstallInfo);
@@ -168,24 +170,55 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
 
         if (waited_ms >= 3000) {
             if (now >= next_slow_read_log_at) {
-                util::logLine("backend/local: slow read wait_ms=" + std::to_string(waited_ms) + " piece=" + std::to_string(piece_start));
+                util::logLine("backend/local: slow read wait_ms=" + std::to_string(waited_ms) +
+                              " piece=" + std::to_string(piece_start) +
+                              " offset=" + std::to_string(offset));
                 next_slow_read_log_at = now + std::chrono::seconds(10);
+
+                // Диагностика: сводка по пирам на момент ожидания
                 std::lock_guard<std::mutex> peers_lock(cached_peers_mutex_);
-                if (scheduler_.is_initialized() && !cached_peers_.empty()) {
-                    scheduler_.on_read_request_with_peers(offset, size, cached_peers_);
+                if (!cached_peers_.empty()) {
+                    int total = static_cast<int>(cached_peers_.size());
+                    int choked = 0, interesting = 0, on_target_piece = 0, active = 0;
+                    int best_speed = 0;
+                    for (const auto& pi : cached_peers_) {
+                        if (pi.flags & lt::peer_info::remote_choked)  ++choked;
+                        if (pi.flags & lt::peer_info::interesting)    ++interesting;
+                        if (pi.down_speed > 0) { ++active; best_speed = std::max(best_speed, pi.down_speed); }
+                        if (pi.downloading_piece_index == piece_start) ++on_target_piece;
+                    }
+                    util::logLine("backend/local: PIECE_WAIT_STATE piece=" + std::to_string(piece_start) +
+                                  " peers=" + std::to_string(total) +
+                                  " choked=" + std::to_string(choked) +
+                                  " interesting=" + std::to_string(interesting) +
+                                  " active=" + std::to_string(active) +
+                                  " on_target=" + std::to_string(on_target_piece) +
+                                  " best_speed=" + std::to_string(best_speed / 1024) + "KB/s" +
+                                  " => " + (on_target_piece == 0 ? "NO_PEER_ON_PIECE (priority/announce issue?)" :
+                                            choked == total ? "ALL_CHOKED (choking algo issue?)" :
+                                            active == 0 ? "NO_ACTIVE_DOWNLOAD (pipeline empty?)" :
+                                            "SLOW_DELIVERY (RTT/bandwidth)"));
+                    if (scheduler_.is_initialized()) {
+                        scheduler_.on_read_request_with_peers(offset, size, cached_peers_);
+                    }
+                } else {
+                    util::logLine("backend/local: PIECE_WAIT_STATE piece=" + std::to_string(piece_start) +
+                                  " NO_CACHED_PEERS (peer list not populated yet)");
+                    if (scheduler_.is_initialized()) {
+                        scheduler_.on_read_request(offset, size);
+                    }
                 }
-            }
+            } // end: if (now >= next_slow_read_log_at)
 
             // Paradox recovery: If libtorrent thinks it's done (seeding or finished), but we are stalled
-            // waiting for a piece, it means MemoryStorage dropped it or it was never fully written.
-            // Force a recheck so libtorrent hashes RAM, realizes it's missing, and redownloads it.
+            // waiting for a piece, it means MemoryStorage dropped it or it was never fully written (e.g. zero padding pieces).
+            // Mark all pieces as available since libtorrent verified them, avoiding destructive force_recheck which resets RAM cache.
             if (waited_ms >= 5000 && handle_.is_valid()) {
                 auto status = handle_.status(lt::torrent_handle::query_accurate_download_counters);
                 if (status.state == lt::torrent_status::seeding || status.state == lt::torrent_status::finished) {
-                    if (now >= next_slow_read_log_at - std::chrono::seconds(5)) { // Don't spam force_recheck
-                        util::logLine("backend/local: PARADOX DETECTED (state=" + std::to_string(status.state) + " but missing piece " + std::to_string(piece_start) + "). Forcing recheck!");
-                        handle_.force_recheck();
-                        handle_.resume(); // ensure it resumes after checking
+                    if (now >= next_slow_read_log_at - std::chrono::seconds(5)) {
+                        util::logLine("backend/local: PARADOX DETECTED (state=" + std::to_string(status.state) + " but missing piece " + std::to_string(piece_start) + "). Recovering by marking all pieces available!");
+                        torrent::markMemoryStorageAllPiecesAvailable(info_hash_str_);
                     }
                 }
             }
@@ -196,7 +229,8 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
                 if (scheduler_.is_initialized()) scheduler_.on_stall();
             }
             lock.unlock();
-        }
+        } // end: if (waited_ms >= 3000)
+
 
         // Мягкое ожидание поступления новых 16KB блоков от пиров.
         // Читаем сырые данные мгновенно по мере их скачивания,
@@ -248,6 +282,8 @@ void LocalLibtorrentBackend::close() {
 
     handle_ = {};
     session_.reset();
+    stall_monitor_.reset();
+    stall_monitor_initialized_ = false;
     opened_ = false;
     util::logLine("backend/local: closed");
 }
@@ -359,22 +395,39 @@ void LocalLibtorrentBackend::tick_thread_func() {
         }
 
         // ── BBR CongestionController ─────────────────────────────────────────
-        auto ti = handle_copy.torrent_file();
-        if (ti) {
-            int64_t total_size = ti->total_size();
-            if (total_size < 200LL * 1024 * 1024) {
-                // < 200 MB: cap max at 4s (не 2s!) — при RTT > 300мс жёсткий лимит 2s
-                // оставляет < 1 блока in-flight и вызывает постоянные stall
-                congestion_ctrl.set_limits(2, 4);
-            } else if (total_size < 2LL * 1024 * 1024 * 1024) {
-                congestion_ctrl.set_limits(2, 4);
-            } else {
-                congestion_ctrl.set_limits(2, 5);
+        const int prev_queue_time = congestion_ctrl.current_queue_time();
+        {
+            int min_limit = 2;
+            int max_limit = 5;
+            int rtt_base = congestion_ctrl.baseline_rtt_ms();
+            if (rtt_base != INT_MAX) {
+                if (rtt_base < 50) {
+                    min_limit = 1;
+                    max_limit = 3;
+                } else if (rtt_base < 150) {
+                    min_limit = 2;
+                    max_limit = 5;
+                } else if (rtt_base < 300) {
+                    min_limit = 3;
+                    max_limit = 8;
+                } else {
+                    min_limit = 4;
+                    max_limit = 12;
+                }
+            }
+            congestion_ctrl.set_limits(min_limit, max_limit);
+
+            static int prev_min_limit = -1;
+            static int prev_max_limit = -1;
+            if (min_limit != prev_min_limit || max_limit != prev_max_limit) {
+                util::logLine("backend/local: CC limits changed to [" + 
+                              std::to_string(min_limit) + ", " + std::to_string(max_limit) + "]s (baseline=" +
+                              (rtt_base == INT_MAX ? "none" : std::to_string(rtt_base) + "ms") + ")");
+                prev_min_limit = min_limit;
+                prev_max_limit = max_limit;
             }
         }
 
-        // ВАЖНО: prev берём ДО update(), т.к. update() меняет queue_time_sec_.
-        const int prev_queue_time = congestion_ctrl.current_queue_time();
         const int new_queue_time  = congestion_ctrl.update(peers, 0);
 
         if (session_copy && new_queue_time != prev_queue_time) {
@@ -386,11 +439,42 @@ void LocalLibtorrentBackend::tick_thread_func() {
                               std::to_string(prev_queue_time) + "s -> " +
                               std::to_string(new_queue_time) + "s" +
                               " rtt_baseline=" + std::to_string(congestion_ctrl.baseline_rtt_ms()) + "ms");
-            } catch (...) {}
+            } catch (const std::exception& e) {
+                util::logLine("backend/local: CC apply_settings ERROR: " + std::string(e.what()));
+            } catch (...) {
+                util::logLine("backend/local: CC apply_settings UNKNOWN ERROR");
+            }
         }
 
         // ── Планировщик on_tick (не держим mutex — scheduler thread-safe) ────
         if (scheduler_.is_initialized()) scheduler_.on_tick_with_peers(peers);
+
+        // ── StallMonitor ──
+        if (stall_monitor_initialized_ && handle_copy.is_valid()) {
+            int monitor_start = -1;
+            int monitor_end = -1;
+            if (scheduler_.is_initialized()) {
+                auto snap = scheduler_.last_snapshot();
+                if (snap.critical.valid()) {
+                    monitor_start = snap.critical.start;
+                    monitor_end = snap.critical.end;
+                }
+                if (snap.urgent.valid()) {
+                    if (monitor_start == -1) {
+                        monitor_start = snap.urgent.start;
+                    }
+                    monitor_end = snap.urgent.end;
+                }
+            }
+            if (monitor_start != -1 && monitor_end != -1) {
+                bool is_stalled_state = false;
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    is_stalled_state = (state_ == StreamState::Stalled);
+                }
+                stall_monitor_.on_tick(monitor_start, monitor_end, is_stalled_state);
+            }
+        }
 
         // ── Периодическое логирование состояния роя (каждые 5 секунд) ────────
         static int log_counter = 0;

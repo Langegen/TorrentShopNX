@@ -127,4 +127,8 @@ private:
     std::string last_error_;
 };
 
+void discardMemoryStoragePiece(const std::string& hash, int piece_index);
+void markMemoryStoragePieceAvailable(const std::string& hash, int piece_index);
+void markMemoryStorageAllPiecesAvailable(const std::string& hash);
+
 } // namespace torrent

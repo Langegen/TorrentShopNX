@@ -114,6 +114,7 @@ private:
     // Шедулер и stall monitor
     TorrServerScheduler scheduler_;
     StallMonitor stall_monitor_;
+    bool stall_monitor_initialized_ = false;
 
 
     // Фоновый тик-поток

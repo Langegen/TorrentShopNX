@@ -47,7 +47,7 @@ public:
     // =========================================================================
 
     static constexpr int kMinQueueTimeSec  = 2;
-    static constexpr int kMaxQueueTimeSec  = 8;
+    static constexpr int kMaxQueueTimeSec  = 15; // Increased from 8 for high RTT stability
     static constexpr int kInitQueueTimeSec = 4;   ///< Старт с консервативного значения
 
     /// Порог роста RTT для deteckt congestion (%)
@@ -196,12 +196,25 @@ private:
                 ++s.active_peers;
                 s.delivery_rate_bps += pi.down_speed;
 
-                // peer_info::rtt в libtorrent 1.2 (тип int, миллисекунды)
-                if (pi.rtt > 0 && pi.rtt < s.min_rtt_ms) {
+                // Only count peers that are delivering at least 50 KB/s for RTT baseline
+                // to prevent very slow peers with low RTT from skewing congestion detection.
+                if (pi.down_speed >= 50 * 1024) {
+                    if (pi.rtt > 0 && pi.rtt < s.min_rtt_ms) {
+                        s.min_rtt_ms = pi.rtt;
+                    }
+                }
+            }
+        }
+
+        // Fallback: if no active peer exceeds 50 KB/s, use any active peer with valid RTT
+        if (s.min_rtt_ms == INT_MAX) {
+            for (const auto& pi : peers) {
+                if (pi.down_speed > 0 && pi.rtt > 0 && pi.rtt < s.min_rtt_ms) {
                     s.min_rtt_ms = pi.rtt;
                 }
             }
         }
+
         return s;
     }
 

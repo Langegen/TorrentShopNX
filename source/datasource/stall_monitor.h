@@ -26,7 +26,7 @@ public:
     StallMonitor() = default;
 
     /// Инициализация с торрент-хэндлом.
-    void init(lt::torrent_handle handle);
+    void init(lt::torrent_handle handle, std::shared_ptr<lt::session> session);
 
     /// Сброс в исходное состояние (при смене торрента/файла).
     void reset();
@@ -38,14 +38,15 @@ public:
     /// 2. Если < kStallThresholdBps, увеличиваем счётчик stall_ticks_
     /// 3. Если stall_ticks_ >= kStallTicksBeforeAction:
     ///    a. Получаем список пиров через get_peer_info()
-    ///    b. Находим пиров со скоростью < 1 KB/s
+    ///    b. Находим пиров со скоростью < 5 KB/s
     ///    c. Среди них ищем тех, кто "висит" на urgent кусках
     ///    d. disconnect_peer() для таких пиров
     ///
     /// @param urgent_start  первый urgent кусок
     /// @param urgent_end    последний urgent кусок
+    /// @param is_stalled_state  находится ли бэкенд в состоянии Stall
     /// @return количество отключённых пиров
-    int on_tick(int urgent_start, int urgent_end);
+    int on_tick(int urgent_start, int urgent_end, bool is_stalled_state = false);
 
     /// Возвращает true если скорость ниже порога >= kStallTicksBeforeAction тиков подряд.
     bool is_stalled() const;
@@ -63,6 +64,7 @@ private:
                                   int urgent_start, int urgent_end) const;
 
     lt::torrent_handle handle_;
+    std::shared_ptr<lt::session> session_;
     bool initialized_ = false;
 
     int stall_ticks_ = 0;
@@ -72,10 +74,10 @@ private:
     // --- Конфигурация ---
     // Порог скорости, ниже которого считаем "stall" (50 KB/s)
     static constexpr int kStallThresholdBps = 50 * 1024;
-    // Скорость пира, ниже которой считаем его "медленным" (1 KB/s)
-    static constexpr int kSlowPeerThresholdBps = 1 * 1024;
-    // Сколько тиков подряд должен быть stall до начала отключения пиров
-    static constexpr int kStallTicksBeforeAction = 5;
+    // Скорость пира, ниже которой считаем его "медленным" (5 KB/s)
+    static constexpr int kSlowPeerThresholdBps = 5 * 1024;
+    // Сколько тиков подряд должен быть stall до начала отключения пиров (3 секунды)
+    static constexpr int kStallTicksBeforeAction = 3;
     // Максимум пиров для отключения за один тик
     static constexpr int kMaxDisconnectsPerTick = 2;
 };

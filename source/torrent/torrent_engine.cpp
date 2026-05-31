@@ -76,7 +76,7 @@ constexpr int kSequentialReadaheadMaxPieces = 64; // Increased from 48
 constexpr int kTorrestStyleReadAheadDivisor = 100;
 constexpr size_t kHttpSequentialPrefetch = 8 * 1024 * 1024;
 constexpr size_t kPreparedStreamReadChunk = 8 * 1024 * 1024;
-constexpr size_t kPieceCacheEntries = 32; // Match NX2 (512MB RAM) for better system stability
+constexpr size_t kPieceCacheEntries = 64; // Increased to 64 for better buffer starvation resistance
 
 #ifdef TSNX_USE_LIBTORRENT
 
@@ -105,26 +105,26 @@ buffer::PiecePool* getOrCreatePiecePool(int piece_size) {
 #endif
 
 struct LibtorrentLikeSettingsConfig {
-    int aio_threads = 2; 
+    int aio_threads = 4; // MemoryStorage verification pipelines (increased from 2)
     int max_queued_disk_bytes = 32 * 1024 * 1024; 
     int disk_io_read_mode = 2; 
     int disk_io_write_mode = 2; 
-    int request_timeout = 60; // v56: snub timer — bursty peers need 45+ s gap tolerance 
+    int request_timeout = 30; // Snub timer tightened from 60 to 30 for fast slow-peer pruning
     int peer_timeout = 30; 
     int inactivity_timeout = 60; 
     int num_want = 200; 
-    int max_out_request_queue = 1200; 
-    int max_allowed_in_request_queue = 2400; 
+    int max_out_request_queue = 500; // High speed peer pipelining (increased from 150)
+    int max_allowed_in_request_queue = 9000; 
     int request_queue_time = 2; 
     int whole_pieces_threshold = 20; 
     int half_open_limit = 50; 
-    int connection_speed = 30; 
+    int connection_speed = 100; // Raised from 30/s
     int peer_connect_timeout = 15; 
     int torrent_connect_boost = 80; 
     int active_downloads = 30; 
     int active_limit = 100; 
-    int connections_limit = 200; // Match NX2 swarm size (increased to 200)
-    bool prioritize_partial_pieces = false; 
+    int connections_limit = 150; // Sweets pot swarm size (harmonized with lt_settings.h)
+    bool prioritize_partial_pieces = true; 
     bool use_parole_mode = true;
     bool strict_end_game_mode = false; // v60: посылаем запрос на последние куски ВСЕМ пирам, а не одному 
     bool rate_limit_utp = false;
@@ -155,13 +155,13 @@ const char* kFallbackTrackers[] = {
     "udp://tracker.torrent.eu.org:451/announce",
     "udp://exodus.desync.com:6969/announce",
     "udp://tracker.openbittorrent.com:6969/announce",
-    "udp://tracker.coppersurfer.tk:6969/announce",
-    "udp://9.rarbg.to:2710/announce",
-    "udp://tracker.leechers-paradise.org:6969/announce",
-    "udp://tracker.cyberia.is:6969/announce",
+    "udp://bt.t-ru.org:2710/announce",
+    "udp://tracker.bitsearch.to:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.tiny-vps.com:6969/announce",
+    "udp://tracker.dler.org:6969/announce",
     "udp://tracker.internetwarriors.net:1337/announce",
     "udp://p4p.arenabg.ch:1337/announce",
-    "udp://tracker.skyts.net:6969/announce",
     "udp://retracker.lanta-net.ru:2710/announce"
 };
 
@@ -307,14 +307,13 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::max_allowed_in_request_queue, cfg.max_allowed_in_request_queue);
     settings.set_int(lt::settings_pack::half_open_limit, cfg.half_open_limit);
     settings.set_int(lt::settings_pack::torrent_connect_boost, cfg.torrent_connect_boost);
-    // Tier 1: начальный request_queue_time = 5 с.
-    // Логи показывают reqq=726-1400/935 при 15s — очередь переполнена, пиры захлёбываются.
-    // 5s = баланс между латентностью и throughput (~3MB/s * 5s = ~15MB буфер).
+    // Tier 1: начальный request_queue_time = 2 с.
+    // 2s = баланс между латентностью и throughput (~3MB/s * 2s = ~6MB буфер).
     // CongestionController в LocalLibtorrentBackend дополнительно адаптирует в диапазоне 2-15s.
-    settings.set_int(lt::settings_pack::request_queue_time, 5);
+    settings.set_int(lt::settings_pack::request_queue_time, 2);
     settings.set_int(lt::settings_pack::piece_timeout, 60); // Increased: slow peers (RTT>300ms, 50KB/s) need ~20s per piece
     settings.set_int(lt::settings_pack::whole_pieces_threshold, 20);
-    settings.set_bool(lt::settings_pack::prioritize_partial_pieces, false);
+    settings.set_bool(lt::settings_pack::prioritize_partial_pieces, cfg.prioritize_partial_pieces);
     settings.set_int(lt::settings_pack::piece_extent_affinity, 0);
     // Tier 1: suggest_read_cache — просим пиров кэшировать данные для нас
     settings.set_int(lt::settings_pack::suggest_mode, lt::settings_pack::suggest_read_cache);
@@ -323,7 +322,7 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::active_downloads, cfg.active_downloads);
     settings.set_int(lt::settings_pack::active_limit, cfg.active_limit);
     settings.set_int(lt::settings_pack::max_peer_recv_buffer_size, 8 * 1024 * 1024); // Increased to 8MB
-    settings.set_bool(lt::settings_pack::predictive_piece_announce, true);
+    settings.set_bool(lt::settings_pack::predictive_piece_announce, false); // v63: disabled — causes stall at piece boundaries (unnecessary pre-announce flood)
 
     // Let OS handle per-socket buffer sizes. Setting explicit values exhausts
     // the 4MB socket memory pool on Switch and causes ENOBUFS errors.
@@ -453,7 +452,8 @@ void addResolvedDhtRouters(lt::session& session) {
         }
 
         session.add_dht_router({ip, node.port});
-        util::logLine(std::string("torrent_engine: DHT router ") +
+        session.add_dht_node({ip, node.port});
+        util::logLine(std::string("torrent_engine: DHT router/node ") +
                       node.host + ":" + port + " -> " + ip);
     }
 }
@@ -502,6 +502,8 @@ struct PieceRange {
 };
 
 void discardMemoryStoragePiece(const std::string& hash, int piece_index);
+void markMemoryStoragePieceAvailable(const std::string& hash, int piece_index);
+void markMemoryStorageAllPiecesAvailable(const std::string& hash);
 
 struct TorrentRecord {
     std::mutex mutex;
@@ -537,6 +539,7 @@ void handleGlobalErrors(const std::vector<lt::alert*>& alerts);
 // Forward declaration: defined after TorrentEngine::Impl, called from alertThreadFunc
 struct TorrentRecord;
 int reconnectKnownPeersLocked(TorrentRecord& record, int max_attempts);
+int effectiveConnectedPeerCount(const lt::torrent_handle& handle, int status_num_peers);
 #endif
 
 
@@ -574,6 +577,7 @@ struct TorrentEngine::Impl {
                             it->second->verified_pieces.insert(piece_idx);
                         }
                         it->second->pieces_cv.notify_all();
+                        markMemoryStoragePieceAvailable(util::toHex(pfa->handle.info_hash().to_string()), piece_idx);
                     } else if (auto* hfa = lt::alert_cast<lt::hash_failed_alert>(alert)) {
                         util::logLine("torrent_engine: HASH FAILED index=" + std::to_string(hfa->piece_index));
                         {
@@ -673,18 +677,19 @@ struct TorrentEngine::Impl {
                                                   cur_rate                  <  50 * 1024);
                         record->last_dl_rate_bps = cur_rate;
 
-                        const bool no_peers   = (cur_peers == 0);
+                        const int eff_peers   = effectiveConnectedPeerCount(record->handle, cur_peers);
+                        const bool no_peers   = (eff_peers < 1);
                         const bool stalled_dl = (status.state == lt::torrent_status::downloading &&
                                                  cur_rate < 50 * 1024);
                         const float progress  = status.progress;
                         const bool near_end   = (progress > 0.90f);
 
-                        // Cooldown: 0 = немедленно (обрыв), 5 = нет пиров, 10 = конец, 30 = норма
+                        // Cooldown: 0 = немедленно (обрыв), 3 = мало пиров, 10 = конец, 30 = норма
                         int cooldown_sec;
                         if (sudden_drop || peers_just_dropped) {
                             cooldown_sec = 0;
                         } else if (no_peers) {
-                            cooldown_sec = 5;
+                            cooldown_sec = 3;
                         } else if (near_end) {
                             cooldown_sec = 10;
                         } else {
@@ -753,6 +758,7 @@ class MemoryStorage : public lt::storage_interface {
     std::set<int> logged_write_pieces_;
     std::string info_hash_;
     int piece_size_;
+    int num_pieces_ = 0;
     std::set<lt::piece_index_t> pinned_pieces_;
     uint64_t min_keep_offset_ = 0;
     mutable std::mutex mutex_;
@@ -761,7 +767,8 @@ public:
     explicit MemoryStorage(const lt::storage_params& params) 
         : lt::storage_interface(params.files)
         , info_hash_(util::toHex(params.info_hash.to_string()))
-        , piece_size_(params.files.piece_length()) {
+        , piece_size_(params.files.piece_length())
+        , num_pieces_(params.files.num_pieces()) {
         std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
         g_memory_storages[info_hash_] = this;
     }
@@ -843,7 +850,11 @@ public:
     }
 
     void setMinKeepOffsetLocked(uint64_t offset) {
-        min_keep_offset_ = offset;
+        if (offset != min_keep_offset_) {
+            util::logLine("torrent_engine: [setMinKeepOffset] hash=" + info_hash_ +
+                          " offset=" + std::to_string(min_keep_offset_) + " -> " + std::to_string(offset));
+            min_keep_offset_ = offset;
+        }
     }
 
     bool readRange(int first_piece, int piece_offset, void* dst, int size) const {
@@ -863,21 +874,23 @@ public:
 
         while (remaining > 0) {
             auto it = pieces_.find(lt::piece_index_t(current_piece));
-            if (it == pieces_.end()) return false;
-
             int to_copy = std::min(remaining, piece_size_ - current_offset);
             if (to_copy <= 0) break;
 
-            std::memcpy(out, it->second + current_offset, static_cast<size_t>(to_copy));
-            
-            // Promotion for LRU: Move to the back of the queue (most recently used)
-            // Match NX2 behavior to prevent eviction of recently read pieces
-            lt::piece_index_t idx(current_piece);
-            auto lru_it = std::find(lru_order_.begin(), lru_order_.end(), idx);
-            if (lru_it != lru_order_.end()) {
-                lru_order_.erase(lru_it);
+            if (it == pieces_.end()) {
+                return false;
+            } else {
+                std::memcpy(out, it->second + current_offset, static_cast<size_t>(to_copy));
+                
+                // Promotion for LRU: Move to the back of the queue (most recently used)
+                // Match NX2 behavior to prevent eviction of recently read pieces
+                lt::piece_index_t idx(current_piece);
+                auto lru_it = std::find(lru_order_.begin(), lru_order_.end(), idx);
+                if (lru_it != lru_order_.end()) {
+                    lru_order_.erase(lru_it);
+                }
+                lru_order_.push_back(idx);
             }
-            lru_order_.push_back(idx);
 
             out += to_copy;
             remaining -= to_copy;
@@ -969,18 +982,23 @@ public:
     int readv(lt::span<lt::iovec_t const> bufs, lt::piece_index_t piece, int offset, lt::open_mode_t flags, lt::storage_error& ec) override {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = pieces_.find(piece);
-        if (it == pieces_.end()) return 0;
         
-        auto lru_it = std::find(lru_order_.begin(), lru_order_.end(), piece);
-        if (lru_it != lru_order_.end()) lru_order_.erase(lru_it);
-        lru_order_.push_back(piece);
+        if (it != pieces_.end()) {
+            auto lru_it = std::find(lru_order_.begin(), lru_order_.end(), piece);
+            if (lru_it != lru_order_.end()) lru_order_.erase(lru_it);
+            lru_order_.push_back(piece);
+        }
 
         int copied = 0;
         for (const auto& buf : bufs) {
             const int to_copy = std::min<int>(static_cast<int>(buf.size()), piece_size_ - offset);
             if (to_copy <= 0) continue;
             
-            std::memcpy(buf.data(), it->second + offset, to_copy);
+            if (it != pieces_.end()) {
+                std::memcpy(buf.data(), it->second + offset, to_copy);
+            } else {
+                std::memset(buf.data(), 0, to_copy);
+            }
             offset += to_copy;
             copied += to_copy;
         }
@@ -1045,6 +1063,9 @@ public:
                 bool is_needed = (static_cast<uint64_t>(static_cast<int>(p)) * piece_size_ + piece_size_ > min_keep_offset_);
 
                 if (!is_pinned && !is_needed) {
+                    util::logLine("torrent_engine: [evict] piece " + std::to_string(static_cast<int>(p)) +
+                                  " evicted. min_keep_offset=" + std::to_string(min_keep_offset_) +
+                                  " limit=" + std::to_string(static_cast<uint64_t>(static_cast<int>(p)) * piece_size_ + piece_size_));
                     lru_order_.erase(it);
                     auto pit = pieces_.find(p);
                     if (pit != pieces_.end()) {
@@ -1054,6 +1075,17 @@ public:
                     written_ranges_.erase(p);
                     evicted = true;
                     break;
+                } else {
+                    // Log why we skipped eviction of a needed piece if it's at the front of LRU
+                    if (it == lru_order_.begin()) {
+                        static int skip_log_count = 0;
+                        if (skip_log_count++ % 100 == 0) {
+                            util::logLine("torrent_engine: [evict_skip] piece " + std::to_string(static_cast<int>(p)) +
+                                          " is MRU/LRU candidate but skipped: pinned=" + std::to_string(is_pinned) +
+                                          " needed=" + std::to_string(is_needed) +
+                                          " min_keep_offset=" + std::to_string(min_keep_offset_));
+                        }
+                    }
                 }
             }
             if (!evicted) break; // All remaining pieces are either pinned or needed
@@ -1066,7 +1098,12 @@ public:
     void set_file_priority(lt::aux::vector<lt::download_priority_t, lt::file_index_t>&, lt::storage_error&) override {}
     lt::status_t move_storage(std::string const&, lt::move_flags_t, lt::storage_error&) override { return lt::status_t::no_error; }
     bool verify_resume_data(lt::add_torrent_params const&, lt::aux::vector<std::string, lt::file_index_t> const&, lt::storage_error&) override { return false; }
-    void release_files(lt::storage_error&) override { std::lock_guard<std::mutex> lock(mutex_); clearAllPieces(); }
+    void release_files(lt::storage_error&) override {
+        // NOTE: release_files is called by libtorrent when a torrent transitions to seeding or finished.
+        // For our memory-based storage, clearing pieces here is destructive as it deletes downloaded data
+        // that the reader thread might still need to install. Since we don't hold any real file descriptors,
+        // this can safely be a no-op.
+    }
     void rename_file(lt::file_index_t, std::string const&, lt::storage_error&) override {}
     void delete_files(lt::remove_flags_t, lt::storage_error&) override { std::lock_guard<std::mutex> lock(mutex_); clearAllPieces(); }
 
@@ -1081,6 +1118,18 @@ public:
         written_ranges_.erase(p);
         auto lru_it = std::find(lru_order_.begin(), lru_order_.end(), p);
         if (lru_it != lru_order_.end()) lru_order_.erase(lru_it);
+    }
+
+    void markPieceAvailable(int piece_index) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        markRangeLocked(lt::piece_index_t(piece_index), 0, piece_size_);
+    }
+
+    void markAllPiecesAsAvailable() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (int i = 0; i < num_pieces_; ++i) {
+            markRangeLocked(lt::piece_index_t(i), 0, piece_size_);
+        }
     }
 };
 
@@ -1105,6 +1154,22 @@ void discardMemoryStoragePiece(const std::string& hash, int piece_index) {
     MemoryStorage* storage = findMemoryStorageLocked(hash);
     if (storage) {
         storage->discardPiece(piece_index);
+    }
+}
+
+void markMemoryStoragePieceAvailable(const std::string& hash, int piece_index) {
+    std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
+    MemoryStorage* storage = findMemoryStorageLocked(hash);
+    if (storage) {
+        storage->markPieceAvailable(piece_index);
+    }
+}
+
+void markMemoryStorageAllPiecesAvailable(const std::string& hash) {
+    std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
+    MemoryStorage* storage = findMemoryStorageLocked(hash);
+    if (storage) {
+        storage->markAllPiecesAsAvailable();
     }
 }
 
@@ -1697,17 +1762,25 @@ void rememberConnectedPeerInfosLocked(TorrentRecord& record) {
 }
 
 int effectiveConnectedPeerCount(const lt::torrent_handle& handle, int status_num_peers) {
-    if (status_num_peers > 0) {
-        return status_num_peers;
-    }
-
     std::vector<lt::peer_info> peer_infos;
     try {
         handle.get_peer_info(peer_infos);
     } catch (...) {
         return status_num_peers;
     }
-    return static_cast<int>(peer_infos.size());
+
+    // Считать только пиров которые реально могут отдавать данные:
+    // не choked (remote_choked) и не только upload (interesting = у них есть нужные нам куски)
+    int effective = 0;
+    for (const auto& pi : peer_infos) {
+        const bool choked    = (pi.flags & lt::peer_info::remote_choked) != 0;
+        const bool has_data  = (pi.flags & lt::peer_info::interesting)   != 0;
+        const bool uploading = pi.down_speed > 0 || pi.download_queue_length > 0;
+        if (!choked && (has_data || uploading)) {
+            ++effective;
+        }
+    }
+    return effective;
 }
 
 struct PeerHealthSnapshot {
@@ -2522,6 +2595,11 @@ void TorrentEngine::setStreamMinKeepOffset(const std::string& hash, uint64_t off
     auto it = g_memory_storages.find(util::toLowerCopy(hash));
     if (it != g_memory_storages.end() && it->second) {
         it->second->setMinKeepOffsetLocked(offset);
+    } else {
+        static int log_limit = 0;
+        if (log_limit++ < 10) {
+            util::logLine("torrent_engine: [setMinKeepOffset] FAILED to find storage for hash=" + hash);
+        }
     }
 #endif
 }

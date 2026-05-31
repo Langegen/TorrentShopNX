@@ -51,12 +51,12 @@ bool endsWithIcase(const std::string& value, const char* ext) {
 static constexpr size_t NSP_HEADER_READ_SIZE = 128 * 1024; // 128KB для заголовка
 static constexpr size_t NSP_HEADER_PROBE_SIZE = 4 * 1024;  // 4KB для быстрого определения реального размера header
 static constexpr size_t NSP_HEADER_MAX_SIZE  = 4 * 1024 * 1024; // защитный лимит для неадекватных header
-static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 128 * 1024;
-static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 32 * 1024 * 1024; // Build v54: 4×piece_size(8MB) — увеличен для компенсации быстрого старта NCZ
+static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 4 * 1024 * 1024; // Increased from 128KB to 4MB to prevent starvation
+static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 32 * 1024 * 1024; // Increased from 8MB to 32MB for smoother play buffer
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
 static constexpr size_t MIN_BUFFER_SIZE = 256 * 1024 * 1024; // 256MB (увеличено для режима title) при N+1 буферизации
-static constexpr size_t DEFAULT_CHUNK_SIZE = 128 * 1024;  // 4MB chunk
+static constexpr size_t DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;  // 4MB chunk
 #ifdef __SWITCH__
 static constexpr size_t COLLECTOR_THREAD_STACK_SIZE = 0x20000; // 128KB
 static constexpr size_t INSTALLER_THREAD_STACK_SIZE = 0x40000; // 256KB, phase 5 is stack-heavy

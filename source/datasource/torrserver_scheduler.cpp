@@ -155,7 +155,7 @@ void TorrServerScheduler::on_tick_with_peers(const std::vector<lt::peer_info>& p
     update_peer_ewma(peers);
     
     // Во время stall инсталлер заблокирован в read(), поэтому он не вызывает on_read_request_with_peers.
-    // Выполняем изоляцию медленных пиров из фонового потока, чтобы сбросить дедлайны зависшим пирам!
+    // Включаем slow peer isolation во время тиков, чтобы она работала во время stall
     apply_slow_peer_isolation(peers, last_snapshot_.critical);
 }
 
@@ -340,7 +340,7 @@ SchedulerSnapshot TorrServerScheduler::rebuild_5zone_window(
     apply_tail(tail);
     if (spec_count > 0) apply_speculative(speculative);
     apply_prefetch(prefetch);
-    apply_urgent_edf(urgent, peer_ewma_stats_, d_step);
+    apply_urgent_edf(urgent, peer_ewma_stats_, d_step, crit_count);
     apply_critical(critical);
 
     // Slow Peer Isolation для Critical зоны
@@ -387,8 +387,9 @@ void TorrServerScheduler::apply_critical(const PieceRange& range) {
 }
 
 void TorrServerScheduler::apply_urgent_edf(const PieceRange& range,
-                                            const std::vector<PeerEwmaStats>& peer_stats,
-                                            int deadline_step_ms) {
+                                           const std::vector<PeerEwmaStats>& peer_stats,
+                                           int deadline_step_ms,
+                                           int crit_count) {
     if (!range.valid()) return;
 
     // EDF: сортируем куски по ожидаемому времени доставки
@@ -457,8 +458,29 @@ void TorrServerScheduler::apply_tail(const PieceRange& range) {
 // =============================================================================
 
 int TorrServerScheduler::apply_slow_peer_isolation(const std::vector<lt::peer_info>& peers,
-                                                    const PieceRange& critical_range) {
+                                                   const PieceRange& critical_range) {
     if (!critical_range.valid() || peers.empty()) return 0;
+
+    // 1. Получаем подробную очередь закачки из libtorrent, чтобы узнать,
+    //    какие пиры реально удерживают блоки критических кусков (даже если downloading_piece_index == -1).
+    std::vector<lt::partial_piece_info> download_queue;
+    try {
+        handle_.get_download_queue(download_queue);
+    } catch (...) {}
+
+    // Карта: piece_index -> список IP-адресов пиров, у которых запрошены блоки этого куска
+    std::unordered_map<int, std::vector<lt::address>> piece_to_peer_ips;
+    for (const auto& ppi : download_queue) {
+        int p_idx = static_cast<int>(ppi.piece_index);
+        if (p_idx < critical_range.start || p_idx > critical_range.end) continue;
+        if (ppi.blocks == nullptr) continue;
+
+        for (int i = 0; i < ppi.blocks_in_piece; ++i) {
+            if (ppi.blocks[i].state == lt::block_info::requested) {
+                piece_to_peer_ips[p_idx].push_back(ppi.blocks[i].peer().address());
+            }
+        }
+    }
 
     int isolated = 0;
     for (const auto& pi : peers) {
@@ -466,61 +488,87 @@ int TorrServerScheduler::apply_slow_peer_isolation(const std::vector<lt::peer_in
         // (1) RTT > порога (2000мс), ИЛИ 
         // (2) down_speed ненулевой, но ниже порога (100 KB/s), ИЛИ
         // (3) пир застрял (down_speed == 0 И выставлен флаг snubbed, то есть нет данных > 2 секунд).
-        // Новые пиры с 0 KB/s, которые ещё не успели отправить данные (< 2 сек), НЕ изолируются!
         const bool slow_rtt   = (pi.rtt > 0 && pi.rtt > cfg_.slow_peer_rtt_ms);
         const bool slow_speed = (pi.down_speed > 0 && pi.down_speed < cfg_.slow_peer_speed_bps) ||
                                 (pi.down_speed == 0 && (pi.flags & lt::peer_info::snubbed));
         if (!slow_rtt && !slow_speed) continue;
 
-        // Проверяем: обслуживает ли этот пир кусок в критической зоне?
+        // Определяем, какие критические куски обслуживает этот пир
+        std::vector<int> target_pieces;
+        
+        // Способ A: через direct downloading_piece_index
         const int dl_piece = pi.downloading_piece_index;
-        if (dl_piece < 0 || dl_piece < critical_range.start || dl_piece > critical_range.end) continue;
+        if (dl_piece >= critical_range.start && dl_piece <= critical_range.end) {
+            target_pieces.push_back(dl_piece);
+        }
 
-        // Ищем, есть ли в рое другие быстрые кандидаты на этот кусок, которые не задушили нас
-        int fast_candidates = 0;
-        for (const auto& other_pi : peers) {
-            if (other_pi.ip == pi.ip) continue; // Пропускаем самого себя
-
-            const bool other_slow_rtt   = (other_pi.rtt > 0 && other_pi.rtt > cfg_.slow_peer_rtt_ms);
-            const bool other_slow_speed = (other_pi.down_speed > 0 && other_pi.down_speed < cfg_.slow_peer_speed_bps) ||
-                                          (other_pi.down_speed == 0 && (other_pi.flags & lt::peer_info::snubbed));
-            const bool other_choked_us  = (other_pi.flags & lt::peer_info::remote_choked);
-            const bool other_has_piece  = (other_pi.flags & lt::peer_info::seed) || 
-                                          (dl_piece >= 0 && dl_piece < static_cast<int>(other_pi.pieces.size()) && other_pi.pieces[lt::piece_index_t(dl_piece)]);
-
-            if (!other_slow_rtt && !other_slow_speed && !other_choked_us && other_has_piece) {
-                fast_candidates++;
+        // Способ B: через get_download_queue блоки
+        for (const auto& pair : piece_to_peer_ips) {
+            int p_idx = pair.first;
+            const auto& ips = pair.second;
+            if (std::find(ips.begin(), ips.end(), pi.ip.address()) != ips.end()) {
+                if (std::find(target_pieces.begin(), target_pieces.end(), p_idx) == target_pieces.end()) {
+                    target_pieces.push_back(p_idx);
+                }
             }
         }
 
-        // Если альтернативных быстрых кандидатов на этот кусок нет — не изолируем медленного пира!
-        if (fast_candidates == 0) {
-            continue;
+        if (target_pieces.empty()) continue;
+
+        for (int dl_piece_to_isolate : target_pieces) {
+            // Ищем, есть ли в рое другие быстрые кандидаты на этот кусок, которые не задушили нас
+            int fast_candidates = 0;
+            for (const auto& other_pi : peers) {
+                if (other_pi.ip == pi.ip) continue; // Пропускаем самого себя
+
+                const bool other_slow_rtt   = (other_pi.rtt > 0 && other_pi.rtt > cfg_.slow_peer_rtt_ms);
+                const bool other_slow_speed = (other_pi.down_speed > 0 && other_pi.down_speed < cfg_.slow_peer_speed_bps) ||
+                                              (other_pi.down_speed == 0 && (other_pi.flags & lt::peer_info::snubbed));
+                const bool other_choked_us  = (other_pi.flags & lt::peer_info::remote_choked);
+                const bool other_has_piece  = (other_pi.flags & lt::peer_info::seed) ||
+                                              (dl_piece_to_isolate >= 0 && dl_piece_to_isolate < static_cast<int>(other_pi.pieces.size()) && other_pi.pieces[lt::piece_index_t(dl_piece_to_isolate)]);
+                const bool other_actively_downloading = (other_pi.down_speed > 0 || other_pi.download_queue_length > 0)
+                                                        || (other_pi.flags & lt::peer_info::seed);
+
+                // Защита от перегрузки очереди: кандидат должен иметь свободные слоты в очереди
+                // ИЛИ иметь очень хороший RTT (< 150мс) при условии, что у медленного пира RTT > 1500мс
+                // и очередь кандидата не забита полностью (менее 500 запросов).
+                const bool other_has_queue_space = 
+                    (other_pi.download_queue_length < other_pi.target_dl_queue_length + 8) ||
+                    (other_pi.rtt > 0 && other_pi.rtt < 150 && pi.rtt > 1500 && other_pi.download_queue_length < 500);
+
+                if (!other_slow_rtt && !other_slow_speed && !other_choked_us && other_has_piece && other_actively_downloading && other_has_queue_space) {
+                    fast_candidates++;
+                }
+            }
+
+            // Если альтернативных быстрых кандидатов на этот кусок нет — не изолируем медленного пира!
+            if (fast_candidates == 0) {
+                continue;
+            }
+
+            // RATE-LIMIT: не сбрасываем дедлайн одного и того же куска чаще, чем раз в 5 секунд.
+            auto now = std::chrono::steady_clock::now();
+            if (last_isolated_.count(dl_piece_to_isolate) &&
+                std::chrono::duration_cast<std::chrono::seconds>(now - last_isolated_[dl_piece_to_isolate]).count() < 5) {
+                continue;
+            }
+            last_isolated_[dl_piece_to_isolate] = now;
+
+            // Стратегия изоляции: сбросить deadline на этом куске и выставить снова
+            try {
+                handle_.reset_piece_deadline(lt::piece_index_t(dl_piece_to_isolate));
+                handle_.set_piece_deadline(dl_piece_to_isolate, 0, lt::torrent_handle::alert_when_available);
+                util::logLine("scheduler: ISOLATED slow peer " + pi.ip.address().to_string() +
+                              " for piece " + std::to_string(dl_piece_to_isolate) +
+                              " (active blocks detected!)" +
+                              " speed=" + std::to_string(pi.down_speed / 1024) + "KB/s" +
+                              " rtt=" + std::to_string(pi.rtt) + "ms" +
+                              " snubbed=" + std::string((pi.flags & lt::peer_info::snubbed) ? "yes" : "no"));
+            } catch (...) {}
+
+            ++isolated;
         }
-
-        // RATE-LIMIT: не сбрасываем дедлайн одного и того же куска чаще, чем раз в 5 секунд.
-        // Иначе мы будем спамить пира отменами запросов 4 раза в секунду, и он вообще ничего не скачает!
-        auto now = std::chrono::steady_clock::now();
-        if (last_isolated_.count(dl_piece) &&
-            std::chrono::duration_cast<std::chrono::seconds>(now - last_isolated_[dl_piece]).count() < 5) {
-            continue;
-        }
-        last_isolated_[dl_piece] = now;
-
-        // Стратегия изоляции: сбросить deadline на этом куске и выставить снова
-        // с небольшой задержкой — libtorrent переключится на более быстрый пир.
-        // Это НЕ разрывает соединение — просто снижает приоритет этого запроса.
-        try {
-            handle_.reset_piece_deadline(lt::piece_index_t(dl_piece));
-            handle_.set_piece_deadline(dl_piece, 0, lt::torrent_handle::alert_when_available);
-            util::logLine("scheduler: ISOLATED slow peer " + pi.ip.address().to_string() +
-                          " for piece " + std::to_string(dl_piece) +
-                          " speed=" + std::to_string(pi.down_speed / 1024) + "KB/s" +
-                          " rtt=" + std::to_string(pi.rtt) + "ms" +
-                          " snubbed=" + std::string((pi.flags & lt::peer_info::snubbed) ? "yes" : "no"));
-        } catch (...) {}
-
-        ++isolated;
     }
 
     return isolated;
