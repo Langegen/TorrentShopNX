@@ -31,6 +31,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -85,6 +86,9 @@ private:
 
     void tick_thread_func();
 
+    void enter_latency_mode_locked(const char* reason, std::chrono::steady_clock::time_point now);
+    void log_session_summary_locked(const char* reason);
+
     /// Безопасная остановка tick thread (вызывать БЕЗ мьютекса).
     void stop_tick_thread();
 
@@ -128,6 +132,26 @@ private:
     static constexpr int kPieceWaitPollMs = 100;
     static constexpr int kTickIntervalMs = 1000;
     static constexpr int kMaxIoRecoveries = 5;
+
+    struct SessionMetrics {
+        uint64_t slow_read_logs = 0;
+        uint64_t no_peer_on_piece = 0;
+        uint64_t all_choked = 0;
+        uint64_t no_active_download = 0;
+        uint64_t slow_delivery = 0;
+        uint64_t starvation_recoveries = 0;
+        uint64_t latency_mode_entries = 0;
+        uint64_t stall_entries = 0;
+        uint64_t stall_recoveries = 0;
+        uint64_t total_stall_ms = 0;
+        uint64_t max_stall_ms = 0;
+        std::chrono::steady_clock::time_point current_stall_started{};
+    };
+
+    SessionMetrics metrics_{};
+    bool latency_mode_ = false;
+    std::chrono::steady_clock::time_point latency_mode_until_{};
+    bool summary_logged_ = false;
 
     // I/O error recovery
     int io_recovery_count_ = 0;

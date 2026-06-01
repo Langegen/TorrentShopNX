@@ -39,6 +39,8 @@ void TorrServerScheduler::init(lt::torrent_handle handle,
     stall_level_       = 0;
     last_snapshot_     = {};
     peer_ewma_stats_.clear();
+    last_isolated_.clear();
+    last_starvation_recovery_.clear();
     initialized_       = true;
 
     util::logLine("scheduler: init piece_size=" + std::to_string(piece_size) +
@@ -112,6 +114,8 @@ void TorrServerScheduler::reset() {
     stall_level_       = 0;
     last_snapshot_     = {};
     peer_ewma_stats_.clear();
+    last_isolated_.clear();
+    last_starvation_recovery_.clear();
 }
 
 // =============================================================================
@@ -157,6 +161,96 @@ void TorrServerScheduler::on_tick_with_peers(const std::vector<lt::peer_info>& p
     // Во время stall инсталлер заблокирован в read(), поэтому он не вызывает on_read_request_with_peers.
     // Включаем slow peer isolation во время тиков, чтобы она работала во время stall
     apply_slow_peer_isolation(peers, last_snapshot_.critical);
+}
+
+
+SchedulerSnapshot TorrServerScheduler::on_piece_starvation(
+        int target_piece,
+        const std::vector<lt::peer_info>& peers,
+        bool no_peer_on_piece) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!initialized_ || !handle_.is_valid()) return last_snapshot_;
+
+    target_piece = std::max(file_first_piece_, std::min(file_last_piece_, target_piece));
+
+    const auto now = std::chrono::steady_clock::now();
+    auto last_it = last_starvation_recovery_.find(target_piece);
+    if (last_it != last_starvation_recovery_.end() &&
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last_it->second).count() < 1200) {
+        apply_slow_peer_isolation(peers, last_snapshot_.critical);
+        return last_snapshot_;
+    }
+    last_starvation_recovery_[target_piece] = now;
+
+    // Escalate the normal stall level so the regular rebuild keeps prefetch/speculative collapsed.
+    stall_level_ = std::max(stall_level_, no_peer_on_piece ? 2 : 1);
+
+    PieceRange critical;
+    critical.start = target_piece;
+    critical.end   = target_piece + (no_peer_on_piece ? 1 : cfg_.critical_pieces - 1);
+    critical = clamp_to_file(critical);
+
+    PieceRange urgent;
+    urgent.start = critical.end + 1;
+    urgent.end   = critical.end + (no_peer_on_piece ? 2 : 4);
+    urgent = clamp_to_file(urgent);
+
+    PieceRange tail;
+    tail.start = target_piece - cfg_.tail_pieces;
+    tail.end   = target_piece - 1;
+    tail = clamp_to_file(tail);
+
+    const int window_min = tail.valid() ? tail.start : critical.start;
+    const int window_max = urgent.valid() ? urgent.end : critical.end;
+    for (int p = file_first_piece_; p <= file_last_piece_; ++p) {
+        if (p < window_min || p > window_max) {
+            handle_.piece_priority(lt::piece_index_t(p), lt::dont_download);
+            handle_.reset_piece_deadline(lt::piece_index_t(p));
+        }
+    }
+
+    apply_tail(tail);
+    if (urgent.valid()) {
+        int deadline = no_peer_on_piece ? 100 : 200;
+        for (int p = urgent.start; p <= urgent.end; ++p) {
+            handle_.piece_priority(lt::piece_index_t(p), cfg_.urgent_priority);
+            handle_.set_piece_deadline(p, deadline);
+            deadline += no_peer_on_piece ? 100 : 200;
+        }
+    }
+
+    if (critical.valid()) {
+        for (int p = critical.start; p <= critical.end; ++p) {
+            handle_.piece_priority(lt::piece_index_t(p), cfg_.critical_priority);
+            handle_.reset_piece_deadline(lt::piece_index_t(p));
+            handle_.set_piece_deadline(p, p == target_piece ? 0 : 50,
+                                       lt::torrent_handle::alert_when_available);
+        }
+    }
+
+    const int slow_count = apply_slow_peer_isolation(peers, critical);
+
+    SchedulerSnapshot snap;
+    snap.critical = critical;
+    snap.urgent = urgent;
+    snap.tail = tail;
+    snap.prefetch = {};
+    snap.speculative = {};
+    snap.deadline_step_ms = no_peer_on_piece ? 100 : 200;
+    snap.slow_peers_count = slow_count;
+    snap.window_changed = has_window_changed(snap);
+
+    last_urgent_start_ = target_piece;
+    last_snapshot_ = snap;
+
+    util::logLine("scheduler: STARVATION recovery piece=" + std::to_string(target_piece) +
+                  " reason=" + std::string(no_peer_on_piece ? "NO_PEER_ON_PIECE" : "SLOW_DELIVERY") +
+                  " critical=" + std::to_string(critical.start) + "-" + std::to_string(critical.end) +
+                  " urgent=" + std::to_string(urgent.valid() ? urgent.start : -1) +
+                  "-" + std::to_string(urgent.valid() ? urgent.end : -1) +
+                  " slow_peers=" + std::to_string(slow_count));
+
+    return snap;
 }
 
 // =============================================================================
