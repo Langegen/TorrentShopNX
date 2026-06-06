@@ -266,17 +266,57 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
                 }
             }
 
+            bool first_stall_for_this_wait = false;
             lock.lock();
             if (state_ != StreamState::Stalled) {
                 ++metrics_.stall_entries;
                 metrics_.current_stall_started = now;
                 enter_latency_mode_locked("stall", now);
                 set_state(StreamState::Stalled, "waiting for piece " + std::to_string(piece_start));
+                first_stall_for_this_wait = true;
                 if (scheduler_.is_initialized()) scheduler_.on_stall();
             } else {
                 enter_latency_mode_locked("stall", now);
             }
             lock.unlock();
+
+            // Не ждём 10-секундного slow-read лога: как только read() перешёл в Stalled,
+            // немедленно сжимаем окно вокруг текущего куска. Это закрывает случай из log.txt,
+            // где быстрые пиры качают future pieces, а текущий piece остаётся без on_target.
+            if (first_stall_for_this_wait && scheduler_.is_initialized()) {
+                std::vector<lt::peer_info> peers_snapshot;
+                {
+                    std::lock_guard<std::mutex> peers_lock(cached_peers_mutex_);
+                    peers_snapshot = cached_peers_;
+                }
+
+                int on_target_piece = 0;
+                int active = 0;
+                int best_speed = 0;
+                for (const auto& pi : peers_snapshot) {
+                    if (pi.down_speed > 0) {
+                        ++active;
+                        best_speed = std::max(best_speed, pi.down_speed);
+                    }
+                    if (pi.downloading_piece_index == piece_start) {
+                        ++on_target_piece;
+                    }
+                }
+
+                const bool no_peer_on_piece = !peers_snapshot.empty() && active > 0 && on_target_piece == 0;
+                scheduler_.on_piece_starvation(piece_start, peers_snapshot, no_peer_on_piece);
+                lock.lock();
+                ++metrics_.starvation_recoveries;
+                lock.unlock();
+
+                util::logLine("backend/local: STALL_RECOVERY piece=" + std::to_string(piece_start) +
+                              " waited_ms=" + std::to_string(waited_ms) +
+                              " peers=" + std::to_string(peers_snapshot.size()) +
+                              " active=" + std::to_string(active) +
+                              " on_target=" + std::to_string(on_target_piece) +
+                              " best_speed=" + std::to_string(best_speed / 1024) + "KB/s" +
+                              " reason=" + std::string(no_peer_on_piece ? "NO_PEER_ON_PIECE" : "STALL"));
+            }
         } // end: if (waited_ms >= 3000)
 
 

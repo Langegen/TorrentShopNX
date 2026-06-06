@@ -20,6 +20,7 @@ PATTERNS = {
     "buffer_waits": "installer: buffer wait",
     "partial_read_advance": "collector: partial read advance",
     "starvation_recoveries": "scheduler: STARVATION recovery",
+    "stall_recoveries_immediate": "backend/local: STALL_RECOVERY",
     "latency_entries": "LATENCY_MODE enter",
     "latency_exits": "LATENCY_MODE exit",
 }
