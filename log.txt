@@ -8,13 +8,11 @@ main: inputInit ok
 main: full application mode
 config: loaded config.ini, TorrServer URL: 192.168.1.150:8090
 ds_mgr: remote URL: 192.168.1.150:8090
-ds_mgr: mode set to: TorrServer
+ds_mgr: mode set to: Local client
 catalog: loaded from switch_games.json, entries=3665
 main: entries=3665
 main: entering loop
 power: keep-awake disabled
-ds_mgr: mode set to: Local client
-config: saved config.ini
 torrent_engine: DHT router/node router.utorrent.com:6881 -> 82.221.103.244
 torrent_engine: DHT router/node router.bittorrent.com:6881 -> 67.215.246.10
 torrent_engine: DHT router/node dht.transmissionbt.com:6881 -> 212.129.33.59
@@ -23,857 +21,622 @@ torrent_engine: DHT router/node dht.libtorrent.org:25401 -> 185.157.221.247
 torrent_engine: failed to resolve DHT router dht.opentrackr.org:1337
 torrent_engine: detected local IP 192.168.1.104
 torrent_engine: listen interface 192.168.1.104:6881
-torrent_engine: [Build v62] settings aio_threads=4 req_timeout=30 conn_speed=100 max_out_req=500 RAM_cache_limit=64 strict_end_game=false
+torrent_engine: [Build v63] settings aio_threads=4 req_timeout=30 conn_speed=100 max_out_req=500 RAM_cache_limit=64 strict_end_game=false stall_recovery=immediate latency_mode=true
 torrent_engine: libtorrent session started (cache=0MiB, connections=150)
-torrent_engine: alert thread started
 torrent_engine: torrest core started (memory cache, no local HTTP server)
+torrent_engine: alert thread started
+torrent_engine: removed stale cache path TorrentShopNX/cache/local_engine/04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: cache root=TorrentShopNX/cache/local_engine
+torrent_engine: save path=TorrentShopNX/cache/local_engine/04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: storage=memory (torrest-style RAM cache)
+torrent_engine: torrent started with sequential_download=false hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: added torrent hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: state Idle -> FetchingMetadata hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec file_index=-1
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=0 candidates=0 dht_nodes=0 listening=yes port=6881
 torrent_engine: listen succeeded: successfully listening on [TCP] 192.168.1.104:6881
 torrent_engine: listen succeeded: successfully listening on [UDP] 192.168.1.104:6881
-torrent_engine: removed stale cache path TorrentShopNX/cache/local_engine/838e7b98569a3c00c8b868b6e362468f5f78aa7b
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] 520 (unknown HTTP error) "<none>" (1)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 3
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 2
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] 520 (unknown HTTP error) "<none>" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (6)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (7)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 3
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 2
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (8)
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] End of file "" (3)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (8)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (9)
+torrent_engine: metadata reconnect hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec peers=0 known=3 candidates=3 reconnect_attempts=0
+torrent_engine: metadata wait hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec state=2 peers=0 seeds=0 known=3 candidates=3 dht_nodes=0 listening=yes port=6881
+lt_engine: probe failed: cancelled
+download: local probe failed: cancelled
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
 torrent_engine: cache root=TorrentShopNX/cache/local_engine
-torrent_engine: save path=TorrentShopNX/cache/local_engine/838e7b98569a3c00c8b868b6e362468f5f78aa7b
+torrent_engine: save path=TorrentShopNX/cache/local_engine/1ec7325a1396e9e503041980f67dd0e4d56156db
 torrent_engine: storage=memory (torrest-style RAM cache)
-torrent_engine: torrent started with sequential_download=false hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: added torrent hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: state Idle -> FetchingMetadata hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b file_index=-1
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=0 candidates=0 dht_nodes=0 listening=yes port=6881
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 2
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 3
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 5
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=1 dht_nodes=0 listening=yes port=6881
-torrent_engine: [v62] reannounce(no_peers): peers=1 dl_rate=0KB/s progress=0% state=2 hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=2 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=2 dht_nodes=0 listening=yes port=6881
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=2 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=2 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=2 dht_nodes=0 listening=yes port=6881
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=2 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=4 dht_nodes=0 listening=yes port=6881
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=4 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=7 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=7 dht_nodes=0 listening=yes port=6881
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=7 reconnect_attempts=0
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=7 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=7 dht_nodes=0 listening=yes port=6881
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=7 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (2)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (2)
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 2
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=1 seeds=0 known=8 candidates=7 dht_nodes=0 listening=yes port=6881
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=7 reconnect_attempts=0
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=7 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=8 candidates=8 dht_nodes=0 listening=yes port=6881
-torrent_engine: [v62] reannounce(peers_dropped): peers=0 dl_rate=0KB/s progress=0% state=2 hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (2)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (2)
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=8 candidates=8 dht_nodes=0 listening=yes port=6881
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (6)
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] End of file "" (1)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (6)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (7)
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=8 candidates=8 dht_nodes=0 listening=yes port=6881
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (3)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (3)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] 520 (unknown HTTP error) "<none>" (2)
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=8 candidates=8 dht_nodes=0 listening=yes port=6881
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (7)
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (8)
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=8 candidates=8 dht_nodes=0 listening=yes port=6881
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (8)
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 5
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 3
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 2
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] received peers: 1
-torrent_engine: metadata reconnect hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b peers=0 known=8 candidates=8 reconnect_attempts=0
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] received peers: 30
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (9)
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
-torrent_engine: metadata received: The Legend of Zelda Skyward Sword HD [NSZ] metadata successfully received
-torrent_engine: PiecePool created piece_size=8388608 capacity=72
-torrent_engine: storage piece 115 started, total_in_ram=1
-torrent_engine: storage piece 475 started, total_in_ram=2
-download: local client queued hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-download: local client starts selected file without HTTP preload hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b file_index=1
-download: starting async open for hybrid hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b index=1
-backend/local: state Idle -> FetchingMetadata
-power: keep-awake enabled
-torrent_engine: synced verified pieces count=1
-torrent_engine: re-using existing torrent hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: state FetchingMetadata -> FileSelected hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b file_index=0
-scheduler: init piece_size=8388608 file_pieces=0-483 total_pieces=484
-backend/local: state FetchingMetadata -> FileSelected
-backend/local: state FileSelected -> PrebufferInstallInfo
-backend/local: open OK file_index=0 size=4054256902 pieces=0-483
-backend/local: tick thread started
-hybrid: start install, buffer=256MB
-hybrid: phase 1 - parsing header
-scheduler: 5zone critical=0-3 urgent=4-11 prefetch=-1--1 spec=-1--1 stall=0
-backend/local: CC limits changed to [2, 5]s (baseline=none)
-backend/local: CC limits changed to [1, 3]s (baseline=14ms)
-backend/local: CC queue_time 4s -> 3s rtt_baseline=13ms mode=throughput
-torrent_engine: storage piece 0 started, total_in_ram=3
-backend/local: state PrebufferInstallInfo -> StreamingOrInstalling
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=0 -> 4096
-hybrid: NSP header probe read=4096 need=336 files=5
-hybrid: NSP contains 5 files, total size=3866MB, ticket=no
-backend/local: state StreamingOrInstalling -> InstallInfoParsed
-backend/local: state InstallInfoParsed -> MainBuffering
-hybrid: phase 2 - creating placeholders
-ncm: initialized, storage=5
-installer: skipping placeholder creation for NCZ (will create later): c5ee456d9734d8d640d8b961fda42614.ncz
-ncm: placeholder created for d68416dd588bf8aa68bf13a4daf981ed.nca
-ncm: placeholder created for e24c3262a4338fcf5832bca32234ba22.nca
-ncm: placeholder created for 0da76a2dd6b0eb4f508495e947aecc17.cnmt.nca
-hybrid: phase 3 - starting Collector + Installer threads
-collector: start
-hybrid: both threads started
-collector: source_type=1 chunk_size=4194304
-download: hybrid install started for The Legend of Zelda: Skyward Sword HD [NSZ][RUS/Multi9] [The Legend of Zelda Skyward Sword HD [NSZ]/The Legend of Zelda Skyward Sword HD [01002DA013484000][v0] (7.07 GB).nsz] (index=1)
-collector: local chunk size=4194304
-installer: start
-installer: local chunk size=4194304
-installer: waiting local prebuffer target=33554432
-backend/local: state MainBuffering -> StreamingOrInstalling
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4096 -> 2162688
-collector: partial read advance offset=336 requested=4194304 got=2162352
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=2162688 -> 2555904
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=2555904 -> 2818048
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=2818048 -> 3080192
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=3080192 -> 3342336
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=3342336 -> 3620864
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=3620864 -> 3883008
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=3883008 -> 4145152
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4145152 -> 4440064
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4440064 -> 4718592
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4718592 -> 4980736
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4980736 -> 5242880
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=5242880 -> 5505024
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=5505024 -> 5783552
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=5783552 -> 6045696
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=6045696 -> 6324224
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=6324224 -> 6602752
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=6602752 -> 6864896
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=6864896 -> 7176192
-backend/local: SWARM status: total_peers=32 active_peers=9 seeds=4 dl_rate=1654KB/s
-   peer[0]: 178.206.172.95:6881 speed=1602KB/s rtt=5ms piece=4 reqq=479/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=97KB/s rtt=92ms piece=0 reqq=44/1 flags=IDL client=μTorrent 3.6
-   peer[2]: 89.223.39.173:51413 speed=3KB/s rtt=626ms piece=-1 reqq=11/5 flags=IDL client=Transmission 4.0.6
-   peer[3]: 5.145.72.87:51413 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=IRDL client=Transmission 4.0.5
-   peer[4]: 46.232.211.72:27905 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
-torrent_engine: storage piece 4 started, total_in_ram=4
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=7176192 -> 8388608
-scheduler: 5zone+EDF critical=1-4 urgent=5-12 prefetch=-1 slow_peers=0 stall=0
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 1)
-scheduler: stall level=1
-backend/local: CC queue_time 3s -> 1s rtt_baseline=7ms mode=latency
-torrent_engine: storage piece 5 started, total_in_ram=5
-torrent_engine: storage piece 1 started, total_in_ram=6
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=8388608 -> 8650752
-collector: stats downloaded=8650416 speed=1261KB/s rb_avail=8650416 rb_free=259785040 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=8650752 -> 8912896
-collector: partial read advance offset=8650752 requested=4194304 got=262144
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=8912896 -> 9175040
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=9175040 -> 9437184
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=9437184 -> 9732096
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=9732096 -> 9994240
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=9994240 -> 10289152
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=10289152 -> 10551296
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=10551296 -> 10813440
-backend/local: SWARM status: total_peers=34 active_peers=4 seeds=4 dl_rate=2149KB/s
-   peer[0]: 178.206.172.95:6881 speed=1924KB/s rtt=5ms piece=1 reqq=401/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=169KB/s rtt=79ms piece=1 reqq=36/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 89.223.39.173:51413 speed=70KB/s rtt=177ms piece=1 reqq=29/4 flags=ICDL client=Transmission 4.0.6
-   peer[3]: 5.145.72.87:51413 speed=47KB/s rtt=189ms piece=1 reqq=41/23 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 217.118.93.136:32612 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=10813440 -> 11075584
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=11075584 -> 11337728
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=11337728 -> 11599872
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=11599872 -> 11862016
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=11862016 -> 12206080
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=12206080 -> 12582912
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=12582912 -> 12845056
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=12845056 -> 13107200
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=13107200 -> 13385728
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=13385728 -> 13647872
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=13647872 -> 15155200
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=15155200 -> 15417344
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=15417344 -> 15728640
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=15728640 -> 16007168
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=16007168 -> 16269312
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=16269312 -> 16547840
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=16547840 -> 16777216
-scheduler: 5zone+EDF critical=2-5 urgent=6-13 prefetch=-1 slow_peers=0 stall=0
-backend/local: SWARM status: total_peers=11 active_peers=4 seeds=4 dl_rate=2330KB/s
-   peer[0]: 178.206.172.95:6881 speed=2041KB/s rtt=6ms piece=2 reqq=213/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=187KB/s rtt=80ms piece=2 reqq=17/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 89.223.39.173:51413 speed=85KB/s rtt=170ms piece=5 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-   peer[3]: 5.145.72.87:51413 speed=83KB/s rtt=166ms piece=5 reqq=29/5 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 78.40.199.103:2408 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
-torrent_engine: storage piece 2 started, total_in_ram=7
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=16777216 -> 18432000
-collector: stats downloaded=18431664 speed=1550KB/s rb_avail=18431664 rb_free=250003792 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=18432000 -> 18694144
-collector: partial read advance offset=18432000 requested=4194304 got=262144
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=18694144 -> 18956288
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=18956288 -> 19251200
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=19251200 -> 19513344
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=19513344 -> 21430272
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=21430272 -> 22020096
-torrent_engine: storage piece 6 started, total_in_ram=8
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=22020096 -> 25165824
-scheduler: 5zone+EDF critical=3-6 urgent=7-14 prefetch=30 slow_peers=0 stall=0
-backend/local: LATENCY_MODE exit
-backend/local: CC queue_time 1s -> 3s rtt_baseline=5ms mode=throughput
-backend/local: SWARM status: total_peers=9 active_peers=4 seeds=4 dl_rate=2583KB/s
-   peer[0]: 178.206.172.95:6881 speed=2288KB/s rtt=7ms piece=6 reqq=241/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=188KB/s rtt=81ms piece=7 reqq=19/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=95KB/s rtt=157ms piece=6 reqq=9/5 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=87KB/s rtt=173ms piece=6 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 78.40.199.103:2408 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
-torrent_engine: storage piece 7 started, total_in_ram=9
-torrent_engine: storage piece 3 started, total_in_ram=10
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=25165824 -> 25444352
-collector: stats downloaded=25444016 speed=1125KB/s rb_avail=25444016 rb_free=242991440 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=25444352 -> 25952256
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=25952256 -> 26247168
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=26247168 -> 26509312
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=26509312 -> 26820608
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=26820608 -> 27181056
-collector: partial read advance offset=26820608 requested=4194304 got=360448
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=27181056 -> 29917184
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=29917184 -> 30179328
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=30179328 -> 30490624
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=30490624 -> 30752768
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=30752768 -> 31014912
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=31014912 -> 31293440
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=31293440 -> 31588352
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=31588352 -> 31850496
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=31850496 -> 32112640
-backend/local: SWARM status: total_peers=8 active_peers=4 seeds=4 dl_rate=2264KB/s
-   peer[0]: 178.206.172.95:6881 speed=1940KB/s rtt=15ms piece=3 reqq=720/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=201KB/s rtt=75ms piece=7 reqq=65/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=99KB/s rtt=159ms piece=8 reqq=34/18 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=90KB/s rtt=188ms piece=8 reqq=26/16 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 78.40.199.103:2408 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=32112640 -> 32374784
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=32374784 -> 32653312
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=32653312 -> 32915456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=32915456 -> 33177600
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=33177600 -> 33439744
-collector: stats downloaded=33439408 speed=1544KB/s rb_avail=33439408 rb_free=234996048 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=33439744 -> 37634048
-scheduler: 5zone+EDF critical=4-7 urgent=8-15 prefetch=31 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=37634048 -> 41828352
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=41828352 -> 46022656
-scheduler: 5zone+EDF critical=5-8 urgent=9-16 prefetch=32 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=46022656 -> 49299456
-collector: partial read advance offset=46022656 requested=4194304 got=3276800
-installer: local prebuffer ready available=49299120
-ncz: using Solid Zstd decompression
-ncz: adjusted logical install size for c5ee456d9734d8d640d8b961fda42614.ncz from 4052603408 to 7593377792
-ncz: installing c5ee456d9734d8d640d8b961fda42614.ncz (compressed: 3864MB, orig: 7241MB)
-installer: stats installed=0 install_speed=0KB/s downloaded=49299120 source_speed=1960KB/s rb_avail=45088216 rb_free=223347240 rb_cap=268435456
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 5)
-scheduler: stall level=1
-scheduler: 5zone critical=5-8 urgent=9-12 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: CC queue_time 3s -> 1s rtt_baseline=5ms mode=latency
-backend/local: SWARM status: total_peers=6 active_peers=4 seeds=4 dl_rate=2090KB/s
-   peer[0]: 178.206.172.95:6881 speed=1758KB/s rtt=7ms piece=8 reqq=524/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=200KB/s rtt=72ms piece=7 reqq=69/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=100KB/s rtt=157ms piece=7 reqq=36/18 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=92KB/s rtt=183ms piece=5 reqq=33/16 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 91.36.184.123:2449 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=RLU client=Halite v 0.4.0.4
-torrent_engine: storage piece 8 started, total_in_ram=11
-installer: stats installed=125829120 install_speed=24552KB/s downloaded=49299120 source_speed=0KB/s rb_avail=14155224 rb_free=254280232 rb_cap=268435456
-torrent_engine: storage piece 9 started, total_in_ram=12
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=5-8 urgent=9-16 prefetch=17-32 spec=33-40 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=49299456 -> 49987584
-collector: stats downloaded=49987248 speed=1920KB/s rb_avail=687576 rb_free=267747880 rb_cap=268435456
-backend/local: SWARM status: total_peers=6 active_peers=5 seeds=4 dl_rate=1776KB/s
-   peer[0]: 178.206.172.95:6881 speed=1504KB/s rtt=12ms piece=9 reqq=147/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=144KB/s rtt=132ms piece=9 reqq=33/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=94KB/s rtt=159ms piece=9 reqq=8/5 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=84KB/s rtt=182ms piece=9 reqq=6/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 91.36.184.123:2449 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=RLU client=Halite v 0.4.0.4
-torrent_engine: storage piece 10 started, total_in_ram=13
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=49987584 -> 54181888
-installer: ncz buffer wait wait_ms=2990 got=361000 rb_avail=3833304 downloaded=54181552 installed=192937984 starvation_total=1
-installer: stats installed=192937984 install_speed=11180KB/s downloaded=54181552 source_speed=813KB/s rb_avail=3833304 rb_free=264602152 rb_cap=268435456
-scheduler: 5zone+EDF critical=6-9 urgent=10-17 prefetch=33 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=54181888 -> 58376192
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=58376192 -> 62570496
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 10 (active blocks detected!) speed=86KB/s rtt=187ms snubbed=no
-scheduler: 5zone+EDF critical=7-10 urgent=11-18 prefetch=34 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=62570496 -> 66764800
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=66764800 -> 70959104
-scheduler: 5zone+EDF critical=8-11 urgent=12-19 prefetch=35 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=70959104 -> 72450048
-collector: partial read advance offset=70959104 requested=4194304 got=1490944
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 8 (active blocks detected!) speed=84KB/s rtt=187ms snubbed=no
-backend/local: SWARM status: total_peers=6 active_peers=5 seeds=4 dl_rate=1702KB/s
-   peer[0]: 178.206.172.95:6881 speed=1437KB/s rtt=11ms piece=10 reqq=121/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=121KB/s rtt=137ms piece=8 reqq=10/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=103KB/s rtt=156ms piece=8 reqq=10/6 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=89KB/s rtt=191ms piece=8 reqq=9/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 91.36.184.123:2449 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=RLU client=Halite v 0.4.0.4
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 8)
-scheduler: stall level=1
-scheduler: 5zone critical=8-11 urgent=12-15 prefetch=-1--1 spec=-1--1 stall=1
-torrent_engine: storage piece 12 started, total_in_ram=14
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=8-11 urgent=12-19 prefetch=20-35 spec=36-43 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=72450048 -> 73236480
-collector: stats downloaded=73236144 speed=3624KB/s rb_avail=343512 rb_free=268091944 rb_cap=268435456
-installer: ncz buffer wait wait_ms=2001 got=442920 rb_avail=343512 downloaded=73236144 installed=222298112 starvation_total=2
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 8)
-scheduler: stall level=1
-scheduler: 5zone critical=8-11 urgent=12-15 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=8-11 urgent=12-19 prefetch=20-35 spec=36-43 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=73236480 -> 75317248
-installer: ncz buffer wait wait_ms=3076 got=180776 rb_avail=1899992 downloaded=75316912 installed=222298112 starvation_total=3
-installer: stats installed=222298112 install_speed=4524KB/s downloaded=75316912 source_speed=3256KB/s rb_avail=1899992 rb_free=266535464 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=75317248 -> 79511552
-scheduler: 5zone+EDF critical=9-12 urgent=13-20 prefetch=36 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=79511552 -> 83705856
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=83705856 -> 87900160
-scheduler: 5zone+EDF critical=10-13 urgent=14-21 prefetch=37 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=87900160 -> 88752128
-collector: partial read advance offset=87900160 requested=4194304 got=851968
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 12 (active blocks detected!) speed=84KB/s rtt=187ms snubbed=no
-backend/local: SWARM status: total_peers=6 active_peers=5 seeds=4 dl_rate=1856KB/s
-   peer[0]: 178.206.172.95:6881 speed=1569KB/s rtt=9ms piece=10 reqq=111/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=154KB/s rtt=94ms piece=-1 reqq=12/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=99KB/s rtt=161ms piece=12 reqq=9/6 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=87KB/s rtt=188ms piece=12 reqq=9/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 91.36.184.123:2449 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=RLU client=Halite v 0.4.0.4
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 10)
-scheduler: stall level=1
-scheduler: 5zone critical=10-13 urgent=14-17 prefetch=-1--1 spec=-1--1 stall=1
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 10 (active blocks detected!) speed=87KB/s rtt=193ms snubbed=no
-torrent_engine: storage piece 14 started, total_in_ram=15
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=10-13 urgent=14-21 prefetch=22-37 spec=38-45 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=88752128 -> 92274688
-collector: stats downloaded=92274352 speed=2732KB/s rb_avail=3128792 rb_free=265306664 rb_cap=268435456
-installer: ncz buffer wait wait_ms=2839 got=393768 rb_avail=3128792 downloaded=92274352 installed=243269632 starvation_total=4
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 14 (active blocks detected!) speed=87KB/s rtt=193ms snubbed=no
-scheduler: 5zone+EDF critical=11-14 urgent=15-22 prefetch=38 slow_peers=1 stall=0
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 11 (active blocks detected!) speed=84KB/s rtt=185ms snubbed=no
-torrent_engine: storage piece 11 started, total_in_ram=16
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=92274688 -> 92602368
-installer: ncz buffer wait wait_ms=2119 got=16936 rb_avail=310744 downloaded=92602032 installed=247463936 starvation_total=5
-installer: stats installed=247463936 install_speed=4085KB/s downloaded=92602032 source_speed=2805KB/s rb_avail=310744 rb_free=268124712 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=92602368 -> 93011968
-backend/local: SWARM status: total_peers=5 active_peers=5 seeds=4 dl_rate=1959KB/s
-   peer[0]: 178.206.172.95:6881 speed=1657KB/s rtt=13ms piece=11 reqq=211/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=175KB/s rtt=88ms piece=-1 reqq=11/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=97KB/s rtt=154ms piece=11 reqq=8/5 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=85KB/s rtt=184ms piece=-1 reqq=8/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 91.36.184.123:2449 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=RLU client=Halite v 0.4.0.4
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=93011968 -> 93356032
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=93356032 -> 94273536
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=94273536 -> 94535680
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=94535680 -> 94797824
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=94797824 -> 95076352
-torrent_engine: storage piece 15 started, total_in_ram=17
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 11)
-scheduler: stall level=1
-scheduler: 5zone critical=11-14 urgent=15-18 prefetch=-1--1 spec=-1--1 stall=1
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 11 (active blocks detected!) speed=84KB/s rtt=185ms snubbed=no
-backend/local: SWARM status: total_peers=5 active_peers=5 seeds=4 dl_rate=1758KB/s
-   peer[0]: 178.206.172.95:6881 speed=1458KB/s rtt=11ms piece=15 reqq=131/1 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=165KB/s rtt=87ms piece=11 reqq=8/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=101KB/s rtt=158ms piece=15 reqq=10/6 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=84KB/s rtt=185ms piece=-1 reqq=6/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 91.36.184.123:2449 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=RLU client=Halite v 0.4.0.4
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=11-14 urgent=15-22 prefetch=23-38 spec=39-46 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=95076352 -> 95879168
-collector: stats downloaded=95878832 speed=344KB/s rb_avail=441816 rb_free=267993640 rb_cap=268435456
-installer: ncz buffer wait wait_ms=6661 got=361000 rb_avail=441816 downloaded=95878832 installed=251658240 starvation_total=6
-installer: stats installed=251658240 install_speed=516KB/s downloaded=95878832 source_speed=403KB/s rb_avail=441816 rb_free=267993640 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=95879168 -> 96223232
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 11 (active blocks detected!) speed=84KB/s rtt=193ms snubbed=no
-backend/local: SWARM status: total_peers=8 active_peers=7 seeds=6 dl_rate=1830KB/s
-   peer[0]: 178.206.172.95:6881 speed=1536KB/s rtt=13ms piece=-1 reqq=74/93 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 179.214.96.136:37603 speed=161KB/s rtt=97ms piece=11 reqq=10/1 flags=ICDL client=μTorrent 3.6
-   peer[2]: 5.145.72.87:51413 speed=101KB/s rtt=163ms piece=11 reqq=8/6 flags=ICDL client=Transmission 4.0.5
-   peer[3]: 89.223.39.173:51413 speed=84KB/s rtt=193ms piece=11 reqq=6/5 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 188.243.60.140:2224 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=IRDL client=qBittorrent/5.1.0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=96223232 -> 97370112
-installer: ncz buffer wait wait_ms=2889 got=262696 rb_avail=884184 downloaded=97369776 installed=251658240 starvation_total=7
-scheduler: ISOLATED slow peer 85.113.51.24 for piece 12 (active blocks detected!) speed=0KB/s rtt=0ms snubbed=no
-torrent_engine: storage piece 16 started, total_in_ram=18
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=97370112 -> 98598912
-collector: partial read advance offset=97370112 requested=4194304 got=1228800
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=98598912 -> 102793216
-installer: ncz buffer wait wait_ms=1163 got=508456 rb_avail=3685848 downloaded=102792880 installed=255852544 starvation_total=8
-scheduler: 5zone+EDF critical=12-15 urgent=16-23 prefetch=39 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=102793216 -> 106987520
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=106987520 -> 107708416
-collector: partial read advance offset=106987520 requested=4194304 got=720896
-installer: stats installed=289406976 install_speed=6393KB/s downloaded=107708080 source_speed=2003KB/s rb_avail=3358168 rb_free=265077288 rb_cap=268435456
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 12)
-scheduler: stall level=1
-scheduler: 5zone critical=12-15 urgent=16-19 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=12-15 urgent=16-23 prefetch=24-39 spec=40-47 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=107708416 -> 107823104
-collector: stats downloaded=107822768 speed=1539KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-installer: ncz buffer wait wait_ms=1620 got=114688 rb_avail=0 downloaded=107822768 installed=293601280 starvation_total=9
-backend/local: SWARM status: total_peers=9 active_peers=8 seeds=6 dl_rate=1879KB/s
-   peer[0]: 178.206.172.95:6881 speed=1166KB/s rtt=24ms piece=16 reqq=151/70 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[1]: 85.113.51.24:56965 speed=462KB/s rtt=24ms piece=17 reqq=45/28 flags=IDLU client=qBittorrent/5.1.2
-   peer[2]: 179.214.96.136:37603 speed=118KB/s rtt=155ms piece=12 reqq=15/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=98KB/s rtt=165ms piece=16 reqq=11/5 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=89KB/s rtt=176ms piece=16 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=107823104 -> 109051904
-installer: ncz buffer wait wait_ms=637 got=197160 rb_avail=1031640 downloaded=109051568 installed=293601280 starvation_total=10
-scheduler: 5zone+EDF critical=13-16 urgent=17-24 prefetch=40 slow_peers=0 stall=0
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 13 (active blocks detected!) speed=91KB/s rtt=174ms snubbed=no
-torrent_engine: storage piece 13 started, total_in_ram=20
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=109051904 -> 109314048
-installer: ncz buffer wait wait_ms=2732 got=16936 rb_avail=245208 downloaded=109313712 installed=297795584 starvation_total=11
-installer: stats installed=297795584 install_speed=1545KB/s downloaded=109313712 source_speed=295KB/s rb_avail=245208 rb_free=268190248 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=109314048 -> 109576192
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=109576192 -> 109854720
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=109854720 -> 110886912
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=110886912 -> 111165440
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=111165440 -> 111427584
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=111427584 -> 111706112
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=111706112 -> 113147904
-installer: ncz buffer wait wait_ms=540 got=508456 rb_avail=933336 downloaded=113147568 installed=301989888 starvation_total=12
-backend/local: SWARM status: total_peers=12 active_peers=6 seeds=6 dl_rate=2245KB/s
-   peer[0]: 85.113.51.24:56965 speed=1041KB/s rtt=8ms piece=17 reqq=109/63 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=962KB/s rtt=18ms piece=17 reqq=117/58 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 179.214.96.136:37603 speed=115KB/s rtt=127ms piece=17 reqq=12/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=102KB/s rtt=154ms piece=17 reqq=13/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=90KB/s rtt=167ms piece=-1 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 17 started, total_in_ram=20
-torrent_engine: storage piece 18 started, total_in_ram=21
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 13)
-scheduler: stall level=1
-scheduler: 5zone critical=13-16 urgent=17-20 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=13-16 urgent=17-24 prefetch=25-40 spec=41-48 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=113147904 -> 113213440
-collector: stats downloaded=113213104 speed=672KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-installer: ncz buffer wait wait_ms=2282 got=65536 rb_avail=0 downloaded=113213104 installed=322961408 starvation_total=13
-torrent_engine: storage piece 19 started, total_in_ram=22
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 13 (active blocks detected!) speed=88KB/s rtt=181ms snubbed=no
-backend/local: SWARM status: total_peers=12 active_peers=11 seeds=6 dl_rate=2595KB/s
-   peer[0]: 85.113.51.24:56965 speed=1553KB/s rtt=7ms piece=19 reqq=164/94 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=815KB/s rtt=16ms piece=13 reqq=87/49 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 179.214.96.136:37603 speed=105KB/s rtt=165ms piece=18 reqq=13/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=101KB/s rtt=158ms piece=13 reqq=13/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=88KB/s rtt=181ms piece=13 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=113213440 -> 113246208
-installer: ncz buffer wait wait_ms=2795 got=32768 rb_avail=0 downloaded=113245872 installed=322961408 starvation_total=14
-installer: stats installed=322961408 install_speed=3446KB/s downloaded=113245872 source_speed=538KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=113246208 -> 117440512
-installer: ncz buffer wait wait_ms=1879 got=16936 rb_avail=4177368 downloaded=117440176 installed=322961408 starvation_total=15
-scheduler: 5zone+EDF critical=14-17 urgent=18-25 prefetch=41 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=117440512 -> 121634816
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=121634816 -> 125829120
-scheduler: 5zone+EDF critical=15-18 urgent=19-26 prefetch=42 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=125829120 -> 130023424
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=130023424 -> 134217728
-scheduler: ISOLATED slow peer 188.243.60.140 for piece 19 (active blocks detected!) speed=27KB/s rtt=362ms snubbed=no
-scheduler: 5zone+EDF critical=16-19 urgent=20-27 prefetch=43 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=134217728 -> 138412032
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=138412032 -> 142606336
-scheduler: ISOLATED slow peer 188.243.60.140 for piece 20 (active blocks detected!) speed=27KB/s rtt=362ms snubbed=no
-scheduler: 5zone+EDF critical=17-20 urgent=21-28 prefetch=44 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=142606336 -> 146800640
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=146800640 -> 150994944
-scheduler: 5zone+EDF critical=18-21 urgent=22-29 prefetch=45 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=150994944 -> 155189248
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=155189248 -> 159383552
-scheduler: 5zone+EDF critical=19-22 urgent=23-30 prefetch=46 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=159383552 -> 160333824
-collector: partial read advance offset=159383552 requested=4194304 got=950272
-torrent_engine: storage piece 20 started, total_in_ram=23
-torrent_engine: storage piece 23 started, total_in_ram=24
-backend/local: SWARM status: total_peers=11 active_peers=8 seeds=6 dl_rate=3149KB/s
-   peer[0]: 85.113.51.24:56965 speed=2078KB/s rtt=8ms piece=23 reqq=205/126 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=846KB/s rtt=17ms piece=23 reqq=92/51 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 179.214.96.136:37603 speed=104KB/s rtt=144ms piece=23 reqq=10/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=99KB/s rtt=159ms piece=23 reqq=10/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=86KB/s rtt=176ms piece=23 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=160333824 -> 162807808
-collector: stats downloaded=162807472 speed=6176KB/s rb_avail=2358744 rb_free=266076712 rb_cap=268435456
-installer: stats installed=390070272 install_speed=12994KB/s downloaded=162807472 source_speed=9596KB/s rb_avail=2358744 rb_free=266076712 rb_cap=268435456
-torrent_engine: storage piece 24 started, total_in_ram=25
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=162807808 -> 167002112
-installer: ncz buffer wait wait_ms=2209 got=262696 rb_avail=3931608 downloaded=167001776 installed=394264576 starvation_total=16
-scheduler: ISOLATED slow peer 188.243.60.140 for piece 20 (active blocks detected!) speed=46KB/s rtt=339ms snubbed=no
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=167002112 -> 168853504
-scheduler: 5zone+EDF critical=20-23 urgent=24-31 prefetch=47 slow_peers=0 stall=0
-backend/local: LATENCY_MODE exit
-backend/local: CC queue_time 1s -> 3s rtt_baseline=4ms mode=throughput
-torrent_engine: storage piece 25 started, total_in_ram=26
-backend/local: SWARM status: total_peers=10 active_peers=10 seeds=6 dl_rate=3483KB/s
-   peer[0]: 85.113.51.24:56965 speed=2150KB/s rtt=9ms piece=25 reqq=763/391 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1064KB/s rtt=10ms piece=26 reqq=171/194 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 179.214.96.136:37603 speed=130KB/s rtt=111ms piece=26 reqq=25/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=100KB/s rtt=158ms piece=20 reqq=27/18 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=89KB/s rtt=180ms piece=20 reqq=22/16 flags=ICDL client=Transmission 4.0.6
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=168853504 -> 170000384
-collector: partial read advance offset=168853504 requested=4194304 got=1146880
-collector: stats downloaded=170000048 speed=1391KB/s rb_avail=638424 rb_free=267797032 rb_cap=268435456
-installer: ncz buffer wait wait_ms=2158 got=508456 rb_avail=638424 downloaded=170000048 installed=406847488 starvation_total=17
-installer: stats installed=406847488 install_speed=3244KB/s downloaded=170000048 source_speed=1391KB/s rb_avail=638424 rb_free=267797032 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=170000384 -> 174194688
-installer: ncz buffer wait wait_ms=1532 got=410152 rb_avail=3784152 downloaded=174194352 installed=406847488 starvation_total=18
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=174194688 -> 176160768
-scheduler: 5zone+EDF critical=21-24 urgent=25-32 prefetch=48 slow_peers=0 stall=0
-torrent_engine: storage piece 26 started, total_in_ram=28
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 21)
-scheduler: stall level=1
-scheduler: 5zone critical=21-24 urgent=25-28 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: CC queue_time 3s -> 1s rtt_baseline=4ms mode=latency
-backend/local: SWARM status: total_peers=10 active_peers=10 seeds=6 dl_rate=2604KB/s
-   peer[0]: 85.113.51.24:56965 speed=1637KB/s rtt=11ms piece=26 reqq=829/297 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=656KB/s rtt=17ms piece=27 reqq=371/119 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 179.214.96.136:37603 speed=134KB/s rtt=119ms piece=27 reqq=49/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=100KB/s rtt=155ms piece=27 reqq=35/18 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=87KB/s rtt=191ms piece=27 reqq=27/15 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 27 started, total_in_ram=29
-torrent_engine: storage piece 28 started, total_in_ram=30
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 21 (active blocks detected!) speed=87KB/s rtt=190ms snubbed=no
-backend/local: SWARM status: total_peers=6 active_peers=6 seeds=6 dl_rate=2936KB/s
-   peer[0]: 85.113.51.24:56965 speed=1615KB/s rtt=7ms piece=21 reqq=324/97 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1019KB/s rtt=12ms piece=28 reqq=99/61 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 179.214.96.136:37603 speed=121KB/s rtt=134ms piece=21 reqq=14/1 flags=ICDL client=μTorrent 3.6
-   peer[3]: 5.145.72.87:51413 speed=100KB/s rtt=171ms piece=28 reqq=12/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=88KB/s rtt=181ms piece=21 reqq=9/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 21 started, total_in_ram=30
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=21-24 urgent=25-32 prefetch=33-48 spec=49-56 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=176160768 -> 176324608
-collector: stats downloaded=176324272 speed=600KB/s rb_avail=146904 rb_free=268288552 rb_cap=268435456
-installer: ncz buffer wait wait_ms=8206 got=16936 rb_avail=146904 downloaded=176324272 installed=419430400 starvation_total=19
-installer: stats installed=419430400 install_speed=1194KB/s downloaded=176324272 source_speed=600KB/s rb_avail=146904 rb_free=268288552 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=176324608 -> 180518912
-installer: ncz buffer wait wait_ms=2862 got=377384 rb_avail=3816920 downloaded=180518576 installed=419430400 starvation_total=20
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=180518912 -> 184549376
-collector: partial read advance offset=180518912 requested=4194304 got=4030464
-scheduler: 5zone+EDF critical=22-25 urgent=26-33 prefetch=49 slow_peers=0 stall=0
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 22 (active blocks detected!) speed=95KB/s rtt=199ms snubbed=no
-backend/local: SWARM status: total_peers=6 active_peers=6 seeds=6 dl_rate=2675KB/s
-   peer[0]: 85.113.51.24:56965 speed=1742KB/s rtt=6ms piece=28 reqq=137/105 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=636KB/s rtt=17ms piece=22 reqq=43/38 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=106KB/s rtt=132ms piece=22 reqq=8/6 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 5.145.72.87:51413 speed=100KB/s rtt=167ms piece=22 reqq=12/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=87KB/s rtt=197ms piece=29 reqq=11/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 29 started, total_in_ram=31
-torrent_engine: storage piece 22 started, total_in_ram=32
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=184549376 -> 184582144
-collector: stats downloaded=184581808 speed=1569KB/s rb_avail=15832 rb_free=268419624 rb_cap=268435456
-installer: ncz buffer wait wait_ms=1600 got=16936 rb_avail=15832 downloaded=184581808 installed=436207616 starvation_total=21
-installer: stats installed=436207616 install_speed=3189KB/s downloaded=184581808 source_speed=1569KB/s rb_avail=15832 rb_free=268419624 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=184582144 -> 188776448
-installer: ncz buffer wait wait_ms=2923 got=508456 rb_avail=3685848 downloaded=188776112 installed=436207616 starvation_total=22
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=188776448 -> 192970752
-scheduler: 5zone+EDF critical=23-26 urgent=27-34 prefetch=50 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=192970752 -> 197165056
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=197165056 -> 201359360
-scheduler: 5zone+EDF critical=24-27 urgent=28-35 prefetch=51 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=201359360 -> 205553664
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=205553664 -> 209747968
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 28 (active blocks detected!) speed=41KB/s rtt=204ms snubbed=yes
-scheduler: 5zone+EDF critical=25-28 urgent=29-36 prefetch=52 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=209747968 -> 213942272
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=213942272 -> 218136576
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 29 (active blocks detected!) speed=41KB/s rtt=204ms snubbed=yes
-scheduler: 5zone+EDF critical=26-29 urgent=30-37 prefetch=53 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=218136576 -> 222330880
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=222330880 -> 226525184
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 30 (active blocks detected!) speed=86KB/s rtt=182ms snubbed=no
-scheduler: 5zone+EDF critical=27-30 urgent=31-38 prefetch=54 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=226525184 -> 230719488
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=230719488 -> 234913792
-scheduler: 5zone+EDF critical=28-31 urgent=32-39 prefetch=55 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=234913792 -> 239108096
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=239108096 -> 241991680
-collector: partial read advance offset=239108096 requested=4194304 got=2883584
-torrent_engine: storage piece 30 started, total_in_ram=33
-backend/local: SWARM status: total_peers=6 active_peers=6 seeds=6 dl_rate=3085KB/s
-   peer[0]: 85.113.51.24:56965 speed=1998KB/s rtt=12ms piece=32 reqq=225/121 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=846KB/s rtt=24ms piece=32 reqq=96/51 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=114KB/s rtt=144ms piece=32 reqq=10/6 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 5.145.72.87:51413 speed=99KB/s rtt=173ms piece=32 reqq=12/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=92KB/s rtt=175ms piece=32 reqq=9/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 32 started, total_in_ram=34
-installer: stats installed=486539264 install_speed=9803KB/s downloaded=241991344 source_speed=11182KB/s rb_avail=28065240 rb_free=240370216 rb_cap=268435456
-backend/local: LATENCY_MODE exit
-backend/local: CC queue_time 1s -> 3s rtt_baseline=4ms mode=throughput
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 28)
-scheduler: stall level=1
-scheduler: 5zone critical=28-31 urgent=32-35 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: CC queue_time 3s -> 1s rtt_baseline=4ms mode=latency
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 28 (active blocks detected!) speed=10KB/s rtt=204ms snubbed=yes
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 29 (active blocks detected!) speed=10KB/s rtt=204ms snubbed=yes
-backend/local: SWARM status: total_peers=6 active_peers=6 seeds=6 dl_rate=2272KB/s
-   peer[0]: 85.113.51.24:56965 speed=1263KB/s rtt=21ms piece=32 reqq=319/76 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=749KB/s rtt=18ms piece=33 reqq=67/45 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=124KB/s rtt=106ms piece=33 reqq=8/7 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 5.145.72.87:51413 speed=100KB/s rtt=157ms piece=33 reqq=8/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=93KB/s rtt=170ms piece=33 reqq=9/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 33 started, total_in_ram=35
-torrent_engine: storage piece 34 started, total_in_ram=36
-backend/local: slow read wait_ms=10032 piece=28 offset=241991680
-backend/local: PIECE_WAIT_STATE piece=28 peers=6 choked=0 interesting=6 active=6 on_target=0 best_speed=1660KB/s => NO_PEER_ON_PIECE (priority/announce issue?)
-scheduler: STARVATION recovery piece=28 reason=NO_PEER_ON_PIECE critical=28-29 urgent=30-31 slow_peers=0
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 28 (active blocks detected!) speed=3KB/s rtt=204ms snubbed=yes
-backend/local: SWARM status: total_peers=8 active_peers=6 seeds=6 dl_rate=3245KB/s
-   peer[0]: 85.113.51.24:56965 speed=1963KB/s rtt=5ms piece=30 reqq=159/119 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1012KB/s rtt=8ms piece=31 reqq=61/61 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=167KB/s rtt=94ms piece=30 reqq=18/10 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 5.145.72.87:51413 speed=100KB/s rtt=157ms piece=30 reqq=10/6 flags=ICDL client=Transmission 4.0.5
-   peer[4]: 89.223.39.173:51413 speed=95KB/s rtt=165ms piece=30 reqq=9/5 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 31 started, total_in_ram=37
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=28-31 urgent=32-39 prefetch=40-55 spec=56-63 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=241991680 -> 246185984
-collector: stats downloaded=246185648 speed=3456KB/s rb_avail=3947992 rb_free=264487464 rb_cap=268435456
-installer: ncz buffer wait wait_ms=10055 got=246312 rb_avail=3947992 downloaded=246185648 installed=545259520 starvation_total=23
-installer: stats installed=545259520 install_speed=4628KB/s downloaded=246185648 source_speed=330KB/s rb_avail=3947992 rb_free=264487464 rb_cap=268435456
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 31 (active blocks detected!) speed=99KB/s rtt=178ms snubbed=no
-scheduler: 5zone+EDF critical=29-32 urgent=33-40 prefetch=56 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=246185984 -> 250380288
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=250380288 -> 254574592
-scheduler: 5zone+EDF critical=30-33 urgent=34-41 prefetch=57 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=254574592 -> 258768896
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=258768896 -> 262963200
-scheduler: ISOLATED slow peer 5.145.72.87 for piece 34 (active blocks detected!) speed=98KB/s rtt=154ms snubbed=no
-scheduler: 5zone+EDF critical=31-34 urgent=35-42 prefetch=58 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=262963200 -> 267157504
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=267157504 -> 267304960
-collector: partial read advance offset=267157504 requested=4194304 got=147456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=267304960 -> 271499264
-scheduler: 5zone+EDF critical=32-35 urgent=36-43 prefetch=59 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=271499264 -> 275693568
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=275693568 -> 279887872
-scheduler: 5zone+EDF critical=33-36 urgent=37-44 prefetch=60 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=279887872 -> 284082176
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=284082176 -> 288276480
-scheduler: 5zone+EDF critical=34-37 urgent=38-45 prefetch=61 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=288276480 -> 292470784
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=292470784 -> 292798464
-collector: partial read advance offset=292470784 requested=4194304 got=327680
-torrent_engine: storage piece 45 started, total_in_ram=38
-torrent_engine: storage piece 38 started, total_in_ram=39
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=292798464 -> 293601280
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 38 (active blocks detected!) speed=85KB/s rtt=200ms snubbed=no
-scheduler: 5zone+EDF critical=35-38 urgent=39-46 prefetch=62 slow_peers=1 stall=0
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 35 (active blocks detected!) speed=81KB/s rtt=199ms snubbed=no
-backend/local: SWARM status: total_peers=8 active_peers=8 seeds=6 dl_rate=3093KB/s
-   peer[0]: 85.113.51.24:56965 speed=1840KB/s rtt=6ms piece=35 reqq=145/111 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1019KB/s rtt=9ms piece=35 reqq=69/61 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=165KB/s rtt=96ms piece=35 reqq=16/10 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 89.223.39.173:51413 speed=81KB/s rtt=199ms piece=38 reqq=9/4 flags=ICDL client=Transmission 4.0.6
-   peer[4]: 5.145.72.87:51413 speed=78KB/s rtt=186ms piece=-1 reqq=12/4 flags=ICDL client=Transmission 4.0.5
-torrent_engine: storage piece 35 started, total_in_ram=40
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=293601280 -> 293650432
-torrent_engine: storage piece 39 started, total_in_ram=41
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 35)
-scheduler: stall level=1
-scheduler: 5zone critical=35-38 urgent=39-42 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: SWARM status: total_peers=8 active_peers=8 seeds=6 dl_rate=2749KB/s
-   peer[0]: 85.113.51.24:56965 speed=1845KB/s rtt=6ms piece=39 reqq=157/111 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=739KB/s rtt=18ms piece=39 reqq=121/44 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=167KB/s rtt=96ms piece=39 reqq=18/10 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 89.223.39.173:51413 speed=29KB/s rtt=209ms piece=-1 reqq=4/1 flags=ICDSL client=Transmission 4.0.6
-   peer[4]: 5.145.72.87:51413 speed=25KB/s rtt=186ms piece=-1 reqq=5/1 flags=ICDSL client=Transmission 4.0.5
-installer: stats installed=742391808 install_speed=25242KB/s downloaded=293650096 source_speed=6077KB/s rb_avail=13663704 rb_free=254771752 rb_cap=268435456
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=35-38 urgent=39-46 prefetch=47-62 spec=63-70 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=293650432 -> 294748160
-collector: stats downloaded=294747824 speed=5963KB/s rb_avail=14761432 rb_free=253674024 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=294748160 -> 298942464
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=298942464 -> 301989888
-scheduler: 5zone+EDF critical=36-39 urgent=40-47 prefetch=63 slow_peers=0 stall=0
-torrent_engine: storage piece 40 started, total_in_ram=42
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 36 (active blocks detected!) speed=48KB/s rtt=521ms snubbed=no
-backend/local: SWARM status: total_peers=8 active_peers=7 seeds=6 dl_rate=2377KB/s
-   peer[0]: 85.113.51.24:56965 speed=1444KB/s rtt=8ms piece=40 reqq=140/87 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=767KB/s rtt=15ms piece=40 reqq=127/46 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=160KB/s rtt=89ms piece=40 reqq=9/9 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 179.214.96.136:37603 speed=52KB/s rtt=518ms piece=40 reqq=5/3 flags=ICDL client=μTorrent 3.6
-   peer[4]: 89.223.39.173:51413 speed=12KB/s rtt=245ms piece=-1 reqq=1/2 flags=ICDL client=Transmission 4.0.6
-installer: stats installed=872415232 install_speed=25388KB/s downloaded=301989552 source_speed=1628KB/s rb_avail=5750232 rb_free=262685224 rb_cap=268435456
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 36)
-scheduler: stall level=1
-scheduler: 5zone critical=36-39 urgent=40-43 prefetch=-1--1 spec=-1--1 stall=1
-torrent_engine: storage piece 36 started, total_in_ram=43
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=36-39 urgent=40-47 prefetch=48-63 spec=64-71 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=301989888 -> 302006272
-collector: partial read advance offset=301989888 requested=4194304 got=16384
-collector: stats downloaded=302005936 speed=1373KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-torrent_engine: storage piece 41 started, total_in_ram=44
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=302006272 -> 306200576
-installer: ncz buffer wait wait_ms=2589 got=552 rb_avail=4193752 downloaded=306200240 installed=880803840 starvation_total=24
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=306200576 -> 309870592
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=309870592 -> 310378496
-scheduler: 5zone+EDF critical=37-40 urgent=41-48 prefetch=64 slow_peers=0 stall=0
-torrent_engine: storage piece 42 started, total_in_ram=45
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 37 (active blocks detected!) speed=82KB/s rtt=212ms snubbed=no
-backend/local: SWARM status: total_peers=31 active_peers=8 seeds=6 dl_rate=3548KB/s
-   peer[0]: 85.113.51.24:56965 speed=2295KB/s rtt=5ms piece=37 reqq=175/139 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1007KB/s rtt=12ms piece=37 reqq=69/61 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=191KB/s rtt=75ms piece=41 reqq=12/11 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 179.214.96.136:37603 speed=82KB/s rtt=212ms piece=-1 reqq=4/4 flags=ICDL client=μTorrent 3.6
-   peer[4]: 89.223.39.173:51413 speed=43KB/s rtt=232ms piece=-1 reqq=1/2 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 37 started, total_in_ram=46
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=310378496 -> 310935552
-collector: partial read advance offset=310378496 requested=4194304 got=557056
-installer: ncz buffer wait wait_ms=821 got=16936 rb_avail=540120 downloaded=310935216 installed=910163968 starvation_total=25
-installer: stats installed=910163968 install_speed=7330KB/s downloaded=310935216 source_speed=1737KB/s rb_avail=540120 rb_free=267895336 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=310935552 -> 312147968
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=312147968 -> 313475072
-collector: stats downloaded=313474736 speed=2037KB/s rb_avail=982488 rb_free=267452968 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=313475072 -> 313819136
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=313819136 -> 314310656
-installer: ncz buffer wait wait_ms=766 got=246312 rb_avail=245208 downloaded=314310320 installed=922746880 starvation_total=26
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=314310656 -> 314572800
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=314572800 -> 315195392
-torrent_engine: storage piece 43 started, total_in_ram=47
-backend/local: SWARM status: total_peers=30 active_peers=7 seeds=6 dl_rate=2968KB/s
-   peer[0]: 85.113.51.24:56965 speed=1756KB/s rtt=6ms piece=43 reqq=113/106 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=902KB/s rtt=11ms piece=43 reqq=32/54 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=194KB/s rtt=85ms piece=43 reqq=14/11 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 179.214.96.136:37603 speed=102KB/s rtt=152ms piece=-1 reqq=7/6 flags=ICDL client=μTorrent 3.6
-   peer[4]: 89.223.39.173:51413 speed=55KB/s rtt=253ms piece=-1 reqq=4/3 flags=ICDL client=Transmission 4.0.6
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 37)
-scheduler: stall level=1
-scheduler: 5zone critical=37-40 urgent=41-44 prefetch=-1--1 spec=-1--1 stall=1
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 37 (active blocks detected!) speed=63KB/s rtt=233ms snubbed=no
-torrent_engine: storage piece 44 started, total_in_ram=48
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=37-40 urgent=41-48 prefetch=49-64 spec=65-72 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=315195392 -> 315277312
-collector: stats downloaded=315276976 speed=276KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-installer: ncz buffer wait wait_ms=4334 got=81920 rb_avail=0 downloaded=315276976 installed=922746880 starvation_total=27
-installer: stats installed=922746880 install_speed=1677KB/s downloaded=315276976 source_speed=578KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=315277312 -> 319471616
-installer: ncz buffer wait wait_ms=1719 got=361000 rb_avail=3833304 downloaded=319471280 installed=922746880 starvation_total=28
-scheduler: 5zone+EDF critical=38-41 urgent=42-49 prefetch=65 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=319471616 -> 323665920
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=323665920 -> 327860224
-scheduler: 5zone+EDF critical=39-42 urgent=43-50 prefetch=66 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=327860224 -> 332054528
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=332054528 -> 336248832
-scheduler: 5zone+EDF critical=40-43 urgent=44-51 prefetch=67 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=336248832 -> 340443136
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=340443136 -> 344637440
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 44 (active blocks detected!) speed=92KB/s rtt=189ms snubbed=no
-scheduler: 5zone+EDF critical=41-44 urgent=45-52 prefetch=68 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=344637440 -> 348831744
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=348831744 -> 353026048
-scheduler: 5zone+EDF critical=42-45 urgent=46-53 prefetch=69 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=353026048 -> 357220352
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=357220352 -> 361414656
-scheduler: 5zone+EDF critical=43-46 urgent=47-54 prefetch=70 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=361414656 -> 365608960
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=365608960 -> 369803264
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 47 (active blocks detected!) speed=92KB/s rtt=189ms snubbed=no
-scheduler: 5zone+EDF critical=44-47 urgent=48-55 prefetch=71 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=369803264 -> 370245632
-collector: partial read advance offset=369803264 requested=4194304 got=442368
-backend/local: SWARM status: total_peers=31 active_peers=8 seeds=6 dl_rate=3088KB/s
-   peer[0]: 85.113.51.24:56965 speed=1841KB/s rtt=11ms piece=44 reqq=168/111 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=940KB/s rtt=10ms piece=44 reqq=119/57 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=196KB/s rtt=92ms piece=44 reqq=16/11 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 179.214.96.136:37603 speed=85KB/s rtt=203ms piece=44 reqq=7/5 flags=ICDL client=μTorrent 3.6
-   peer[4]: 89.223.39.173:51413 speed=66KB/s rtt=236ms piece=-1 reqq=6/4 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 47 started, total_in_ram=49
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=370245632 -> 374439936
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=374439936 -> 376356864
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=376356864 -> 378175488
-scheduler: 5zone+EDF critical=45-48 urgent=49-56 prefetch=72 slow_peers=0 stall=0
-installer: stats installed=1006632960 install_speed=16381KB/s downloaded=378175152 source_speed=12282KB/s rb_avail=43662808 rb_free=224772648 rb_cap=268435456
-scheduler: ISOLATED slow peer 179.214.96.136 for piece 45 (active blocks detected!) speed=92KB/s rtt=157ms snubbed=no
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=378175488 -> 378191872
-collector: stats downloaded=378191536 speed=9975KB/s rb_avail=29523416 rb_free=238912040 rb_cap=268435456
-torrent_engine: storage piece 49 started, total_in_ram=50
-backend/local: SWARM status: total_peers=33 active_peers=8 seeds=6 dl_rate=3672KB/s
-   peer[0]: 85.113.51.24:56965 speed=2259KB/s rtt=4ms piece=49 reqq=129/137 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1097KB/s rtt=8ms piece=50 reqq=38/66 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=197KB/s rtt=90ms piece=-1 reqq=15/11 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 179.214.96.136:37603 speed=102KB/s rtt=143ms piece=49 reqq=5/6 flags=ICDL client=μTorrent 3.6
-   peer[4]: 89.223.39.173:51413 speed=70KB/s rtt=211ms piece=49 reqq=5/4 flags=ICDL client=Transmission 4.0.6
-torrent_engine: storage piece 50 started, total_in_ram=51
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 45)
-scheduler: stall level=1
-scheduler: 5zone critical=45-48 urgent=49-52 prefetch=-1--1 spec=-1--1 stall=1
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=45-48 urgent=49-56 prefetch=57-72 spec=73-80 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=378191872 -> 382386176
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=382386176 -> 383320064
-collector: partial read advance offset=382386176 requested=4194304 got=933888
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 45 (active blocks detected!) speed=75KB/s rtt=210ms snubbed=no
-torrent_engine: storage piece 51 started, total_in_ram=52
-installer: stats installed=1186988032 install_speed=25190KB/s downloaded=383319728 source_speed=718KB/s rb_avail=13155800 rb_free=255279656 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=383320064 -> 385875968
-collector: stats downloaded=385875632 speed=1263KB/s rb_avail=14138840 rb_free=254296616 rb_cap=268435456
-scheduler: 5zone+EDF critical=46-49 urgent=50-57 prefetch=73 slow_peers=0 stall=0
-scheduler: ISOLATED slow peer 89.223.39.173 for piece 46 (active blocks detected!) speed=74KB/s rtt=202ms snubbed=no
-backend/local: SWARM status: total_peers=20 active_peers=12 seeds=7 dl_rate=4509KB/s
-   peer[0]: 85.113.51.24:56965 speed=2368KB/s rtt=6ms piece=46 reqq=140/143 flags=IDLU client=qBittorrent/5.1.2
-   peer[1]: 178.206.172.95:6881 speed=1814KB/s rtt=12ms piece=52 reqq=153/110 flags=ICDLU client=libtorrent/1.2.2.0
-   peer[2]: 188.243.60.140:2224 speed=216KB/s rtt=77ms piece=46 reqq=16/13 flags=ICDL client=qBittorrent/5.1.0
-   peer[3]: 179.214.96.136:37603 speed=116KB/s rtt=143ms piece=52 reqq=11/7 flags=ICDL client=μTorrent 3.6
-   peer[4]: 89.223.39.173:51413 speed=74KB/s rtt=202ms piece=46 reqq=4/4 flags=ICDL client=Transmission 4.0.6
+torrent_engine: torrent started with sequential_download=false hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: added torrent hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: state Idle -> FetchingMetadata hash=1ec7325a1396e9e503041980f67dd0e4d56156db file_index=-1
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=0 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=0 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (10)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (11)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=0 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] 520 (unknown HTTP error) "<none>" (4)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (11)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=0 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (12)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (13)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (12)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (14)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] 500 Internal Server Error "Internal Server Error" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (13)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (15)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (14)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (16)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 3
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 2
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (15)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (17)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (6)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (16)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (18)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (17)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (19)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] End of file "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (18)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (20)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (19)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (6)
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (8)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (21)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (20)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] End of file "" (2)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (22)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (9)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (21)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=0 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (23)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (22)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (24)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (23)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (10)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (25)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (8)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (24)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (26)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] 520 (unknown HTTP error) "<none>" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (11)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (9)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (12)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (25)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (27)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 3
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 2
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (26)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (28)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] End of file "" (6)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (27)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (13)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (29)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] 500 Internal Server Error "Internal Server Error" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (10)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] 500 Internal Server Error "Internal Server Error" (5)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (14)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (11)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (28)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (30)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (15)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (12)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (16)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (13)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (12)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (12)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (12)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (29)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (31)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (30)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (32)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (17)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (14)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (18)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] 520 (unknown HTTP error) "<none>" (7)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (5)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (31)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (33)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (13)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (13)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (13)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (32)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=0 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (34)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=0 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (15)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (19)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (33)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (20)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (35)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (16)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (21)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (17)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (34)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (36)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (14)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (14)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (14)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://bt.t-ru.org/ann?magnet)[192.168.1.104:6881] received peers: 12
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (35)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (22)
+torrent_engine: tracker error: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (37)
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 3
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 2
+torrent_engine: tracker reply: 04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec (http://37.120.182.83:80/announce)[192.168.1.104:6881] received peers: 0
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (18)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (23)
+torrent_engine: [v62] reannounce(no_peers): peers=2 dl_rate=0KB/s progress=0% state=2 hash=04ee8c5ce7ca92f901106c5ecbed3acaa630b2ec
+torrent_engine: metadata received: Ghosts n Goblins Resurrection [NSP] metadata successfully received
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (6)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (36)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (19)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (38)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (24)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: PiecePool created piece_size=4194304 capacity=72
+torrent_engine: storage piece 551 started, total_in_ram=1
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (20)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (25)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (10)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (21)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (15)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (15)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (15)
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker reply: Ghosts n Goblins Resurrection [NSP] (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: metadata wait hash=1ec7325a1396e9e503041980f67dd0e4d56156db state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=1ec7325a1396e9e503041980f67dd0e4d56156db peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (7)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (26)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (22)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] timed out "" (3)
+lt_engine: probe failed: cancelled
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (5)
+download: local probe failed: cancelled
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: cache root=TorrentShopNX/cache/local_engine
+torrent_engine: save path=TorrentShopNX/cache/local_engine/8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901
+torrent_engine: storage=memory (torrest-style RAM cache)
+torrent_engine: torrent started with sequential_download=false hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901
+torrent_engine: added torrent hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901
+torrent_engine: state Idle -> FetchingMetadata hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 file_index=-1
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=0 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (1)
+torrent_engine: tracker reply: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (1)
+torrent_engine: tracker reply: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://exodus.desync.com:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker reply: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (11)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (8)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (28)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (24)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (1)
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=0 dht_nodes=0 listening=yes port=6881
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (2)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (2)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (2)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (8)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (9)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (29)
+torrent_engine: tracker reply: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.dler.org:6969/announce)[192.168.1.104:6881] received peers: 1
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (25)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (10)
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (30)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (3)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (3)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: storage piece 297 started, total_in_ram=2
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (3)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (4)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (4)
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (1)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (11)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (26)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (31)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (2)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (12)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (12)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (12)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (12)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (6)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (27)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.opentrackr.org:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.openbittorrent.com:6969/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.internetwarriors.net:1337/announce)[192.168.1.104:6881] timed out "" (2)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://p4p.arenabg.ch:1337/announce)[192.168.1.104:6881] timed out "" (1)
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (5)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (5)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (4)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (6)
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (6)
+torrent_engine: tracker error: Ghosts n Goblins Resurrection [NSP] (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (2)
+torrent_engine: tracker reply: Ghosts n Goblins Resurrection [NSP] (udp://open.stealth.si:80/announce)[192.168.1.104:6881] received peers: 3
+torrent_engine: tracker reply: Ghosts n Goblins Resurrection [NSP] (udp://tracker.torrent.eu.org:451/announce)[192.168.1.104:6881] received peers: 2
+torrent_engine: tracker error: 8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (5)
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: [v62] reannounce(no_peers): peers=0 dl_rate=0KB/s progress=0% state=2 hash=1ec7325a1396e9e503041980f67dd0e4d56156db
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://bt.t-ru.org:2710/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.bitsearch.to:1337/announce)[192.168.1.104:6881] timed out "" (9)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://37.120.182.83:80/announce)[192.168.1.104:6881] Connection refused "" (3)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (http://bt4.t-ru.org/ann?magnet)[192.168.1.104:6881] Connection reset by peer "" (13)
+torrent_engine: metadata wait hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 state=2 peers=0 seeds=0 known=1 candidates=1 dht_nodes=0 listening=yes port=6881
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:6881] Host not found (authoritative) "" (32)
+torrent_engine: tracker error: 1ec7325a1396e9e503041980f67dd0e4d56156db (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:6881] Host not found (authoritative) "" (28)
+torrent_engine: metadata reconnect hash=8fcab5407bfd8b0a92a5e5c879746f5bb7ee6901 peers=0 known=1 candidates=1 reconnect_attempts=0
