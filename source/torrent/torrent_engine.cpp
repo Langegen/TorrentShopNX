@@ -397,12 +397,13 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
 }
 
 void log_applied_libtorrent_like_settings(const LibtorrentLikeSettingsConfig& cfg) {
-    util::logLine("torrent_engine: [Build v62] settings aio_threads=" + std::to_string(cfg.aio_threads) +
+    util::logLine("torrent_engine: [Build v63] settings aio_threads=" + std::to_string(cfg.aio_threads) +
                   " req_timeout=" + std::to_string(cfg.request_timeout) +
                   " conn_speed=" + std::to_string(cfg.connection_speed) +
                   " max_out_req=" + std::to_string(cfg.max_out_request_queue) +
                   " RAM_cache_limit=" + std::to_string(kPieceCacheEntries) +
-                  " strict_end_game=" + std::string(cfg.strict_end_game_mode ? "true" : "false"));
+                  " strict_end_game=" + std::string(cfg.strict_end_game_mode ? "true" : "false") +
+                  " stall_recovery=immediate latency_mode=true");
 }
 
 // Адаптирует request_queue_time и whole_pieces_threshold под размер торрента.

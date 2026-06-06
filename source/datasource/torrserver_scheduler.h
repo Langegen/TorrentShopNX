@@ -127,6 +127,13 @@ public:
     /// Фоновый тик с проверкой пиров (для применения изоляции во время stall)
     void on_tick_with_peers(const std::vector<lt::peer_info>& peers);
 
+    /// Аварийное восстановление, когда read() ждёт текущий кусок, но быстрые
+    /// пиры не переключаются на него. Сжимает окно вокруг target_piece,
+    /// сбрасывает stale deadlines и форсирует deadline=0 для текущего куска.
+    SchedulerSnapshot on_piece_starvation(int target_piece,
+                                           const std::vector<lt::peer_info>& peers,
+                                           bool no_peer_on_piece);
+
     // =========================================================================
     // Запрос состояния
     // =========================================================================
@@ -218,6 +225,7 @@ private:
     SchedulerSnapshot      last_snapshot_;
     std::vector<PeerEwmaStats> peer_ewma_stats_; ///< EWMA-статистика пиров
     std::unordered_map<int, std::chrono::steady_clock::time_point> last_isolated_; ///< Rate-limit изоляций
+    std::unordered_map<int, std::chrono::steady_clock::time_point> last_starvation_recovery_; ///< Rate-limit starvation recovery
 
     mutable std::mutex mutex_;
 };

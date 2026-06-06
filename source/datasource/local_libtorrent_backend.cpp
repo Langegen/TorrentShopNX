@@ -40,6 +40,10 @@ bool LocalLibtorrentBackend::open(const ContentRequest& request) {
     session_.reset();
     handle_ = {};
     io_recovery_count_ = 0;
+    metrics_ = {};
+    latency_mode_ = false;
+    latency_mode_until_ = {};
+    summary_logged_ = false;
 
     if (request.info_hash.empty() && request.magnet_link.empty() && request.torrent_file_path.empty()) {
         set_state(StreamState::Error, "пустой запрос: нет hash/magnet/file");
@@ -148,8 +152,22 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
 
             // Сообщаем планировщику о восстановлении после stall — сбрасываем stall_level,
             // восстанавливаем speculative зону и нормальный deadline_step.
-            if (was_stalled && scheduler_.is_initialized()) {
-                scheduler_.on_stall_recovered();
+            if (was_stalled) {
+                const auto stall_recovered_at = std::chrono::steady_clock::now();
+                lock.lock();
+                ++metrics_.stall_recoveries;
+                if (metrics_.current_stall_started.time_since_epoch().count() > 0) {
+                    const auto stall_ms = static_cast<uint64_t>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            stall_recovered_at - metrics_.current_stall_started).count());
+                    metrics_.total_stall_ms += stall_ms;
+                    metrics_.max_stall_ms = std::max(metrics_.max_stall_ms, stall_ms);
+                    metrics_.current_stall_started = {};
+                }
+                lock.unlock();
+                if (scheduler_.is_initialized()) {
+                    scheduler_.on_stall_recovered();
+                }
             }
 
             // Сообщаем движку минимальный оффсет, который нам всё ещё нужен.
@@ -165,6 +183,7 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
             lock.lock();
             ++status_.stall_count;
             set_state(StreamState::Stalled, "timeout waiting for pieces");
+            log_session_summary_locked("timeout");
             return 0;
         }
 
@@ -187,6 +206,13 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
                         if (pi.down_speed > 0) { ++active; best_speed = std::max(best_speed, pi.down_speed); }
                         if (pi.downloading_piece_index == piece_start) ++on_target_piece;
                     }
+                    const bool no_peer_on_piece = (on_target_piece == 0);
+                    const bool all_choked = (total > 0 && choked == total);
+                    const bool no_active_download = (active == 0);
+                    const char* diagnosis = no_peer_on_piece ? "NO_PEER_ON_PIECE (priority/announce issue?)" :
+                                             all_choked ? "ALL_CHOKED (choking algo issue?)" :
+                                             no_active_download ? "NO_ACTIVE_DOWNLOAD (pipeline empty?)" :
+                                             "SLOW_DELIVERY (RTT/bandwidth)";
                     util::logLine("backend/local: PIECE_WAIT_STATE piece=" + std::to_string(piece_start) +
                                   " peers=" + std::to_string(total) +
                                   " choked=" + std::to_string(choked) +
@@ -194,16 +220,33 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
                                   " active=" + std::to_string(active) +
                                   " on_target=" + std::to_string(on_target_piece) +
                                   " best_speed=" + std::to_string(best_speed / 1024) + "KB/s" +
-                                  " => " + (on_target_piece == 0 ? "NO_PEER_ON_PIECE (priority/announce issue?)" :
-                                            choked == total ? "ALL_CHOKED (choking algo issue?)" :
-                                            active == 0 ? "NO_ACTIVE_DOWNLOAD (pipeline empty?)" :
-                                            "SLOW_DELIVERY (RTT/bandwidth)"));
+                                  " => " + diagnosis);
+                    lock.lock();
+                    ++metrics_.slow_read_logs;
+                    if (no_peer_on_piece) ++metrics_.no_peer_on_piece;
+                    else if (all_choked) ++metrics_.all_choked;
+                    else if (no_active_download) ++metrics_.no_active_download;
+                    else ++metrics_.slow_delivery;
+                    enter_latency_mode_locked(no_peer_on_piece ? "NO_PEER_ON_PIECE" : "slow_read", now);
+                    lock.unlock();
+
                     if (scheduler_.is_initialized()) {
-                        scheduler_.on_read_request_with_peers(offset, size, cached_peers_);
+                        if (no_peer_on_piece || waited_ms >= 10000) {
+                            scheduler_.on_piece_starvation(piece_start, cached_peers_, no_peer_on_piece);
+                            lock.lock();
+                            ++metrics_.starvation_recoveries;
+                            lock.unlock();
+                        } else {
+                            scheduler_.on_read_request_with_peers(offset, size, cached_peers_);
+                        }
                     }
                 } else {
                     util::logLine("backend/local: PIECE_WAIT_STATE piece=" + std::to_string(piece_start) +
                                   " NO_CACHED_PEERS (peer list not populated yet)");
+                    lock.lock();
+                    ++metrics_.slow_read_logs;
+                    enter_latency_mode_locked("NO_CACHED_PEERS", now);
+                    lock.unlock();
                     if (scheduler_.is_initialized()) {
                         scheduler_.on_read_request(offset, size);
                     }
@@ -223,12 +266,57 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
                 }
             }
 
+            bool first_stall_for_this_wait = false;
             lock.lock();
             if (state_ != StreamState::Stalled) {
+                ++metrics_.stall_entries;
+                metrics_.current_stall_started = now;
+                enter_latency_mode_locked("stall", now);
                 set_state(StreamState::Stalled, "waiting for piece " + std::to_string(piece_start));
+                first_stall_for_this_wait = true;
                 if (scheduler_.is_initialized()) scheduler_.on_stall();
+            } else {
+                enter_latency_mode_locked("stall", now);
             }
             lock.unlock();
+
+            // Не ждём 10-секундного slow-read лога: как только read() перешёл в Stalled,
+            // немедленно сжимаем окно вокруг текущего куска. Это закрывает случай из log.txt,
+            // где быстрые пиры качают future pieces, а текущий piece остаётся без on_target.
+            if (first_stall_for_this_wait && scheduler_.is_initialized()) {
+                std::vector<lt::peer_info> peers_snapshot;
+                {
+                    std::lock_guard<std::mutex> peers_lock(cached_peers_mutex_);
+                    peers_snapshot = cached_peers_;
+                }
+
+                int on_target_piece = 0;
+                int active = 0;
+                int best_speed = 0;
+                for (const auto& pi : peers_snapshot) {
+                    if (pi.down_speed > 0) {
+                        ++active;
+                        best_speed = std::max(best_speed, pi.down_speed);
+                    }
+                    if (pi.downloading_piece_index == piece_start) {
+                        ++on_target_piece;
+                    }
+                }
+
+                const bool no_peer_on_piece = !peers_snapshot.empty() && active > 0 && on_target_piece == 0;
+                scheduler_.on_piece_starvation(piece_start, peers_snapshot, no_peer_on_piece);
+                lock.lock();
+                ++metrics_.starvation_recoveries;
+                lock.unlock();
+
+                util::logLine("backend/local: STALL_RECOVERY piece=" + std::to_string(piece_start) +
+                              " waited_ms=" + std::to_string(waited_ms) +
+                              " peers=" + std::to_string(peers_snapshot.size()) +
+                              " active=" + std::to_string(active) +
+                              " on_target=" + std::to_string(on_target_piece) +
+                              " best_speed=" + std::to_string(best_speed / 1024) + "KB/s" +
+                              " reason=" + std::string(no_peer_on_piece ? "NO_PEER_ON_PIECE" : "STALL"));
+            }
         } // end: if (waited_ms >= 3000)
 
 
@@ -270,6 +358,7 @@ void LocalLibtorrentBackend::notifyStreamingComplete(bool success) {
     if (!opened_) return;
     set_state(success ? StreamState::Completed : StreamState::Error,
               success ? "streaming finished" : "streaming failed");
+    log_session_summary_locked(success ? "completed" : "failed");
 }
 
 void LocalLibtorrentBackend::close() {
@@ -279,6 +368,8 @@ void LocalLibtorrentBackend::close() {
     if (state_ != StreamState::Error && state_ != StreamState::Completed) {
         set_state(StreamState::Stopping);
     }
+
+    log_session_summary_locked("close");
 
     handle_ = {};
     session_.reset();
@@ -298,6 +389,53 @@ void LocalLibtorrentBackend::set_state(StreamState new_state, const std::string&
     util::logLine("backend/local: state " + std::string(streamStateName(old)) +
                   " -> " + std::string(streamStateName(new_state)) +
                   (detail.empty() ? "" : " (" + detail + ")"));
+}
+
+
+void LocalLibtorrentBackend::enter_latency_mode_locked(const char* reason,
+                                                       std::chrono::steady_clock::time_point now) {
+    constexpr auto kLatencyHold = std::chrono::seconds(10);
+    const bool was_in_latency = latency_mode_ && now < latency_mode_until_;
+    latency_mode_ = true;
+    latency_mode_until_ = now + kLatencyHold;
+    if (!was_in_latency) {
+        ++metrics_.latency_mode_entries;
+        util::logLine(std::string("backend/local: LATENCY_MODE enter reason=") +
+                      (reason ? reason : "unknown") + " hold=10s");
+    }
+}
+
+void LocalLibtorrentBackend::log_session_summary_locked(const char* reason) {
+    if (summary_logged_) return;
+    if (!opened_ && metrics_.slow_read_logs == 0 && metrics_.stall_entries == 0 &&
+        metrics_.starvation_recoveries == 0) {
+        return;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    if (metrics_.current_stall_started.time_since_epoch().count() > 0) {
+        const auto stall_ms = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - metrics_.current_stall_started).count());
+        metrics_.total_stall_ms += stall_ms;
+        metrics_.max_stall_ms = std::max(metrics_.max_stall_ms, stall_ms);
+        metrics_.current_stall_started = {};
+    }
+
+    summary_logged_ = true;
+    util::logLine("backend/local: SESSION_SUMMARY reason=" +
+                  std::string(reason ? reason : "unknown") +
+                  " slow_read_logs=" + std::to_string(metrics_.slow_read_logs) +
+                  " stalls=" + std::to_string(metrics_.stall_entries) +
+                  " stall_recoveries=" + std::to_string(metrics_.stall_recoveries) +
+                  " stall_total_ms=" + std::to_string(metrics_.total_stall_ms) +
+                  " stall_max_ms=" + std::to_string(metrics_.max_stall_ms) +
+                  " no_peer_on_piece=" + std::to_string(metrics_.no_peer_on_piece) +
+                  " all_choked=" + std::to_string(metrics_.all_choked) +
+                  " no_active_download=" + std::to_string(metrics_.no_active_download) +
+                  " slow_delivery=" + std::to_string(metrics_.slow_delivery) +
+                  " starvation_recoveries=" + std::to_string(metrics_.starvation_recoveries) +
+                  " latency_entries=" + std::to_string(metrics_.latency_mode_entries));
 }
 
 bool LocalLibtorrentBackend::prepare_via_engine(const ContentRequest& request) {
@@ -345,6 +483,7 @@ void LocalLibtorrentBackend::stop_tick_thread() {
 void LocalLibtorrentBackend::tick_thread_func() {
     util::logLine("backend/local: tick thread started");
     CongestionController congestion_ctrl;
+    int applied_queue_time = congestion_ctrl.current_queue_time();
 
     while (true) {
         // Ждём с разблокированным mutex — read() не блокируется
@@ -358,11 +497,18 @@ void LocalLibtorrentBackend::tick_thread_func() {
         // Кратко берём mutex только для копирования handle/session
         lt::torrent_handle handle_copy;
         std::shared_ptr<lt::session> session_copy;
+        bool latency_mode_active = false;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (!tick_running_) break;
             handle_copy  = handle_;
             session_copy = session_;
+            const auto now = std::chrono::steady_clock::now();
+            latency_mode_active = latency_mode_ && now < latency_mode_until_;
+            if (latency_mode_ && !latency_mode_active) {
+                latency_mode_ = false;
+                util::logLine("backend/local: LATENCY_MODE exit");
+            }
         }
 
         if (!handle_copy.is_valid()) continue;
@@ -395,7 +541,6 @@ void LocalLibtorrentBackend::tick_thread_func() {
         }
 
         // ── BBR CongestionController ─────────────────────────────────────────
-        const int prev_queue_time = congestion_ctrl.current_queue_time();
         {
             int min_limit = 2;
             int max_limit = 5;
@@ -428,17 +573,22 @@ void LocalLibtorrentBackend::tick_thread_func() {
             }
         }
 
-        const int new_queue_time  = congestion_ctrl.update(peers, 0);
+        int new_queue_time  = congestion_ctrl.update(peers, 0);
+        if (latency_mode_active) {
+            new_queue_time = std::min(new_queue_time, 1);
+        }
 
-        if (session_copy && new_queue_time != prev_queue_time) {
+        if (session_copy && new_queue_time != applied_queue_time) {
             try {
                 lt::settings_pack pack;
                 pack.set_int(lt::settings_pack::request_queue_time, new_queue_time);
                 session_copy->apply_settings(pack);
                 util::logLine("backend/local: CC queue_time " +
-                              std::to_string(prev_queue_time) + "s -> " +
+                              std::to_string(applied_queue_time) + "s -> " +
                               std::to_string(new_queue_time) + "s" +
-                              " rtt_baseline=" + std::to_string(congestion_ctrl.baseline_rtt_ms()) + "ms");
+                              " rtt_baseline=" + std::to_string(congestion_ctrl.baseline_rtt_ms()) + "ms" +
+                              (latency_mode_active ? " mode=latency" : " mode=throughput"));
+                applied_queue_time = new_queue_time;
             } catch (const std::exception& e) {
                 util::logLine("backend/local: CC apply_settings ERROR: " + std::string(e.what()));
             } catch (...) {
