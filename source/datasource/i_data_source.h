@@ -37,6 +37,7 @@ public:
     virtual void notifyStreamingComplete(bool /*success*/) {}
     virtual size_t streamPieceSize() const { return 0; }
     virtual uint64_t streamTorrentOffset() const { return 0; }
+    virtual int downloadSpeedKBps() const { return -1; }
 
     virtual ReadFailureKind lastReadFailure() const { return ReadFailureKind::None; }
     virtual bool shouldFallbackOnReadFailure() const { return false; }

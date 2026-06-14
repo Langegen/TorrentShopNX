@@ -103,6 +103,13 @@ uint64_t BackendDataSource::streamTorrentOffset() const {
     return backend_->fileOffsetInTorrent();
 }
 
+int BackendDataSource::downloadSpeedKBps() const {
+    if (!backend_) {
+        return -1;
+    }
+    return backend_->downloadSpeedKBps();
+}
+
 ReadFailureKind BackendDataSource::lastReadFailure() const {
     if (!backend_) {
         return ReadFailureKind::None;

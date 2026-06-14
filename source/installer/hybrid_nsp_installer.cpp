@@ -1363,6 +1363,12 @@ std::string HybridNspInstaller::statusText() const {
 }
 
 double HybridNspInstaller::downloadSpeedKbps() const {
+    if (source_) {
+        int speed = source_->downloadSpeedKBps();
+        if (speed >= 0) {
+            return static_cast<double>(speed);
+        }
+    }
 #ifdef __SWITCH__
     u64 now = armGetSystemTick();
     u64 freq = armGetSystemTickFreq();

@@ -569,7 +569,7 @@ void DownloadManager::trackProgress() {
     }
     if (torrent_) {
         const auto poll_interval = local_hybrid_active
-            ? std::chrono::milliseconds(5000)
+            ? std::chrono::milliseconds(1000)
             : std::chrono::milliseconds(800);
         if (last_torrent_list_.empty() ||
             last_torrent_list_poll_.time_since_epoch().count() == 0 ||
