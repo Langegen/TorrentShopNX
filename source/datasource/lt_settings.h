@@ -37,7 +37,7 @@ inline lt::settings_pack make_streaming_settings_pack(const std::string& bind_ip
     s.set_int(lt::settings_pack::max_out_request_queue, 500);
     s.set_int(lt::settings_pack::request_queue_time, 2);
     s.set_int(lt::settings_pack::max_allowed_in_request_queue, 9000);
-    s.set_int(lt::settings_pack::connections_limit, 150);
+    s.set_int(lt::settings_pack::connections_limit, 80);
     s.set_int(lt::settings_pack::connection_speed, 100);
     s.set_int(lt::settings_pack::request_timeout, 30);
     s.set_int(lt::settings_pack::peer_timeout, 90);
@@ -83,9 +83,9 @@ inline lt::settings_pack make_streaming_settings_pack(const std::string& bind_ip
     // --- Listen ---
     if (!bind_ip.empty()) {
         s.set_str(lt::settings_pack::listen_interfaces,
-                  bind_ip + ":6881,0.0.0.0:6881");
+                  bind_ip + ":50575,0.0.0.0:50575");
     } else {
-        s.set_str(lt::settings_pack::listen_interfaces, "0.0.0.0:6881");
+        s.set_str(lt::settings_pack::listen_interfaces, "0.0.0.0:50575");
     }
     s.set_str(lt::settings_pack::dht_bootstrap_nodes,
               "router.bittorrent.com:6881,"

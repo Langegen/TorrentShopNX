@@ -151,6 +151,7 @@ private:
     SessionMetrics metrics_{};
     bool latency_mode_ = false;
     std::chrono::steady_clock::time_point latency_mode_until_{};
+    std::chrono::steady_clock::time_point open_time_{};
     bool summary_logged_ = false;
 
     // I/O error recovery

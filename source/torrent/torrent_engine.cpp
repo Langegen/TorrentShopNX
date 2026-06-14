@@ -60,9 +60,9 @@ constexpr const char* kCacheRoot = "TorrentShopNX/cache/local_engine";
 constexpr const char* kCacheRoot = "sdmc:/switch/TorrentShopNX/cache/local_engine";
 #endif
 constexpr int kDefaultPort = 8080;
-constexpr int kLibtorrentListenPort = 6881;
+constexpr int kLibtorrentListenPort = 50575;
 constexpr int kCacheBlocks16KiB = 0; // Disabled: we use MemoryStorage instead
-constexpr int kConnectionsLimit = 150; // MUST match connections_limit in settings!
+constexpr int kConnectionsLimit = 80; // MUST match connections_limit in settings!
 constexpr int kMetadataTimeoutMs = 300000; // 5 min
 constexpr int kPieceWaitTimeoutMs = 45000;
 constexpr int kPollSleepMs = 50; 
@@ -123,7 +123,7 @@ struct LibtorrentLikeSettingsConfig {
     int torrent_connect_boost = 80; 
     int active_downloads = 30; 
     int active_limit = 100; 
-    int connections_limit = 150; // Sweets pot swarm size (harmonized with lt_settings.h)
+    int connections_limit = 80; // Sweets pot swarm size (harmonized with lt_settings.h)
     bool prioritize_partial_pieces = true; 
     bool use_parole_mode = true;
     bool strict_end_game_mode = false; // v60: посылаем запрос на последние куски ВСЕМ пирам, а не одному 
@@ -324,10 +324,8 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::max_peer_recv_buffer_size, 8 * 1024 * 1024); // Increased to 8MB
     settings.set_bool(lt::settings_pack::predictive_piece_announce, false); // v63: disabled — causes stall at piece boundaries (unnecessary pre-announce flood)
 
-    // Let OS handle per-socket buffer sizes. Setting explicit values exhausts
-    // the 4MB socket memory pool on Switch and causes ENOBUFS errors.
-    settings.set_int(lt::settings_pack::send_socket_buffer_size, 0);
-    settings.set_int(lt::settings_pack::recv_socket_buffer_size, 0);
+    settings.set_int(lt::settings_pack::recv_socket_buffer_size, 1024 * 1024); // 1 MB
+    settings.set_int(lt::settings_pack::send_socket_buffer_size, 512 * 1024); // 512 KB
     settings.set_int(lt::settings_pack::send_buffer_low_watermark, 512 * 1024);
     settings.set_int(lt::settings_pack::send_buffer_watermark, 1024 * 1024);
     settings.set_int(lt::settings_pack::mixed_mode_algorithm, lt::settings_pack::prefer_tcp); // TCP is more stable on Switch than UTP under load
@@ -347,7 +345,7 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_bool(lt::settings_pack::deprecated_ignore_limits_on_local_network,
                       cfg.ignore_limits_on_local_network);
 #endif
-    settings.set_bool(lt::settings_pack::allow_multiple_connections_per_ip, true);
+    settings.set_bool(lt::settings_pack::allow_multiple_connections_per_ip, false);
     settings.set_int(lt::settings_pack::out_enc_policy, lt::settings_pack::pe_enabled);
     settings.set_int(lt::settings_pack::in_enc_policy, lt::settings_pack::pe_enabled);
     settings.set_int(lt::settings_pack::allowed_enc_level, lt::settings_pack::pe_both);
@@ -366,11 +364,12 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_bool(lt::settings_pack::enable_incoming_utp, cfg.incoming_utp);
     settings.set_bool(lt::settings_pack::enable_outgoing_tcp, true);
     settings.set_bool(lt::settings_pack::enable_incoming_tcp, true);
-    settings.set_bool(lt::settings_pack::enable_upnp, false);
-    settings.set_bool(lt::settings_pack::enable_natpmp, false);
-    settings.set_bool(lt::settings_pack::announce_to_all_tiers, true); 
-    settings.set_bool(lt::settings_pack::announce_to_all_trackers, true); 
-    settings.set_bool(lt::settings_pack::prefer_udp_trackers, false); 
+    // Ha Switch без UPnP входящие TCP-соединения блокируются NAT, из-за чего peers=0.
+    settings.set_bool(lt::settings_pack::enable_upnp, true);
+    settings.set_bool(lt::settings_pack::enable_natpmp, true);
+    settings.set_bool(lt::settings_pack::announce_to_all_tiers, true);
+    settings.set_bool(lt::settings_pack::announce_to_all_trackers, true);
+    settings.set_bool(lt::settings_pack::prefer_udp_trackers, false);
     settings.set_int(lt::settings_pack::mixed_mode_algorithm, lt::settings_pack::prefer_tcp);
     settings.set_int(lt::settings_pack::choking_algorithm, lt::settings_pack::fixed_slots_choker);
 
@@ -685,12 +684,12 @@ struct TorrentEngine::Impl {
                         const float progress  = status.progress;
                         const bool near_end   = (progress > 0.90f);
 
-                        // Cooldown: 0 = немедленно (обрыв), 3 = мало пиров, 10 = конец, 30 = норма
+                        // Cooldown: 0 = немедленно (обрыв), 20 = мало пиров, 10 = конец, 30 = норма
                         int cooldown_sec;
                         if (sudden_drop || peers_just_dropped) {
                             cooldown_sec = 0;
                         } else if (no_peers) {
-                            cooldown_sec = 3;
+                            cooldown_sec = 20;
                         } else if (near_end) {
                             cooldown_sec = 10;
                         } else {
@@ -717,7 +716,7 @@ struct TorrentEngine::Impl {
                                 // При обрыве: сразу переподключить известные адреса пиров
                                 if (no_peers || peers_just_dropped) {
                                     record->handle.resume(); // на случай если torrent был pause'd
-                                    reconnectKnownPeersLocked(*record, 10);
+                                    reconnectKnownPeersLocked(*record, 4);
                                 }
 
                                 const char* reason =

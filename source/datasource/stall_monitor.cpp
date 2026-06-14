@@ -24,6 +24,7 @@ void StallMonitor::init(lt::torrent_handle handle, std::shared_ptr<lt::session> 
     stall_ticks_ = 0;
     last_download_rate_ = 0;
     stall_started_ = {};
+    init_time_ = std::chrono::steady_clock::now();
 }
 
 void StallMonitor::reset() {
@@ -33,10 +34,23 @@ void StallMonitor::reset() {
     stall_ticks_ = 0;
     last_download_rate_ = 0;
     stall_started_ = {};
+    init_time_ = {};
+    peer_first_seen_.clear();
 }
 
 int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_state) {
     if (!initialized_ || !handle_.is_valid()) {
+        return 0;
+    }
+
+    auto now_time = std::chrono::steady_clock::now();
+
+    // Проверяем глобальный период прогрева после старта/инициализации
+    auto elapsed_since_init = std::chrono::duration_cast<std::chrono::seconds>(now_time - init_time_).count();
+    if (elapsed_since_init < kWarmupGracePeriodSeconds) {
+        stall_ticks_ = 0;
+        stall_started_ = {};
+        peer_first_seen_.clear();
         return 0;
     }
 
@@ -52,7 +66,7 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
             stall_ticks_ = kStallTicksBeforeAction;
         }
         if (stall_started_.time_since_epoch().count() == 0) {
-            stall_started_ = std::chrono::steady_clock::now();
+            stall_started_ = now_time;
         }
     } else if (last_download_rate_ >= kStallThresholdBps) {
         // Скорость нормальная — сбрасываем счётчик
@@ -63,7 +77,7 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
         // Скорость ниже порога — инкрементируем
         ++stall_ticks_;
         if (stall_started_.time_since_epoch().count() == 0) {
-            stall_started_ = std::chrono::steady_clock::now();
+            stall_started_ = now_time;
         }
     }
 
@@ -75,6 +89,19 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
     // 5. Получаем список пиров и ищем медленных на urgent кусках
     std::vector<lt::peer_info> peers;
     handle_.get_peer_info(peers);
+
+    // Обновляем карту времени первого обнаружения пиров
+    std::map<std::string, std::chrono::steady_clock::time_point> new_seen;
+    for (const auto& pi : peers) {
+        std::string ip_port = pi.ip.address().to_string() + ":" + std::to_string(pi.ip.port());
+        auto it = peer_first_seen_.find(ip_port);
+        if (it != peer_first_seen_.end()) {
+            new_seen[ip_port] = it->second;
+        } else {
+            new_seen[ip_port] = now_time;
+        }
+    }
+    peer_first_seen_ = std::move(new_seen);
 
     int disconnected = 0;
     for (const auto& pi : peers) {
@@ -95,6 +122,16 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
         // Проверяем, висит ли пир на наших urgent кусках
         if (!is_peer_on_urgent_piece(pi, urgent_start, urgent_end)) {
             continue;
+        }
+
+        // Новички имеют индивидуальный grace period
+        std::string ip_port = pi.ip.address().to_string() + ":" + std::to_string(pi.ip.port());
+        auto seen_it = peer_first_seen_.find(ip_port);
+        if (seen_it != peer_first_seen_.end()) {
+            auto elapsed_peer_sec = std::chrono::duration_cast<std::chrono::seconds>(now_time - seen_it->second).count();
+            if (elapsed_peer_sec < kMinPeerConnectionAgeSeconds) {
+                continue; // Не трогаем новичка
+            }
         }
 
         // Медленный пир на urgent куске — отключаем

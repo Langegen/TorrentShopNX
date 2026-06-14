@@ -43,7 +43,7 @@ namespace lt = libtorrent;
 /// Конфигурация 5-зонного планировщика.
 struct SchedulerConfig {
     // === Размеры зон (в кусках) ===
-    int critical_pieces    = 4;    ///< Зона 1: ~1.3 с при 24MB/s (было 8)
+    int critical_pieces    = 2;    ///< Зона 1: ~0.6 с при 24MB/s (было 4)
     int urgent_pieces      = 8;    ///< Зона 2: ~2.6 с (было 16)
     int prefetch_pieces    = 16;   ///< Зона 3: последовательная загрузка (было 24)
     int speculative_pieces = 8;    ///< Зона 4: speculative (было 16)
@@ -57,7 +57,7 @@ struct SchedulerConfig {
     // === Stall-режим ===
     int stall_extra_critical   = 0;
     int stall_extra_urgent     = -4;   ///< Сжимаем Urgent зону с 8 до 4 кусков при stall (было -12)
-    int stall_extra_prefetch   = -16;  ///< Полностью отключаем Prefetch при stall (с 16 до 0) (было -24)
+    int stall_extra_prefetch   = -12;  ///< Сжимаем Prefetch при stall (с 16 до 4) (было -16)
     int stall_deadline_step_ms = 50;
 
     // === EDF / EWMA ===

@@ -204,7 +204,8 @@ SchedulerSnapshot TorrServerScheduler::on_piece_starvation(
     const int window_max = urgent.valid() ? urgent.end : critical.end;
     for (int p = file_first_piece_; p <= file_last_piece_; ++p) {
         if (p < window_min || p > window_max) {
-            handle_.piece_priority(lt::piece_index_t(p), lt::dont_download);
+            // ВАЖНО: НИКОГДА не ставим dont_download (0) для кусков, которые вышли из окна.
+            handle_.piece_priority(lt::piece_index_t(p), lt::download_priority_t(1));
             handle_.reset_piece_deadline(lt::piece_index_t(p));
         }
     }
@@ -223,7 +224,7 @@ SchedulerSnapshot TorrServerScheduler::on_piece_starvation(
         for (int p = critical.start; p <= critical.end; ++p) {
             handle_.piece_priority(lt::piece_index_t(p), cfg_.critical_priority);
             handle_.reset_piece_deadline(lt::piece_index_t(p));
-            handle_.set_piece_deadline(p, p == target_piece ? 0 : 50,
+            handle_.set_piece_deadline(p, p == target_piece ? 0 : 1000,
                                        lt::torrent_handle::alert_when_available);
         }
     }
@@ -313,7 +314,12 @@ SchedulerSnapshot TorrServerScheduler::rebuild_window(int critical_start) {
                                (urgent.valid()     ? urgent.end      : critical.end));
         for (int p = file_first_piece_; p <= file_last_piece_; ++p) {
             if (p < window_min || p > window_max) {
-                handle_.piece_priority(lt::piece_index_t(p), lt::dont_download);
+                // ВАЖНО: НИКОГДА не ставим dont_download (0) для кусков, которые вышли из окна.
+                // Если кусок начал качаться (инсталлятор прыгнул к NCA заголовкам в конце файла),
+                // а потом инсталлятор вернулся к piece 0, этот кусок окажется за пределами окна.
+                // Установка 0 отменит in-flight запросы к пирам, что убьет их скорость до 0,
+                // их target_dl_queue_length упадет до 1, и возникнет request queue death spiral!
+                handle_.piece_priority(lt::piece_index_t(p), lt::download_priority_t(1));
             }
         }
     }
@@ -423,7 +429,8 @@ SchedulerSnapshot TorrServerScheduler::rebuild_5zone_window(
                                (urgent.valid()     ? urgent.end       : critical.end));
         for (int p = file_first_piece_; p <= file_last_piece_; ++p) {
             if (p < window_min || p > window_max) {
-                handle_.piece_priority(lt::piece_index_t(p), lt::dont_download);
+                // ВАЖНО: НИКОГДА не ставим dont_download (0) для кусков, которые вышли из окна.
+                handle_.piece_priority(lt::piece_index_t(p), lt::download_priority_t(1));
             }
         }
     }

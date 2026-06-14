@@ -16,6 +16,8 @@
 
 #include <chrono>
 #include <vector>
+#include <map>
+#include <string>
 
 namespace datasource {
 
@@ -70,6 +72,8 @@ private:
     int stall_ticks_ = 0;
     int last_download_rate_ = 0;
     std::chrono::steady_clock::time_point stall_started_{};
+    std::chrono::steady_clock::time_point init_time_{};
+    std::map<std::string, std::chrono::steady_clock::time_point> peer_first_seen_;
 
     // --- Конфигурация ---
     // Порог скорости, ниже которого считаем "stall" (50 KB/s)
@@ -80,6 +84,10 @@ private:
     static constexpr int kStallTicksBeforeAction = 3;
     // Максимум пиров для отключения за один тик
     static constexpr int kMaxDisconnectsPerTick = 2;
+    // Общий период прогрева после инициализации перед началом работы монитора (секунд)
+    static constexpr int kWarmupGracePeriodSeconds = 30;
+    // Индивидуальный период прогрева для пиров после их первого обнаружения (секунд)
+    static constexpr int kMinPeerConnectionAgeSeconds = 15;
 };
 
 } // namespace datasource

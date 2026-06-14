@@ -253,14 +253,16 @@ int main(int argc, char** argv) {
     sock_cfg.sb_efficiency = 32; // from nxTransmission, greatly improves socket buffer allocation on Switch
     sock_cfg.tcp_tx_buf_max_size = 1048576; // 1MB TX
     sock_cfg.tcp_rx_buf_max_size = 1048576; // 1MB RX
-    sock_cfg.udp_rx_buf_size = 1048576;      // 1MB UDP
+    sock_cfg.udp_rx_buf_size = 1048576;      // 1MB UDP RX
+    sock_cfg.udp_tx_buf_size = 1048576;      // 1MB UDP TX
     util::logLine("main: socket config sb_efficiency=" + std::to_string(sock_cfg.sb_efficiency) +
                   " num_bsd_sessions=" + std::to_string(sock_cfg.num_bsd_sessions) +
                   " tcp_tx=" + std::to_string(sock_cfg.tcp_tx_buf_size) +
                   " tcp_rx=" + std::to_string(sock_cfg.tcp_rx_buf_size) +
                   " tcp_tx_max=" + std::to_string(sock_cfg.tcp_tx_buf_max_size) +
                   " tcp_rx_max=" + std::to_string(sock_cfg.tcp_rx_buf_max_size) +
-                  " udp_rx=" + std::to_string(sock_cfg.udp_rx_buf_size));
+                  " udp_rx=" + std::to_string(sock_cfg.udp_rx_buf_size) +
+                  " udp_tx=" + std::to_string(sock_cfg.udp_tx_buf_size));
     Result sock_rc = socketInitialize(&sock_cfg);
     util::logLine(std::string("main: socketInitialize rc=") + std::to_string((int)sock_rc));
 

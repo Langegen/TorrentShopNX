@@ -43,6 +43,7 @@ bool LocalLibtorrentBackend::open(const ContentRequest& request) {
     metrics_ = {};
     latency_mode_ = false;
     latency_mode_until_ = {};
+    open_time_ = std::chrono::steady_clock::now();
     summary_logged_ = false;
 
     if (request.info_hash.empty() && request.magnet_link.empty() && request.torrent_file_path.empty()) {
@@ -394,6 +395,13 @@ void LocalLibtorrentBackend::set_state(StreamState new_state, const std::string&
 
 void LocalLibtorrentBackend::enter_latency_mode_locked(const char* reason,
                                                        std::chrono::steady_clock::time_point now) {
+    // Во время прогрева (первые 30 секунд после открытия) не входим в LATENCY_MODE,
+    // так как на старте скорость раздачи еще только раскачивается и ограничение
+    // очереди запросов в 1 секунду задушит скорость пиров.
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - open_time_).count() < 30) {
+        return;
+    }
+
     constexpr auto kLatencyHold = std::chrono::seconds(10);
     const bool was_in_latency = latency_mode_ && now < latency_mode_until_;
     latency_mode_ = true;
@@ -575,7 +583,7 @@ void LocalLibtorrentBackend::tick_thread_func() {
 
         int new_queue_time  = congestion_ctrl.update(peers, 0);
         if (latency_mode_active) {
-            new_queue_time = std::min(new_queue_time, 1);
+            new_queue_time = std::min(new_queue_time, 2);
         }
 
         if (session_copy && new_queue_time != applied_queue_time) {
