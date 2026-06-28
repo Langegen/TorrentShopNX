@@ -21,8 +21,8 @@ TARGET      :=  TorrentShopNX
 BUILD       :=  build
 SOURCES     :=  source source/ui source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
 DATA        :=
-INCLUDES    :=  include
-ROMFS       :=  data
+INCLUDES    :=  include _external/borealis/library/include _external/borealis/library/include/borealis/extern _external/borealis/library/include/borealis/extern/nanovg _external/borealis/library/lib/extern/fmt/include _external/borealis/library/lib/extern/tweeny/include _external/borealis/library/lib/extern/yoga
+ROMFS       :=  resources
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -30,7 +30,7 @@ ROMFS       :=  data
 ARCH    :=  -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
 # Base CFLAGS
-CFLAGS  :=  -g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES)
+CFLAGS  :=  -g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS -DBOOST_ASIO_DISABLE_CONCEPTS
 
 #---------------------------------------------------------------------------------
 # External libraries logic
@@ -73,11 +73,17 @@ export LIBPATHS :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib) $(EXTRA_LIBPATHS)
 #---------------------------------------------------------------------------------
 # Final flags formulation
 #---------------------------------------------------------------------------------
+BOREALIS_BUILD_DIR := $(TOPDIR)/_external/borealis/build/library
+BOREALIS_LIBS := $(BOREALIS_BUILD_DIR)/libborealis.a \
+                 $(BOREALIS_BUILD_DIR)/lib/extern/yoga/yoga/libyogacore.a \
+                 $(BOREALIS_BUILD_DIR)/lib/extern/fmt/libfmt.a \
+                 $(BOREALIS_BUILD_DIR)/libtinyxml2.a
+
 CFLAGS      +=  $(INCLUDE) -D__SWITCH__
-CXXFLAGS    :=  $(CFLAGS) -fno-rtti -fexceptions
+CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions
 ASFLAGS     :=  -g $(ARCH)
-LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
-LIBS        :=  -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lzstd -lnx
+LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map) -Wl,--wrap=socketExit
+LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lzstd -lnx -lm
 
 #---------------------------------------------------------------------------------
 # Pass-through/recursive rules
@@ -141,6 +147,10 @@ DEPENDS := $(OFILES:.o=.d)
 all : $(OUTPUT).nro
 
 $(OUTPUT).nro : $(OUTPUT).elf
+	@echo building romfs ...
+	@$(DEVKITPRO)/tools/bin/build_romfs $(TOPDIR)/$(ROMFS) $(CURDIR)/romfs.bin
+	@$(DEVKITPRO)/tools/bin/elf2nro $< $@ --romfs=$(CURDIR)/romfs.bin
+	@echo built ... $(notdir $@)
 
 $(OUTPUT).elf : $(OFILES)
 

@@ -1,0 +1,46 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="20"
+    paddingBottom="20"
+    paddingLeft="20">
+
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="20">
+        <brls:Label text="Настройки" fontSize="28" />
+    </brls:Box>
+
+    <brls:ScrollingFrame width="auto" height="auto" grow="1.0">
+        <brls:Box width="auto" height="auto" axis="column">
+
+            <brls:Box
+                width="10000"
+                height="auto"
+                axis="column"
+                alignItems="stretch"
+                paddingTop="40"
+                paddingRight="40"
+                paddingBottom="40"
+                paddingLeft="40">
+                
+                <brls:BooleanCell
+                    id="keepAwakeCell" />
+                    
+                <brls:SelectorCell
+                    id="modeCell" />
+                    
+                <brls:InputCell
+                    id="remoteUrlCell" />
+                    
+                <brls:InputCell
+                    id="catalogUrlCell" />
+
+            </brls:Box>
+
+        </brls:Box>
+    </brls:ScrollingFrame>
+
+</brls:Box>
+</brls:AppletFrame>

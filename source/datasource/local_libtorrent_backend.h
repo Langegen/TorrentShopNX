@@ -160,6 +160,9 @@ private:
     // Кэш peer_info для EDF планировщика (обновляется в tick_thread)
     mutable std::mutex          cached_peers_mutex_;
     std::vector<lt::peer_info>  cached_peers_;
+    
+    // Кэш скорости скачивания для предотвращения блокировок UI потока
+    int                         cached_download_speed_kbps_ = 0;
 };
 
 } // namespace datasource

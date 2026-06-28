@@ -25,7 +25,8 @@ enum class DownloadState {
     Installing,          // Совместимость: старый режим
     Completed,
     Cancelled,
-    Failed               // Новый: ошибка
+    Failed,              // Новый: ошибка
+    Paused
 };
 
 struct DownloadItem {
@@ -40,6 +41,8 @@ struct DownloadItem {
     float download_speed_kbps = 0.0f;
     std::chrono::steady_clock::time_point speed_sample_at{};
     std::chrono::steady_clock::time_point start_time{};
+    int seeds = 0;
+    int peers = 0;
 
     // Гибридный инсталлятор (новый режим)
     std::unique_ptr<installer::HybridNspInstaller> hybrid_installer;
@@ -72,6 +75,10 @@ struct DownloadItem {
 
     // Сообщение об ошибке
     std::string error_message;
+
+    std::string topic_id;
+    std::vector<int> selected_files;
+    bool priorities_set = false;
 };
 
 class DownloadManager {
@@ -86,6 +93,7 @@ public:
     bool startDownload(size_t index);
     void startNextDownload();
     void trackProgress();
+    void shutdown();
     bool cancelDownload(size_t index);
     bool getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files);
     bool setFileWanted(size_t index, int file_index, bool wanted);

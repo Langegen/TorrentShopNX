@@ -1,0 +1,16 @@
+<brls:AppletFrame
+    iconInterpolation="linear"
+    headerHidden="true"
+    footerHidden="false">
+
+    <brls:ScrollingFrame width="auto" height="auto" grow="1.0">
+        <brls:Box width="auto" height="auto" axis="column" padding="40" justifyContent="center" alignItems="center" grow="1.0">
+            <brls:Image image="@res/img/borealis_256.png" width="256px" height="256px" marginBottom="40" />
+            <brls:Button id="btnCatalog" text="Каталог" width="400px" height="80px" marginBottom="20" style="primary" />
+            <brls:Button id="btnFavorites" text="Избранное" width="400px" height="80px" marginBottom="20" />
+            <brls:Button id="btnDownloads" text="Загрузки" width="400px" height="80px" marginBottom="20" />
+            <brls:Button id="btnSettings" text="Настройки" width="400px" height="80px" />
+        </brls:Box>
+    </brls:ScrollingFrame>
+
+</brls:AppletFrame>

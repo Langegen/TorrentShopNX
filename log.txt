@@ -1,1068 +1,641 @@
 TorrentShopNX log start
 main: start
-main: consoleInit ok
-main: romfsInit rc=5465
-main: socket config sb_efficiency=32 num_bsd_sessions=8 tcp_tx=32768 tcp_rx=65536 tcp_tx_max=1048576 tcp_rx_max=1048576 udp_rx=1048576 udp_tx=1048576
-main: socketInitialize rc=0
-main: inputInit ok
-main: full application mode
+GameData: cached images count=359
 config: loaded config.ini, TorrServer URL: 192.168.1.150:8090
+config: loaded config.ini, TorrServer URL: 192.168.1.150:8090
+favorites: loaded count=3
 ds_mgr: remote URL: 192.168.1.150:8090
 ds_mgr: mode set to: Local client
-catalog: loaded from switch_games.json, entries=3734
-main: entries=3734
-main: entering loop
+main: initializing TorrentEngine eagerly
+main: TorrentEngine eagerly initialized, address=336207437632
+config: loaded config.ini
+GameData: loading games from sdmc:/switch/TorrentShopNX/switch_games.json
+GameData: loaded array, count=3988
+main: loaded g_games count=3988
+main: instantiating and pushing MainMenu...
+MainMenu: constructor start
+MainMenu: constructor end
+main: MainMenu instantiated, pushing...
+MainMenu: onContentAvailable start
+main: MainMenu pushed, starting loop...
+main: entering mainLoop
+main: mainLoop frame=1
+main: mainLoop frame=2
+main: mainLoop frame=3
 power: keep-awake disabled
+FileSelectView: onContentAvailable start
+FileSelectView: probe thread started
+FileSelectView: probing magnet magnet:?xt=urn:btih:EDEE8883749C1CA863FFF97CDFCD4DC38D581D18&tr=http%3A%2F%2Fbt3.t-ru.org%2Fann%3Fmagnet
+FileSelectView: onContentAvailable end
+InternalTorrentEngine: probeFiles start, magnet_link=magnet:?xt=urn:btih:EDEE8883749C1CA863FFF97CDFCD4DC38D581D18&tr=http%3A%2F%2Fbt3.t-ru.org%2Fann%3Fmagnet
+InternalTorrentEngine: getting TorrentEngine instance
+InternalTorrentEngine: TorrentEngine instance address=336207437632
+InternalTorrentEngine: calling beginProbe
+TorrentEngine::beginProbe start, hash_hint=
+TorrentEngine::beginProbe this pointer=336207437632
+TorrentEngine::beginProbe impl_ pointer=373853898816
+TorrentEngine::beginProbe acquiring lock
+TorrentEngine::beginProbe lock acquired
+TorrentEngine::beginProbe setting status fields
+TorrentEngine::beginProbe end
+InternalTorrentEngine: calling addMagnet
+TorrentEngine::addMagnet start, magnet=magnet:?xt=urn:btih:EDEE8883749C1CA863FFF97CDFCD4DC38D581D18&tr=http%3A%2F%2Fbt3.t-ru.org%2Fann%3Fmagnet
+TorrentEngine::addMagnet calling start(8080)
+TorrentEngine::start start, port=8080
+TorrentEngine::start acquiring lock
+TorrentEngine::start lock acquired
+TorrentEngine::start calling ensureSessionLocked
+ensureSessionLocked start
+ensureSessionLocked creating cache directory: TorrentShopNX/cache/local_engine
+ensureSessionLocked cache directory created, error_code=0
+ensureSessionLocked calling detectPrimaryIPv4Address
+ensureSessionLocked detectPrimaryIPv4Address returned bind_ip=192.168.1.104
+ensureSessionLocked making settings pack
+ensureSessionLocked creating lt::session with settings
+ensureSessionLocked lt::session created successfully
+ensureSessionLocked adding resolved DHT routers
 torrent_engine: DHT router/node router.utorrent.com:6881 -> 82.221.103.244
 torrent_engine: DHT router/node router.bittorrent.com:6881 -> 67.215.246.10
 torrent_engine: DHT router/node dht.transmissionbt.com:6881 -> 212.129.33.59
 torrent_engine: DHT router/node dht.aelitis.com:6881 -> 34.203.221.232
 torrent_engine: DHT router/node dht.libtorrent.org:25401 -> 185.157.221.247
-torrent_engine: DHT router/node dht.opentrackr.org:1337 -> 198.18.0.251
+torrent_engine: DHT router/node dht.opentrackr.org:1337 -> 198.18.1.19
+ensureSessionLocked starting DHT
+ensureSessionLocked DHT started
 torrent_engine: detected local IP 192.168.1.104
 torrent_engine: listen interface 192.168.1.104:50575
 torrent_engine: [Build v63] settings aio_threads=4 req_timeout=30 conn_speed=100 max_out_req=500 RAM_cache_limit=64 strict_end_game=false stall_recovery=immediate latency_mode=true
 torrent_engine: libtorrent session started (cache=0MiB, connections=80)
-torrent_engine: torrest core started (memory cache, no local HTTP server)
+TorrentEngine::start ensureSessionLocked done
+TorrentEngine::start starting alert thread
 torrent_engine: alert thread started
-torrent_engine: removed stale cache path TorrentShopNX/cache/local_engine/838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: cache root=TorrentShopNX/cache/local_engine
-torrent_engine: save path=TorrentShopNX/cache/local_engine/838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: storage=memory (torrest-style RAM cache)
-torrent_engine: torrent started with sequential_download=false hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: added torrent hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: state Idle -> FetchingMetadata hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b file_index=-1
-torrent_engine: metadata wait hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b state=2 peers=0 seeds=0 known=0 candidates=0 dht_nodes=1 listening=yes port=50575
+TorrentEngine::start alert thread started
+torrent_engine: torrest core started (memory cache, no local HTTP server)
+TorrentEngine::addMagnet acquiring lock
 torrent_engine: listen succeeded: successfully listening on [TCP] 192.168.1.104:50575
 torrent_engine: listen succeeded: successfully listening on [UDP] 192.168.1.104:50575
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://37.120.182.83:80/announce)[192.168.1.104:50575] received peers: 3
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (http://bt2.t-ru.org/ann?magnet)[192.168.1.104:50575] 521 (unknown HTTP error) "<none>" (1)
-torrent_engine: tracker reply: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://exodus.desync.com:6969/announce)[192.168.1.104:50575] received peers: 2
-torrent_engine: tracker error: 838e7b98569a3c00c8b868b6e362468f5f78aa7b (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:50575] Host not found (authoritative) "" (1)
-torrent_engine: metadata received: The Legend of Zelda Skyward Sword HD [NSZ] metadata successfully received
-download: local client queued hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-download: local client starts selected file without HTTP preload hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b file_index=1
-download: starting async open for hybrid hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b index=1
+TorrentEngine::addMagnet lock acquired
+TorrentEngine::addMagnet calling ensureTorrentLocked
+ensureTorrentLocked start, magnet=magnet:?xt=urn:btih:EDEE8883749C1CA863FFF97CDFCD4DC38D581D18&tr=http%3A%2F%2Fbt3.t-ru.org%2Fann%3Fmagnet
+ensureTorrentLocked checking existing torrents for hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+ensureTorrentLocked calling ensureSessionLocked
+ensureSessionLocked start
+ensureSessionLocked session already exists
+ensureTorrentLocked ensureSessionLocked success
+torrent_engine: removed stale cache path TorrentShopNX/cache/local_engine/edee8883749c1ca863fff97cdfcd4dc38d581d18
+torrent_engine: cache root=TorrentShopNX/cache/local_engine
+torrent_engine: save path=TorrentShopNX/cache/local_engine/edee8883749c1ca863fff97cdfcd4dc38d581d18
+torrent_engine: storage=memory (torrest-style RAM cache)
+ensureTorrentLocked calling add_torrent
+ensureTorrentLocked add_torrent finished, ec=Success, handle.is_valid=1
+ensureTorrentLocked setting max connections
+ensureTorrentLocked forcing reannounce
+ensureTorrentLocked forcing dht announce
+torrent_engine: torrent started with sequential_download=false hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+torrent_engine: added torrent hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+TorrentEngine::addMagnet ensureTorrentLocked done, hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+TorrentEngine::addMagnet success
+InternalTorrentEngine: addMagnet finished, ok=1, hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+InternalTorrentEngine: calling getTorrentFiles to fetch parsed files
+torrent_engine: state Idle -> FetchingMetadata hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 file_index=-1
+torrent_engine: metadata wait hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 state=2 peers=0 seeds=0 known=0 candidates=0 dht_nodes=0 listening=yes port=50575
+torrent_engine: tracker reply: edee8883749c1ca863fff97cdfcd4dc38d581d18 (http://37.120.182.83:80/announce)[192.168.1.104:50575] received peers: 0
+torrent_engine: tracker reply: edee8883749c1ca863fff97cdfcd4dc38d581d18 (http://bt3.t-ru.org/ann?magnet)[192.168.1.104:50575] received peers: 8
+torrent_engine: tracker error: edee8883749c1ca863fff97cdfcd4dc38d581d18 (udp://tracker.tiny-vps.com:6969/announce)[192.168.1.104:50575] Host not found (authoritative) "" (1)
+torrent_engine: metadata wait hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 state=2 peers=0 seeds=0 known=8 candidates=0 dht_nodes=0 listening=yes port=50575
+torrent_engine: tracker error: edee8883749c1ca863fff97cdfcd4dc38d581d18 (udp://retracker.lanta-net.ru:2710/announce)[192.168.1.104:50575] Host not found (authoritative) "" (1)
+torrent_engine: PiecePool created piece_size=2097152 capacity=72
+torrent_engine: metadata received: Rocket Knight Adventures Re-Sparked Collection [NSP] metadata successfully received
+InternalTorrentEngine: getTorrentFiles fetched count=2
+FileSelectView: probe done, success=1 count=2
+FileSelectView: sync callback, success=1 count=2
+FileSelectView: added row 0 name='Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A000][v0].nsp'
+FileSelectView: added row 1 name='Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A800][v131072].nsp'
+FileSelectView: rebuildFileList done, rows=2
+download: local client queued hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+download_ui: added game Rocket Knight Adventures Re-Sparked Collection (Sparkster, SNES/Genesis) (Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A000][v0].nsp) (topic_id=6539658_1) to download queue
+download_ui: added game Rocket Knight Adventures Re-Sparked Collection (Sparkster, SNES/Genesis) (Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A800][v131072].nsp) (topic_id=6539658_2) to download queue
+download: local client starts selected file without HTTP preload hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 file_index=1
+download: starting async open for hybrid hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 index=1
 backend/local: state Idle -> FetchingMetadata
+TorrentEngine::start start, port=8080
+TorrentEngine::start already running
+ensureTorrentLocked start, magnet=magnet:?xt=urn:btih:EDEE8883749C1CA863FFF97CDFCD4DC38D581D18&tr=http%3A%2F%2Fbt3.t-ru.org%2Fann%3Fmagnet
+ensureTorrentLocked checking existing torrents for hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+ensureTorrentLocked existing torrent found
 power: keep-awake enabled
-torrent_engine: PiecePool created piece_size=8388608 capacity=72
-torrent_engine: storage piece 446 started, total_in_ram=1
-torrent_engine: storage piece 363 started, total_in_ram=2
-torrent_engine: storage piece 6 started, total_in_ram=3
-torrent_engine: storage piece 0 started, total_in_ram=4
 torrent_engine: synced verified pieces count=0
-torrent_engine: re-using existing torrent hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b
-torrent_engine: state FetchingMetadata -> FileSelected hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b file_index=0
-scheduler: init piece_size=8388608 file_pieces=0-483 total_pieces=484
+torrent_engine: re-using existing torrent hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+torrent_engine: state FetchingMetadata -> FileSelected hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 file_index=0
+scheduler: init piece_size=2097152 file_pieces=0-838 total_pieces=839
 backend/local: state FetchingMetadata -> FileSelected
 backend/local: state FileSelected -> PrebufferInstallInfo
-backend/local: open OK file_index=0 size=4054256902 pieces=0-483
+backend/local: open OK file_index=0 size=1758136395 pieces=0-838
 backend/local: tick thread started
 hybrid: start install, buffer=256MB
 hybrid: phase 1 - parsing header
 scheduler: 5zone critical=0-1 urgent=2-9 prefetch=-1--1 spec=-1--1 stall=0
-backend/local: state PrebufferInstallInfo -> StreamingOrInstalling
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=0 -> 4096
-hybrid: NSP header probe read=4096 need=336 files=5
-hybrid: NSP contains 5 files, total size=3866MB, ticket=no
+backend/local: CC limits changed to [2, 5]s (baseline=none)
+backend/local: CC limits changed to [1, 3]s (baseline=21ms)
+backend/local: CC queue_time 4s -> 3s rtt_baseline=21ms mode=throughput
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 0 (active blocks detected!) speed=4KB/s rtt=5540ms snubbed=no
+backend/local: state PrebufferInstallInfo -> Stalled (waiting for piece 0)
+scheduler: stall level=1
+scheduler: STARVATION recovery piece=0 reason=SLOW_DELIVERY critical=0-1 urgent=2-5 slow_peers=0
+backend/local: STALL_RECOVERY piece=0 waited_ms=3036 peers=6 active=3 on_target=1 best_speed=304KB/s reason=STALL
+backend/local: SWARM status: total_peers=7 active_peers=3 seeds=3 dl_rate=504KB/s
+   peer[0]: 37.151.115.104:53147 speed=497KB/s rtt=24ms piece=2 reqq=46/90 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=21KB/s rtt=542ms piece=-1 reqq=11/3 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=5540ms piece=-1 reqq=9/2 flags=ICDL client=qBittorrent/5.1.0
+   peer[3]: 95.32.203.195:23972 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
+   peer[4]: 95.25.90.80:50575 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRLU client=
+torrent_engine: storage piece 3 started, total_in_ram=2
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 0 (active blocks detected!) speed=1KB/s rtt=5530ms snubbed=no
+torrent_engine: storage piece 0 started, total_in_ram=3
+backend/local: state Stalled -> StreamingOrInstalling
+scheduler: stall recovered
+scheduler: 5zone critical=0-1 urgent=2-9 prefetch=-1--1 spec=-1--1 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=0 -> 4096
+hybrid: NSP header probe read=4096 need=528 files=8
+hybrid: NSP contains 8 files, total size=1676MB, ticket=yes
 backend/local: state StreamingOrInstalling -> InstallInfoParsed
 backend/local: state InstallInfoParsed -> MainBuffering
 hybrid: phase 2 - creating placeholders
 ncm: initialized, storage=5
-installer: skipping placeholder creation for NCZ (will create later): c5ee456d9734d8d640d8b961fda42614.ncz
-ncm: placeholder created for d68416dd588bf8aa68bf13a4daf981ed.nca
-ncm: placeholder created for e24c3262a4338fcf5832bca32234ba22.nca
-ncm: placeholder created for 0da76a2dd6b0eb4f508495e947aecc17.cnmt.nca
+ncm: placeholder created for 47051e6f56167e37e882a3be4aa6c90d.nca
+ncm: placeholder created for 71a41a16ff6235b5bf4fb38b9ce88886.nca
+ncm: placeholder created for 74d3f5ed68c6d2db62be4b7dc2c68d99.nca
+ncm: placeholder created for 901af693020b88cffa9354689be837cc.cnmt.nca
+ncm: placeholder created for e3f97ef54f056770e6698393cf08d16f.nca
 hybrid: phase 3 - starting Collector + Installer threads
 collector: start
-hybrid: both threads started
 collector: source_type=1 chunk_size=4194304
-download: hybrid install started for The Legend of Zelda: Skyward Sword HD [NSZ][RUS/Multi9] [The Legend of Zelda Skyward Sword HD [NSZ]/The Legend of Zelda Skyward Sword HD [01002DA013484000][v0] (7.07 GB).nsz] (index=1)
 collector: local chunk size=4194304
+hybrid: both threads started
 installer: start
+download: hybrid install started for Rocket Knight Adventures Re-Sparked Collection (Sparkster, SNES/Genesis) (Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A000][v0].nsp) (index=1)
 installer: local chunk size=4194304
 installer: waiting local prebuffer target=33554432
+torrent_engine: storage piece 592 started, total_in_ram=3
+torrent_engine: storage piece 719 started, total_in_ram=4
+torrent_engine: storage piece 630 started, total_in_ram=5
+download: configured file priorities and size=1758136395 for Rocket Knight Adventures Re-Sparked Collection (Sparkster, SNES/Genesis) (Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A000][v0].nsp)
+torrent_engine: storage piece 2 started, total_in_ram=6
 backend/local: state MainBuffering -> StreamingOrInstalling
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4096 -> 327680
-collector: partial read advance offset=336 requested=4194304 got=327344
-backend/local: CC limits changed to [2, 5]s (baseline=none)
-torrent_engine: storage piece 1 started, total_in_ram=6
-torrent_engine: storage piece 424 started, total_in_ram=7
-torrent_engine: storage piece 376 started, total_in_ram=8
-torrent_engine: storage piece 2 started, total_in_ram=8
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=327680 -> 4521984
-backend/local: CC limits changed to [1, 3]s (baseline=9ms)
-backend/local: CC queue_time 4s -> 3s rtt_baseline=8ms mode=throughput
-torrent_engine: storage piece 3 started, total_in_ram=9
-scheduler: ISOLATED slow peer 84.42.72.159 for piece 1 (active blocks detected!) speed=95KB/s rtt=35ms snubbed=no
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=4521984 -> 8716288
-scheduler: ISOLATED slow peer 177.154.3.7 for piece 2 (active blocks detected!) speed=44KB/s rtt=231ms snubbed=no
-scheduler: 5zone+EDF critical=1-2 urgent=3-10 prefetch=-1 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=8716288 -> 10485760
-collector: partial read advance offset=8716288 requested=4194304 got=1769472
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=10485760 -> 11878400
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=11878400 -> 12222464
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=12222464 -> 12517376
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=12517376 -> 12779520
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=12779520 -> 13189120
-collector: stats downloaded=13188784 speed=2570KB/s rb_avail=13188784 rb_free=255246672 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=13189120 -> 14434304
-backend/local: SWARM status: total_peers=68 active_peers=18 seeds=16 dl_rate=3655KB/s
-   peer[0]: 188.232.227.159:15018 speed=1114KB/s rtt=2ms piece=1 reqq=363/203 flags=ICDLU client=MediaGet2 3.01.4337
-   peer[1]: 217.15.128.94:1554 speed=524KB/s rtt=22ms piece=4 reqq=102/95 flags=ICDLU client=qBittorrent/5.1.2
-   peer[2]: 93.149.172.29:30655 speed=494KB/s rtt=12ms piece=4 reqq=59/90 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 178.72.97.164:2049 speed=489KB/s rtt=11ms piece=2 reqq=147/89 flags=ICDLU client=qBittorrent/4.6.3
-   peer[4]: 213.230.74.16:35895 speed=310KB/s rtt=15ms piece=3 reqq=64/56 flags=ICDLU client=μTorrent 3.6
-torrent_engine: storage piece 5 started, total_in_ram=11
-torrent_engine: storage piece 4 started, total_in_ram=11
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=14434304 -> 15892480
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=15892480 -> 20086784
-scheduler: ISOLATED slow peer 45.5.141.99 for piece 3 (active blocks detected!) speed=22KB/s rtt=578ms snubbed=no
-torrent_engine: storage piece 7 started, total_in_ram=12
-scheduler: 5zone+EDF critical=2-3 urgent=4-11 prefetch=-1 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=20086784 -> 24281088
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=24281088 -> 27869184
-collector: partial read advance offset=24281088 requested=4194304 got=3588096
-collector: stats downloaded=27868848 speed=2406KB/s rb_avail=27868848 rb_free=240566608 rb_cap=268435456
-torrent_engine: storage piece 9 started, total_in_ram=14
-scheduler: ISOLATED slow peer 186.226.228.33 for piece 4 (active blocks detected!) speed=92KB/s rtt=91ms snubbed=no
-scheduler: 5zone+EDF critical=3-4 urgent=5-12 prefetch=28 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=27869184 -> 32063488
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=32063488 -> 36257792
-scheduler: ISOLATED slow peer 186.226.228.33 for piece 5 (active blocks detected!) speed=63KB/s rtt=256ms snubbed=no
-scheduler: 5zone+EDF critical=4-5 urgent=6-13 prefetch=29 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=36257792 -> 37421056
-collector: partial read advance offset=36257792 requested=4194304 got=1163264
-installer: local prebuffer ready available=37420720
-ncz: using Solid Zstd decompression
-ncz: adjusted logical install size for c5ee456d9734d8d640d8b961fda42614.ncz from 4052603408 to 7593377792
-ncz: installing c5ee456d9734d8d640d8b961fda42614.ncz (compressed: 3864MB, orig: 7241MB)
-installer: stats installed=0 install_speed=0KB/s downloaded=37420720 source_speed=3045KB/s rb_avail=33209816 rb_free=235225640 rb_cap=268435456
-backend/local: SWARM status: total_peers=69 active_peers=19 seeds=17 dl_rate=4219KB/s
-   peer[0]: 188.232.227.159:15018 speed=944KB/s rtt=17ms piece=7 reqq=334/172 flags=ICDLU client=MediaGet2 3.01.4337
-   peer[1]: 178.72.97.164:2049 speed=620KB/s rtt=34ms piece=8 reqq=229/113 flags=ICDLU client=qBittorrent/4.6.3
-   peer[2]: 93.149.172.29:30655 speed=534KB/s rtt=13ms piece=9 reqq=243/97 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 217.15.128.94:1554 speed=520KB/s rtt=29ms piece=7 reqq=185/94 flags=ICDLU client=qBittorrent/5.1.2
-   peer[4]: 85.53.121.194:35017 speed=468KB/s rtt=33ms piece=-1 reqq=56/85 flags=ICDL client=qBittorrent/5.2.0
-torrent_engine: storage piece 8 started, total_in_ram=14
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=37421056 -> 37699584
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=37699584 -> 41893888
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=41893888 -> 45006848
-scheduler: 5zone+EDF critical=5-6 urgent=7-14 prefetch=30 slow_peers=0 stall=0
-installer: stats installed=125829120 install_speed=24504KB/s downloaded=45006512 source_speed=1477KB/s rb_avail=10386904 rb_free=258048552 rb_cap=268435456
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 5)
-torrent_engine: storage piece 11 started, total_in_ram=17
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=4096 -> 1294336
+collector: partial read advance offset=528 requested=4194304 got=1293808
+backend/local: SWARM status: total_peers=7 active_peers=3 seeds=3 dl_rate=966KB/s
+   peer[0]: 37.151.115.104:53147 speed=953KB/s rtt=12ms piece=-1 reqq=99/173 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=25KB/s rtt=523ms piece=-1 reqq=11/4 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=17KB/s rtt=1233ms piece=-1 reqq=7/3 flags=ICDL client=qBittorrent/5.1.0
+   peer[3]: 95.32.203.195:23972 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
+   peer[4]: 95.25.90.80:50575 speed=0KB/s rtt=0ms piece=-1 reqq=0/4 flags=CRL client=
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 0)
 scheduler: stall level=1
-torrent_engine: storage piece 12 started, total_in_ram=17
-scheduler: 5zone critical=5-6 urgent=7-10 prefetch=11-14 spec=-1--1 stall=1
-torrent_engine: storage piece 10 started, total_in_ram=17
-scheduler: ISOLATED slow peer 78.164.177.53 for piece 5 (active blocks detected!) speed=4KB/s rtt=640ms snubbed=yes
-scheduler: STARVATION recovery piece=5 reason=NO_PEER_ON_PIECE critical=5-6 urgent=7-8 slow_peers=0
-backend/local: STALL_RECOVERY piece=5 waited_ms=3526 peers=76 active=21 on_target=0 best_speed=901KB/s reason=NO_PEER_ON_PIECE
+scheduler: STARVATION recovery piece=0 reason=NO_PEER_ON_PIECE critical=0-1 urgent=2-3 slow_peers=0
+backend/local: STALL_RECOVERY piece=0 waited_ms=3008 peers=7 active=3 on_target=0 best_speed=953KB/s reason=NO_PEER_ON_PIECE
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
-scheduler: 5zone critical=5-6 urgent=7-14 prefetch=15-30 spec=31-38 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=45006848 -> 49201152
-collector: stats downloaded=49200816 speed=2265KB/s rb_avail=4095448 rb_free=264340008 rb_cap=268435456
-installer: ncz buffer wait wait_ms=722 got=98856 rb_avail=4095448 downloaded=49200816 installed=184549376 starvation_total=1
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=49201152 -> 53395456
-scheduler: ISOLATED slow peer 187.255.195.58 for piece 7 (active blocks detected!) speed=4KB/s rtt=4213ms snubbed=no
-scheduler: 5zone+EDF critical=6-7 urgent=8-15 prefetch=31 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=53395456 -> 57589760
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=57589760 -> 59359232
-collector: partial read advance offset=57589760 requested=4194304 got=1769472
+scheduler: 5zone critical=0-1 urgent=2-9 prefetch=-1--1 spec=-1--1 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=1294336 -> 2097152
+scheduler: 5zone+EDF critical=1-2 urgent=3-10 prefetch=-1 slow_peers=0 stall=0
+torrent_engine: storage piece 4 started, total_in_ram=7
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 1 (active blocks detected!) speed=11KB/s rtt=1233ms snubbed=no
+torrent_engine: storage piece 5 started, total_in_ram=8
+torrent_engine: storage piece 6 started, total_in_ram=9
+torrent_engine: storage piece 7 started, total_in_ram=10
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 1)
+scheduler: stall level=1
+scheduler: STARVATION recovery piece=1 reason=NO_PEER_ON_PIECE critical=1-2 urgent=3-4 slow_peers=0
+backend/local: STALL_RECOVERY piece=1 waited_ms=3028 peers=3 active=3 on_target=0 best_speed=1259KB/s reason=NO_PEER_ON_PIECE
+torrent_engine: storage piece 1 started, total_in_ram=11
+backend/local: state Stalled -> StreamingOrInstalling
+scheduler: stall recovered
+scheduler: 5zone critical=1-2 urgent=3-10 prefetch=-1--1 spec=-1--1 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=2097152 -> 3375104
+collector: stats downloaded=3374576 speed=464KB/s rb_avail=3374576 rb_free=265060880 rb_cap=268435456
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=3375104 -> 7569408
+scheduler: 5zone+EDF critical=3-4 urgent=5-12 prefetch=28 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=7569408 -> 11763712
+scheduler: 5zone+EDF critical=5-6 urgent=7-14 prefetch=30 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=11763712 -> 14057472
+collector: partial read advance offset=11763712 requested=4194304 got=2293760
+scheduler: 5zone+EDF critical=6-7 urgent=8-15 prefetch=31 slow_peers=0 stall=0
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1268KB/s
+   peer[0]: 37.151.115.104:53147 speed=1269KB/s rtt=26ms piece=-1 reqq=1/230 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=28KB/s rtt=593ms piece=-1 reqq=4/5 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=10KB/s rtt=1587ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=14057472 -> 14565376
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=14565376 -> 14974976
 scheduler: 5zone+EDF critical=7-8 urgent=9-16 prefetch=32 slow_peers=0 stall=0
-backend/local: SWARM status: total_peers=73 active_peers=27 seeds=24 dl_rate=5098KB/s
-torrent_engine: storage piece 14 started, total_in_ram=19
-   peer[0]: 188.232.227.159:15018 speed=846KB/s rtt=13ms piece=13 reqq=54/154 flags=ICDLU client=MediaGet2 3.01.4337
-torrent_engine: storage piece 13 started, total_in_ram=19
-   peer[1]: 178.72.97.164:2049 speed=674KB/s rtt=13ms piece=14 reqq=80/122 flags=ICDLU client=qBittorrent/4.6.3
-   peer[2]: 85.53.121.194:35017 speed=560KB/s rtt=43ms piece=-1 reqq=26/102 flags=ICDL client=qBittorrent/5.2.0
-   peer[3]: 93.149.172.29:30655 speed=480KB/s rtt=31ms piece=12 reqq=79/87 flags=ICDLU client=qBittorrent/5.1.0
-   peer[4]: 193.194.107.87:5782 speed=423KB/s rtt=30ms piece=13 reqq=72/77 flags=ICDLU client=qBittorrent/5.2.1
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=14974976 -> 15368192
 backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 7)
 scheduler: stall level=1
 scheduler: 5zone critical=7-8 urgent=9-12 prefetch=13-16 spec=-1--1 stall=1
 scheduler: STARVATION recovery piece=7 reason=NO_PEER_ON_PIECE critical=7-8 urgent=9-10 slow_peers=0
-backend/local: STALL_RECOVERY piece=7 waited_ms=3284 peers=73 active=27 on_target=0 best_speed=846KB/s reason=NO_PEER_ON_PIECE
+backend/local: STALL_RECOVERY piece=7 waited_ms=3081 peers=3 active=3 on_target=0 best_speed=975KB/s reason=NO_PEER_ON_PIECE
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
 scheduler: 5zone critical=7-8 urgent=9-16 prefetch=17-32 spec=33-40 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=59359232 -> 63553536
-installer: ncz buffer wait wait_ms=3549 got=426536 rb_avail=3767768 downloaded=63553200 installed=201326592 starvation_total=2
-installer: stats installed=201326592 install_speed=9952KB/s downloaded=63553200 source_speed=2444KB/s rb_avail=3767768 rb_free=264667688 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=63553536 -> 67747840
-scheduler: 5zone+EDF critical=8-9 urgent=10-17 prefetch=33 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=67747840 -> 71942144
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=71942144 -> 76136448
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=15368192 -> 16154624
+torrent_engine: storage piece 9 started, total_in_ram=12
+torrent_engine: storage piece 10 started, total_in_ram=13
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1071KB/s
+   peer[0]: 37.151.115.104:53147 speed=1073KB/s rtt=9ms piece=10 reqq=164/195 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=25KB/s rtt=647ms piece=-1 reqq=4/4 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=6KB/s rtt=1916ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=16154624 -> 16777216
+collector: stats downloaded=16776688 speed=2307KB/s rb_avail=16776688 rb_free=251658768 rb_cap=268435456
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 9 (active blocks detected!) speed=6KB/s rtt=1916ms snubbed=no
+scheduler: 5zone+EDF critical=8-9 urgent=10-17 prefetch=33 slow_peers=1 stall=0
+torrent_engine: storage piece 8 started, total_in_ram=14
+torrent_engine: storage piece 11 started, total_in_ram=15
+torrent_engine: storage piece 12 started, total_in_ram=16
+torrent_engine: storage piece 13 started, total_in_ram=17
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=16777216 -> 16793600
+torrent_engine: storage piece 14 started, total_in_ram=18
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1724KB/s
+   peer[0]: 37.151.115.104:53147 speed=1757KB/s rtt=8ms piece=8 reqq=433/319 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=14KB/s rtt=746ms piece=-1 reqq=7/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=5KB/s rtt=2194ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=16793600 -> 19529728
 scheduler: 5zone+EDF critical=9-10 urgent=11-18 prefetch=34 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=76136448 -> 80330752
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=80330752 -> 84525056
-scheduler: 5zone+EDF critical=10-11 urgent=12-19 prefetch=35 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=84525056 -> 88719360
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=88719360 -> 92913664
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=19529728 -> 23724032
 scheduler: 5zone+EDF critical=11-12 urgent=13-20 prefetch=36 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=92913664 -> 97107968
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=97107968 -> 101302272
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=23724032 -> 25198592
+collector: partial read advance offset=23724032 requested=4194304 got=1474560
 scheduler: 5zone+EDF critical=12-13 urgent=14-21 prefetch=37 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=101302272 -> 104103936
-collector: partial read advance offset=101302272 requested=4194304 got=2801664
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=104103936 -> 108298240
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=108298240 -> 109150208
-scheduler: ISOLATED slow peer 89.179.126.222 for piece 14 (active blocks detected!) speed=32KB/s rtt=523ms snubbed=no
-scheduler: 5zone+EDF critical=13-14 urgent=15-22 prefetch=38 slow_peers=1 stall=0
-torrent_engine: storage piece 15 started, total_in_ram=21
-torrent_engine: storage piece 16 started, total_in_ram=21
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=109150208 -> 113344512
-collector: stats downloaded=113344176 speed=9248KB/s rb_avail=12139992 rb_free=256295464 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=113344512 -> 116064256
-collector: partial read advance offset=113344512 requested=4194304 got=2719744
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=116064256 -> 117735424
-scheduler: ISOLATED slow peer 185.67.54.57 for piece 15 (active blocks detected!) speed=0KB/s rtt=0ms snubbed=no
-scheduler: 5zone+EDF critical=14-15 urgent=16-23 prefetch=39 slow_peers=1 stall=0
-backend/local: SWARM status: total_peers=72 active_peers=29 seeds=27 dl_rate=4240KB/s
-   peer[0]: 5.18.177.119:2050 speed=400KB/s rtt=52ms piece=17 reqq=78/72 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 85.53.121.194:35017 speed=398KB/s rtt=19ms piece=18 reqq=59/72 flags=ICDL client=qBittorrent/5.2.0
-   peer[2]: 188.232.227.159:15018 speed=340KB/s rtt=90ms piece=15 reqq=122/61 flags=ICDLU client=MediaGet2 3.01.4337
-   peer[3]: 95.24.120.124:8254 speed=309KB/s rtt=60ms piece=17 reqq=60/56 flags=IDLU client=μTorrent 3.6
-   peer[4]: 178.72.97.164:2049 speed=267KB/s rtt=113ms piece=17 reqq=67/48 flags=ICDLU client=qBittorrent/4.6.3
-installer: stats installed=327155712 install_speed=24300KB/s downloaded=117735088 source_speed=10463KB/s rb_avail=1850840 rb_free=266584616 rb_cap=268435456
-scheduler: ISOLATED slow peer 185.67.54.57 for piece 14 (active blocks detected!) speed=6KB/s rtt=2487ms snubbed=no
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=117735424 -> 118177792
-installer: ncz buffer wait wait_ms=1511 got=246312 rb_avail=196056 downloaded=118177456 installed=327155712 starvation_total=3
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=118177792 -> 122372096
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=122372096 -> 126353408
-collector: partial read advance offset=122372096 requested=4194304 got=3981312
-scheduler: ISOLATED slow peer 187.131.141.154 for piece 16 (active blocks detected!) speed=14KB/s rtt=843ms snubbed=no
-scheduler: 5zone+EDF critical=15-16 urgent=17-24 prefetch=40 slow_peers=1 stall=0
-scheduler: ISOLATED slow peer 185.67.54.57 for piece 15 (active blocks detected!) speed=7KB/s rtt=2181ms snubbed=no
+torrent_engine: storage piece 15 started, total_in_ram=19
+torrent_engine: storage piece 16 started, total_in_ram=20
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=25198592 -> 29392896
+collector: stats downloaded=29392368 speed=1978KB/s rb_avail=29392368 rb_free=239043088 rb_cap=268435456
+scheduler: 5zone+EDF critical=14-15 urgent=16-23 prefetch=39 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=29392896 -> 33587200
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 17 (active blocks detected!) speed=4KB/s rtt=2194ms snubbed=no
+scheduler: 5zone+EDF critical=16-17 urgent=18-25 prefetch=41 slow_peers=1 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=33587200 -> 33816576
+collector: partial read advance offset=33587200 requested=4194304 got=229376
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=33816576 -> 34078720
+installer: local prebuffer ready available=34078192
+installer: NCA installed: 47051e6f56167e37e882a3be4aa6c90d.nca
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=34078720 -> 34340864
+installer: stats installed=4194304 install_speed=213KB/s downloaded=34340336 source_speed=1744KB/s rb_avail=30146032 rb_free=238289424 rb_cap=268435456
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=34340864 -> 34603008
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=34603008 -> 34865152
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=34865152 -> 35127296
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=35127296 -> 35389440
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=35389440 -> 35651584
+scheduler: 5zone+EDF critical=17-18 urgent=19-26 prefetch=42 slow_peers=0 stall=0
+torrent_engine: storage piece 17 started, total_in_ram=21
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=35651584 -> 35930112
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=35930112 -> 36208640
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=36208640 -> 36470784
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=36470784 -> 36732928
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=36732928 -> 36995072
+torrent_engine: storage piece 18 started, total_in_ram=22
+torrent_engine: storage piece 19 started, total_in_ram=23
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=2070KB/s
+   peer[0]: 37.151.115.104:53147 speed=2123KB/s rtt=8ms piece=20 reqq=652/386 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=10KB/s rtt=874ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=1KB/s rtt=2446ms piece=-1 reqq=2/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 20 started, total_in_ram=24
 backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 15)
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 17)
 scheduler: stall level=1
-scheduler: 5zone critical=15-16 urgent=17-20 prefetch=21-24 spec=-1--1 stall=1
-scheduler: STARVATION recovery piece=15 reason=SLOW_DELIVERY critical=15-16 urgent=17-20 slow_peers=0
-backend/local: STALL_RECOVERY piece=15 waited_ms=3018 peers=73 active=32 on_target=2 best_speed=315KB/s reason=STALL
-backend/local: SWARM status: total_peers=77 active_peers=32 seeds=29 dl_rate=3460KB/s
-   peer[0]: 85.53.121.194:35017 speed=277KB/s rtt=99ms piece=19 reqq=129/50 flags=ICDL client=qBittorrent/5.2.0
-   peer[1]: 5.18.41.73:5349 speed=263KB/s rtt=34ms piece=20 reqq=67/47 flags=IDLU client=qBittorrent/5.1.4
-   peer[2]: 5.18.177.119:2050 speed=241KB/s rtt=75ms piece=18 reqq=91/44 flags=IDLU client=qBittorrent/5.1.0
-   peer[3]: 95.27.68.200:2199 speed=241KB/s rtt=35ms piece=21 reqq=30/44 flags=IDLU client=qBittorrent/5.1.0
-   peer[4]: 188.243.60.140:2224 speed=210KB/s rtt=48ms piece=20 reqq=34/38 flags=ICDLU client=qBittorrent/5.1.0
-torrent_engine: storage piece 19 started, total_in_ram=25
-torrent_engine: storage piece 18 started, total_in_ram=25
-backend/local: CC queue_time 3s -> 2s rtt_baseline=3ms mode=latency
+scheduler: 5zone critical=17-18 urgent=19-22 prefetch=23-26 spec=-1--1 stall=1
+scheduler: STARVATION recovery piece=17 reason=NO_PEER_ON_PIECE critical=17-18 urgent=19-20 slow_peers=0
+backend/local: STALL_RECOVERY piece=17 waited_ms=3022 peers=3 active=3 on_target=0 best_speed=2123KB/s reason=NO_PEER_ON_PIECE
+backend/local: CC queue_time 3s -> 2s rtt_baseline=6ms mode=latency
+torrent_engine: storage piece 21 started, total_in_ram=25
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
-scheduler: 5zone critical=15-16 urgent=17-24 prefetch=25-40 spec=41-48 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=126353408 -> 130547712
-collector: stats downloaded=130547376 speed=1706KB/s rb_avail=4177368 rb_free=264258088 rb_cap=268435456
-installer: ncz buffer wait wait_ms=4724 got=16936 rb_avail=4177368 downloaded=130547376 installed=339738624 starvation_total=4
-installer: stats installed=339738624 install_speed=1683KB/s downloaded=130547376 source_speed=1714KB/s rb_avail=4177368 rb_free=264258088 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=130547712 -> 134742016
-scheduler: ISOLATED slow peer 177.154.3.7 for piece 16 (active blocks detected!) speed=93KB/s rtt=198ms snubbed=no
-scheduler: ISOLATED slow peer 177.154.3.7 for piece 17 (active blocks detected!) speed=93KB/s rtt=198ms snubbed=no
-scheduler: 5zone+EDF critical=16-17 urgent=18-25 prefetch=41 slow_peers=2 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=134742016 -> 135643136
-collector: partial read advance offset=134742016 requested=4194304 got=901120
-torrent_engine: storage piece 20 started, total_in_ram=26
-torrent_engine: storage piece 21 started, total_in_ram=26
-torrent_engine: storage piece 17 started, total_in_ram=26
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=135643136 -> 136806400
-installer: ncz buffer wait wait_ms=1839 got=164392 rb_avail=998872 downloaded=136806064 installed=352321536 starvation_total=5
-torrent_engine: storage piece 23 started, total_in_ram=27
-backend/local: SWARM status: total_peers=78 active_peers=33 seeds=31 dl_rate=3552KB/s
-   peer[0]: 5.18.177.119:2050 speed=309KB/s rtt=51ms piece=22 reqq=75/37 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 95.24.120.124:8254 speed=286KB/s rtt=41ms piece=22 reqq=61/34 flags=IDLU client=μTorrent 3.6
-   peer[2]: 95.27.68.200:2199 speed=274KB/s rtt=33ms piece=22 reqq=37/33 flags=IDLU client=qBittorrent/5.1.0
-   peer[3]: 5.18.41.73:5349 speed=245KB/s rtt=54ms piece=22 reqq=55/29 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 5.228.83.248:1933 speed=221KB/s rtt=55ms piece=-1 reqq=25/26 flags=IDLU client=qBittorrent/5.1.4
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=136806400 -> 137232384
-installer: ncz buffer wait wait_ms=2110 got=49704 rb_avail=376280 downloaded=137232048 installed=352321536 starvation_total=6
-scheduler: ISOLATED slow peer 187.255.195.58 for piece 17 (active blocks detected!) speed=3KB/s rtt=3797ms snubbed=no
-scheduler: ISOLATED slow peer 187.255.195.58 for piece 16 (active blocks detected!) speed=3KB/s rtt=3797ms snubbed=no
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 16)
-scheduler: stall level=1
-scheduler: 5zone critical=16-17 urgent=18-21 prefetch=22-25 spec=-1--1 stall=1
-scheduler: STARVATION recovery piece=16 reason=NO_PEER_ON_PIECE critical=16-17 urgent=18-19 slow_peers=0
-backend/local: STALL_RECOVERY piece=16 waited_ms=3257 peers=73 active=33 on_target=0 best_speed=295KB/s reason=NO_PEER_ON_PIECE
-torrent_engine: storage piece 24 started, total_in_ram=29
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=16-17 urgent=18-25 prefetch=26-41 spec=42-49 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=137232384 -> 141426688
-collector: stats downloaded=141426352 speed=1209KB/s rb_avail=4046296 rb_free=264389160 rb_cap=268435456
-installer: ncz buffer wait wait_ms=4270 got=148008 rb_avail=4046296 downloaded=141426352 installed=352321536 starvation_total=7
-installer: stats installed=352321536 install_speed=1398KB/s downloaded=141426352 source_speed=1209KB/s rb_avail=4046296 rb_free=264389160 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=141426688 -> 145620992
-scheduler: ISOLATED slow peer 189.12.47.173 for piece 18 (active blocks detected!) speed=7KB/s rtt=173ms snubbed=yes
-scheduler: 5zone+EDF critical=17-18 urgent=19-26 prefetch=42 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=145620992 -> 149815296
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=149815296 -> 153305088
-collector: partial read advance offset=149815296 requested=4194304 got=3489792
-scheduler: ISOLATED slow peer 189.12.47.173 for piece 19 (active blocks detected!) speed=7KB/s rtt=173ms snubbed=yes
-scheduler: 5zone+EDF critical=18-19 urgent=20-27 prefetch=43 slow_peers=1 stall=0
-backend/local: SWARM status: total_peers=74 active_peers=34 seeds=33 dl_rate=3375KB/s
-   peer[0]: 95.27.68.200:2199 speed=287KB/s rtt=44ms piece=24 reqq=53/34 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 5.18.177.119:2050 speed=265KB/s rtt=39ms piece=24 reqq=38/32 flags=IDLU client=qBittorrent/5.1.0
-   peer[2]: 95.24.120.124:8254 speed=228KB/s rtt=109ms piece=24 reqq=65/27 flags=IDLU client=μTorrent 3.6
-   peer[3]: 188.243.60.140:2224 speed=222KB/s rtt=58ms piece=24 reqq=36/27 flags=ICDLU client=qBittorrent/5.1.0
-   peer[4]: 5.18.41.73:5349 speed=221KB/s rtt=59ms piece=24 reqq=39/26 flags=IDLU client=qBittorrent/5.1.4
-torrent_engine: storage piece 22 started, total_in_ram=30
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=153305088 -> 156680192
-installer: ncz buffer wait wait_ms=1411 got=328232 rb_avail=3046872 downloaded=156679856 installed=377487360 starvation_total=8
-torrent_engine: storage piece 25 started, total_in_ram=30
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 18)
-scheduler: stall level=1
-scheduler: 5zone critical=18-19 urgent=20-23 prefetch=24-27 spec=-1--1 stall=1
-scheduler: ISOLATED slow peer 89.179.126.222 for piece 19 (active blocks detected!) speed=18KB/s rtt=571ms snubbed=yes
-scheduler: ISOLATED slow peer 189.12.47.173 for piece 18 (active blocks detected!) speed=3KB/s rtt=173ms snubbed=yes
-scheduler: STARVATION recovery piece=18 reason=SLOW_DELIVERY critical=18-19 urgent=20-23 slow_peers=2
-backend/local: STALL_RECOVERY piece=18 waited_ms=3134 peers=75 active=34 on_target=1 best_speed=283KB/s reason=STALL
-backend/local: CC limits changed to [2, 5]s (baseline=54ms)
-stall_monitor: disconnecting slow peer 186.219.55.101:54709 speed=141 B/s pieces=488
-stall_monitor: disconnected 1 slow peers, stall_ticks=3 dl_rate=3745941 B/s
-torrent_engine: storage piece 27 started, total_in_ram=32
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=18-19 urgent=20-27 prefetch=28-43 spec=44-51 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=156680192 -> 159645696
-collector: stats downloaded=159645360 speed=2678KB/s rb_avail=2866648 rb_free=265568808 rb_cap=268435456
-installer: ncz buffer wait wait_ms=3890 got=98856 rb_avail=2866648 downloaded=159645360 installed=385875968 starvation_total=9
-backend/local: SWARM status: total_peers=71 active_peers=32 seeds=31 dl_rate=3389KB/s
-installer: stats installed=385875968 install_speed=4928KB/s downloaded=159645360 source_speed=2676KB/s rb_avail=2866648 rb_free=265568808 rb_cap=268435456
-   peer[0]: 95.27.68.200:2199 speed=277KB/s rtt=52ms piece=-1 reqq=0/1 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 5.18.177.119:2050 speed=225KB/s rtt=64ms piece=26 reqq=41/27 flags=IDLU client=qBittorrent/5.1.0
-   peer[2]: 5.18.41.73:5349 speed=215KB/s rtt=66ms piece=26 reqq=52/26 flags=IDLU client=qBittorrent/5.1.4
-   peer[3]: 95.24.120.124:8254 speed=203KB/s rtt=95ms piece=-1 reqq=0/1 flags=IDLU client=μTorrent 3.6
-   peer[4]: 5.16.21.61:28566 speed=201KB/s rtt=72ms piece=-1 reqq=0/1 flags=ICDLU client=qBittorrent/5.1.0
+scheduler: 5zone critical=17-18 urgent=19-26 prefetch=27-42 spec=43-50 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=36995072 -> 41189376
+collector: stats downloaded=41188848 speed=2214KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=3797 got=4194304 rb_avail=0 downloaded=41188848 installed=36994544 starvation_total=1
 scheduler: 5zone+EDF critical=19-20 urgent=21-28 prefetch=44 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=159645696 -> 163840000
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=163840000 -> 168034304
-scheduler: 5zone+EDF critical=20-21 urgent=22-29 prefetch=45 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=168034304 -> 172228608
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=172228608 -> 176422912
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=41189376 -> 45006848
 scheduler: 5zone+EDF critical=21-22 urgent=23-30 prefetch=46 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=176422912 -> 180617216
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=180617216 -> 184811520
+installer: stats installed=41188848 install_speed=7097KB/s downloaded=45006320 source_speed=2046KB/s rb_avail=3817472 rb_free=264617984 rb_cap=268435456
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=45006848 -> 45301760
+collector: partial read advance offset=45006848 requested=4194304 got=294912
+installer: buffer wait wait_ms=771 got=294912 rb_avail=0 downloaded=45301232 installed=45006320 starvation_total=2
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=45301760 -> 45563904
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=45563904 -> 46137344
 scheduler: 5zone+EDF critical=22-23 urgent=24-31 prefetch=47 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=184811520 -> 189005824
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=189005824 -> 193200128
-scheduler: 5zone+EDF critical=23-24 urgent=25-32 prefetch=48 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=193200128 -> 197394432
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=197394432 -> 201588736
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 25 (active blocks detected!) speed=27KB/s rtt=549ms snubbed=no
-scheduler: 5zone+EDF critical=24-25 urgent=26-33 prefetch=49 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=201588736 -> 205783040
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=205783040 -> 206307328
-collector: partial read advance offset=205783040 requested=4194304 got=524288
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=206307328 -> 210501632
-scheduler: ISOLATED slow peer 187.131.141.154 for piece 26 (active blocks detected!) speed=49KB/s rtt=343ms snubbed=no
-scheduler: 5zone+EDF critical=25-26 urgent=27-34 prefetch=50 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=210501632 -> 210599936
-torrent_engine: storage piece 31 started, total_in_ram=33
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=210599936 -> 214794240
+torrent_engine: storage piece 23 started, total_in_ram=26
+torrent_engine: storage piece 24 started, total_in_ram=27
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1605KB/s
+   peer[0]: 37.151.115.104:53147 speed=1638KB/s rtt=8ms piece=24 reqq=326/198 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=14KB/s rtt=949ms piece=-1 reqq=2/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=1KB/s rtt=2446ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 25 started, total_in_ram=28
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 22)
+scheduler: stall level=1
+scheduler: 5zone critical=22-23 urgent=24-27 prefetch=28-31 spec=-1--1 stall=1
+scheduler: STARVATION recovery piece=22 reason=NO_PEER_ON_PIECE critical=22-23 urgent=24-25 slow_peers=0
+backend/local: STALL_RECOVERY piece=22 waited_ms=3009 peers=3 active=3 on_target=0 best_speed=1699KB/s reason=NO_PEER_ON_PIECE
+scheduler: ISOLATED slow peer 91.212.201.246 for piece 22 (active blocks detected!) speed=12KB/s rtt=949ms snubbed=no
+torrent_engine: storage piece 22 started, total_in_ram=29
+backend/local: state Stalled -> StreamingOrInstalling
+scheduler: stall recovered
+scheduler: 5zone critical=22-23 urgent=24-31 prefetch=32-47 spec=48-55 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=46137344 -> 47398912
+collector: stats downloaded=47398384 speed=982KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=4656 got=1261568 rb_avail=0 downloaded=47398384 installed=46136816 starvation_total=3
+installer: stats installed=47398384 install_speed=996KB/s downloaded=47398384 source_speed=383KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=47398912 -> 51593216
+scheduler: 5zone+EDF critical=24-25 urgent=26-33 prefetch=49 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=51593216 -> 54525952
+scheduler: 5zone+EDF critical=26-27 urgent=28-35 prefetch=51 slow_peers=0 stall=0
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 26 (active blocks detected!) speed=2KB/s rtt=2655ms snubbed=no
+torrent_engine: storage piece 28 started, total_in_ram=30
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1598KB/s
+   peer[0]: 37.151.115.104:53147 speed=1632KB/s rtt=8ms piece=28 reqq=282/197 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=13KB/s rtt=954ms piece=-1 reqq=5/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=2655ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 29 started, total_in_ram=31
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 26)
+scheduler: stall level=1
+scheduler: 5zone critical=26-27 urgent=28-31 prefetch=32-35 spec=-1--1 stall=1
+scheduler: STARVATION recovery piece=26 reason=NO_PEER_ON_PIECE critical=26-27 urgent=28-29 slow_peers=0
+backend/local: STALL_RECOVERY piece=26 waited_ms=3057 peers=3 active=3 on_target=0 best_speed=1632KB/s reason=NO_PEER_ON_PIECE
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 27 (active blocks detected!) speed=4KB/s rtt=2846ms snubbed=no
+torrent_engine: storage piece 27 started, total_in_ram=32
 torrent_engine: storage piece 26 started, total_in_ram=33
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=214794240 -> 218988544
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 27 (active blocks detected!) speed=25KB/s rtt=552ms snubbed=no
-scheduler: 5zone+EDF critical=26-27 urgent=28-35 prefetch=51 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=218988544 -> 223035392
-collector: partial read advance offset=218988544 requested=4194304 got=4046848
-torrent_engine: storage piece 28 started, total_in_ram=34
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=223035392 -> 227229696
-scheduler: ISOLATED slow peer 178.205.88.107 for piece 28 (active blocks detected!) speed=8KB/s rtt=1793ms snubbed=no
-scheduler: 5zone+EDF critical=27-28 urgent=29-36 prefetch=52 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=227229696 -> 227803136
-installer: stats installed=507510784 install_speed=23555KB/s downloaded=227802800 source_speed=13199KB/s rb_avail=7585240 rb_free=260850216 rb_cap=268435456
-backend/local: CC limits changed to [1, 3]s (baseline=49ms)
-backend/local: SWARM status: total_peers=71 active_peers=34 seeds=34 dl_rate=3283KB/s
-   peer[0]: 95.27.68.200:2199 speed=286KB/s rtt=55ms piece=28 reqq=58/34 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 85.53.121.194:35017 speed=239KB/s rtt=53ms piece=28 reqq=35/29 flags=ICDL client=qBittorrent/5.2.0
-   peer[2]: 5.16.21.61:28566 speed=214KB/s rtt=95ms piece=28 reqq=51/26 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 46.188.124.71:3193 speed=210KB/s rtt=99ms piece=28 reqq=49/25 flags=IDLU client=qBittorrent/4.5.5
-   peer[4]: 95.24.120.124:8254 speed=208KB/s rtt=47ms piece=28 reqq=33/25 flags=IDLU client=μTorrent 3.6
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=227803136 -> 231997440
-collector: stats downloaded=231997104 speed=10021KB/s rb_avail=3915224 rb_free=264520232 rb_cap=268435456
-installer: ncz buffer wait wait_ms=1637 got=279080 rb_avail=3915224 downloaded=231997104 installed=515899392 starvation_total=10
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=231997440 -> 235143168
-collector: partial read advance offset=231997440 requested=4194304 got=3145728
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 29 (active blocks detected!) speed=50KB/s rtt=385ms snubbed=no
-scheduler: 5zone+EDF critical=28-29 urgent=30-37 prefetch=53 slow_peers=1 stall=0
-torrent_engine: storage piece 30 started, total_in_ram=36
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=235143168 -> 236535808
-installer: ncz buffer wait wait_ms=1902 got=279080 rb_avail=1113560 downloaded=236535472 installed=528482304 starvation_total=11
-scheduler: ISOLATED slow peer 178.205.88.107 for piece 28 (active blocks detected!) speed=5KB/s rtt=1934ms snubbed=no
-backend/local: LATENCY_MODE exit
-backend/local: CC queue_time 2s -> 3s rtt_baseline=47ms mode=throughput
-torrent_engine: storage piece 29 started, total_in_ram=36
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 28)
-scheduler: stall level=1
-scheduler: 5zone critical=28-29 urgent=30-33 prefetch=34-37 spec=-1--1 stall=1
-scheduler: ISOLATED slow peer 177.136.199.245 for piece 29 (active blocks detected!) speed=66KB/s rtt=253ms snubbed=no
-scheduler: STARVATION recovery piece=28 reason=SLOW_DELIVERY critical=28-29 urgent=30-33 slow_peers=1
-backend/local: STALL_RECOVERY piece=28 waited_ms=3471 peers=74 active=41 on_target=1 best_speed=264KB/s reason=STALL
-stall_monitor: disconnecting slow peer 178.205.88.107:22676 speed=3459 B/s pieces=488
-stall_monitor: disconnected 1 slow peers, stall_ticks=3 dl_rate=3422821 B/s
-backend/local: SWARM status: total_peers=78 active_peers=41 seeds=38 dl_rate=3299KB/s
-   peer[0]: 5.18.177.119:2050 speed=196KB/s rtt=63ms piece=32 reqq=36/35 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 5.18.41.73:5349 speed=195KB/s rtt=69ms piece=31 reqq=62/35 flags=IDLU client=qBittorrent/5.1.4
-   peer[2]: 5.16.21.61:28566 speed=192KB/s rtt=77ms piece=31 reqq=69/34 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 5.228.83.248:1933 speed=190KB/s rtt=62ms piece=32 reqq=37/34 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 85.53.121.194:35017 speed=177KB/s rtt=102ms piece=30 reqq=69/32 flags=ICDL client=qBittorrent/5.2.0
-torrent_engine: storage piece 32 started, total_in_ram=37
-backend/local: CC queue_time 3s -> 2s rtt_baseline=46ms mode=latency
-scheduler: ISOLATED slow peer 79.139.194.205 for piece 28 (active blocks detected!) speed=91KB/s rtt=127ms snubbed=no
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
-scheduler: 5zone critical=28-29 urgent=30-37 prefetch=38-53 spec=54-61 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=236535808 -> 240730112
-collector: stats downloaded=240729776 speed=991KB/s rb_avail=3735000 rb_free=264700456 rb_cap=268435456
-installer: ncz buffer wait wait_ms=6149 got=459304 rb_avail=3735000 downloaded=240729776 installed=528482304 starvation_total=12
-installer: stats installed=528482304 install_speed=1932KB/s downloaded=240729776 source_speed=1191KB/s rb_avail=3735000 rb_free=264700456 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=240730112 -> 244924416
-scheduler: ISOLATED slow peer 185.67.54.57 for piece 30 (active blocks detected!) speed=5KB/s rtt=1425ms snubbed=no
-scheduler: 5zone+EDF critical=29-30 urgent=31-38 prefetch=54 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=244924416 -> 249118720
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=249118720 -> 251478016
-collector: partial read advance offset=249118720 requested=4194304 got=2359296
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=251478016 -> 252018688
-scheduler: ISOLATED slow peer 187.131.141.154 for piece 31 (active blocks detected!) speed=58KB/s rtt=280ms snubbed=no
-scheduler: 5zone+EDF critical=30-31 urgent=32-39 prefetch=55 slow_peers=1 stall=0
-torrent_engine: storage piece 36 started, total_in_ram=39
-torrent_engine: storage piece 34 started, total_in_ram=40
-torrent_engine: storage piece 33 started, total_in_ram=40
-backend/local: CC limits changed to [2, 5]s (baseline=68ms)
-backend/local: SWARM status: total_peers=72 active_peers=41 seeds=39 dl_rate=3256KB/s
+scheduler: 5zone critical=26-27 urgent=28-35 prefetch=36-51 spec=52-59 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=54525952 -> 56590336
+collector: partial read advance offset=54525952 requested=4194304 got=2064384
+collector: stats downloaded=56589808 speed=1514KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=5681 got=2064384 rb_avail=0 downloaded=56589808 installed=54525424 starvation_total=4
+installer: stats installed=56589808 install_speed=1509KB/s downloaded=56589808 source_speed=1509KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=56590336 -> 60784640
+scheduler: 5zone+EDF critical=28-29 urgent=30-37 prefetch=53 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=60784640 -> 62914560
+scheduler: 5zone+EDF critical=30-31 urgent=32-39 prefetch=55 slow_peers=0 stall=0
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 30 (active blocks detected!) speed=2KB/s rtt=2846ms snubbed=no
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1261KB/s
+   peer[0]: 37.151.115.104:53147 speed=1288KB/s rtt=13ms piece=30 reqq=306/156 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=10KB/s rtt=1151ms piece=27 reqq=3/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=2846ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 32 started, total_in_ram=34
+torrent_engine: storage piece 33 started, total_in_ram=35
 backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 30)
-   peer[0]: 5.228.83.248:1933 speed=202KB/s rtt=66ms piece=34 reqq=47/24 flags=IDLU client=qBittorrent/5.1.4
 scheduler: stall level=1
-   peer[1]: 95.27.68.200:2199 speed=192KB/s rtt=74ms piece=34 reqq=42/23 flags=IDLU client=qBittorrent/5.1.0
 scheduler: 5zone critical=30-31 urgent=32-35 prefetch=36-39 spec=-1--1 stall=1
-   peer[2]: 5.18.41.73:5349 speed=185KB/s rtt=69ms piece=33 reqq=43/22 flags=IDLU client=qBittorrent/5.1.4
-   peer[3]: 95.24.120.124:8254 speed=181KB/s rtt=81ms piece=34 reqq=45/22 flags=IDLU client=μTorrent 3.6
-   peer[4]: 5.18.177.119:2050 speed=166KB/s rtt=91ms piece=34 reqq=41/20 flags=IDLU client=qBittorrent/5.1.0
 scheduler: STARVATION recovery piece=30 reason=NO_PEER_ON_PIECE critical=30-31 urgent=32-33 slow_peers=0
-backend/local: STALL_RECOVERY piece=30 waited_ms=3206 peers=72 active=41 on_target=0 best_speed=202KB/s reason=NO_PEER_ON_PIECE
+backend/local: STALL_RECOVERY piece=30 waited_ms=3038 peers=3 active=3 on_target=0 best_speed=1337KB/s reason=NO_PEER_ON_PIECE
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 31 (active blocks detected!) speed=4KB/s rtt=3007ms snubbed=no
+torrent_engine: storage piece 30 started, total_in_ram=36
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
 scheduler: 5zone critical=30-31 urgent=32-39 prefetch=40-55 spec=56-63 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=252018688 -> 253067264
-installer: ncz buffer wait wait_ms=2257 got=180776 rb_avail=867800 downloaded=253066928 installed=570425344 starvation_total=13
-torrent_engine: storage piece 35 started, total_in_ram=41
-scheduler: ISOLATED slow peer 185.67.54.57 for piece 30 (active blocks detected!) speed=5KB/s rtt=1613ms snubbed=no
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 30)
-scheduler: stall level=1
-scheduler: 5zone critical=30-31 urgent=32-35 prefetch=36-39 spec=-1--1 stall=1
-scheduler: STARVATION recovery piece=30 reason=SLOW_DELIVERY critical=30-31 urgent=32-35 slow_peers=0
-backend/local: STALL_RECOVERY piece=30 waited_ms=3410 peers=75 active=42 on_target=1 best_speed=206KB/s reason=STALL
-stall_monitor: disconnecting slow peer 185.67.54.57:2305 speed=4900 B/s pieces=488
-stall_monitor: disconnected 1 slow peers, stall_ticks=3 dl_rate=3544146 B/s
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=30-31 urgent=32-39 prefetch=40-55 spec=56-63 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=253067264 -> 257261568
-collector: stats downloaded=257261232 speed=1912KB/s rb_avail=4013528 rb_free=264421928 rb_cap=268435456
-installer: ncz buffer wait wait_ms=4339 got=180776 rb_avail=4013528 downloaded=257261232 installed=574619648 starvation_total=14
-installer: stats installed=574619648 install_speed=5335KB/s downloaded=257261232 source_speed=1911KB/s rb_avail=4013528 rb_free=264421928 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=257261568 -> 261455872
-scheduler: ISOLATED slow peer 93.185.199.207 for piece 32 (active blocks detected!) speed=54KB/s rtt=282ms snubbed=no
-scheduler: 5zone+EDF critical=31-32 urgent=33-40 prefetch=56 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=261455872 -> 265650176
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=265650176 -> 269844480
-scheduler: ISOLATED slow peer 46.188.124.71 for piece 33 (active blocks detected!) speed=86KB/s rtt=234ms snubbed=no
-scheduler: 5zone+EDF critical=32-33 urgent=34-41 prefetch=57 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=269844480 -> 274038784
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=274038784 -> 276873216
-collector: partial read advance offset=274038784 requested=4194304 got=2834432
-scheduler: ISOLATED slow peer 213.230.74.16 for piece 34 (active blocks detected!) speed=72KB/s rtt=252ms snubbed=no
-scheduler: 5zone+EDF critical=33-34 urgent=35-42 prefetch=58 slow_peers=1 stall=0
-backend/local: SWARM status: total_peers=75 active_peers=44 seeds=42 dl_rate=3350KB/s
-   peer[0]: 5.16.21.61:28566 speed=206KB/s rtt=96ms piece=36 reqq=23/24 flags=ICDLU client=qBittorrent/5.1.0
-   peer[1]: 5.228.83.248:1933 speed=200KB/s rtt=74ms piece=36 reqq=14/24 flags=IDLU client=qBittorrent/5.1.4
-   peer[2]: 95.27.68.200:2199 speed=189KB/s rtt=72ms piece=36 reqq=13/22 flags=IDLU client=qBittorrent/5.1.0
-   peer[3]: 5.18.41.73:5349 speed=177KB/s rtt=105ms piece=37 reqq=20/21 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 178.76.241.48:1024 speed=154KB/s rtt=102ms piece=36 reqq=13/18 flags=IDLU client=qBittorrent/5.1.0
-torrent_engine: storage piece 37 started, total_in_ram=42
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 33)
-scheduler: stall level=1
-scheduler: 5zone critical=33-34 urgent=35-38 prefetch=39-42 spec=-1--1 stall=1
-torrent_engine: storage piece 38 started, total_in_ram=43
-scheduler: STARVATION recovery piece=33 reason=NO_PEER_ON_PIECE critical=33-34 urgent=35-36 slow_peers=0
-backend/local: STALL_RECOVERY piece=33 waited_ms=3022 peers=73 active=44 on_target=0 best_speed=197KB/s reason=NO_PEER_ON_PIECE
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=33-34 urgent=35-42 prefetch=43-58 spec=59-66 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=276873216 -> 278986752
-collector: stats downloaded=278986416 speed=3665KB/s rb_avail=1621464 rb_free=266813992 rb_cap=268435456
-installer: ncz buffer wait wait_ms=2814 got=492072 rb_avail=1621464 downloaded=278986416 installed=650117120 starvation_total=15
-scheduler: ISOLATED slow peer 46.188.124.71 for piece 33 (active blocks detected!) speed=97KB/s rtt=137ms snubbed=no
-installer: stats installed=650117120 install_speed=12727KB/s downloaded=278986416 source_speed=3662KB/s rb_avail=1621464 rb_free=266813992 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=278986752 -> 283181056
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=283181056 -> 287375360
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=62914560 -> 65011712
+collector: partial read advance offset=62914560 requested=4194304 got=2097152
+collector: stats downloaded=65011184 speed=1548KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=4935 got=2097152 rb_avail=0 downloaded=65011184 installed=62914032 starvation_total=5
+scheduler: 5zone+EDF critical=31-32 urgent=33-40 prefetch=56 slow_peers=0 stall=0
+torrent_engine: storage piece 31 started, total_in_ram=37
+installer: stats installed=65011184 install_speed=1549KB/s downloaded=65011184 source_speed=1549KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=65011712 -> 69206016
+scheduler: 5zone+EDF critical=33-34 urgent=35-42 prefetch=58 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=69206016 -> 71303168
 scheduler: 5zone+EDF critical=34-35 urgent=36-43 prefetch=59 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=287375360 -> 291569664
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=291569664 -> 295763968
-scheduler: ISOLATED slow peer 177.136.199.245 for piece 36 (active blocks detected!) speed=34KB/s rtt=275ms snubbed=yes
-scheduler: 5zone+EDF critical=35-36 urgent=37-44 prefetch=60 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=295763968 -> 299958272
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=299958272 -> 304152576
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 37 (active blocks detected!) speed=47KB/s rtt=345ms snubbed=no
-scheduler: 5zone+EDF critical=36-37 urgent=38-45 prefetch=61 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=304152576 -> 308346880
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=308346880 -> 310935552
-collector: partial read advance offset=308346880 requested=4194304 got=2588672
-scheduler: ISOLATED slow peer 95.24.120.124 for piece 38 (active blocks detected!) speed=91KB/s rtt=99ms snubbed=no
-scheduler: 5zone+EDF critical=37-38 urgent=39-46 prefetch=62 slow_peers=1 stall=0
-backend/local: SWARM status: total_peers=73 active_peers=44 seeds=42 dl_rate=3227KB/s
-   peer[0]: 5.228.83.248:1933 speed=197KB/s rtt=88ms piece=38 reqq=18/24 flags=IDLU client=qBittorrent/5.1.4
-   peer[1]: 95.27.68.200:2199 speed=194KB/s rtt=83ms piece=39 reqq=16/23 flags=IDLU client=qBittorrent/5.1.0
-   peer[2]: 5.16.21.61:28566 speed=188KB/s rtt=83ms piece=38 reqq=14/22 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 5.18.41.73:5349 speed=176KB/s rtt=86ms piece=38 reqq=13/21 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 178.76.241.48:1024 speed=159KB/s rtt=97ms piece=38 reqq=12/19 flags=IDLU client=qBittorrent/5.1.0
-torrent_engine: storage piece 39 started, total_in_ram=44
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 37)
-scheduler: stall level=1
-scheduler: 5zone critical=37-38 urgent=39-42 prefetch=43-46 spec=-1--1 stall=1
-scheduler: STARVATION recovery piece=37 reason=SLOW_DELIVERY critical=37-38 urgent=39-42 slow_peers=0
-backend/local: STALL_RECOVERY piece=37 waited_ms=3750 peers=77 active=48 on_target=1 best_speed=183KB/s reason=STALL
-stall_monitor: disconnecting slow peer 187.255.195.58:65042 speed=2165 B/s pieces=488
-stall_monitor: disconnected 1 slow peers, stall_ticks=3 dl_rate=3447082 B/s
-torrent_engine: storage piece 40 started, total_in_ram=45
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=37-38 urgent=39-46 prefetch=47-62 spec=63-70 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=310935552 -> 312098816
-collector: stats downloaded=312098480 speed=5310KB/s rb_avail=32112088 rb_free=236323368 rb_cap=268435456
-installer: stats installed=809500672 install_speed=24125KB/s downloaded=312098480 source_speed=5012KB/s rb_avail=31587800 rb_free=236847656 rb_cap=268435456
-scheduler: ISOLATED slow peer 188.243.60.140 for piece 37 (active blocks detected!) speed=72KB/s rtt=166ms snubbed=no
-backend/local: SWARM status: total_peers=76 active_peers=54 seeds=42 dl_rate=3221KB/s
-   peer[0]: 5.228.83.248:1933 speed=167KB/s rtt=99ms piece=41 reqq=41/20 flags=IDLU client=qBittorrent/5.1.4
-   peer[1]: 95.27.68.200:2199 speed=163KB/s rtt=97ms piece=40 reqq=39/19 flags=IDLU client=qBittorrent/5.1.0
-   peer[2]: 95.24.120.124:8254 speed=161KB/s rtt=85ms piece=41 reqq=37/19 flags=IDLU client=μTorrent 3.6
-   peer[3]: 5.16.21.61:28566 speed=154KB/s rtt=107ms piece=40 reqq=37/18 flags=ICDLU client=qBittorrent/5.1.0
-   peer[4]: 45.87.251.154:30095 speed=151KB/s rtt=86ms piece=42 reqq=28/18 flags=ICDL client=qBittorrent/5.1.2
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 37)
-scheduler: stall level=1
-scheduler: 5zone critical=37-38 urgent=39-42 prefetch=43-46 spec=-1--1 stall=1
-torrent_engine: storage piece 41 started, total_in_ram=47
-scheduler: STARVATION recovery piece=37 reason=SLOW_DELIVERY critical=37-38 urgent=39-42 slow_peers=0
-torrent_engine: storage piece 42 started, total_in_ram=47
-backend/local: STALL_RECOVERY piece=37 waited_ms=3406 peers=76 active=54 on_target=2 best_speed=167KB/s reason=STALL
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=37-38 urgent=39-46 prefetch=47-62 spec=63-70 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=312098816 -> 316293120
-collector: stats downloaded=316292784 speed=797KB/s rb_avail=3800536 rb_free=264634920 rb_cap=268435456
-installer: ncz buffer wait wait_ms=619 got=393768 rb_avail=3800536 downloaded=316292784 installed=914358272 starvation_total=16
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=316293120 -> 320487424
-scheduler: 5zone+EDF critical=38-39 urgent=40-47 prefetch=63 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=320487424 -> 324681728
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=324681728 -> 328876032
-scheduler: ISOLATED slow peer 213.230.74.16 for piece 40 (active blocks detected!) speed=53KB/s rtt=174ms snubbed=yes
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1484KB/s
+   peer[0]: 37.151.115.104:53147 speed=1516KB/s rtt=8ms piece=34 reqq=294/183 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=10KB/s rtt=1156ms piece=34 reqq=3/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=3007ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 34 started, total_in_ram=38
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=71303168 -> 73400320
+collector: partial read advance offset=71303168 requested=4194304 got=2097152
+installer: buffer wait wait_ms=1128 got=2097152 rb_avail=0 downloaded=73399792 installed=71302640 starvation_total=6
+scheduler: 5zone+EDF critical=35-36 urgent=37-44 prefetch=60 slow_peers=0 stall=0
+torrent_engine: storage piece 36 started, total_in_ram=39
+torrent_engine: storage piece 37 started, total_in_ram=40
+torrent_engine: storage piece 38 started, total_in_ram=41
+torrent_engine: storage piece 35 started, total_in_ram=42
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=73400320 -> 73662464
+installer: buffer wait wait_ms=2547 got=262144 rb_avail=0 downloaded=73661936 installed=73399792 starvation_total=7
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=73662464 -> 73924608
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=73924608 -> 74186752
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=74186752 -> 74448896
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=74448896 -> 74711040
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=74711040 -> 74973184
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=74973184 -> 75317248
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=75317248 -> 79511552
+scheduler: 5zone+EDF critical=37-38 urgent=39-46 prefetch=62 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=79511552 -> 81379328
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 39 (active blocks detected!) speed=3KB/s rtt=3146ms snubbed=no
+scheduler: 5zone+EDF critical=38-39 urgent=40-47 prefetch=63 slow_peers=1 stall=0
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1446KB/s
+   peer[0]: 37.151.115.104:53147 speed=1478KB/s rtt=68ms piece=38 reqq=477/179 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=9KB/s rtt=1168ms piece=-1 reqq=5/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=3146ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=81379328 -> 81788928
+collector: partial read advance offset=81379328 requested=4194304 got=409600
+collector: stats downloaded=81788400 speed=2358KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=2099 got=409600 rb_avail=0 downloaded=81788400 installed=81378800 starvation_total=8
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 40 (active blocks detected!) speed=2KB/s rtt=3146ms snubbed=no
 scheduler: 5zone+EDF critical=39-40 urgent=41-48 prefetch=64 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=328876032 -> 333070336
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=333070336 -> 337264640
-scheduler: ISOLATED slow peer 45.5.141.99 for piece 41 (active blocks detected!) speed=46KB/s rtt=305ms snubbed=no
-scheduler: 5zone+EDF critical=40-41 urgent=42-49 prefetch=65 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=337264640 -> 341458944
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=341458944 -> 345653248
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 42 (active blocks detected!) speed=60KB/s rtt=266ms snubbed=no
-scheduler: 5zone+EDF critical=41-42 urgent=43-50 prefetch=66 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=345653248 -> 346161152
-collector: partial read advance offset=345653248 requested=4194304 got=507904
-installer: stats installed=922746880 install_speed=21742KB/s downloaded=346160816 source_speed=6539KB/s rb_avail=32095704 rb_free=236339752 rb_cap=268435456
-torrent_engine: storage piece 43 started, total_in_ram=48
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=346161152 -> 349356032
-backend/local: SWARM status: total_peers=71 active_peers=54 seeds=45 dl_rate=3690KB/s
-   peer[0]: 5.228.83.248:1933 speed=231KB/s rtt=60ms piece=44 reqq=34/28 flags=IDLU client=qBittorrent/5.1.4
-   peer[1]: 5.16.21.61:28566 speed=203KB/s rtt=63ms piece=44 reqq=34/24 flags=ICDLU client=qBittorrent/5.1.0
-   peer[2]: 95.24.120.124:8254 speed=198KB/s rtt=77ms piece=-1 reqq=25/24 flags=IDLU client=μTorrent 3.6
-   peer[3]: 5.18.177.119:2050 speed=175KB/s rtt=86ms piece=44 reqq=34/21 flags=IDLU client=qBittorrent/5.1.0
-   peer[4]: 45.87.251.154:30095 speed=169KB/s rtt=78ms piece=44 reqq=39/20 flags=ICDL client=qBittorrent/5.1.2
-torrent_engine: storage piece 44 started, total_in_ram=49
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=349356032 -> 351518720
-installer: stats installed=1048576000 install_speed=24536KB/s downloaded=351518384 source_speed=1044KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
-torrent_engine: storage piece 45 started, total_in_ram=50
-scheduler: ISOLATED slow peer 95.79.209.100 for piece 42 (active blocks detected!) speed=13KB/s rtt=605ms snubbed=yes
-scheduler: ISOLATED slow peer 78.164.177.53 for piece 41 (active blocks detected!) speed=0KB/s rtt=3135ms snubbed=no
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 41)
+installer: stats installed=81788400 install_speed=2370KB/s downloaded=81788400 source_speed=2370KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+backend/local: CC limits changed to [2, 5]s (baseline=63ms)
+backend/local: LATENCY_MODE enter reason=stall hold=10s
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 39)
 scheduler: stall level=1
-scheduler: 5zone critical=41-42 urgent=43-46 prefetch=47-50 spec=-1--1 stall=1
-scheduler: STARVATION recovery piece=41 reason=NO_PEER_ON_PIECE critical=41-42 urgent=43-44 slow_peers=0
-backend/local: STALL_RECOVERY piece=41 waited_ms=3116 peers=70 active=59 on_target=0 best_speed=250KB/s reason=NO_PEER_ON_PIECE
-torrent_engine: storage piece 47 started, total_in_ram=52
-torrent_engine: storage piece 46 started, total_in_ram=52
+scheduler: 5zone critical=39-40 urgent=41-44 prefetch=45-48 spec=-1--1 stall=1
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 39 (active blocks detected!) speed=3KB/s rtt=3246ms snubbed=no
+scheduler: STARVATION recovery piece=39 reason=SLOW_DELIVERY critical=39-40 urgent=41-44 slow_peers=1
+backend/local: STALL_RECOVERY piece=39 waited_ms=3021 peers=3 active=3 on_target=1 best_speed=958KB/s reason=STALL
+torrent_engine: storage piece 40 started, total_in_ram=43
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=926KB/s
+   peer[0]: 37.151.115.104:53147 speed=937KB/s rtt=13ms piece=40 reqq=281/113 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=14KB/s rtt=1105ms piece=-1 reqq=2/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=3246ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+backend/local: CC limits changed to [1, 3]s (baseline=49ms)
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 40 (active blocks detected!) speed=2KB/s rtt=3246ms snubbed=no
+torrent_engine: storage piece 41 started, total_in_ram=44
+torrent_engine: storage piece 39 started, total_in_ram=45
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
-scheduler: 5zone critical=41-42 urgent=43-50 prefetch=51-66 spec=67-74 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=351518720 -> 355713024
-collector: stats downloaded=355712688 speed=4215KB/s rb_avail=3898840 rb_free=264536616 rb_cap=268435456
-installer: ncz buffer wait wait_ms=3800 got=295464 rb_avail=3898840 downloaded=355712688 installed=1048576000 starvation_total=17
-torrent_engine: storage piece 48 started, total_in_ram=53
-scheduler: ISOLATED slow peer 95.79.209.100 for piece 43 (active blocks detected!) speed=11KB/s rtt=841ms snubbed=yes
+scheduler: 5zone critical=39-40 urgent=41-48 prefetch=49-64 spec=65-72 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=81788928 -> 84852736
+collector: stats downloaded=84852208 speed=448KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=6648 got=3063808 rb_avail=0 downloaded=84852208 installed=81788400 starvation_total=9
+scheduler: 5zone+EDF critical=40-41 urgent=42-49 prefetch=65 slow_peers=0 stall=0
+installer: stats installed=84852208 install_speed=444KB/s downloaded=84852208 source_speed=444KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+torrent_engine: storage piece 42 started, total_in_ram=46
+torrent_engine: storage piece 43 started, total_in_ram=47
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1208KB/s
+   peer[0]: 37.151.115.104:53147 speed=1226KB/s rtt=10ms piece=43 reqq=250/148 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=16KB/s rtt=965ms piece=41 reqq=7/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=2KB/s rtt=3353ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 40)
+scheduler: stall level=1
+scheduler: 5zone critical=40-41 urgent=42-45 prefetch=46-49 spec=-1--1 stall=1
+scheduler: STARVATION recovery piece=40 reason=NO_PEER_ON_PIECE critical=40-41 urgent=42-43 slow_peers=0
+backend/local: STALL_RECOVERY piece=40 waited_ms=3011 peers=3 active=3 on_target=0 best_speed=1226KB/s reason=NO_PEER_ON_PIECE
+backend/local: state Stalled -> StreamingOrInstalling
+scheduler: stall recovered
+scheduler: 5zone critical=40-41 urgent=42-49 prefetch=50-65 spec=66-73 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=84852736 -> 89047040
+installer: buffer wait wait_ms=3303 got=4194304 rb_avail=0 downloaded=89046512 installed=84852208 starvation_total=10
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 43 (active blocks detected!) speed=2KB/s rtt=3353ms snubbed=no
 scheduler: 5zone+EDF critical=42-43 urgent=44-51 prefetch=67 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=355713024 -> 359907328
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=359907328 -> 364101632
-scheduler: ISOLATED slow peer 170.238.51.124 for piece 44 (active blocks detected!) speed=8KB/s rtt=502ms snubbed=yes
-scheduler: 5zone+EDF critical=43-44 urgent=45-52 prefetch=68 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=364101632 -> 368295936
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=368295936 -> 368574464
-collector: partial read advance offset=368295936 requested=4194304 got=278528
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=368574464 -> 369688576
-scheduler: ISOLATED slow peer 93.149.172.29 for piece 45 (active blocks detected!) speed=65KB/s rtt=161ms snubbed=yes
-scheduler: 5zone+EDF critical=44-45 urgent=46-53 prefetch=69 slow_peers=1 stall=0
-installer: stats installed=1086324736 install_speed=7009KB/s downloaded=369688240 source_speed=3373KB/s rb_avail=11582936 rb_free=256852520 rb_cap=268435456
-backend/local: SWARM status: total_peers=61 active_peers=53 seeds=47 dl_rate=3986KB/s
-   peer[0]: 95.27.68.200:2199 speed=265KB/s rtt=34ms piece=49 reqq=13/32 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 95.24.120.124:8254 speed=253KB/s rtt=64ms piece=48 reqq=20/30 flags=IDLU client=μTorrent 3.6
-   peer[2]: 5.228.83.248:1933 speed=196KB/s rtt=65ms piece=47 reqq=56/23 flags=IDLU client=qBittorrent/5.1.4
-   peer[3]: 45.87.251.154:30095 speed=190KB/s rtt=79ms piece=48 reqq=34/23 flags=ICDL client=qBittorrent/5.1.2
-   peer[4]: 5.18.177.119:2050 speed=184KB/s rtt=70ms piece=48 reqq=17/22 flags=IDLU client=qBittorrent/5.1.0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=89047040 -> 91242496
+scheduler: 5zone+EDF critical=43-44 urgent=45-52 prefetch=68 slow_peers=0 stall=0
+torrent_engine: storage piece 45 started, total_in_ram=48
+torrent_engine: storage piece 46 started, total_in_ram=49
+torrent_engine: storage piece 47 started, total_in_ram=50
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 43)
+scheduler: stall level=1
+scheduler: 5zone critical=43-44 urgent=45-48 prefetch=49-52 spec=-1--1 stall=1
+scheduler: STARVATION recovery piece=43 reason=NO_PEER_ON_PIECE critical=43-44 urgent=45-46 slow_peers=0
+backend/local: STALL_RECOVERY piece=43 waited_ms=3024 peers=3 active=3 on_target=0 best_speed=1337KB/s reason=NO_PEER_ON_PIECE
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 44 (active blocks detected!) speed=3KB/s rtt=3448ms snubbed=no
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1138KB/s
+   peer[0]: 37.151.115.104:53147 speed=1152KB/s rtt=57ms piece=44 reqq=112/139 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=17KB/s rtt=988ms piece=-1 reqq=4/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=3KB/s rtt=3448ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 43 (active blocks detected!) speed=2KB/s rtt=3448ms snubbed=no
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 44 (active blocks detected!) speed=4KB/s rtt=3553ms snubbed=no
+backend/local: state Stalled -> StreamingOrInstalling
+scheduler: stall recovered
+scheduler: 5zone critical=43-44 urgent=45-52 prefetch=53-68 spec=69-76 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=91242496 -> 92274688
+collector: partial read advance offset=91242496 requested=4194304 got=1032192
+collector: stats downloaded=92274160 speed=561KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+installer: buffer wait wait_ms=9353 got=1032192 rb_avail=0 downloaded=92274160 installed=91241968 starvation_total=11
+scheduler: 5zone+EDF critical=44-45 urgent=46-53 prefetch=69 slow_peers=0 stall=0
+installer: stats installed=92274160 install_speed=564KB/s downloaded=92274160 source_speed=564KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=631KB/s
+   peer[0]: 37.151.115.104:53147 speed=635KB/s rtt=57ms piece=-1 reqq=1/77 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=12KB/s rtt=1106ms piece=-1 reqq=1/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=3KB/s rtt=3553ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
 backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 44)
 scheduler: stall level=1
 scheduler: 5zone critical=44-45 urgent=46-49 prefetch=50-53 spec=-1--1 stall=1
-torrent_engine: storage piece 49 started, total_in_ram=54
-scheduler: STARVATION recovery piece=44 reason=SLOW_DELIVERY critical=44-45 urgent=46-49 slow_peers=0
-backend/local: STALL_RECOVERY piece=44 waited_ms=3001 peers=61 active=53 on_target=1 best_speed=265KB/s reason=STALL
+scheduler: STARVATION recovery piece=44 reason=NO_PEER_ON_PIECE critical=44-45 urgent=46-47 slow_peers=0
+backend/local: STALL_RECOVERY piece=44 waited_ms=3030 peers=3 active=3 on_target=0 best_speed=528KB/s reason=NO_PEER_ON_PIECE
+torrent_engine: storage piece 44 started, total_in_ram=51
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
 scheduler: 5zone critical=44-45 urgent=46-53 prefetch=54-69 spec=70-77 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=369688576 -> 373882880
-collector: stats downloaded=373882544 speed=3169KB/s rb_avail=3718616 rb_free=264716840 rb_cap=268435456
-scheduler: ISOLATED slow peer 79.139.194.205 for piece 45 (active blocks detected!) speed=38KB/s rtt=175ms snubbed=yes
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=373882880 -> 378077184
-scheduler: 5zone+EDF critical=45-46 urgent=47-54 prefetch=70 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=378077184 -> 382271488
-installer: stats installed=1216348160 install_speed=23979KB/s downloaded=382271152 source_speed=2320KB/s rb_avail=4242904 rb_free=264192552 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=382271488 -> 386465792
-torrent_engine: storage piece 53 started, total_in_ram=55
-torrent_engine: storage piece 50 started, total_in_ram=56
-torrent_engine: storage piece 51 started, total_in_ram=57
-scheduler: ISOLATED slow peer 5.228.83.248 for piece 47 (active blocks detected!) speed=84KB/s rtt=346ms snubbed=yes
-scheduler: 5zone+EDF critical=46-47 urgent=48-55 prefetch=71 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=386465792 -> 390660096
-installer: ncz buffer wait wait_ms=1010 got=475688 rb_avail=3718616 downloaded=390659760 installed=1266679808 starvation_total=18
-torrent_engine: storage piece 52 started, total_in_ram=58
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=390660096 -> 394854400
-scheduler: ISOLATED slow peer 85.192.48.13 for piece 48 (active blocks detected!) speed=4KB/s rtt=1217ms snubbed=yes
-scheduler: 5zone+EDF critical=47-48 urgent=49-56 prefetch=72 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=394854400 -> 399048704
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=399048704 -> 403243008
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=92274688 -> 96468992
+installer: buffer wait wait_ms=3878 got=4194304 rb_avail=0 downloaded=96468464 installed=92274160 starvation_total=12
+scheduler: 5zone+EDF critical=46-47 urgent=48-55 prefetch=71 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=96468992 -> 100139008
+scheduler: 5zone+EDF critical=47-48 urgent=49-56 prefetch=72 slow_peers=0 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=100139008 -> 100663296
+collector: partial read advance offset=100139008 requested=4194304 got=524288
 scheduler: 5zone+EDF critical=48-49 urgent=50-57 prefetch=73 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=403243008 -> 406650880
-collector: partial read advance offset=403243008 requested=4194304 got=3407872
-backend/local: CC limits changed to [1, 3]s (baseline=49ms)
-scheduler: ISOLATED slow peer 147.45.208.32 for piece 49 (active blocks detected!) speed=9KB/s rtt=296ms snubbed=no
-backend/local: SWARM status: total_peers=49 active_peers=48 seeds=46 dl_rate=4643KB/s
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=406650880 -> 410845184
-   peer[0]: 95.27.68.200:2199 speed=242KB/s rtt=72ms piece=52 reqq=65/1 flags=IDLU client=qBittorrent/5.1.0
-collector: stats downloaded=410844848 speed=6187KB/s rb_avail=14466520 rb_free=253968936 rb_cap=268435456
-   peer[1]: 46.188.124.71:3193 speed=232KB/s rtt=62ms piece=53 reqq=55/28 flags=IDLU client=qBittorrent/4.5.5
-   peer[2]: 5.16.21.61:28566 speed=223KB/s rtt=64ms piece=53 reqq=56/27 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 45.87.251.154:30095 speed=207KB/s rtt=62ms piece=52 reqq=51/25 flags=ICDL client=qBittorrent/5.1.2
-   peer[4]: 178.76.241.48:1024 speed=199KB/s rtt=71ms piece=53 reqq=49/24 flags=IDLU client=qBittorrent/5.1.0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=410845184 -> 415039488
-scheduler: ISOLATED slow peer 93.149.172.29 for piece 50 (active blocks detected!) speed=29KB/s rtt=486ms snubbed=no
-scheduler: 5zone+EDF critical=49-50 urgent=51-58 prefetch=74 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=415039488 -> 415531008
-collector: partial read advance offset=415039488 requested=4194304 got=491520
-installer: stats installed=1312817152 install_speed=18800KB/s downloaded=415530672 source_speed=6481KB/s rb_avail=18628056 rb_free=249807400 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=415531008 -> 419725312
-scheduler: ISOLATED slow peer 93.149.172.29 for piece 51 (active blocks detected!) speed=29KB/s rtt=486ms snubbed=no
-scheduler: 5zone+EDF critical=50-51 urgent=52-59 prefetch=75 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=419725312 -> 423706624
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=423706624 -> 427900928
-scheduler: ISOLATED slow peer 79.139.194.205 for piece 52 (active blocks detected!) speed=19KB/s rtt=697ms snubbed=no
-scheduler: 5zone+EDF critical=51-52 urgent=53-60 prefetch=76 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=427900928 -> 427917312
-collector: partial read advance offset=427900928 requested=4194304 got=16384
-torrent_engine: storage piece 54 started, total_in_ram=60
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=427917312 -> 432111616
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=432111616 -> 435552256
-backend/local: LATENCY_MODE exit
-backend/local: CC queue_time 2s -> 3s rtt_baseline=45ms mode=throughput
-torrent_engine: storage piece 55 started, total_in_ram=61
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=435552256 -> 439746560
-collector: stats downloaded=439746224 speed=5248KB/s rb_avail=19250648 rb_free=249184808 rb_cap=268435456
-scheduler: ISOLATED slow peer 170.244.255.135 for piece 53 (active blocks detected!) speed=28KB/s rtt=357ms snubbed=yes
-scheduler: 5zone+EDF critical=52-53 urgent=54-61 prefetch=77 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=439746560 -> 439877632
-collector: partial read advance offset=439746560 requested=4194304 got=131072
-installer: stats installed=1447034880 install_speed=25280KB/s downloaded=439877296 source_speed=4585KB/s rb_avail=18857432 rb_free=249578024 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=439877632 -> 444071936
-backend/local: SWARM status: total_peers=51 active_peers=49 seeds=47 dl_rate=3818KB/s
-   peer[0]: 95.24.120.124:8254 speed=244KB/s rtt=46ms piece=-1 reqq=32/44 flags=IDLU client=μTorrent 3.6
-torrent_engine: storage piece 56 started, total_in_ram=62
-   peer[1]: 95.211.171.15:20001 speed=200KB/s rtt=48ms piece=56 reqq=39/36 flags=ICDL client=libTorrent 0.13.6
-   peer[2]: 45.87.251.154:30095 speed=199KB/s rtt=62ms piece=56 reqq=45/36 flags=ICDL client=qBittorrent/5.1.2
-   peer[3]: 5.228.83.248:1933 speed=188KB/s rtt=51ms piece=-1 reqq=23/34 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 178.76.241.48:1024 speed=171KB/s rtt=44ms piece=-1 reqq=20/31 flags=IDLU client=qBittorrent/5.1.0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=444071936 -> 445169664
-collector: stats downloaded=445169328 speed=1036KB/s rb_avail=3177944 rb_free=265257512 rb_cap=268435456
-installer: stats installed=1577058304 install_speed=25308KB/s downloaded=445169328 source_speed=1030KB/s rb_avail=2653656 rb_free=265781800 rb_cap=268435456
-scheduler: ISOLATED slow peer 170.244.255.135 for piece 54 (active blocks detected!) speed=24KB/s rtt=596ms snubbed=yes
-scheduler: ISOLATED slow peer 170.244.255.135 for piece 53 (active blocks detected!) speed=24KB/s rtt=596ms snubbed=yes
-torrent_engine: storage piece 58 started, total_in_ram=63
-scheduler: 5zone+EDF critical=53-54 urgent=55-62 prefetch=78 slow_peers=2 stall=0
-torrent_engine: storage piece 57 started, total_in_ram=63
-torrent_engine: storage piece 59 started, total_in_ram=64
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-torrent_engine: storage piece 60 started, total_in_ram=65
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 53)
-torrent_engine: [evict_skip] piece 424 is MRU/LRU candidate but skipped: pinned=0 needed=1 min_keep_offset=445169664
+torrent_engine: storage piece 48 started, total_in_ram=52
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=100663296 -> 101711872
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 48 (active blocks detected!) speed=3KB/s rtt=3658ms snubbed=no
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=544KB/s
+   peer[0]: 37.151.115.104:53147 speed=544KB/s rtt=20ms piece=48 reqq=35/65 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=14KB/s rtt=1177ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=3KB/s rtt=3658ms piece=-1 reqq=2/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 50 started, total_in_ram=53
+backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 48)
 scheduler: stall level=1
-torrent_engine: [evict] piece 1 evicted. min_keep_offset=445169664 limit=16777216
-scheduler: 5zone critical=53-54 urgent=55-58 prefetch=59-62 spec=-1--1 stall=1
-torrent_engine: storage piece 61 started, total_in_ram=65
-torrent_engine: [evict] piece 2 evicted. min_keep_offset=445169664 limit=25165824
-scheduler: STARVATION recovery piece=53 reason=NO_PEER_ON_PIECE critical=53-54 urgent=55-56 slow_peers=0
-backend/local: STALL_RECOVERY piece=53 waited_ms=4591 peers=51 active=48 on_target=0 best_speed=263KB/s reason=NO_PEER_ON_PIECE
-torrent_engine: [evict] piece 3 evicted. min_keep_offset=445169664 limit=33554432
+scheduler: 5zone critical=48-49 urgent=50-53 prefetch=54-57 spec=-1--1 stall=1
+scheduler: STARVATION recovery piece=48 reason=NO_PEER_ON_PIECE critical=48-49 urgent=50-51 slow_peers=0
+backend/local: STALL_RECOVERY piece=48 waited_ms=3042 peers=3 active=3 on_target=0 best_speed=637KB/s reason=NO_PEER_ON_PIECE
+hybrid: cancelling installation...
+backend/local: state Stalled -> Error (streaming failed)
+backend/local: SESSION_SUMMARY reason=failed slow_read_logs=0 stalls=13 stall_recoveries=12 stall_total_ms=24717 stall_max_ms=6479 no_peer_on_piece=0 all_choked=0 no_active_download=0 slow_delivery=0 starvation_recoveries=13 latency_entries=2
+installer: thread finished, installed 101711344 bytes
+backend/local: state Error -> Stalled (waiting for piece 48)
+scheduler: stall level=3
+scheduler: 5zone critical=48-49 urgent=50-53 prefetch=54-57 spec=-1--1 stall=3
+backend/local: STALL_RECOVERY piece=48 waited_ms=3142 peers=3 active=3 on_target=0 best_speed=637KB/s reason=NO_PEER_ON_PIECE
+torrent_engine: storage piece 51 started, total_in_ram=54
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 48 (active blocks detected!) speed=4KB/s rtt=3769ms snubbed=no
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=521KB/s
+   peer[0]: 37.151.115.104:53147 speed=518KB/s rtt=19ms piece=51 reqq=77/62 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=14KB/s rtt=1117ms piece=-1 reqq=5/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=4KB/s rtt=3769ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 52 started, total_in_ram=55
+torrent_engine: storage piece 53 started, total_in_ram=56
+backend/local: slow read wait_ms=10055 piece=48 offset=101711872
+backend/local: PIECE_WAIT_STATE piece=48 peers=3 choked=0 interesting=3 active=3 on_target=0 best_speed=796KB/s => NO_PEER_ON_PIECE (priority/announce issue?)
+scheduler: ISOLATED slow peer 91.212.201.246 for piece 49 (active blocks detected!) speed=17KB/s rtt=1117ms snubbed=no
+scheduler: STARVATION recovery piece=48 reason=NO_PEER_ON_PIECE critical=48-49 urgent=50-51 slow_peers=1
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
-scheduler: 5zone critical=53-54 urgent=55-62 prefetch=63-78 spec=79-86 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=445169664 -> 449363968
-collector: stats downloaded=449363632 speed=735KB/s rb_avail=3702232 rb_free=264733224 rb_cap=268435456
-installer: ncz buffer wait wait_ms=2960 got=492072 rb_avail=3702232 downloaded=449363632 installed=1614807040 starvation_total=19
-scheduler: ISOLATED slow peer 186.219.55.101 for piece 54 (active blocks detected!) speed=0KB/s rtt=0ms snubbed=no
-installer: stats installed=1614807040 install_speed=6658KB/s downloaded=449363632 source_speed=739KB/s rb_avail=3702232 rb_free=264733224 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=449363968 -> 453558272
-backend/local: CC queue_time 3s -> 2s rtt_baseline=39ms mode=latency
-scheduler: 5zone+EDF critical=54-55 urgent=56-63 prefetch=79 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=453558272 -> 457752576
-torrent_engine: storage piece 63 started, total_in_ram=65
-torrent_engine: [evict] piece 4 evicted. min_keep_offset=457752576 limit=41943040
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=457752576 -> 461946880
-scheduler: 5zone+EDF critical=55-56 urgent=57-64 prefetch=80 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=461946880 -> 466141184
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=466141184 -> 470335488
-installer: stats installed=1673527296 install_speed=10697KB/s downloaded=470335152 source_speed=3820KB/s rb_avail=16285144 rb_free=252150312 rb_cap=268435456
-torrent_engine: storage piece 64 started, total_in_ram=65
-scheduler: 5zone+EDF critical=56-57 urgent=58-65 prefetch=81 slow_peers=0 stall=0
-torrent_engine: [evict] piece 5 evicted. min_keep_offset=470335488 limit=50331648
-torrent_engine: storage piece 62 started, total_in_ram=64
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=470335488 -> 474529792
-backend/local: SWARM status: total_peers=63 active_peers=47 seeds=45 dl_rate=5349KB/s
-collector: stats downloaded=474529456 speed=3423KB/s rb_avail=16809432 rb_free=251626024 rb_cap=268435456
-   peer[0]: 95.24.120.124:8254 speed=349KB/s rtt=44ms piece=64 reqq=49/42 flags=IDLU client=μTorrent 3.6
-   peer[1]: 5.228.83.248:1933 speed=293KB/s rtt=34ms piece=-1 reqq=29/35 flags=IDLU client=qBittorrent/5.1.4
-   peer[2]: 95.211.171.15:20001 speed=285KB/s rtt=18ms piece=-1 reqq=23/34 flags=ICDL client=libTorrent 0.13.6
-   peer[3]: 5.16.21.61:28566 speed=275KB/s rtt=38ms piece=-1 reqq=27/33 flags=ICDLU client=qBittorrent/5.1.0
-   peer[4]: 178.76.241.48:1024 speed=261KB/s rtt=43ms piece=-1 reqq=26/31 flags=IDLU client=qBittorrent/5.1.0
-torrent_engine: storage piece 65 started, total_in_ram=65
-torrent_engine: [evict] piece 6 evicted. min_keep_offset=474529792 limit=58720256
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=474529792 -> 478724096
-scheduler: 5zone+EDF critical=57-58 urgent=59-66 prefetch=82 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=478724096 -> 482918400
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=482918400 -> 487112704
-scheduler: 5zone+EDF critical=58-59 urgent=60-67 prefetch=83 slow_peers=0 stall=0
-torrent_engine: storage piece 66 started, total_in_ram=65
-torrent_engine: [evict] piece 7 evicted. min_keep_offset=487112704 limit=67108864
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=487112704 -> 491307008
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=491307008 -> 495501312
-scheduler: ISOLATED slow peer 78.164.177.53 for piece 60 (active blocks detected!) speed=2KB/s rtt=3366ms snubbed=no
-scheduler: 5zone+EDF critical=59-60 urgent=61-68 prefetch=84 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=495501312 -> 499695616
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=499695616 -> 503889920
-scheduler: ISOLATED slow peer 93.149.172.29 for piece 61 (active blocks detected!) speed=23KB/s rtt=535ms snubbed=no
-scheduler: 5zone+EDF critical=60-61 urgent=62-69 prefetch=85 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=503889920 -> 508084224
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=508084224 -> 512278528
-scheduler: 5zone+EDF critical=61-62 urgent=63-70 prefetch=86 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=512278528 -> 516472832
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=516472832 -> 520667136
-scheduler: ISOLATED slow peer 179.214.235.231 for piece 63 (active blocks detected!) speed=7KB/s rtt=1401ms snubbed=yes
-scheduler: 5zone+EDF critical=62-63 urgent=64-71 prefetch=87 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=520667136 -> 524861440
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=524861440 -> 529055744
-scheduler: 5zone+EDF critical=63-64 urgent=65-72 prefetch=88 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=529055744 -> 533250048
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=533250048 -> 537444352
-scheduler: ISOLATED slow peer 177.154.3.7 for piece 65 (active blocks detected!) speed=60KB/s rtt=288ms snubbed=no
-scheduler: 5zone+EDF critical=64-65 urgent=66-73 prefetch=89 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=537444352 -> 539672576
-collector: partial read advance offset=537444352 requested=4194304 got=2228224
-backend/local: LATENCY_MODE exit
-installer: stats installed=1740636160 install_speed=12167KB/s downloaded=539672240 source_speed=12570KB/s rb_avail=78282200 rb_free=190153256 rb_cap=268435456
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-torrent_engine: storage piece 67 started, total_in_ram=65
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 64)
-torrent_engine: [evict] piece 8 evicted. min_keep_offset=539672576 limit=75497472
+scheduler: 5zone critical=48-49 urgent=50-57 prefetch=58-73 spec=74-81 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=101711872 -> 102760448
+collector: stats downloaded=102759920 speed=688KB/s rb_avail=0 rb_free=268435456 rb_cap=268435456
+collector: finished, downloaded 102759920 bytes
+ncm: cleanup 4 placeholders
+hybrid: installation cancelled
+download_ui: cancelled topic_id=6539658_1
+download: local client queued hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+torrent_engine: storage piece 49 started, total_in_ram=57
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1093KB/s
+   peer[0]: 37.151.115.104:53147 speed=1107KB/s rtt=9ms piece=49 reqq=196/134 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=13KB/s rtt=1081ms piece=-1 reqq=5/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=4KB/s rtt=3853ms piece=-1 reqq=2/2 flags=ICDL client=qBittorrent/5.1.0
+download: local client starts selected file without HTTP preload hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 file_index=2
+download: starting async open for hybrid hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 index=2
+backend/local: tick thread stopped
+backend/local: state Idle -> FetchingMetadata
+TorrentEngine::start start, port=8080
+TorrentEngine::start already running
+ensureTorrentLocked start, magnet=magnet:?xt=urn:btih:EDEE8883749C1CA863FFF97CDFCD4DC38D581D18&tr=http%3A%2F%2Fbt3.t-ru.org%2Fann%3Fmagnet
+ensureTorrentLocked checking existing torrents for hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+ensureTorrentLocked existing torrent found
+torrent_engine: synced verified pieces count=52
+torrent_engine: re-using existing torrent hash=edee8883749c1ca863fff97cdfcd4dc38d581d18
+scheduler: init piece_size=2097152 file_pieces=838-858 total_pieces=21
+torrent_engine: storage piece 54 started, total_in_ram=58
+backend/local: state FetchingMetadata -> FileSelected
+backend/local: state FileSelected -> PrebufferInstallInfo
+backend/local: open OK file_index=1 size=42596240 pieces=838-858
+backend/local: tick thread started
+hybrid: start install, buffer=256MB
+hybrid: phase 1 - parsing header
+scheduler: 5zone+EDF critical=838-839 urgent=840-847 prefetch=-1 slow_peers=0 stall=0
+torrent_engine: storage piece 55 started, total_in_ram=59
+backend/local: CC limits changed to [2, 5]s (baseline=none)
+backend/local: CC limits changed to [1, 3]s (baseline=19ms)
+backend/local: CC queue_time 4s -> 3s rtt_baseline=18ms mode=throughput
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 838 (active blocks detected!) speed=2KB/s rtt=3853ms snubbed=no
+torrent_engine: storage piece 840 started, total_in_ram=60
+backend/local: state PrebufferInstallInfo -> Stalled (waiting for piece 838)
 scheduler: stall level=1
-torrent_engine: storage piece 68 started, total_in_ram=65
-scheduler: 5zone critical=64-65 urgent=66-69 prefetch=70-73 spec=-1--1 stall=1
-torrent_engine: [evict] piece 9 evicted. min_keep_offset=539672576 limit=83886080
-backend/local: CC queue_time 2s -> 3s rtt_baseline=33ms mode=throughput
-scheduler: STARVATION recovery piece=64 reason=SLOW_DELIVERY critical=64-65 urgent=66-69 slow_peers=0
-backend/local: STALL_RECOVERY piece=64 waited_ms=3089 peers=74 active=47 on_target=1 best_speed=253KB/s reason=STALL
+scheduler: STARVATION recovery piece=838 reason=NO_PEER_ON_PIECE critical=838-839 urgent=840-841 slow_peers=0
+backend/local: STALL_RECOVERY piece=838 waited_ms=3004 peers=3 active=3 on_target=0 best_speed=1247KB/s reason=NO_PEER_ON_PIECE
+torrent_engine: storage piece 841 started, total_in_ram=61
+scheduler: ISOLATED slow peer 84.47.165.182 for piece 839 (active blocks detected!) speed=3KB/s rtt=3928ms snubbed=no
+backend/local: SWARM status: total_peers=3 active_peers=3 seeds=3 dl_rate=1396KB/s
+   peer[0]: 37.151.115.104:53147 speed=1426KB/s rtt=12ms piece=841 reqq=151/259 flags=ICDL client=qBittorrent/4.6.7
+   peer[1]: 91.212.201.246:59888 speed=8KB/s rtt=1133ms piece=-1 reqq=4/2 flags=ICDL client=qBittorrent/5.1.4
+   peer[2]: 84.47.165.182:31479 speed=3KB/s rtt=3928ms piece=-1 reqq=3/2 flags=ICDL client=qBittorrent/5.1.0
+torrent_engine: storage piece 839 started, total_in_ram=62
+torrent_engine: storage piece 838 started, total_in_ram=63
 backend/local: state Stalled -> StreamingOrInstalling
 scheduler: stall recovered
-scheduler: 5zone critical=64-65 urgent=66-73 prefetch=74-89 spec=90-97 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=539672576 -> 543866880
-collector: stats downloaded=543866544 speed=8485KB/s rb_avail=73039320 rb_free=195396136 rb_cap=268435456
-torrent_engine: storage piece 69 started, total_in_ram=65
-torrent_engine: [evict] piece 10 evicted. min_keep_offset=543866880 limit=92274688
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=543866880 -> 548061184
-scheduler: ISOLATED slow peer 181.191.168.132 for piece 66 (active blocks detected!) speed=41KB/s rtt=318ms snubbed=no
-scheduler: 5zone+EDF critical=65-66 urgent=67-74 prefetch=90 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=548061184 -> 552255488
-installer: stats installed=1870659584 install_speed=25351KB/s downloaded=552255152 source_speed=2453KB/s rb_avail=78282200 rb_free=190153256 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=552255488 -> 556449792
-scheduler: ISOLATED slow peer 45.5.141.99 for piece 67 (active blocks detected!) speed=54KB/s rtt=281ms snubbed=no
-scheduler: 5zone+EDF critical=66-67 urgent=68-75 prefetch=91 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=556449792 -> 560644096
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=560644096 -> 564838400
-scheduler: ISOLATED slow peer 45.5.141.99 for piece 68 (active blocks detected!) speed=54KB/s rtt=281ms snubbed=no
-scheduler: 5zone+EDF critical=67-68 urgent=69-76 prefetch=92 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=564838400 -> 566067200
-collector: partial read advance offset=564838400 requested=4194304 got=1228800
-torrent_engine: storage piece 73 started, total_in_ram=65
-backend/local: CC queue_time 3s -> 2s rtt_baseline=31ms mode=latency
-torrent_engine: [evict] piece 11 evicted. min_keep_offset=566067200 limit=100663296
-torrent_engine: storage piece 70 started, total_in_ram=65
-torrent_engine: [evict] piece 12 evicted. min_keep_offset=566067200 limit=109051904
-torrent_engine: [evict] piece 13 evicted. min_keep_offset=566067200 limit=117440512
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=566067200 -> 570261504
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=570261504 -> 570867712
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 69 (active blocks detected!) speed=60KB/s rtt=185ms snubbed=no
-scheduler: 5zone+EDF critical=68-69 urgent=70-77 prefetch=93 slow_peers=1 stall=0
-backend/local: SWARM status: total_peers=79 active_peers=46 seeds=45 dl_rate=4291KB/s
-   peer[0]: 95.211.171.15:20001 speed=277KB/s rtt=54ms piece=72 reqq=21/33 flags=ICDL client=libTorrent 0.13.6
-   peer[1]: 95.24.120.124:8254 speed=249KB/s rtt=51ms piece=72 reqq=21/30 flags=IDLU client=μTorrent 3.6
-   peer[2]: 5.228.83.248:1933 speed=241KB/s rtt=54ms piece=71 reqq=42/29 flags=IDLU client=qBittorrent/5.1.4
-   peer[3]: 95.27.68.200:2199 speed=216KB/s rtt=58ms piece=71 reqq=32/26 flags=IDLU client=qBittorrent/5.1.0
-   peer[4]: 85.53.121.194:35017 speed=207KB/s rtt=72ms piece=71 reqq=20/25 flags=ICDL client=qBittorrent/5.2.0
-installer: stats installed=2000683008 install_speed=25058KB/s downloaded=570867376 source_speed=3586KB/s rb_avail=66485720 rb_free=201949736 rb_cap=268435456
-torrent_engine: storage piece 72 started, total_in_ram=65
-torrent_engine: [evict] piece 14 evicted. min_keep_offset=570867712 limit=125829120
-torrent_engine: storage piece 71 started, total_in_ram=64
-backend/local: CC limits changed to [2, 5]s (baseline=68ms)
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 68)
-scheduler: ISOLATED slow peer 179.218.18.162 for piece 68 (active blocks detected!) speed=18KB/s rtt=509ms snubbed=yes
-scheduler: stall level=1
-scheduler: 5zone critical=68-69 urgent=70-73 prefetch=74-77 spec=-1--1 stall=1
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 69 (active blocks detected!) speed=34KB/s rtt=298ms snubbed=no
-scheduler: STARVATION recovery piece=68 reason=SLOW_DELIVERY critical=68-69 urgent=70-73 slow_peers=1
-backend/local: STALL_RECOVERY piece=68 waited_ms=3289 peers=80 active=46 on_target=1 best_speed=252KB/s reason=STALL
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=68-69 urgent=70-77 prefetch=78-93 spec=94-101 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=570867712 -> 572112896
-collector: stats downloaded=572112560 speed=2808KB/s rb_avail=53575128 rb_free=214860328 rb_cap=268435456
-installer: stats installed=2143289344 install_speed=25288KB/s downloaded=572112560 source_speed=220KB/s rb_avail=50953688 rb_free=217481768 rb_cap=268435456
-torrent_engine: storage piece 74 started, total_in_ram=65
-torrent_engine: [evict] piece 15 evicted. min_keep_offset=572112896 limit=134217728
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 68)
-scheduler: ISOLATED slow peer 179.218.18.162 for piece 68 (active blocks detected!) speed=16KB/s rtt=817ms snubbed=no
-scheduler: stall level=1
-torrent_engine: [evict] piece 16 evicted. min_keep_offset=572112896 limit=142606336
-scheduler: 5zone critical=68-69 urgent=70-73 prefetch=74-77 spec=-1--1 stall=1
-torrent_engine: [evict] piece 17 evicted. min_keep_offset=572112896 limit=150994944
-scheduler: STARVATION recovery piece=68 reason=SLOW_DELIVERY critical=68-69 urgent=70-73 slow_peers=0
-backend/local: STALL_RECOVERY piece=68 waited_ms=3509 peers=75 active=51 on_target=1 best_speed=214KB/s reason=STALL
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=68-69 urgent=70-77 prefetch=78-93 spec=94-101 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=572112896 -> 576307200
-stall_monitor: disconnecting slow peer 78.164.177.53:41335 speed=1779 B/s pieces=231
-stall_monitor: disconnected 1 slow peers, stall_ticks=3 dl_rate=4255218 B/s
-backend/local: SWARM status: total_peers=75 active_peers=51 seeds=45 dl_rate=3883KB/s
-torrent_engine: storage piece 76 started, total_in_ram=64
-   peer[0]: 95.24.120.124:8254 speed=214KB/s rtt=45ms piece=74 reqq=27/26 flags=IDLU client=μTorrent 3.6
-   peer[1]: 5.228.83.248:1933 speed=213KB/s rtt=61ms piece=74 reqq=38/25 flags=IDLU client=qBittorrent/5.1.4
-   peer[2]: 95.27.68.200:2199 speed=205KB/s rtt=54ms piece=74 reqq=31/24 flags=IDLU client=qBittorrent/5.1.0
-   peer[3]: 95.211.171.15:20001 speed=191KB/s rtt=137ms piece=-1 reqq=57/23 flags=ICDL client=libTorrent 0.13.6
-   peer[4]: 5.18.41.73:5349 speed=188KB/s rtt=58ms piece=-1 reqq=23/22 flags=IDLU client=qBittorrent/5.1.4
-scheduler: ISOLATED slow peer 78.164.177.53 for piece 69 (active blocks detected!) speed=1KB/s rtt=3893ms snubbed=no
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=576307200 -> 580501504
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 70 (active blocks detected!) speed=22KB/s rtt=609ms snubbed=no
-scheduler: 5zone+EDF critical=69-70 urgent=71-78 prefetch=94 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=580501504 -> 584695808
-collector: stats downloaded=584695472 speed=2149KB/s rb_avail=42040792 rb_free=226394664 rb_cap=268435456
-torrent_engine: storage piece 75 started, total_in_ram=64
-installer: stats installed=2273312768 install_speed=24989KB/s downloaded=584695472 source_speed=2418KB/s rb_avail=40992216 rb_free=227443240 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=584695808 -> 588890112
-torrent_engine: [evict] piece 18 evicted. min_keep_offset=588890112 limit=159383552
-scheduler: 5zone+EDF critical=70-71 urgent=72-79 prefetch=95 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=588890112 -> 593084416
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=593084416 -> 597278720
-scheduler: 5zone+EDF critical=71-72 urgent=73-80 prefetch=96 slow_peers=0 stall=0
-torrent_engine: [evict] piece 19 evicted. min_keep_offset=597278720 limit=167772160
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=597278720 -> 601473024
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=601473024 -> 605667328
-scheduler: 5zone+EDF critical=72-73 urgent=74-81 prefetch=97 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=605667328 -> 609861632
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=609861632 -> 614055936
-scheduler: ISOLATED slow peer 181.191.168.132 for piece 74 (active blocks detected!) speed=42KB/s rtt=395ms snubbed=no
-scheduler: 5zone+EDF critical=73-74 urgent=75-82 prefetch=98 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=614055936 -> 618250240
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=618250240 -> 622444544
-scheduler: ISOLATED slow peer 45.5.141.99 for piece 75 (active blocks detected!) speed=43KB/s rtt=347ms snubbed=no
-scheduler: 5zone+EDF critical=74-75 urgent=76-83 prefetch=99 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=622444544 -> 626638848
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=626638848 -> 627458048
-collector: partial read advance offset=626638848 requested=4194304 got=819200
-torrent_engine: storage piece 78 started, total_in_ram=64
-torrent_engine: storage piece 77 started, total_in_ram=64
-installer: stats installed=2399141888 install_speed=24091KB/s downloaded=627457712 source_speed=8187KB/s rb_avail=28179928 rb_free=240255528 rb_cap=268435456
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=627458048 -> 631652352
-collector: stats downloaded=631652016 speed=7153KB/s rb_avail=30277080 rb_free=238158376 rb_cap=268435456
-torrent_engine: storage piece 80 started, total_in_ram=65
-torrent_engine: [evict] piece 20 evicted. min_keep_offset=631652352 limit=176160768
-torrent_engine: storage piece 79 started, total_in_ram=65
-torrent_engine: [evict] piece 21 evicted. min_keep_offset=631652352 limit=184549376
-scheduler: ISOLATED slow peer 89.179.126.222 for piece 76 (active blocks detected!) speed=25KB/s rtt=410ms snubbed=no
-scheduler: 5zone+EDF critical=75-76 urgent=77-84 prefetch=100 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=631652352 -> 633487360
-backend/local: CC limits changed to [1, 3]s (baseline=48ms)
-backend/local: LATENCY_MODE exit
-torrent_engine: [evict] piece 22 evicted. min_keep_offset=633487360 limit=192937984
-backend/local: CC queue_time 2s -> 3s rtt_baseline=45ms mode=throughput
-scheduler: ISOLATED slow peer 187.255.195.58 for piece 75 (active blocks detected!) speed=2KB/s rtt=3891ms snubbed=no
-backend/local: SWARM status: total_peers=77 active_peers=59 seeds=47 dl_rate=4883KB/s
-   peer[0]: 95.24.120.124:8254 speed=306KB/s rtt=57ms piece=80 reqq=70/37 flags=IDLU client=μTorrent 3.6
-   peer[1]: 95.27.68.200:2199 speed=287KB/s rtt=51ms piece=80 reqq=73/34 flags=IDLU client=qBittorrent/5.1.0
-   peer[2]: 5.16.21.61:28566 speed=283KB/s rtt=62ms piece=81 reqq=70/34 flags=ICDLU client=qBittorrent/5.1.0
-   peer[3]: 5.228.83.248:1933 speed=270KB/s rtt=36ms piece=80 reqq=83/32 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 95.211.171.15:20001 speed=267KB/s rtt=66ms piece=79 reqq=67/32 flags=ICDL client=libTorrent 0.13.6
-torrent_engine: [evict] piece 23 evicted. min_keep_offset=633487360 limit=201326592
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=633487360 -> 637681664
-installer: ncz buffer wait wait_ms=738 got=393768 rb_avail=3800536 downloaded=637681328 installed=2457862144 starvation_total=20
-scheduler: 5zone+EDF critical=76-77 urgent=78-85 prefetch=101 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=637681664 -> 638369792
-collector: partial read advance offset=637681664 requested=4194304 got=688128
-torrent_engine: storage piece 81 started, total_in_ram=64
-torrent_engine: storage piece 82 started, total_in_ram=64
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-scheduler: ISOLATED slow peer 187.255.195.58 for piece 76 (active blocks detected!) speed=4KB/s rtt=3796ms snubbed=no
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 76)
-scheduler: stall level=1
-scheduler: 5zone critical=76-77 urgent=78-81 prefetch=82-85 spec=-1--1 stall=1
-torrent_engine: [evict] piece 24 evicted. min_keep_offset=638369792 limit=209715200
-torrent_engine: [evict] piece 25 evicted. min_keep_offset=638369792 limit=218103808
-torrent_engine: storage piece 83 started, total_in_ram=64
-scheduler: STARVATION recovery piece=76 reason=NO_PEER_ON_PIECE critical=76-77 urgent=78-79 slow_peers=0
-backend/local: STALL_RECOVERY piece=76 waited_ms=4469 peers=78 active=59 on_target=0 best_speed=308KB/s reason=NO_PEER_ON_PIECE
-stall_monitor: disconnecting slow peer 179.214.235.231:6881 speed=1702 B/s pieces=488
-stall_monitor: disconnected 1 slow peers, stall_ticks=3 dl_rate=4816366 B/s
-torrent_engine: [evict] piece 26 evicted. min_keep_offset=638369792 limit=226492416
-torrent_engine: storage piece 84 started, total_in_ram=64
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: stall recovered
-scheduler: 5zone critical=76-77 urgent=78-85 prefetch=86-101 spec=102-109 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=638369792 -> 642564096
-collector: stats downloaded=642563760 speed=1124KB/s rb_avail=3964376 rb_free=264471080 rb_cap=268435456
-installer: ncz buffer wait wait_ms=6520 got=229928 rb_avail=3964376 downloaded=642563760 installed=2466250752 starvation_total=21
-installer: stats installed=2466250752 install_speed=6513KB/s downloaded=642563760 source_speed=1466KB/s rb_avail=3964376 rb_free=264471080 rb_cap=268435456
-backend/local: CC queue_time 3s -> 2s rtt_baseline=37ms mode=latency
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=642564096 -> 646758400
-installer: ncz buffer wait wait_ms=1927 got=229928 rb_avail=3964376 downloaded=646758064 installed=2474639360 starvation_total=22
-torrent_engine: storage piece 85 started, total_in_ram=64
-scheduler: 5zone+EDF critical=77-78 urgent=79-86 prefetch=102 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=646758400 -> 650952704
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=650952704 -> 655147008
-scheduler: 5zone+EDF critical=78-79 urgent=80-87 prefetch=103 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=655147008 -> 659341312
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=659341312 -> 663535616
-scheduler: 5zone+EDF critical=79-80 urgent=81-88 prefetch=104 slow_peers=0 stall=0
-torrent_engine: [evict] piece 27 evicted. min_keep_offset=663535616 limit=234881024
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=663535616 -> 667729920
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=667729920 -> 671924224
-scheduler: 5zone+EDF critical=80-81 urgent=82-89 prefetch=105 slow_peers=0 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=671924224 -> 676118528
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=676118528 -> 680312832
-scheduler: ISOLATED slow peer 186.225.69.222 for piece 82 (active blocks detected!) speed=0KB/s rtt=0ms snubbed=no
-scheduler: 5zone+EDF critical=81-82 urgent=83-90 prefetch=106 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=680312832 -> 684507136
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=684507136 -> 688701440
-scheduler: ISOLATED slow peer 68.207.108.232 for piece 83 (active blocks detected!) speed=35KB/s rtt=353ms snubbed=no
-scheduler: 5zone+EDF critical=82-83 urgent=84-91 prefetch=107 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=688701440 -> 692895744
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=692895744 -> 697090048
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 84 (active blocks detected!) speed=46KB/s rtt=351ms snubbed=no
-scheduler: 5zone+EDF critical=83-84 urgent=85-92 prefetch=108 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=697090048 -> 701284352
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=701284352 -> 705478656
-scheduler: ISOLATED slow peer 187.131.141.154 for piece 85 (active blocks detected!) speed=39KB/s rtt=382ms snubbed=no
-scheduler: 5zone+EDF critical=84-85 urgent=86-93 prefetch=109 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=705478656 -> 709672960
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=709672960 -> 713867264
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 86 (active blocks detected!) speed=46KB/s rtt=351ms snubbed=no
-scheduler: 5zone+EDF critical=85-86 urgent=87-94 prefetch=110 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=713867264 -> 714539008
-collector: partial read advance offset=713867264 requested=4194304 got=671744
-installer: stats installed=2541748224 install_speed=14436KB/s downloaded=714538672 source_speed=13762KB/s rb_avail=29277656 rb_free=239157800 rb_cap=268435456
-torrent_engine: storage piece 87 started, total_in_ram=65
-torrent_engine: [evict] piece 28 evicted. min_keep_offset=714539008 limit=243269632
-torrent_engine: storage piece 86 started, total_in_ram=64
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=714539008 -> 716652544
-collector: stats downloaded=716652208 speed=12959KB/s rb_avail=22478296 rb_free=245957160 rb_cap=268435456
-backend/local: SWARM status: total_peers=77 active_peers=58 seeds=44 dl_rate=4449KB/s
-   peer[0]: 95.24.120.124:8254 speed=335KB/s rtt=48ms piece=88 reqq=77/40 flags=IDLU client=μTorrent 3.6
-   peer[1]: 95.27.68.200:2199 speed=315KB/s rtt=47ms piece=87 reqq=72/38 flags=IDLU client=qBittorrent/5.1.0
-   peer[2]: 5.18.41.73:5349 speed=273KB/s rtt=61ms piece=87 reqq=67/33 flags=IDLU client=qBittorrent/5.1.4
-   peer[3]: 95.211.171.15:20001 speed=270KB/s rtt=27ms piece=87 reqq=41/32 flags=ICDL client=libTorrent 0.13.6
-   peer[4]: 5.228.83.248:1933 speed=243KB/s rtt=74ms piece=87 reqq=67/29 flags=IDLU client=qBittorrent/5.1.4
-torrent_engine: storage piece 88 started, total_in_ram=65
-torrent_engine: [evict] piece 29 evicted. min_keep_offset=716652544 limit=251658240
-torrent_engine: [evict] piece 30 evicted. min_keep_offset=716652544 limit=260046848
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=716652544 -> 718323712
-installer: ncz buffer wait wait_ms=708 got=66088 rb_avail=1605080 downloaded=718323376 installed=2579496960 starvation_total=23
-torrent_engine: storage piece 89 started, total_in_ram=64
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=718323712 -> 720781312
-installer: ncz buffer wait wait_ms=974 got=492072 rb_avail=1965528 downloaded=720780976 installed=2583691264 starvation_total=24
-torrent_engine: [evict] piece 31 evicted. min_keep_offset=720781312 limit=268435456
-scheduler: ISOLATED slow peer 94.180.115.143 for piece 85 (active blocks detected!) speed=32KB/s rtt=407ms snubbed=no
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=720781312 -> 724975616
-installer: ncz buffer wait wait_ms=524 got=131624 rb_avail=4062680 downloaded=724975280 installed=2583691264 starvation_total=25
-scheduler: ISOLATED slow peer 213.230.74.16 for piece 87 (active blocks detected!) speed=84KB/s rtt=234ms snubbed=no
-scheduler: 5zone+EDF critical=86-87 urgent=88-95 prefetch=111 slow_peers=1 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=724975616 -> 729169920
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=729169920 -> 732266496
-collector: partial read advance offset=729169920 requested=4194304 got=3096576
-scheduler: ISOLATED slow peer 213.230.74.16 for piece 88 (active blocks detected!) speed=84KB/s rtt=234ms snubbed=no
-scheduler: 5zone+EDF critical=87-88 urgent=89-96 prefetch=112 slow_peers=1 stall=0
-backend/local: LATENCY_MODE exit
-backend/local: CC queue_time 2s -> 3s rtt_baseline=33ms mode=throughput
-backend/local: LATENCY_MODE enter reason=stall hold=10s
-torrent_engine: storage piece 90 started, total_in_ram=64
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 87)
-scheduler: stall level=1
-torrent_engine: [evict] piece 32 evicted. min_keep_offset=732266496 limit=276824064
-scheduler: 5zone critical=87-88 urgent=89-92 prefetch=93-96 spec=-1--1 stall=1
-scheduler: STARVATION recovery piece=87 reason=SLOW_DELIVERY critical=87-88 urgent=89-92 slow_peers=0
-backend/local: STALL_RECOVERY piece=87 waited_ms=4295 peers=76 active=53 on_target=2 best_speed=280KB/s reason=STALL
-scheduler: ISOLATED slow peer 213.230.74.16 for piece 87 (active blocks detected!) speed=46KB/s rtt=449ms snubbed=no
-backend/local: state Stalled -> StreamingOrInstalling
-scheduler: ISOLATED slow peer 213.230.74.16 for piece 88 (active blocks detected!) speed=46KB/s rtt=449ms snubbed=no
-scheduler: stall recovered
-scheduler: 5zone critical=87-88 urgent=89-96 prefetch=97-112 spec=113-120 stall=0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=732266496 -> 733970432
-collector: stats downloaded=733970096 speed=1679KB/s rb_avail=1523160 rb_free=266912296 rb_cap=268435456
-installer: ncz buffer wait wait_ms=5899 got=180776 rb_avail=1523160 downloaded=733970096 installed=2596274176 starvation_total=26
-installer: stats installed=2596274176 install_speed=5049KB/s downloaded=733970096 source_speed=1799KB/s rb_avail=1523160 rb_free=266912296 rb_cap=268435456
-torrent_engine: storage piece 92 started, total_in_ram=65
-torrent_engine: [evict] piece 33 evicted. min_keep_offset=733970432 limit=285212672
-torrent_engine: storage piece 91 started, total_in_ram=64
-backend/local: SWARM status: total_peers=76 active_peers=54 seeds=45 dl_rate=3852KB/s
-   peer[0]: 95.27.68.200:2199 speed=299KB/s rtt=11ms piece=-1 reqq=52/54 flags=IDLU client=qBittorrent/5.1.0
-   peer[1]: 95.211.171.15:20001 speed=297KB/s rtt=11ms piece=-1 reqq=51/54 flags=ICDL client=libTorrent 0.13.6
-   peer[2]: 95.24.120.124:8254 speed=228KB/s rtt=23ms piece=-1 reqq=35/41 flags=IDLU client=μTorrent 3.6
-   peer[3]: 5.18.41.73:5349 speed=217KB/s rtt=28ms piece=91 reqq=38/39 flags=IDLU client=qBittorrent/5.1.4
-   peer[4]: 5.16.21.61:28566 speed=192KB/s rtt=52ms piece=90 reqq=50/35 flags=ICDLU client=qBittorrent/5.1.0
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=733970432 -> 737624064
-installer: ncz buffer wait wait_ms=578 got=49704 rb_avail=3603928 downloaded=737623728 installed=2596274176 starvation_total=27
-torrent_engine: [setMinKeepOffset] hash=838e7b98569a3c00c8b868b6e362468f5f78aa7b offset=737624064 -> 738246656
-collector: partial read advance offset=737624064 requested=4194304 got=622592
-scheduler: ISOLATED slow peer 187.45.59.7 for piece 89 (active blocks detected!) speed=50KB/s rtt=316ms snubbed=no
-scheduler: 5zone+EDF critical=88-89 urgent=90-97 prefetch=113 slow_peers=1 stall=0
-backend/local: CC queue_time 3s -> 2s rtt_baseline=30ms mode=latency
-torrent_engine: storage piece 93 started, total_in_ram=65
-torrent_engine: [evict] piece 34 evicted. min_keep_offset=738246656 limit=293601280
-backend/local: state StreamingOrInstalling -> Stalled (waiting for piece 88)
-torrent_engine: [evict] piece 35 evicted. min_keep_offset=738246656 limit=301989888
-scheduler: stall level=1
-scheduler: 5zone critical=88-89 urgent=90-93 prefetch=94-97 spec=-1--1 stall=1
-torrent_engine: [evict] piece 36 evicted. min_keep_offset=738246656 limit=310378496
-scheduler: STARVATION recovery piece=88 reason=SLOW_DELIVERY critical=88-89 urgent=90-93 slow_peers=0
-backend/local: STALL_RECOVERY piece=88 waited_ms=3317 peers=78 active=48 on_target=1 best_speed=276KB/s reason=STALL
+scheduler: 5zone critical=838-839 urgent=840-847 prefetch=-1--1 spec=-1--1 stall=0
+torrent_engine: [setMinKeepOffset] hash=edee8883749c1ca863fff97cdfcd4dc38d581d18 offset=102760448 -> 1758140491
+hybrid: NSP header probe read=4096 need=464 files=7
+hybrid: NSP contains 7 files, total size=40MB, ticket=yes
+backend/local: state StreamingOrInstalling -> InstallInfoParsed
+backend/local: state InstallInfoParsed -> MainBuffering
+hybrid: phase 2 - creating placeholders
+ncm: initialized, storage=5
+ncm: placeholder created for f59057a5f21eac0f380ebcaf99e7dc8d.nca
+ncm: placeholder created for 8716967ee5ca7da839c07513fcfb7692.nca
+ncm: placeholder created for 30e53ecb82e63cc66c8b21383e8614e9.nca
+ncm: placeholder created for adbd03993e5645051422e850d53edb1f.nca
+ncm: placeholder created for b57d62bcdd1983e967e75838a6aa1a67.cnmt.nca
+hybrid: phase 3 - starting Collector + Installer threads
+collector: start
+collector: source_type=1 chunk_size=4194304
+collector: local chunk size=4194304
+installer: start
+installer: local chunk size=4194304
+hybrid: both threads started
+download: hybrid install started for Rocket Knight Adventures Re-Sparked Collection (Sparkster, SNES/Genesis) (Rocket Knight Adventures Re-Sparked Collection [NSP]/Rocket Knight Adventures Re-Sparked [0100017019C4A800][v131072].nsp) (index=2)

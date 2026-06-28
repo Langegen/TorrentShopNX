@@ -3,6 +3,7 @@
 #include <fstream>
 #include <mutex>
 #include <sys/stat.h>
+#include <cstdio>
 
 namespace util {
 
@@ -44,24 +45,23 @@ static void ensureDirRecursive(const std::string& path) {
 void logInit() {
     ensureDirRecursive("sdmc:/switch/TorrentShopNX");
     std::lock_guard<std::mutex> lock(g_log_mutex);
+    g_log_file.open(kLogPath, std::ios::trunc);
     if (g_log_file.is_open()) {
-        g_log_file.close();
-    }
-    g_log_file.open(kLogPath, std::ios::out | std::ios::trunc);
-    if (g_log_file) {
-        g_log_file << "TorrentShopNX log start" << '\n';
-        g_log_file.flush();
+        g_log_file << "TorrentShopNX log start" << std::endl;
     }
 }
 
 void logLine(const std::string& line) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
-    if (!g_log_file.is_open()) {
-        g_log_file.open(kLogPath, std::ios::out | std::ios::app);
+    if (g_log_file.is_open()) {
+        g_log_file << line << "\n";
     }
-    if (g_log_file) {
-        g_log_file << line << '\n';
-        g_log_file.flush();
+}
+
+void logClose() {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    if (g_log_file.is_open()) {
+        g_log_file.close();
     }
 }
 

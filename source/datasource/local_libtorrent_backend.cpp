@@ -36,6 +36,7 @@ bool LocalLibtorrentBackend::open(const ContentRequest& request) {
     std::unique_lock<std::mutex> lock(mutex_);
     state_ = StreamState::Idle;
     status_ = {};
+    cached_download_speed_kbps_ = 0;
     opened_ = false;
     session_.reset();
     handle_ = {};
@@ -339,9 +340,7 @@ bool LocalLibtorrentBackend::isAvailable() const {
 
 int LocalLibtorrentBackend::downloadSpeedKBps() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!handle_.is_valid()) return 0;
-    auto ts = handle_.status(lt::torrent_handle::query_accurate_download_counters);
-    return ts.download_payload_rate / 1024;
+    return cached_download_speed_kbps_;
 }
 
 int LocalLibtorrentBackend::pieceSize() const {
@@ -527,6 +526,7 @@ void LocalLibtorrentBackend::tick_thread_func() {
             std::lock_guard<std::mutex> lock(mutex_);
             status_.peers = ts.num_peers;
             status_.seeds = ts.num_seeds;
+            cached_download_speed_kbps_ = ts.download_payload_rate / 1024;
 
             // I/O error auto-recovery
             if (ts.errc && io_recovery_count_ < kMaxIoRecoveries) {

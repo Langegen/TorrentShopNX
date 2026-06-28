@@ -1,0 +1,28 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="20"
+    paddingBottom="20"
+    paddingLeft="20">
+
+    <!-- Header -->
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="10">
+        <brls:Label text="Загрузки" fontSize="28" />
+    </brls:Box>
+
+    <brls:Label id="emptyLabel" text="Нет активных или завершенных загрузок." fontSize="20" textColor="#AAAAAA" />
+
+    <!-- Recycler Grid -->
+    <brls:RecyclerFrame
+        id="recycler"
+        width="auto"
+        height="auto"
+        paddingTop="20"
+        paddingBottom="20"
+        grow="1.0" />
+
+</brls:Box>
+</brls:AppletFrame>

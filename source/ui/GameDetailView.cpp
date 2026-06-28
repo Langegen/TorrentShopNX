@@ -1,0 +1,139 @@
+#include "GameDetailView.hpp"
+#include "FileSelectView.hpp"
+#include "FavoritesManager.hpp"
+#include <sstream>
+
+namespace ui {
+
+GameDetailView::GameDetailView(const Game& game) : game_(game) {
+}
+
+GameDetailView::~GameDetailView() {
+    if (imageToken) *imageToken = false;
+}
+
+void GameDetailView::onContentAvailable() {
+    imageToken = std::make_shared<bool>(true);
+    // Fill text and images
+    title->setText(cleanTitle(game_.title));
+    setImageFromHTTPS(cover, game_.cover, imageToken);
+    
+    // Metadata
+    metaDeveloper->setText("Разработчик: " + (game_.developer.empty() ? "(неизвестно)" : game_.developer));
+    metaPublisher->setText("Издатель: " + (game_.publisher.empty() ? "(неизвестно)" : game_.publisher));
+    metaYear->setText("Дата выпуска: " + (game_.year.empty() ? "(неизвестно)" : game_.year));
+    metaFormat->setText("Формат образа: " + (game_.image_format.empty() ? "(неизвестно)" : game_.image_format));
+    metaVoice->setText("Язык озвучки: " + (game_.voice_lang.empty() ? "(неизвестно)" : game_.voice_lang));
+    
+    // Clean description (remove leading ': ')
+    std::string desc = game_.description;
+    if (desc.size() >= 2 && desc.substr(0, 2) == ": ") {
+        desc = desc.substr(2);
+    }
+    description->setText(desc);
+    
+    // Dynamic Badges (Genres & Languages)
+    // Add language badge
+    std::string lang = extractLangBadge(game_.interface_lang);
+    if (!lang.empty()) {
+        brls::Box* langBadge = new brls::Box();
+        langBadge->setPadding(5, 10, 5, 10);
+        langBadge->setMarginRight(10);
+        langBadge->setMarginBottom(10);
+        langBadge->setBackgroundColor(nvgRGB(233, 30, 99)); // Pink lang badge
+        langBadge->setCornerRadius(6);
+
+        brls::Label* langLabel = new brls::Label();
+        langLabel->setText(lang);
+        langLabel->setFontSize(14);
+        langLabel->setTextColor(nvgRGB(255, 255, 255));
+        langBadge->addView(langLabel);
+
+        badgesBox->addView(langBadge);
+    }
+    
+    // Add genre badges
+    std::stringstream ss(game_.genre);
+    std::string genreTag;
+    while (std::getline(ss, genreTag, ',')) {
+        while (!genreTag.empty() && std::isspace(genreTag.front())) genreTag.erase(genreTag.begin());
+        while (!genreTag.empty() && std::isspace(genreTag.back())) genreTag.pop_back();
+        if (!genreTag.empty()) {
+            brls::Box* gBadge = new brls::Box();
+            gBadge->setPadding(5, 10, 5, 10);
+            gBadge->setMarginRight(10);
+            gBadge->setMarginBottom(10);
+            gBadge->setBackgroundColor(nvgRGB(0, 150, 136)); // Teal genre badge
+            gBadge->setCornerRadius(6);
+
+            brls::Label* gLabel = new brls::Label();
+            gLabel->setText(genreTag);
+            gLabel->setFontSize(14);
+            gLabel->setTextColor(nvgRGB(255, 255, 255));
+            gBadge->addView(gLabel);
+
+            badgesBox->addView(gBadge);
+        }
+    }
+    
+    // Screenshots Horizontal Scroll
+    for (const auto& scrUrl : game_.screenshots) {
+        if (scrUrl.empty()) continue;
+        brls::Image* scrImg = new brls::Image();
+        scrImg->setWidth(240); // 16:9 ratio
+        scrImg->setHeight(135);
+        scrImg->setMarginRight(15);
+        scrImg->setFocusable(true);
+        scrImg->registerClickAction([](brls::View* view) {
+            return true;
+        });
+        setImageFromHTTPS(scrImg, scrUrl, imageToken);
+        screenshotsBox->addView(scrImg);
+    }
+    
+    // Buttons Actions
+    btnDownload->registerClickAction([this](brls::View* view) {
+        brls::Application::pushActivity(new FileSelectView(game_));
+        return true;
+    });
+    
+    btnFavorite->registerClickAction([this](brls::View* view) {
+        catalog::FavoritesManager::instance().toggleFavorite(game_.topic_id);
+        updateFavoriteButton();
+        return true;
+    });
+    
+    // Gamepad quick-favorites shortcut
+    this->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+        catalog::FavoritesManager::instance().toggleFavorite(game_.topic_id);
+        updateFavoriteButton();
+        return true;
+    });
+    
+    // Update initial button state
+    updateFavoriteButton();
+
+    // Explicitly set the last focused view on the activity content box to guarantee btnDownload gets default focus
+    brls::Box* contentBoxView = dynamic_cast<brls::Box*>(getContentView());
+    if (contentBoxView) {
+        contentBoxView->setLastFocusedView(btnDownload);
+    }
+
+    // Explicitly request focus on the download button to guarantee focus is not lost or dropped
+    brls::Application::giveFocus(btnDownload);
+}
+
+void GameDetailView::updateFavoriteButton() {
+    bool isFav = catalog::FavoritesManager::instance().isFavorite(game_.topic_id);
+    if (isFav) {
+        btnFavorite->setText("Из избранного");
+    } else {
+        btnFavorite->setText("В избранное");
+    }
+}
+
+brls::View* GameDetailView::create() {
+    return nullptr; // XML constructor stub (should not be used directly)
+}
+
+} // namespace ui

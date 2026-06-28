@@ -1,0 +1,38 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+
+    <brls:Box
+        width="auto"
+        height="auto"
+        axis="column"
+        padding="40"
+        grow="1.0">
+
+        <!-- Header -->
+        <brls:Label id="title" text="Выбор файлов" fontSize="26" marginBottom="10" />
+        <brls:Label id="subtitle" text="Выберите файлы для загрузки из торрента" fontSize="16" textColor="#AAAAAA" marginBottom="20" />
+
+        <!-- Scrollable file list -->
+        <brls:ScrollingFrame
+            id="fileListScroll"
+            width="auto"
+            height="auto"
+            grow="1.0"
+            marginBottom="20">
+
+            <brls:Box
+                id="fileListBox"
+                width="auto"
+                height="auto"
+                axis="column" />
+
+        </brls:ScrollingFrame>
+
+        <!-- Bottom Summary -->
+        <brls:Box width="auto" height="50px" axis="row" alignItems="center" justifyContent="spaceBetween" padding="10" backgroundColor="#2C2C2C" cornerRadius="5">
+            <brls:Label text="Всего выбрано:" fontSize="16" />
+            <brls:Label id="totalSizeText" text="0 MB" fontSize="16" textColor="#00FF00" />
+        </brls:Box>
+
+    </brls:Box>
+
+</brls:AppletFrame>

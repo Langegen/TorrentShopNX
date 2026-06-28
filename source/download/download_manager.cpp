@@ -47,7 +47,22 @@ static void updateSleepPolicy(bool has_active_transfers) {
 
 DownloadManager::DownloadManager() = default;
 DownloadManager::~DownloadManager() {
+    shutdown();
+}
+
+void DownloadManager::shutdown() {
     stopAllStreamConsumers();
+
+    for (auto& item : queue_) {
+        if (item.hybrid_installer) {
+            item.hybrid_installer.reset();
+        }
+    }
+
+    datasource::IDataSource* source = ds_manager_.getSource();
+    if (source) {
+        source->close();
+    }
 }
 
 size_t DownloadManager::addToQueue(const std::string& title,
@@ -558,24 +573,39 @@ void DownloadManager::startNextDownload() {
 void DownloadManager::trackProgress() {
     auto now = std::chrono::steady_clock::now();
     bool refreshed_torrent_list = false;
-    bool local_hybrid_active = false;
-    for (const auto& item : queue_) {
-        if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
-            item.state == DownloadState::StreamInstalling &&
-            item.hybrid_installer) {
-            local_hybrid_active = true;
-            break;
-        }
-    }
-    if (torrent_) {
-        const auto poll_interval = local_hybrid_active
-            ? std::chrono::milliseconds(1000)
-            : std::chrono::milliseconds(800);
+    const bool is_local_client = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    if (torrent_ && !is_local_client) {
+        const auto poll_interval = std::chrono::milliseconds(800);
         if (last_torrent_list_.empty() ||
             last_torrent_list_poll_.time_since_epoch().count() == 0 ||
             (now - last_torrent_list_poll_) >= poll_interval) {
             auto fresh_list = torrent_->getTorrentList();
             if (!fresh_list.empty()) {
+                last_torrent_list_ = std::move(fresh_list);
+            }
+            last_torrent_list_poll_ = now;
+            refreshed_torrent_list = true;
+        }
+    } else if (is_local_client) {
+        const auto poll_interval = std::chrono::milliseconds(800);
+        if (last_torrent_list_poll_.time_since_epoch().count() == 0 ||
+            (now - last_torrent_list_poll_) >= poll_interval) {
+            std::vector<torrent::TorrentEngineItem> engine_items;
+            if (torrent::TorrentEngine::instance().getTorrentList(engine_items)) {
+                std::vector<torrent::TorrentInfo> fresh_list;
+                for (const auto& ei : engine_items) {
+                    torrent::TorrentInfo ti;
+                    ti.id = -1;
+                    ti.name = ei.name;
+                    ti.hash = ei.hash;
+                    ti.percent_done = ei.progress;
+                    ti.download_speed_kbps = ei.download_speed_kbps;
+                    ti.loaded_size = ei.loaded_size;
+                    ti.torrent_size = ei.torrent_size;
+                    ti.seeds = ei.seeds;
+                    ti.peers = ei.peers;
+                    fresh_list.push_back(ti);
+                }
                 last_torrent_list_ = std::move(fresh_list);
             }
             last_torrent_list_poll_ = now;
@@ -664,6 +694,43 @@ void DownloadManager::trackProgress() {
         }
 
         if (item.state == DownloadState::Downloading || item.state == DownloadState::StreamInstalling) {
+            if (!item.priorities_set && !item.selected_files.empty()) {
+                std::vector<torrent::TorrentFileInfo> files;
+                bool got_files = false;
+                if (item.torrent_id >= 0 && torrent_) {
+                    got_files = torrent_->getTorrentFiles(item.torrent_id, files);
+                } else if (!item.torrent_hash.empty()) {
+                    std::vector<torrent::TorrentEngineFileInfo> engine_files;
+                    if (torrent::TorrentEngine::instance().getTorrentFiles(item.torrent_hash, engine_files)) {
+                        for (const auto& ef : engine_files) {
+                            torrent::TorrentFileInfo f;
+                            f.index = ef.index;
+                            f.name = ef.name;
+                            f.size = ef.size;
+                            f.wanted = ef.wanted;
+                            files.push_back(f);
+                        }
+                        got_files = true;
+                    }
+                }
+                
+                if (got_files && !files.empty()) {
+                    for (const auto& f : files) {
+                        bool wanted = std::find(item.selected_files.begin(), item.selected_files.end(), f.index) != item.selected_files.end();
+                        if (item.torrent_id >= 0 && torrent_) {
+                            setFileWanted(i, f.index, wanted);
+                        } else if (!item.torrent_hash.empty()) {
+                            torrent::TorrentEngine::instance().setFileWanted(item.torrent_hash, f.index, wanted);
+                        }
+                        
+                        if (wanted && f.index == item.forced_file_index) {
+                            item.install_total = f.size;
+                        }
+                    }
+                    item.priorities_set = true;
+                    util::logLine("download: configured file priorities and size=" + std::to_string(item.install_total) + " for " + item.title);
+                }
+            }
             bool matched = false;
             for (const auto& t : list) {
                 bool match = false;
@@ -681,6 +748,8 @@ void DownloadManager::trackProgress() {
                 }
 
                 matched = true;
+                item.seeds = t.seeds;
+                item.peers = t.peers;
                 
                 // If hybrid installer is active, its downloadProgress() is already the overall progress.
                 // Otherwise, fallback to libtorrent's progress.

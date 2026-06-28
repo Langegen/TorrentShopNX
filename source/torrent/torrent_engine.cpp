@@ -87,19 +87,21 @@ constexpr lt::download_priority_t kReadaheadPiecePriority{1};
 // Глобальный PiecePool — предвыделённые буферы для MemoryStorage.
 // Создаётся при первом вызове (lazy init) и переиспользуется всеми торрентами.
 // =============================================================================
-static std::unique_ptr<buffer::PiecePool> g_piece_pool;
+static std::shared_ptr<buffer::PiecePool> g_piece_pool;
 static std::mutex                          g_piece_pool_mutex;
 
-buffer::PiecePool* getOrCreatePiecePool(int piece_size) {
+std::shared_ptr<buffer::PiecePool> getOrCreatePiecePool(int piece_size) {
     std::lock_guard<std::mutex> lock(g_piece_pool_mutex);
     if (!g_piece_pool || g_piece_pool->piece_size() != piece_size) {
         // kPieceCacheEntries + kQueueDepth(8) буферов для запаса
         const int pool_size = kPieceCacheEntries + 8;
-        g_piece_pool = buffer::PiecePool::create(piece_size, pool_size);
+        g_piece_pool = std::shared_ptr<buffer::PiecePool>(
+            buffer::PiecePool::create(piece_size, pool_size).release()
+        );
         util::logLine("torrent_engine: PiecePool created piece_size=" +
                       std::to_string(piece_size) + " capacity=" + std::to_string(pool_size));
     }
-    return g_piece_pool.get();
+    return g_piece_pool;
 }
 
 #endif
@@ -544,6 +546,27 @@ int effectiveConnectedPeerCount(const lt::torrent_handle& handle, int status_num
 
 
 #ifdef TSNX_USE_LIBTORRENT
+#include <atomic>
+
+class Spinlock {
+private:
+    std::atomic_flag flag = ATOMIC_FLAG_INIT;
+public:
+    void lock() {
+        int yield_count = 0;
+        while (flag.test_and_set(std::memory_order_acquire)) {
+            if (++yield_count < 20) {
+                std::this_thread::yield();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+    }
+    void unlock() {
+        flag.clear(std::memory_order_release);
+    }
+};
+
 struct TorrentEngine::Impl {
 
     struct PreparedStream {
@@ -554,7 +577,7 @@ struct TorrentEngine::Impl {
         int resolved_file_index = -1;
         uint64_t file_size = 0;
     };
-    std::mutex mutex;
+    Spinlock mutex;
     std::shared_ptr<lt::session> session;
     std::unordered_map<std::string, std::shared_ptr<TorrentRecord>> torrents;
     PreparedStream prepared_stream;
@@ -638,7 +661,7 @@ struct TorrentEngine::Impl {
         while (alert_thread_running) {
             std::shared_ptr<lt::session> sess;
             {
-                std::lock_guard<std::mutex> lock(mutex);
+                std::lock_guard<Spinlock> lock(mutex);
                 sess = session;
             }
             if (sess) {
@@ -647,7 +670,7 @@ struct TorrentEngine::Impl {
 
             std::vector<lt::alert*> alerts;
             {
-                std::lock_guard<std::mutex> lock(mutex);
+                std::lock_guard<Spinlock> lock(mutex);
                 if (!session) break;
                 session->pop_alerts(&alerts);
                 if (!alerts.empty()) {
@@ -761,6 +784,7 @@ class MemoryStorage : public lt::storage_interface {
     int num_pieces_ = 0;
     std::set<lt::piece_index_t> pinned_pieces_;
     uint64_t min_keep_offset_ = 0;
+    std::shared_ptr<buffer::PiecePool> pool_;
     mutable std::mutex mutex_;
 
 public:
@@ -769,6 +793,7 @@ public:
         , info_hash_(util::toHex(params.info_hash.to_string()))
         , piece_size_(params.files.piece_length())
         , num_pieces_(params.files.num_pieces()) {
+        pool_ = getOrCreatePiecePool(piece_size_);
         std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
         g_memory_storages[info_hash_] = this;
     }
@@ -783,8 +808,7 @@ public:
 
     void freePieceBuffer(char* ptr) {
         if (!ptr) return;
-        buffer::PiecePool* pool = getOrCreatePiecePool(piece_size_);
-        if (!pool || !pool->release(ptr)) {
+        if (!pool_ || !pool_->release(ptr)) {
             delete[] ptr;
         }
     }
@@ -799,12 +823,14 @@ public:
     }
 
     ~MemoryStorage() override {
-        clearAllPieces();
-        std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
-        auto it = g_memory_storages.find(info_hash_);
-        if (it != g_memory_storages.end() && it->second == this) {
-            g_memory_storages.erase(it);
+        {
+            std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
+            auto it = g_memory_storages.find(info_hash_);
+            if (it != g_memory_storages.end() && it->second == this) {
+                g_memory_storages.erase(it);
+            }
         }
+        clearAllPieces();
     }
 
     void initialize(lt::storage_error&) override {}
@@ -1010,8 +1036,7 @@ public:
         char* data_ptr = nullptr;
         auto it = pieces_.find(piece);
         if (it == pieces_.end()) {
-            buffer::PiecePool* pool = getOrCreatePiecePool(piece_size_);
-            data_ptr = pool ? pool->acquire() : nullptr;
+            data_ptr = pool_ ? pool_->acquire() : nullptr;
             if (!data_ptr) {
                 data_ptr = new (std::nothrow) char[piece_size_];
                 if (!data_ptr) {
@@ -1278,23 +1303,23 @@ void cachePieceBufferLocked(TorrentRecord& record,
 bool waitForMetadataLocked(TorrentEngine::Impl& impl,
                            TorrentRecord& record,
                            std::string& error_out,
-                           std::unique_lock<std::mutex>& lock);
+                           std::unique_lock<Spinlock>& lock);
 bool applyFilePrioritiesLocked(TorrentEngine::Impl& impl,
                                TorrentRecord& record,
                                int preferred_file_index,
                                std::string& error_out,
-                               std::unique_lock<std::mutex>& lock);
+                               std::unique_lock<Spinlock>& lock);
 bool resolveFileAccessLocked(TorrentEngine::Impl& impl,
                             TorrentRecord& record,
                             int external_file_index,
                             int& resolved_file_index,
                             uint64_t* out_file_size,
                             std::string& error_out,
-                            std::unique_lock<std::mutex>& lock);
+                            std::unique_lock<Spinlock>& lock);
 int chooseDefaultFileIndexLocked(TorrentEngine::Impl& impl,
                                  TorrentRecord& record,
                                  std::string& error_out,
-                                 std::unique_lock<std::mutex>& lock);
+                                 std::unique_lock<Spinlock>& lock);
 bool hasCachedPieceDataLocked(const TorrentRecord& record,
                               int piece);
 const char* torrentStateName(TorrentState state);
@@ -1353,11 +1378,20 @@ void handleGlobalErrors(const std::vector<lt::alert*>& alerts) {
 }
 
 bool ensureSessionLocked(TorrentEngine::Impl& impl, std::string& error_out) {
-    if (impl.session) return true;
+    util::logLine("ensureSessionLocked start");
+    if (impl.session) {
+        util::logLine("ensureSessionLocked session already exists");
+        return true;
+    }
 
     std::error_code dir_ec;
+    util::logLine("ensureSessionLocked creating cache directory: " + impl.cache_root.string());
     std::filesystem::create_directories(impl.cache_root, dir_ec);
+    util::logLine("ensureSessionLocked cache directory created, error_code=" + std::to_string(dir_ec.value()));
+
+    util::logLine("ensureSessionLocked calling detectPrimaryIPv4Address");
     const std::string bind_ip = detectPrimaryIPv4Address();
+    util::logLine("ensureSessionLocked detectPrimaryIPv4Address returned bind_ip=" + bind_ip);
 #ifdef __SWITCH__
     if (bind_ip.empty()) {
         error_out = "failed to detect local IPv4 for libtorrent listen";
@@ -1366,19 +1400,26 @@ bool ensureSessionLocked(TorrentEngine::Impl& impl, std::string& error_out) {
     }
 #endif
 
+    util::logLine("ensureSessionLocked making settings pack");
     const LibtorrentLikeSettingsConfig tuning_cfg{};
     lt::settings_pack settings = make_torrserver_like_settings(tuning_cfg, bind_ip);
 
     try {
         const auto flags = lt::session::start_default_features | lt::session::add_default_plugins;
+        util::logLine("ensureSessionLocked creating lt::session with settings");
         impl.session = std::make_shared<lt::session>(settings, flags);
+        util::logLine("ensureSessionLocked lt::session created successfully");
     } catch (const std::exception& e) {
+        util::logLine(std::string("ensureSessionLocked lt::session creation failed: ") + e.what());
         error_out = std::string("failed to start libtorrent session: ") + e.what();
         return false;
     }
 
+    util::logLine("ensureSessionLocked adding resolved DHT routers");
     addResolvedDhtRouters(*impl.session);
+    util::logLine("ensureSessionLocked starting DHT");
     impl.session->start_dht();
+    util::logLine("ensureSessionLocked DHT started");
     util::logLine("torrent_engine: detected local IP " + bind_ip);
     util::logLine("torrent_engine: listen interface " + bind_ip + ":" +
                   std::to_string(kLibtorrentListenPort));
@@ -1425,7 +1466,7 @@ void updateProbeStatusLocked(TorrentEngine::Impl& impl,
 bool waitForMetadataLocked(TorrentEngine::Impl& impl,
                            TorrentRecord& record,
                            std::string& error_out,
-                           std::unique_lock<std::mutex>& lock) {
+                           std::unique_lock<Spinlock>& lock) {
     if (!record.handle.is_valid()) {
         transitionTorrentStateLocked(record, TorrentState::Error, -1);
         error_out = "torrent handle is invalid";
@@ -1529,7 +1570,7 @@ bool applyFilePrioritiesLocked(TorrentEngine::Impl& impl,
                                TorrentRecord& record,
                                int preferred_file_index,
                                std::string& error_out,
-                               std::unique_lock<std::mutex>& lock) {
+                               std::unique_lock<Spinlock>& lock) {
     if (!waitForMetadataLocked(impl, record, error_out, lock)) {
         return false;
     }
@@ -1593,7 +1634,7 @@ bool resolveFileAccessLocked(TorrentEngine::Impl& impl,
                             int& resolved_file_index,
                             uint64_t* out_file_size,
                             std::string& error_out,
-                            std::unique_lock<std::mutex>& lock) {
+                            std::unique_lock<Spinlock>& lock) {
     if (external_file_index < 0) {
         external_file_index = chooseDefaultFileIndexLocked(impl, record, error_out, lock);
         if (external_file_index < 0) {
@@ -1950,7 +1991,7 @@ bool getTorrentFilesLocked(TorrentEngine::Impl& impl,
                            TorrentRecord& record,
                            std::vector<TorrentEngineFileInfo>& out_files,
                            std::string& error_out,
-                           std::unique_lock<std::mutex>& lock) {
+                           std::unique_lock<Spinlock>& lock) {
     out_files.clear();
     if (!waitForMetadataLocked(impl, record, error_out, lock)) {
         return false;
@@ -1989,7 +2030,7 @@ bool getTorrentFilesLocked(TorrentEngine::Impl& impl,
 int chooseDefaultFileIndexLocked(TorrentEngine::Impl& impl,
                                  TorrentRecord& record,
                                  std::string& error_out,
-                                 std::unique_lock<std::mutex>& lock) {
+                                 std::unique_lock<Spinlock>& lock) {
     std::vector<TorrentEngineFileInfo> files;
     if (!getTorrentFilesLocked(impl, record, files, error_out, lock) || files.empty()) {
         return -1;
@@ -2017,23 +2058,26 @@ bool ensureTorrentLocked(TorrentEngine::Impl& impl,
                          std::shared_ptr<TorrentRecord>& out_record,
                          std::string& out_hash,
                          std::string& error_out) {
+    util::logLine("ensureTorrentLocked start, magnet=" + magnet_link);
     out_record.reset();
     const std::string normalized_magnet = normalizeMagnetLink(magnet_link);
     out_hash = util::toLowerCopy(!info_hash.empty() ? info_hash : extractBtihHash(normalized_magnet));
 
     if (!out_hash.empty()) {
+        util::logLine("ensureTorrentLocked checking existing torrents for hash=" + out_hash);
         auto existing = impl.torrents.find(out_hash);
         if (existing != impl.torrents.end()) {
             out_record = existing->second;
+            util::logLine("ensureTorrentLocked existing torrent found");
             // Clear verified pieces to force re-validation on stream start
             {
                 std::lock_guard<std::mutex> rec_lock(out_record->mutex);
                 out_record->verified_pieces.clear();
                 if (out_record->handle.is_valid()) {
                     // Sync verified pieces with libtorrent state
-                    const auto& ti = out_record->handle.get_torrent_info();
-                    if (ti.is_valid()) {
-                        int num_pieces = ti.num_pieces();
+                    auto ti = out_record->handle.torrent_file();
+                    if (ti && ti->is_valid()) {
+                        int num_pieces = ti->num_pieces();
                         for (int i = 0; i < num_pieces; ++i) {
                             if (out_record->handle.have_piece(lt::piece_index_t(i))) {
                                 out_record->verified_pieces.insert(i);
@@ -2048,9 +2092,12 @@ bool ensureTorrentLocked(TorrentEngine::Impl& impl,
         }
     }
 
+    util::logLine("ensureTorrentLocked calling ensureSessionLocked");
     if (!ensureSessionLocked(impl, error_out)) {
+        util::logLine("ensureTorrentLocked ensureSessionLocked failed");
         return false;
     }
+    util::logLine("ensureTorrentLocked ensureSessionLocked success");
 
     lt::error_code ec;
     lt::add_torrent_params atp;
@@ -2112,16 +2159,21 @@ bool ensureTorrentLocked(TorrentEngine::Impl& impl,
     atp.flags |= lt::torrent_flags::paused;
     atp.flags &= ~lt::torrent_flags::auto_managed;
 
+    util::logLine("ensureTorrentLocked calling add_torrent");
     lt::torrent_handle handle = impl.session->add_torrent(atp, ec);
+    util::logLine("ensureTorrentLocked add_torrent finished, ec=" + ec.message() + ", handle.is_valid=" + std::to_string(handle.is_valid()));
     if (ec || !handle.is_valid()) {
         error_out = "add_torrent failed: " + ec.message();
         return false;
     }
 
+    util::logLine("ensureTorrentLocked setting max connections");
     handle.set_max_connections(kConnectionsLimit);
     // Stay paused until we receive metadata and set priorities
     // handle.force_recheck(); // Redundant for MemoryStorage
+    util::logLine("ensureTorrentLocked forcing reannounce");
     handle.force_reannounce();
+    util::logLine("ensureTorrentLocked forcing dht announce");
     handle.force_dht_announce();
     util::logLine("torrent_engine: torrent started with sequential_download=false hash=" + normalized_hash);
 
@@ -2183,6 +2235,7 @@ std::string TorrentEngine::serverUrl() const {
 }
 
 bool TorrentEngine::start(int port) {
+    util::logLine("TorrentEngine::start start, port=" + std::to_string(port));
 #ifndef TSNX_USE_LIBTORRENT
     (void)port;
     std::lock_guard<std::mutex> lock(state_mutex_);
@@ -2194,19 +2247,25 @@ bool TorrentEngine::start(int port) {
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         if (server_running_ && port_ == port && impl_->session) {
+            util::logLine("TorrentEngine::start already running");
             return true;
         }
     }
 
     std::string error_out;
     {
-        std::lock_guard<std::mutex> lock(impl_->mutex);
+        util::logLine("TorrentEngine::start acquiring lock");
+        std::lock_guard<Spinlock> lock(impl_->mutex);
+        util::logLine("TorrentEngine::start lock acquired");
+        util::logLine("TorrentEngine::start calling ensureSessionLocked");
         if (!ensureSessionLocked(*impl_, error_out)) {
+            util::logLine("TorrentEngine::start ensureSessionLocked failed: " + error_out);
             std::lock_guard<std::mutex> state_lock(state_mutex_);
             last_error_ = error_out;
             return false;
         }
     }
+    util::logLine("TorrentEngine::start ensureSessionLocked done");
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -2215,8 +2274,10 @@ bool TorrentEngine::start(int port) {
         last_error_.clear();
         
         if (!impl_->alert_thread_running) {
+            util::logLine("TorrentEngine::start starting alert thread");
             impl_->alert_thread_running = true;
             impl_->alert_thread = std::thread([this]() { impl_->alertThreadFunc(); });
+            util::logLine("TorrentEngine::start alert thread started");
         }
     }
 
@@ -2227,16 +2288,28 @@ bool TorrentEngine::start(int port) {
 }
 
 void TorrentEngine::stop() {
+    {
+        std::lock_guard<std::mutex> state_lock(state_mutex_);
+        if (!server_running_) {
+            return;
+        }
+    }
 #ifndef TSNX_USE_LIBTORRENT
     return;
 #else
+    std::shared_ptr<lt::session> session_to_leak;
+    std::thread alert_thread_to_join;
+
     {
-        std::lock_guard<std::mutex> lock(impl_->mutex);
+        std::lock_guard<Spinlock> lock(impl_->mutex);
         if (impl_->session) {
+            util::logLine("torrent_engine: removing all torrents to close file handles");
             for (auto it = impl_->torrents.begin(); it != impl_->torrents.end(); ++it) {
                 if (it->second && it->second->handle.is_valid()) {
-                    impl_->session->remove_torrent(it->second->handle,
-                                                   lt::session::delete_files | lt::session::delete_partfile);
+                    try {
+                        impl_->session->remove_torrent(it->second->handle,
+                                                       lt::session::delete_files | lt::session::delete_partfile);
+                    } catch (...) {}
                 }
             }
         }
@@ -2244,33 +2317,38 @@ void TorrentEngine::stop() {
         impl_->prepared_stream = {};
         impl_->probe_status = {};
         impl_->probe_cancel_requested = false;
-        
+
         if (impl_->alert_thread_running) {
             impl_->alert_thread_running = false;
-            if (impl_->alert_thread.joinable()) {
-                impl_->alert_thread.join();
-            }
+            alert_thread_to_join = std::move(impl_->alert_thread);
         }
-        
-        impl_->session.reset();
+
+        session_to_leak = impl_->session;
     }
 
-    std::error_code ec;
-    std::filesystem::remove_all(impl_->cache_root, ec);
-#ifdef __SWITCH__
-    std::filesystem::remove_all("sdmc:/switch/sdmc:/switch/TorrentShopNX/cache/local_engine", ec);
-#endif
+    // Join alert thread OUTSIDE the lock
+    if (alert_thread_to_join.joinable()) {
+        util::logLine("torrent_engine: joining alert thread");
+        alert_thread_to_join.join();
+        util::logLine("torrent_engine: alert thread stopped and joined");
+    }
+
+    if (session_to_leak) {
+        util::logLine("torrent_engine: leaking session to prevent thread-exit crash, waiting 400ms for torrent removal and file close to settle...");
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        util::logLine("torrent_engine: session leaked, files should be closed");
+    }
 
     std::lock_guard<std::mutex> state_lock(state_mutex_);
     server_running_ = false;
     last_error_.clear();
-    util::logLine("torrent_engine: torrest core stopped and RAM cache released");
+    util::logLine("torrent_engine: stopped cleanly (leaked after removal)");
     return;
-
 #endif
 }
 
 bool TorrentEngine::addMagnet(const std::string& magnet, std::string* out_hash) {
+    util::logLine("TorrentEngine::addMagnet start, magnet=" + magnet);
 #ifndef TSNX_USE_LIBTORRENT
     (void)magnet;
     (void)out_hash;
@@ -2284,25 +2362,33 @@ bool TorrentEngine::addMagnet(const std::string& magnet, std::string* out_hash) 
         return false;
     }
 
+    util::logLine("TorrentEngine::addMagnet calling start(" + std::to_string(port_) + ")");
     if (!start(port_)) {
+        util::logLine("TorrentEngine::addMagnet start failed");
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    util::logLine("TorrentEngine::addMagnet acquiring lock");
+    std::lock_guard<Spinlock> lock(impl_->mutex);
+    util::logLine("TorrentEngine::addMagnet lock acquired");
     std::shared_ptr<TorrentRecord> record;
     std::string hash;
     std::string error;
+    util::logLine("TorrentEngine::addMagnet calling ensureTorrentLocked");
     if (!ensureTorrentLocked(*impl_, "", magnet, "", record, hash, error) || !record) {
+        util::logLine("TorrentEngine::addMagnet ensureTorrentLocked failed: " + error);
         std::lock_guard<std::mutex> state_lock(state_mutex_);
         last_error_ = error;
         return false;
     }
+    util::logLine("TorrentEngine::addMagnet ensureTorrentLocked done, hash=" + hash);
 
     if (out_hash) {
         *out_hash = hash;
     }
     std::lock_guard<std::mutex> state_lock(state_mutex_);
     last_error_.clear();
+    util::logLine("TorrentEngine::addMagnet success");
     return true;
 #endif
 }
@@ -2325,7 +2411,7 @@ bool TorrentEngine::addTorrentFile(const std::string& torrent_file_path, std::st
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     std::shared_ptr<TorrentRecord> record;
     std::string hash;
     std::string error;
@@ -2353,24 +2439,22 @@ bool TorrentEngine::getTorrentList(std::vector<TorrentEngineItem>& out_items) {
     last_error_ = "TSNX_USE_LIBTORRENT is disabled";
     return false;
 #else
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     for (auto& entry : impl_->torrents) {
         auto& record = entry.second;
         if (!record || !record->handle.is_valid()) continue;
 
-        std::lock_guard<std::mutex> record_lock(record->mutex);
         auto status = record->handle.status(lt::torrent_handle::query_accurate_download_counters);
-        if (!status.name.empty()) {
-            record->name = status.name;
-        }
 
         TorrentEngineItem item;
         item.hash = record->hash;
-        item.name = !record->name.empty() ? record->name : record->hash;
+        item.name = !status.name.empty() ? status.name : record->hash;
         item.progress = status.progress;
         item.download_speed_kbps = static_cast<float>(status.download_rate / 1024.0f);
         item.loaded_size = static_cast<unsigned long long>(status.total_wanted_done);
         item.torrent_size = static_cast<unsigned long long>(status.total_wanted);
+        item.seeds = status.num_seeds;
+        item.peers = status.num_peers;
         out_items.push_back(std::move(item));
     }
 
@@ -2387,7 +2471,7 @@ bool TorrentEngine::getTorrentFiles(const std::string& hash, std::vector<Torrent
     last_error_ = "TSNX_USE_LIBTORRENT is disabled";
     return false;
 #else
-    std::unique_lock<std::mutex> lock(impl_->mutex);
+    std::unique_lock<Spinlock> lock(impl_->mutex);
     auto it = impl_->torrents.find(util::toLowerCopy(hash));
     if (it == impl_->torrents.end()) {
         std::lock_guard<std::mutex> state_lock(state_mutex_);
@@ -2424,7 +2508,7 @@ bool TorrentEngine::setFileWanted(const std::string& hash, int file_index, bool 
     last_error_ = "TSNX_USE_LIBTORRENT is disabled";
     return false;
 #else
-    std::unique_lock<std::mutex> lock(impl_->mutex);
+    std::unique_lock<Spinlock> lock(impl_->mutex);
     auto it = impl_->torrents.find(util::toLowerCopy(hash));
     if (it == impl_->torrents.end()) {
         std::lock_guard<std::mutex> state_lock(state_mutex_);
@@ -2481,7 +2565,7 @@ bool TorrentEngine::removeTorrent(const std::string& hash) {
     (void)hash;
     return false;
 #else
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     auto it = impl_->torrents.find(util::toLowerCopy(hash));
     if (it == impl_->torrents.end()) {
         return false;
@@ -2501,7 +2585,7 @@ bool TorrentEngine::pauseTorrent(const std::string& hash) {
     (void)hash;
     return false;
 #else
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     auto it = impl_->torrents.find(util::toLowerCopy(hash));
     if (it == impl_->torrents.end() || !it->second || !it->second->handle.is_valid()) {
         return false;
@@ -2517,7 +2601,7 @@ bool TorrentEngine::resumeTorrent(const std::string& hash) {
     (void)hash;
     return false;
 #else
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     auto it = impl_->torrents.find(util::toLowerCopy(hash));
     if (it == impl_->torrents.end() || !it->second || !it->second->handle.is_valid()) {
         return false;
@@ -2545,7 +2629,7 @@ bool TorrentEngine::prepareStream(const std::string& info_hash,
         return false;
     }
 
-    std::unique_lock<std::mutex> lock(impl_->mutex);
+    std::unique_lock<Spinlock> lock(impl_->mutex);
     std::shared_ptr<TorrentRecord> record;
     std::string hash;
     std::string error;
@@ -2623,7 +2707,7 @@ size_t TorrentEngine::readPreparedAvailable(uint64_t offset, void* buf, size_t s
     int file_index = -1;
     uint64_t file_size = 0;
     {
-        std::lock_guard<std::mutex> lock(impl_->mutex);
+        std::lock_guard<Spinlock> lock(impl_->mutex);
         if (!impl_->prepared_stream.open || !impl_->prepared_stream.record) {
             return 0;
         }
@@ -2667,8 +2751,14 @@ size_t TorrentEngine::readPreparedAvailable(uint64_t offset, void* buf, size_t s
 
 
 void TorrentEngine::beginProbe(const std::string& hash_hint) {
+    util::logLine("TorrentEngine::beginProbe start, hash_hint=" + hash_hint);
 #ifdef TSNX_USE_LIBTORRENT
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    util::logLine("TorrentEngine::beginProbe this pointer=" + std::to_string((uintptr_t)this));
+    util::logLine("TorrentEngine::beginProbe impl_ pointer=" + std::to_string((uintptr_t)impl_.get()));
+    util::logLine("TorrentEngine::beginProbe acquiring lock");
+    std::lock_guard<Spinlock> lock(impl_->mutex);
+    util::logLine("TorrentEngine::beginProbe lock acquired");
+    util::logLine("TorrentEngine::beginProbe setting status fields");
     impl_->probe_status = {};
     impl_->probe_status.active = true;
     impl_->probe_status.phase = "starting torrent";
@@ -2677,11 +2767,12 @@ void TorrentEngine::beginProbe(const std::string& hash_hint) {
 #else
     (void)hash_hint;
 #endif
+    util::logLine("TorrentEngine::beginProbe end");
 }
 
 void TorrentEngine::finishProbe() {
 #ifdef TSNX_USE_LIBTORRENT
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     impl_->probe_status.active = false;
     impl_->probe_cancel_requested = false;
 #endif
@@ -2689,7 +2780,7 @@ void TorrentEngine::finishProbe() {
 
 void TorrentEngine::cancelProbe() {
 #ifdef TSNX_USE_LIBTORRENT
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     impl_->probe_cancel_requested = true;
     if (impl_->probe_status.active) {
         impl_->probe_status.phase = "cancelled";
@@ -2699,7 +2790,7 @@ void TorrentEngine::cancelProbe() {
 
 TorrentEngineProbeStatus TorrentEngine::probeStatus() const {
 #ifdef TSNX_USE_LIBTORRENT
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     return impl_->probe_status;
 #else
     return {};
@@ -2709,7 +2800,7 @@ TorrentEngineProbeStatus TorrentEngine::probeStatus() const {
 TorrentEngine::StreamAccessInfo TorrentEngine::getStreamAccess() {
     StreamAccessInfo info{};
 #ifdef TSNX_USE_LIBTORRENT
-    std::lock_guard<std::mutex> lock(impl_->mutex);
+    std::lock_guard<Spinlock> lock(impl_->mutex);
     if (!impl_->session || !impl_->prepared_stream.open || !impl_->prepared_stream.record) {
         return info;
     }

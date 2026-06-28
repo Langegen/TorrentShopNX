@@ -14,6 +14,8 @@ struct TorrentInfo {
     float download_speed_kbps = 0.0f;
     unsigned long long loaded_size = 0;
     unsigned long long torrent_size = 0;
+    int seeds = 0;
+    int peers = 0;
 };
 
 struct TorrentFileInfo {
