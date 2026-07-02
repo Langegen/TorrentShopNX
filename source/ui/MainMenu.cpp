@@ -43,8 +43,6 @@ void MainMenu::onContentAvailable() {
     brls::RepeatingTimer* timer = new brls::RepeatingTimer();
     timer->setPeriod(1000); 
     timer->setCallback([this]() {
-        ui::DownloadManager::instance().getImpl().trackProgress();
-        ui::DownloadManager::instance().triggerCallback();
         updateDownloadsBadge(ui::DownloadManager::instance().getActiveDownloadsCount());
     });
     timer->start();

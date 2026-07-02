@@ -173,10 +173,100 @@ inline void cacheImagesInit() {
     util::logLine("GameData: cached images count=" + std::to_string(g_cached_images.size()));
 }
 
+// Helper to convert thumbnail URLs from popular image hostings to their original/full-size versions
+inline std::string getOriginalImageUrl(const std::string& url) {
+    std::string original = url;
+    
+    // FastPic
+    size_t fpThumb = original.find("/thumb/");
+    if (fpThumb != std::string::npos && (original.find("fastpic.") != std::string::npos)) {
+        original.replace(fpThumb, 7, "/big/");
+        return original;
+    }
+    
+    // ImageBan
+    size_t ibThumb = original.find("/thumbs/");
+    if (ibThumb != std::string::npos && (original.find("imageban.ru") != std::string::npos || original.find("imageban.co") != std::string::npos)) {
+        original.replace(ibThumb, 8, "/out/");
+        return original;
+    }
+    
+    // ImgBox
+    if (original.find("thumbs.imgbox.com") != std::string::npos) {
+        size_t hostPos = original.find("thumbs.imgbox.com");
+        original.replace(hostPos, 17, "images.imgbox.com");
+        size_t tPos = original.rfind("_t.");
+        if (tPos != std::string::npos) {
+            original.replace(tPos, 3, "_o.");
+        }
+        return original;
+    }
+
+    // LostPic
+    size_t lpThumb = original.find("/thumbs/");
+    if (lpThumb != std::string::npos && original.find("lostpic.net") != std::string::npos) {
+        original.replace(lpThumb, 8, "/orig/");
+        return original;
+    }
+
+    // PostImages
+    if (original.find("thumbs.postimg.cc") != std::string::npos) {
+        size_t hostPos = original.find("thumbs.postimg.cc");
+        original.replace(hostPos, 17, "i.postimg.cc");
+        return original;
+    }
+    if (original.find("thumbs.postimg.org") != std::string::npos) {
+        size_t hostPos = original.find("thumbs.postimg.org");
+        original.replace(hostPos, 18, "i.postimg.org");
+        return original;
+    }
+
+    // PixHost
+    if (original.find("pixhost.to/thumbs/") != std::string::npos) {
+        size_t tPos = original.find("://t");
+        if (tPos != std::string::npos) {
+            original.replace(tPos + 3, 1, "img");
+        }
+        size_t thumbsPos = original.find("/thumbs/");
+        if (thumbsPos != std::string::npos) {
+            original.replace(thumbsPos, 8, "/images/");
+        }
+        return original;
+    }
+    
+    return original;
+}
+
 // Asynchronously download and cache images from URLs, showing placeholder during download
-inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png") {
+inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false) {
     if (url.empty() || !img) {
         if (img) img->setImageFromFile(placeholder);
+        return;
+    }
+    
+    if (bypassCache) {
+        img->setImageFromFile(placeholder);
+        img->setFreeTexture(true);
+        
+        brls::async([img, url, token]() {
+            net::HttpClient http;
+            auto res = http.httpGet(url);
+            if (res.status_code == 200 && !res.body.empty()) {
+                brls::sync([img, body = std::move(res.body), token]() {
+                    if (token && !*token) return;
+                    
+                    int tex = nvgCreateImageMem(
+                        brls::Application::getNVGContext(), 
+                        NVG_IMAGE_GENERATE_MIPMAPS, 
+                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())), 
+                        body.size()
+                    );
+                    if (tex > 0) {
+                        img->innerSetImage(tex);
+                    }
+                });
+            }
+        });
         return;
     }
     
@@ -213,7 +303,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
                     if (token && !*token) return;
                     
                     if (brls::TextureCache::instance().getCache(cachePath) == 0) {
-                        int tex = nvgCreateImageMem(brls::Application::getNVGContext(), 0, const_cast<unsigned char*>(buffer.data()), buffer.size());
+                        int tex = nvgCreateImageMem(brls::Application::getNVGContext(), NVG_IMAGE_GENERATE_MIPMAPS, const_cast<unsigned char*>(buffer.data()), buffer.size());
                         if (tex > 0) {
                             brls::TextureCache::instance().addCache(cachePath, tex);
                         }
@@ -247,7 +337,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
                 if (brls::TextureCache::instance().getCache(cachePath) == 0) {
                     int tex = nvgCreateImageMem(
                         brls::Application::getNVGContext(), 
-                        0, 
+                        NVG_IMAGE_GENERATE_MIPMAPS, 
                         const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())), 
                         body.size()
                     );

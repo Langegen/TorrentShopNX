@@ -1,6 +1,7 @@
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
+#include "../utils/log.h"
 #include <sstream>
 #include <set>
 
@@ -41,6 +42,23 @@ GameRowCell* GameRowCell::create() {
     GameRowCell* cell = new GameRowCell();
     brls::Logger::info("GameRowCell: create() done");
     return cell;
+}
+
+void GameRowCell::prepareForReuse() {
+    util::logLine("GameRowCell::prepareForReuse - Resetting card highlight/focus states");
+    brls::RecyclerCell::prepareForReuse();
+    brls::Box* cards[] = { card0, card1, card2, card3, card4, card5 };
+    int i = 0;
+    for (auto* card : cards) {
+        if (card) {
+            if (card->isFocused()) {
+                util::logLine("GameRowCell::prepareForReuse - Card " + std::to_string(i) + " was focused, resetting.");
+            }
+            card->setHighlighted(false);
+            card->setHighlightProgress(0.0f);
+        }
+        i++;
+    }
 }
 
 // CATALOGVIEW IMPLEMENTATION
@@ -119,6 +137,9 @@ void CatalogView::filterCatalog() {
     
     // Reload recycler view
     recycler->reloadData();
+
+    // Reset focus to the recycler to select the new cells and avoid referencing old/reused cells
+    brls::Application::giveFocus(recycler);
 }
 
 // DATASOURCE IMPLEMENTATION

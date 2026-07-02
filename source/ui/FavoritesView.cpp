@@ -2,6 +2,7 @@
 #include "CatalogView.hpp"
 #include "FavoritesManager.hpp"
 #include "GameDetailView.hpp"
+#include "../utils/log.h"
 
 extern std::vector<Game> g_games;
 
@@ -17,6 +18,25 @@ void FavoritesView::onContentAvailable() {
     filterFavorites();
 }
 
+void FavoritesView::willAppear(bool resetState) {
+    util::logLine("FavoritesView: willAppear resetState=" + std::to_string(resetState));
+    brls::Activity::willAppear(resetState);
+    filterFavorites();
+    if (resetState) {
+        util::logLine("FavoritesView: resetState is true, giving focus to recycler");
+        brls::Application::giveFocus(recycler);
+    }
+    brls::View* currentFocus = brls::Application::getCurrentFocus();
+    util::logLine("FavoritesView: willAppear currentFocus=" + (currentFocus ? currentFocus->describe() : "nullptr"));
+}
+
+void FavoritesView::willDisappear(bool resetState) {
+    util::logLine("FavoritesView: willDisappear resetState=" + std::to_string(resetState));
+    brls::Activity::willDisappear(resetState);
+    util::logLine("FavoritesView: clearing focus");
+    brls::Application::giveFocus(nullptr);
+}
+
 
 
 void FavoritesView::filterFavorites() {
@@ -28,6 +48,7 @@ void FavoritesView::filterFavorites() {
         }
     }
     recycler->reloadData();
+    brls::Application::giveFocus(recycler);
 }
 
 int FavoritesView::FavoritesDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {

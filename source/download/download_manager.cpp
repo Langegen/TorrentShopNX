@@ -45,12 +45,39 @@ static void updateSleepPolicy(bool has_active_transfers) {
 #endif
 }
 
-DownloadManager::DownloadManager() = default;
+DownloadManager::DownloadManager() {
+    progress_thread_running_.store(true);
+    progress_thread_ = std::thread([this]() {
+        while (progress_thread_running_.load()) {
+            trackProgress();
+            
+            if (progress_callback_) {
+                progress_callback_();
+            }
+
+            std::unique_lock<std::mutex> lock(progress_cv_mutex_);
+            if (has_open_pending_.load()) {
+                progress_cv_.wait_for(lock, std::chrono::milliseconds(100));
+            } else {
+                progress_cv_.wait_for(lock, std::chrono::milliseconds(1000));
+            }
+        }
+    });
+}
+
 DownloadManager::~DownloadManager() {
     shutdown();
 }
 
 void DownloadManager::shutdown() {
+    if (progress_thread_running_.load()) {
+        progress_thread_running_.store(false);
+        progress_cv_.notify_all();
+        if (progress_thread_.joinable()) {
+            progress_thread_.join();
+        }
+    }
+
     stopAllStreamConsumers();
 
     for (auto& item : queue_) {
@@ -643,6 +670,8 @@ void DownloadManager::trackProgress() {
             item.progress = dl_p;
             hybrid_speed_kbps = static_cast<float>(item.hybrid_installer->downloadSpeedKbps());
             if (!(hybrid_speed_kbps >= 0.0f)) hybrid_speed_kbps = 0.0f;
+            item.install_written = item.hybrid_installer->bytesInstalled();
+            item.install_total = item.hybrid_installer->totalBytes();
 
             if (item.hybrid_installer->isFinished()) {
                 if (item.hybrid_installer->hasError()) {
@@ -750,6 +779,7 @@ void DownloadManager::trackProgress() {
                 matched = true;
                 item.seeds = t.seeds;
                 item.peers = t.peers;
+                item.dht = t.dht;
                 
                 // If hybrid installer is active, its downloadProgress() is already the overall progress.
                 // Otherwise, fallback to libtorrent's progress.
@@ -913,6 +943,35 @@ void DownloadManager::trackProgress() {
                     item.stream_consumer_started = false;
                 }
             }
+        }
+
+        // Calculate and smooth installation speed
+        if (item.state == DownloadState::StreamInstalling || item.state == DownloadState::Installing) {
+            unsigned long long current_install_written = item.install_written;
+            if (item.install_speed_sample_at.time_since_epoch().count() == 0) {
+                item.install_speed_sample_at = now;
+                item.last_install_written = current_install_written;
+                item.install_speed_kbps = 0.0f;
+            } else {
+                double dt = std::chrono::duration_cast<std::chrono::milliseconds>(now - item.install_speed_sample_at).count() / 1000.0;
+                if (dt >= 0.5) { // update speed sample every 500ms or more
+                    unsigned long long delta = 0;
+                    if (current_install_written >= item.last_install_written) {
+                        delta = current_install_written - item.last_install_written;
+                    }
+                    float sampled_speed_kbps = static_cast<float>(delta) / 1024.0f / dt;
+                    item.install_speed_kbps = smoothDownloadSpeedKbps(item.install_speed_kbps,
+                                                                      sampled_speed_kbps,
+                                                                      item.install_speed_sample_at,
+                                                                      now);
+                    item.install_speed_sample_at = now;
+                    item.last_install_written = current_install_written;
+                }
+            }
+        } else {
+            item.install_speed_kbps = 0.0f;
+            item.install_speed_sample_at = std::chrono::steady_clock::time_point{};
+            item.last_install_written = 0;
         }
     }
 

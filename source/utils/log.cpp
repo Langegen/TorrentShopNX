@@ -48,6 +48,7 @@ void logInit() {
     g_log_file.open(kLogPath, std::ios::trunc);
     if (g_log_file.is_open()) {
         g_log_file << "TorrentShopNX log start" << std::endl;
+        g_log_file.flush();
     }
 }
 
@@ -55,6 +56,7 @@ void logLine(const std::string& line) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
     if (g_log_file.is_open()) {
         g_log_file << line << "\n";
+        g_log_file.flush();
     }
 }
 

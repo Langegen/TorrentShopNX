@@ -61,6 +61,11 @@ void DownloadsView::onContentAvailable() {
             }
         });
     });
+
+    // Force an immediate refresh so that cells show the current download state
+    // right away after the auto-redirect from FileSelectView (without waiting for
+    // the next progress-thread tick which can be up to 1 second away).
+    ui::DownloadManager::instance().triggerCallback();
 }
 
 DownloadsView::~DownloadsView() {
@@ -70,15 +75,16 @@ DownloadsView::~DownloadsView() {
 
 
 
-static std::string formatKbps(float speed_kbps) {
+static std::string formatKbps(float speed_kbps, bool is_download) {
+    std::string prefix = is_download ? "↓ " : "↑ ";
     if (speed_kbps >= 1024.0f) {
         float mbps = speed_kbps / 1024.0f;
         char buf[32];
-        std::snprintf(buf, sizeof(buf), "↓ %.2f MB/s", mbps);
+        std::snprintf(buf, sizeof(buf), "%s%.2f MB/s", prefix.c_str(), mbps);
         return std::string(buf);
     } else {
         char buf[32];
-        std::snprintf(buf, sizeof(buf), "↓ %.1f KB/s", speed_kbps);
+        std::snprintf(buf, sizeof(buf), "%s%.1f KB/s", prefix.c_str(), speed_kbps);
         return std::string(buf);
     }
 }
@@ -102,15 +108,21 @@ static std::string formatEta(float speed_kbps, unsigned long long remaining_byte
     }
 }
 
-static std::string formatProgressBytes(unsigned long long total, float progress_fraction) {
-    unsigned long long downloaded = (unsigned long long)((double)total * progress_fraction);
-    
-    double dl_val = (double)downloaded / 1024.0 / 1024.0;
-    double tot_val = (double)total / 1024.0 / 1024.0;
-    
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.1f MB / %.1f MB", dl_val, tot_val);
-    return std::string(buf);
+static std::string formatBytes(unsigned long long bytes) {
+    double val = (double)bytes / 1024.0 / 1024.0; // in MB
+    if (val >= 1024.0) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.2f GB", val / 1024.0);
+        return std::string(buf);
+    } else {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.1f MB", val);
+        return std::string(buf);
+    }
+}
+
+static std::string formatProgressBytes(unsigned long long written, unsigned long long total) {
+    return formatBytes(written) + " / " + formatBytes(total);
 }
 
 // DATASOURCE IMPLEMENTATION
@@ -145,11 +157,29 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     float progress = item.progress;
     if (progress < 0.0f) progress = 0.0f;
     if (progress > 1.0f) progress = 1.0f;
-    cell->progressBar->setWidthPercentage(progress * 100.0f);
+    cell->progressBar->setWidth(progress * 300.0f);
     
     char progressBuf[16];
     std::snprintf(progressBuf, sizeof(progressBuf), "%d%%", (int)(progress * 100.0f));
-    cell->progressText->setText(progressBuf);
+    std::string progressStr = progressBuf;
+
+    unsigned long long dl_written = 0;
+    unsigned long long dl_total = 0;
+    if (item.hybrid_installer) {
+        dl_written = item.hybrid_installer->bytesDownloaded();
+        dl_total = item.hybrid_installer->downloadTotalBytes();
+    } else {
+        dl_total = item.install_total;
+        dl_written = (dl_total > 0) ? (unsigned long long)((double)dl_total * progress) : 0;
+    }
+
+    if (item.state == download::DownloadState::Downloading || 
+        item.state == download::DownloadState::StreamInstalling) {
+        progressStr += "  (" + formatKbps(item.download_speed_kbps, true) + ", " + formatProgressBytes(dl_written, dl_total) + ")";
+    } else {
+        progressStr += "  (" + formatProgressBytes(dl_written, dl_total) + ")";
+    }
+    cell->progressText->setText(progressStr);
 
     // Manage installation progress bar row visibility
     const bool showsInstall = (item.state == download::DownloadState::StreamPreparing || 
@@ -162,11 +192,25 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         float instProgress = item.install_progress;
         if (instProgress < 0.0f) instProgress = 0.0f;
         if (instProgress > 1.0f) instProgress = 1.0f;
-        cell->installBar->setWidthPercentage(instProgress * 100.0f);
+        cell->installBar->setWidth(instProgress * 300.0f);
         
         char instBuf[16];
         std::snprintf(instBuf, sizeof(instBuf), "%d%%", (int)(instProgress * 100.0f));
-        cell->installText->setText(instBuf);
+        std::string instStr = instBuf;
+
+        unsigned long long inst_written = item.install_written;
+        unsigned long long inst_total = item.install_total;
+        if (inst_total == 0 && item.hybrid_installer) {
+            inst_total = item.hybrid_installer->totalBytes();
+        }
+
+        if (item.state == download::DownloadState::StreamInstalling ||
+            item.state == download::DownloadState::Installing) {
+            instStr += "  (" + formatKbps(item.install_speed_kbps, false) + ", " + formatProgressBytes(inst_written, inst_total) + ")";
+        } else {
+            instStr += "  (" + formatProgressBytes(inst_written, inst_total) + ")";
+        }
+        cell->installText->setText(instStr);
     } else {
         cell->installProgressRow->setVisibility(brls::Visibility::GONE);
     }
@@ -218,23 +262,10 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     if (item.state == download::DownloadState::Downloading || 
         item.state == download::DownloadState::StreamInstalling) {
         
-        // Calculate remaining bytes
-        unsigned long long totalSize = 0;
-        if (item.hybrid_installer) {
-            totalSize = item.hybrid_installer->totalBytes();
-        }
-        if (totalSize == 0) {
-            totalSize = item.install_total;
-        }
-        if (totalSize == 0) {
-            totalSize = 500ull * 1024ull * 1024ull; // dummy fallback
-        }
+        // Calculate remaining download bytes
+        unsigned long long remaining_dl = (dl_total >= dl_written) ? (dl_total - dl_written) : 0;
         
-        unsigned long long remaining = (unsigned long long)((double)totalSize * (1.0f - progress));
-        
-        std::string stats = formatKbps(item.download_speed_kbps) + "   " + 
-                            formatEta(item.download_speed_kbps, remaining) + "   " +
-                            formatProgressBytes(totalSize, progress);
+        std::string stats = formatEta(item.download_speed_kbps, remaining_dl);
         cell->statsText->setText(stats);
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (item.state == download::DownloadState::Completed) {
@@ -252,8 +283,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         item.state == download::DownloadState::StreamInstalling ||
         item.state == download::DownloadState::StreamPreparing) {
         
-        char peersBuf[64];
-        std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d", item.seeds, item.peers);
+        char peersBuf[128];
+        std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d · DHT: %d", item.seeds, item.peers, item.dht);
         cell->peersText->setText(peersBuf);
         cell->peersText->setVisibility(brls::Visibility::VISIBLE);
     } else {

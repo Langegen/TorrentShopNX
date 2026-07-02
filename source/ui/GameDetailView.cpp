@@ -5,6 +5,53 @@
 
 namespace ui {
 
+class ScrollAndFocusController : public brls::View {
+public:
+    ScrollAndFocusController(brls::ScrollingFrame* targetScroll, brls::Button* btnDownload)
+        : targetScroll_(targetScroll), btnDownload_(btnDownload) {
+        setHeight(0);
+        setWidth(0);
+    }
+    
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override {
+        if (!targetScroll_ || !btnDownload_) return;
+        
+        float contentHeight = 0;
+        if (!targetScroll_->getChildren().empty()) {
+            contentHeight = targetScroll_->getChildren().front()->getHeight();
+        }
+        float viewHeight = targetScroll_->getHeight();
+        float maxOffset = contentHeight - viewHeight;
+        
+        if (contentHeight <= 0 || viewHeight <= 0) return;
+        
+        float currentOffset = targetScroll_->getContentOffsetY();
+        bool atBottom = (maxOffset <= 0) || (currentOffset >= maxOffset - 5.0f);
+        
+        brls::View* currentFocus = brls::Application::getCurrentFocus();
+        if (currentFocus == targetScroll_) {
+            auto& state = brls::Application::getControllerState();
+            bool dpadDown = state.buttons[brls::BUTTON_DOWN] || state.buttons[brls::BUTTON_NAV_DOWN];
+            float leftY = state.axes[brls::LEFT_Y];
+            
+            // Left stick scrolling implementation
+            if (std::abs(leftY) > 0.15f) {
+                float speed = leftY * 12.0f;
+                targetScroll_->setContentOffsetY(currentOffset + speed, false);
+            }
+            
+            if (atBottom && (dpadDown || leftY > 0.15f)) {
+                brls::Logger::info("ScrollAndFocusController: User pressed DOWN at bottom. Transferring focus to btnDownload.");
+                brls::Application::giveFocus(btnDownload_);
+            }
+        }
+    }
+    
+private:
+    brls::ScrollingFrame* targetScroll_;
+    brls::Button* btnDownload_;
+};
+
 GameDetailView::GameDetailView(const Game& game) : game_(game) {
 }
 
@@ -113,6 +160,10 @@ void GameDetailView::onContentAvailable() {
     // Update initial button state
     updateFavoriteButton();
 
+    ScrollAndFocusController* scrollController = new ScrollAndFocusController(scroll, btnDownload);
+    contentBox->addView(scrollController);
+
+
     // Explicitly set the last focused view on the activity content box to guarantee btnDownload gets default focus
     brls::Box* contentBoxView = dynamic_cast<brls::Box*>(getContentView());
     if (contentBoxView) {
@@ -134,6 +185,17 @@ void GameDetailView::updateFavoriteButton() {
 
 brls::View* GameDetailView::create() {
     return nullptr; // XML constructor stub (should not be used directly)
+}
+
+void GameDetailView::willAppear(bool resetState) {
+    brls::Activity::willAppear(resetState);
+    scroll->resetScrollToTop();
+    brls::Application::giveFocus(scroll);
+}
+
+void GameDetailView::willDisappear(bool resetState) {
+    brls::Activity::willDisappear(resetState);
+    brls::Application::giveFocus(nullptr);
 }
 
 } // namespace ui

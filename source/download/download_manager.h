@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <future>
 
 #include "../installer/stream_installer.h"
@@ -43,13 +44,16 @@ struct DownloadItem {
     std::chrono::steady_clock::time_point start_time{};
     int seeds = 0;
     int peers = 0;
+    int dht = 0;
 
     // Гибридный инсталлятор (новый режим)
-    std::unique_ptr<installer::HybridNspInstaller> hybrid_installer;
+    std::shared_ptr<installer::HybridNspInstaller> hybrid_installer;
     std::string torrent_hash;  // Хеш торрента для DataSource
 
     // Асинхронный open
     std::shared_ptr<std::future<bool>> open_future;
+    std::shared_ptr<std::atomic<bool>> open_done;
+    std::shared_ptr<std::atomic<bool>> open_success;
 
     // Старый streaming install (для совместимости)
     bool stream_ready = false;
@@ -57,6 +61,9 @@ struct DownloadItem {
     std::string stream_name;
     unsigned long long install_total = 0;
     unsigned long long install_written = 0;
+    float install_speed_kbps = 0.0f;
+    std::chrono::steady_clock::time_point install_speed_sample_at{};
+    unsigned long long last_install_written = 0;
     struct StreamFile {
         std::string path;
         uint64_t offset = 0;
@@ -110,6 +117,9 @@ public:
 
     const std::vector<DownloadItem>& queue() const { return queue_; }
 
+    using ProgressCallback = std::function<void()>;
+    void setProgressCallback(ProgressCallback cb) { progress_callback_ = cb; }
+
 private:
     struct StreamConsumer {
         int torrent_id = -1;
@@ -130,6 +140,15 @@ private:
     std::vector<StreamConsumer> stream_consumers_;
 
     torrent::TorrentManager* getTorrent();
+
+    std::thread progress_thread_;
+    std::atomic<bool> progress_thread_running_{false};
+    ProgressCallback progress_callback_ = nullptr;
+
+    // Used to wake the progress thread early when an async open completes
+    std::mutex progress_cv_mutex_;
+    std::condition_variable progress_cv_;
+    std::atomic<bool> has_open_pending_{false};  // true while any item is in StreamPreparing
 };
 
 } // namespace download

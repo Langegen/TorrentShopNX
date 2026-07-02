@@ -17,6 +17,10 @@ void DownloadManager::init() {
         impl_.dataSourceManager().setMode(datasource::DataSourceMode::Remote);
     }
     
+    impl_.setProgressCallback([this]() {
+        triggerCallback();
+    });
+
     // Load and restore previous downloads
     loadDownloads();
 }

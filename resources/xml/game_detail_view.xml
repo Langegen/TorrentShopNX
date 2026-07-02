@@ -7,47 +7,43 @@
             <brls:Image id="cover" width="300px" height="490px" />
         </brls:Box>
         
-        <!-- Right Column: Box wrapping Scroll and Buttons -->
-        <brls:Box width="auto" height="auto" axis="column" grow="1.0">
+        <!-- Right Column: Scrollable Content -->
+        <brls:ScrollingFrame id="scroll" width="auto" height="auto" grow="1.0">
+            <brls:Box id="contentBox" width="auto" height="auto" axis="column" paddingRight="20">
+                
+                <!-- Game Title -->
+                <brls:Label id="title" fontSize="30" marginBottom="10" />
 
-            <brls:ScrollingFrame id="scroll" width="auto" height="auto" grow="1.0">
-                <brls:Box width="auto" height="auto" axis="column" paddingRight="20">
-                    
-                    <!-- Game Title -->
-                    <brls:Label id="title" fontSize="30" marginBottom="10" />
+                <!-- Badges (Genre & Lang) -->
+                <brls:Box id="badgesBox" width="auto" height="auto" axis="row" marginBottom="20" />
 
-                    <!-- Badges (Genre & Lang) -->
-                    <brls:Box id="badgesBox" width="auto" height="auto" axis="row" marginBottom="20" />
-
-                    <!-- Metadata Block -->
-                    <brls:Box width="auto" height="auto" axis="column" marginBottom="20" padding="15" backgroundColor="#2C2C2C" cornerRadius="8">
-                        <brls:Label id="metaDeveloper" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
-                        <brls:Label id="metaPublisher" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
-                        <brls:Label id="metaYear" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
-                        <brls:Label id="metaFormat" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
-                        <brls:Label id="metaVoice" fontSize="15" textColor="#AAAAAA" />
-                    </brls:Box>
-
-                    <!-- Description -->
-                    <brls:Label text="Описание" fontSize="20" marginBottom="10" />
-                    <brls:Label id="description" fontSize="16" marginBottom="30" />
-
-                    <!-- Screenshots -->
-                    <brls:Label text="Скриншоты" fontSize="20" marginBottom="10" />
-                    <brls:HScrollingFrame id="screenshotsScroll" width="auto" height="160px" marginBottom="30">
-                        <brls:Box id="screenshotsBox" width="auto" height="auto" axis="row" alignItems="center" />
-                    </brls:HScrollingFrame>
-
+                <!-- Metadata Block -->
+                <brls:Box width="auto" height="auto" axis="column" marginBottom="20" padding="15" backgroundColor="#2C2C2C" cornerRadius="8">
+                    <brls:Label id="metaDeveloper" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
+                    <brls:Label id="metaPublisher" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
+                    <brls:Label id="metaYear" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
+                    <brls:Label id="metaFormat" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
+                    <brls:Label id="metaVoice" fontSize="15" textColor="#AAAAAA" />
                 </brls:Box>
-            </brls:ScrollingFrame>
 
-            <!-- Action Buttons -->
-            <brls:Box width="auto" height="auto" axis="row" justifyContent="flexStart" marginTop="10">
-                <brls:Button id="btnDownload" text="Скачать" width="220px" height="50px" marginRight="20" style="primary" />
-                <brls:Button id="btnFavorite" text="В избранное" width="220px" height="50px" />
+                <!-- Description -->
+                <brls:Label text="Описание" fontSize="20" marginBottom="10" />
+                <brls:Label id="description" fontSize="16" marginBottom="30" />
+
+                <!-- Screenshots -->
+                <brls:Label text="Скриншоты" fontSize="20" marginBottom="10" />
+                <brls:HScrollingFrame id="screenshotsScroll" width="auto" height="160px" marginBottom="30">
+                    <brls:Box id="screenshotsBox" width="auto" height="auto" axis="row" alignItems="center" />
+                </brls:HScrollingFrame>
+
+                <!-- Action Buttons -->
+                <brls:Box width="auto" height="auto" axis="row" justifyContent="flexStart" marginTop="10" marginBottom="40">
+                    <brls:Button id="btnDownload" text="Скачать" width="220px" height="50px" marginRight="20" style="primary" />
+                    <brls:Button id="btnFavorite" text="В избранное" width="220px" height="50px" />
+                </brls:Box>
+
             </brls:Box>
-
-        </brls:Box>
+        </brls:ScrollingFrame>
 
     </brls:Box>
 

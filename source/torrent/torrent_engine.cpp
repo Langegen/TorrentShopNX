@@ -62,7 +62,7 @@ constexpr const char* kCacheRoot = "sdmc:/switch/TorrentShopNX/cache/local_engin
 constexpr int kDefaultPort = 8080;
 constexpr int kLibtorrentListenPort = 50575;
 constexpr int kCacheBlocks16KiB = 0; // Disabled: we use MemoryStorage instead
-constexpr int kConnectionsLimit = 80; // MUST match connections_limit in settings!
+constexpr int kConnectionsLimit = 40; // Reduced from 80: Switch BSD socket limit is ~32-64, need headroom for DHT+trackers
 constexpr int kMetadataTimeoutMs = 300000; // 5 min
 constexpr int kPieceWaitTimeoutMs = 45000;
 constexpr int kPollSleepMs = 50; 
@@ -125,7 +125,7 @@ struct LibtorrentLikeSettingsConfig {
     int torrent_connect_boost = 80; 
     int active_downloads = 30; 
     int active_limit = 100; 
-    int connections_limit = 80; // Sweets pot swarm size (harmonized with lt_settings.h)
+    int connections_limit = 40; // Reduced from 80: Switch BSD socket limit is ~32-64
     bool prioritize_partial_pieces = true; 
     bool use_parole_mode = true;
     bool strict_end_game_mode = false; // v60: посылаем запрос на последние куски ВСЕМ пирам, а не одному 
@@ -149,6 +149,14 @@ const DhtBootstrapNode kDhtBootstrapNodes[] = {
     {"dht.libtorrent.org",     25401},
     // Дополнительные актуальные узлы
     {"dht.opentrackr.org",     1337},
+};
+
+// Hardcoded IP fallbacks: bypass DNS spoofing (ISP/ТСПУ returns 198.18.x.x for some hosts)
+const DhtBootstrapNode kDhtBootstrapIPFallbacks[] = {
+    {"82.221.103.244",  6881},  // router.utorrent.com
+    {"67.215.246.10",   6881},  // router.bittorrent.com
+    {"212.129.33.59",   6881},  // dht.transmissionbt.com
+    {"185.157.221.247", 25401}, // dht.libtorrent.org
 };
 
 const char* kFallbackTrackers[] = {
@@ -357,7 +365,8 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
                      | lt::alert::storage_notification    // (1 << 3)
                      | lt::alert::status_notification     // (1 << 6)
                      | lt::alert::performance_warning     // (1 << 9)
-                     | lt::alert::tracker_notification);  // (1 << 4)
+                     | lt::alert::tracker_notification    // (1 << 4)
+                     | lt::alert::peer_notification);     // (1 << 1) — peer connect/disconnect diagnostics
     settings.set_int(lt::settings_pack::alert_queue_size, 4000);
 
     settings.set_bool(lt::settings_pack::enable_dht, true);
@@ -453,10 +462,26 @@ void addResolvedDhtRouters(lt::session& session) {
             continue;
         }
 
+        // Check for known DNS spoofing indicators (e.g. ISP ТСПУ returning 198.18.x.x)
+        if (ip.rfind("198.18.", 0) == 0 || ip.rfind("127.", 0) == 0 || ip == "0.0.0.0") {
+            util::logLine(std::string("torrent_engine: SPOOFED DNS detected for ") +
+                          node.host + ":" + port + " -> " + ip + " (skipping)");
+            continue;
+        }
+
         session.add_dht_router({ip, node.port});
         session.add_dht_node({ip, node.port});
         util::logLine(std::string("torrent_engine: DHT router/node ") +
                       node.host + ":" + port + " -> " + ip);
+    }
+
+    // Hardcoded IP fallbacks: always added to guarantee DHT bootstrap
+    // even when DNS is fully spoofed by ISP
+    for (const auto& node : kDhtBootstrapIPFallbacks) {
+        session.add_dht_router({node.host, node.port});
+        session.add_dht_node({node.host, node.port});
+        util::logLine(std::string("torrent_engine: DHT IP fallback ") +
+                      node.host + ":" + std::to_string(node.port));
     }
 }
 
@@ -528,6 +553,7 @@ struct TorrentRecord {
     std::set<int> verified_pieces;
     std::deque<lt::tcp::endpoint> recent_peer_endpoints;
     size_t reconnect_cursor = 0;
+    bool metadata_lockdown_applied = false; // Guard against repeated metadata lockdown race
 };
 
 bool readMemoryStorageRange(const TorrentRecord& record,
@@ -542,6 +568,8 @@ void handleGlobalErrors(const std::vector<lt::alert*>& alerts);
 struct TorrentRecord;
 int reconnectKnownPeersLocked(TorrentRecord& record, int max_attempts);
 int effectiveConnectedPeerCount(const lt::torrent_handle& handle, int status_num_peers);
+void rememberPeerEndpointFromAlertLocked(TorrentEngine::Impl& impl, const lt::peer_alert& peer_event);
+void rememberConnectedPeerInfosLocked(TorrentRecord& record);
 #endif
 
 
@@ -610,8 +638,11 @@ struct TorrentEngine::Impl {
                         discardMemoryStoragePiece(util::toHex(hfa->handle.info_hash().to_string()), static_cast<int>(hfa->piece_index));
                     } else if (auto* mra = lt::alert_cast<lt::metadata_received_alert>(alert)) {
                         auto ti = mra->handle.torrent_file();
-                        if (ti) {
+                        if (ti && !it->second->metadata_lockdown_applied) {
                             // Pre-emptive lockdown: Disable ALL pieces immediately
+                            // ONCE ONLY: repeated lockdown after applyFilePrioritiesLocked
+                            // kills the interesting flag, causing all peers to choke us.
+                            it->second->metadata_lockdown_applied = true;
                             int num_pieces = ti->num_pieces();
                             std::vector<lt::download_priority_t> priorities(num_pieces, lt::dont_download);
                             mra->handle.prioritize_pieces(priorities);
@@ -620,7 +651,14 @@ struct TorrentEngine::Impl {
                             int64_t total_sz = ti->total_size();
                             util::logLine("torrent_engine: metadata received, total_size=" + std::to_string(total_sz));
                             adapt_settings_for_torrent_size(*session, total_sz);
+                        } else if (ti && it->second->metadata_lockdown_applied) {
+                            util::logLine("torrent_engine: metadata received AGAIN, lockdown SKIPPED (already applied)");
                         }
+                    } else if (auto* pda = lt::alert_cast<lt::peer_disconnected_alert>(alert)) {
+                        // Remember peer endpoints for reconnection on mass disconnect
+                        rememberPeerEndpointFromAlertLocked(*this, *pda);
+                    } else if (auto* pca = lt::alert_cast<lt::peer_connect_alert>(alert)) {
+                        rememberPeerEndpointFromAlertLocked(*this, *pca);
                     }
                 }
             }
@@ -684,6 +722,9 @@ struct TorrentEngine::Impl {
                     for (auto& pair : torrents) {
                         auto& record = pair.second;
                         if (!record || !record->handle.is_valid()) continue;
+
+                        // Populate recent_peer_endpoints for reconnect on mass disconnect
+                        rememberConnectedPeerInfosLocked(*record);
                         
                         auto status = record->handle.status(lt::torrent_handle::query_accurate_download_counters);
                         const int cur_rate    = status.download_payload_rate;
@@ -2455,6 +2496,7 @@ bool TorrentEngine::getTorrentList(std::vector<TorrentEngineItem>& out_items) {
         item.torrent_size = static_cast<unsigned long long>(status.total_wanted);
         item.seeds = status.num_seeds;
         item.peers = status.num_peers;
+        item.dht = impl_->session ? impl_->session->status().dht_nodes : 0;
         out_items.push_back(std::move(item));
     }
 

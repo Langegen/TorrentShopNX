@@ -11,6 +11,8 @@ public:
 
     FavoritesView();
     void onContentAvailable() override;
+    void willAppear(bool resetState = false) override;
+    void willDisappear(bool resetState = false) override;
 
     void filterFavorites();
 

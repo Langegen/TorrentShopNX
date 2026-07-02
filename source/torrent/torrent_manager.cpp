@@ -613,6 +613,11 @@ bool TorrentManager::parseAndCacheList(const std::string& body, std::vector<Torr
         if (!std::isfinite(seeds_val)) seeds_val = extractJsonNumber(obj, "ActiveSeeds");
         if (!std::isfinite(seeds_val) || seeds_val < 0.0) seeds_val = 0.0;
 
+        double dht_val = extractJsonNumber(obj, "dht_nodes");
+        if (!std::isfinite(dht_val)) dht_val = extractJsonNumber(obj, "dht");
+        if (!std::isfinite(dht_val)) dht_val = extractJsonNumber(obj, "DhtNodes");
+        if (!std::isfinite(dht_val) || dht_val < 0.0) dht_val = 0.0;
+
         TorrentInfo info;
         info.id = local_id;
         info.name = name;
@@ -623,6 +628,7 @@ bool TorrentManager::parseAndCacheList(const std::string& body, std::vector<Torr
         info.torrent_size = static_cast<unsigned long long>((std::isfinite(total) && total > 0.0) ? total : 0.0);
         info.seeds = static_cast<int>(seeds_val);
         info.peers = static_cast<int>(peers_val);
+        info.dht = static_cast<int>(dht_val);
         out_list.push_back(info);
     }
 

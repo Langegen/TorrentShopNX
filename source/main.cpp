@@ -46,7 +46,7 @@ extern "C" {
 
         // Custom network initialization configured for TorrentShopNX
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
-        cfg.num_bsd_sessions  = 8;
+        cfg.num_bsd_sessions  = 12; // Increased from 8: need headroom for 40 peer connections + DHT + trackers
         cfg.sb_efficiency = 32;
         cfg.tcp_tx_buf_max_size = 1048576;
         cfg.tcp_rx_buf_max_size = 1048576;
@@ -209,7 +209,6 @@ int main(int argc, char** argv) {
     MainMenu* menu = new MainMenu();
     util::logLine("main: MainMenu instantiated, pushing...");
     brls::Application::pushActivity(menu);
-    util::logLine("main: MainMenu pushed, starting loop...");
 
     util::logLine("main: entering mainLoop");
     // Execute Borealis main loop

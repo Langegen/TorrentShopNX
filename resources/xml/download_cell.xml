@@ -31,7 +31,7 @@
         <brls:Box width="auto" height="15px" axis="row" alignItems="center" marginBottom="5">
             <brls:Label text="Загрузка: " fontSize="12" width="80px" />
             <brls:Box id="progressBarBg" width="300px" height="10px" backgroundColor="#444444" cornerRadius="5">
-                <brls:Box id="progressBar" width="0%" height="10px" backgroundColor="#4CAF50" cornerRadius="5" />
+                <brls:Box id="progressBar" width="0" height="10px" backgroundColor="#4CAF50" cornerRadius="5" />
             </brls:Box>
             <brls:Label id="progressText" text="0%" fontSize="12" marginLeft="10" />
         </brls:Box>
@@ -40,7 +40,7 @@
         <brls:Box id="installProgressRow" width="auto" height="15px" axis="row" alignItems="center" marginBottom="5">
             <brls:Label text="Установка: " fontSize="12" width="80px" />
             <brls:Box id="installBarBg" width="300px" height="10px" backgroundColor="#444444" cornerRadius="5">
-                <brls:Box id="installBar" width="0%" height="10px" backgroundColor="#2196F3" cornerRadius="5" />
+                <brls:Box id="installBar" width="0" height="10px" backgroundColor="#2196F3" cornerRadius="5" />
             </brls:Box>
             <brls:Label id="installText" text="0%" fontSize="12" marginLeft="10" />
         </brls:Box>

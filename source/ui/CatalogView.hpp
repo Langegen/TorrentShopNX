@@ -11,6 +11,7 @@ public:
     ~GameRowCell();
     std::shared_ptr<bool> imageToken;
     static GameRowCell* create();
+    void prepareForReuse() override;
 
     // Bind cards 0 to 5
     BRLS_BIND(brls::Box, card0, "card0");
