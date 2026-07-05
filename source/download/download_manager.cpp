@@ -631,6 +631,7 @@ void DownloadManager::trackProgress() {
                     ti.torrent_size = ei.torrent_size;
                     ti.seeds = ei.seeds;
                     ti.peers = ei.peers;
+                    ti.dht = ei.dht;
                     fresh_list.push_back(ti);
                 }
                 last_torrent_list_ = std::move(fresh_list);
@@ -977,15 +978,18 @@ void DownloadManager::trackProgress() {
 
     bool has_active = false;
     bool has_queued = false;
+    bool has_paused = false;
     for (const auto& item : queue_) {
         if (isTransferActive(item.state)) {
             has_active = true;
         } else if (item.state == DownloadState::Queued) {
             has_queued = true;
+        } else if (item.state == DownloadState::Paused) {
+            has_paused = true;
         }
     }
 
-    if (!has_active && has_queued) {
+    if (!has_active && !has_paused && has_queued) {
         startNextDownload();
         has_active = hasActiveTransfers();
     }

@@ -150,7 +150,7 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
                     if (t) {
                         auto* peer_conn = t->find_peer(ep);
                         if (peer_conn) {
-                            peer_conn->disconnect(lt::error_code(lt::errors::peer_banned, lt::libtorrent_category()), lt::operation_t::unknown);
+                            peer_conn->disconnect(lt::error_code(lt::errors::optimistic_disconnect, lt::libtorrent_category()), lt::operation_t::unknown);
                         }
                     }
                 }

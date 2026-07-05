@@ -55,7 +55,7 @@ namespace lt = libtorrent;
 // libtorrent 1.2.x on Switch treats "sdmc:/..." as a relative path and prefixes
 // the current working directory, which produces invalid paths like
 // "sdmc:/switch/sdmc:/switch/...". Use a cwd-relative cache root instead.
-constexpr const char* kCacheRoot = "TorrentShopNX/cache/local_engine";
+constexpr const char* kCacheRoot = "cache/local_engine";
 #else
 constexpr const char* kCacheRoot = "sdmc:/switch/TorrentShopNX/cache/local_engine";
 #endif
@@ -334,10 +334,10 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::max_peer_recv_buffer_size, 8 * 1024 * 1024); // Increased to 8MB
     settings.set_bool(lt::settings_pack::predictive_piece_announce, false); // v63: disabled — causes stall at piece boundaries (unnecessary pre-announce flood)
 
-    settings.set_int(lt::settings_pack::recv_socket_buffer_size, 1024 * 1024); // 1 MB
-    settings.set_int(lt::settings_pack::send_socket_buffer_size, 512 * 1024); // 512 KB
-    settings.set_int(lt::settings_pack::send_buffer_low_watermark, 512 * 1024);
-    settings.set_int(lt::settings_pack::send_buffer_watermark, 1024 * 1024);
+    settings.set_int(lt::settings_pack::recv_socket_buffer_size, 256 * 1024); // 256 KB
+    settings.set_int(lt::settings_pack::send_socket_buffer_size, 256 * 1024); // 256 KB
+    settings.set_int(lt::settings_pack::send_buffer_low_watermark, 128 * 1024);
+    settings.set_int(lt::settings_pack::send_buffer_watermark, 256 * 1024);
     settings.set_int(lt::settings_pack::mixed_mode_algorithm, lt::settings_pack::prefer_tcp); // TCP is more stable on Switch than UTP under load
     settings.set_int(lt::settings_pack::num_optimistic_unchoke_slots, 30); 
     settings.set_bool(lt::settings_pack::use_parole_mode, cfg.use_parole_mode);
@@ -387,11 +387,10 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
 #ifdef __SWITCH__
     // On Switch, libtorrent expands 0.0.0.0 through interface enumeration.
     // That path can produce no endpoints, leaving the session non-listening and
-    // DHT permanently at zero nodes. Bind the listen socket to the IPv4 address
-    // we already detected with getsockname() instead.
+    // DHT permanently at zero nodes. Bind the listen socket ONLY to the IPv4 address
+    // we already detected with getsockname() to prevent conflicts.
     settings.set_str(lt::settings_pack::listen_interfaces,
-                     bind_ip + ":" + std::to_string(kLibtorrentListenPort) +
-                     ",0.0.0.0:" + std::to_string(kLibtorrentListenPort));
+                     bind_ip + ":" + std::to_string(kLibtorrentListenPort));
 #else
     if (!bind_ip.empty()) {
         settings.set_str(lt::settings_pack::listen_interfaces,
@@ -614,6 +613,7 @@ struct TorrentEngine::Impl {
     std::filesystem::path cache_root = kCacheRoot;
     std::thread alert_thread;
     std::atomic<bool> alert_thread_running{false};
+    std::vector<std::pair<std::string, int>> resolved_dht_nodes;
 
     void distributeAlertsLocked(std::vector<lt::alert*>& alerts) {
         for (lt::alert* alert : alerts) {
@@ -688,6 +688,19 @@ struct TorrentEngine::Impl {
                     util::logLine("torrent_engine: " + detail);
                 }
             }
+
+            if (auto* lsa = lt::alert_cast<lt::listen_succeeded_alert>(alert)) {
+                std::string msg = lsa->message();
+                if (msg.find("[UDP]") != std::string::npos || msg.find("[udp]") != std::string::npos) {
+                    util::logLine("torrent_engine: UDP listen succeeded (" + msg + "), re-injecting DHT routers to bootstrap...");
+                    for (const auto& pair : resolved_dht_nodes) {
+                        if (session) {
+                            session->add_dht_router({pair.first, pair.second});
+                            session->add_dht_node({pair.first, pair.second});
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -719,6 +732,24 @@ struct TorrentEngine::Impl {
                 // Build v51: Periodic Torrent Recovery (every ~1s)
                 if (++tick_counter >= 20) {
                     tick_counter = 0;
+
+                    // Periodic DHT bootstrap recovery if nodes == 0 (every ~15s)
+                    static int dht_bootstrap_tick = 0;
+                    if (++dht_bootstrap_tick >= 15) {
+                        dht_bootstrap_tick = 0;
+                        if (session && !resolved_dht_nodes.empty()) {
+                            auto sess_status = session->status();
+                            if (sess_status.dht_nodes == 0) {
+                                util::logLine("torrent_engine: DHT nodes = 0, re-injecting " +
+                                              std::to_string(resolved_dht_nodes.size()) + " bootstrap nodes...");
+                                for (const auto& pair : resolved_dht_nodes) {
+                                    session->add_dht_router({pair.first, pair.second});
+                                    session->add_dht_node({pair.first, pair.second});
+                                }
+                            }
+                        }
+                    }
+
                     for (auto& pair : torrents) {
                         auto& record = pair.second;
                         if (!record || !record->handle.is_valid()) continue;
@@ -1457,10 +1488,44 @@ bool ensureSessionLocked(TorrentEngine::Impl& impl, std::string& error_out) {
     }
 
     util::logLine("ensureSessionLocked adding resolved DHT routers");
-    addResolvedDhtRouters(*impl.session);
+    impl.resolved_dht_nodes.clear();
+    for (const auto& node : kDhtBootstrapNodes) {
+        const std::string port = std::to_string(node.port);
+        const std::string ip = resolveIPv4Address(node.host, port.c_str());
+        if (ip.empty()) {
+            util::logLine(std::string("torrent_engine: failed to resolve DHT router ") +
+                          node.host + ":" + port);
+            continue;
+        }
+
+        // Check for known DNS spoofing indicators
+        if (ip.rfind("198.18.", 0) == 0 || ip.rfind("127.", 0) == 0 || ip == "0.0.0.0") {
+            util::logLine(std::string("torrent_engine: SPOOFED DNS detected for ") +
+                          node.host + ":" + port + " -> " + ip + " (skipping)");
+            continue;
+        }
+
+        impl.resolved_dht_nodes.push_back({ip, node.port});
+        util::logLine(std::string("torrent_engine: resolved DHT router ") +
+                      node.host + ":" + port + " -> " + ip);
+    }
+
+    // Hardcoded IP fallbacks
+    for (const auto& node : kDhtBootstrapIPFallbacks) {
+        impl.resolved_dht_nodes.push_back({node.host, node.port});
+        util::logLine(std::string("torrent_engine: DHT IP fallback ") +
+                      node.host + ":" + std::to_string(node.port));
+    }
+
     util::logLine("ensureSessionLocked starting DHT");
     impl.session->start_dht();
     util::logLine("ensureSessionLocked DHT started");
+
+    // Add them to the session now
+    for (const auto& pair : impl.resolved_dht_nodes) {
+        impl.session->add_dht_router({pair.first, pair.second});
+        impl.session->add_dht_node({pair.first, pair.second});
+    }
     util::logLine("torrent_engine: detected local IP " + bind_ip);
     util::logLine("torrent_engine: listen interface " + bind_ip + ":" +
                   std::to_string(kLibtorrentListenPort));

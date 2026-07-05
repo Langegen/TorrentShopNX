@@ -14,8 +14,7 @@
         
         <!-- Search and Filter triggers -->
         <brls:Box width="auto" height="auto" axis="row" alignItems="center">
-            <brls:Label id="searchHint" text="Поиск [X]" fontSize="16" textColor="#AAAAAA" marginRight="20" />
-            <brls:Label id="filterHint" text="Сброс поиска [Y]" fontSize="16" textColor="#AAAAAA" />
+            <brls:Label id="statsHint" text="Игр: 0 | Обновлено: Никогда" fontSize="16" textColor="#AAAAAA" />
         </brls:Box>
     </brls:Box>
 
@@ -26,6 +25,7 @@
         height="auto"
         paddingTop="20"
         paddingBottom="20"
+        paddingRight="30"
         grow="1.0" />
 
 </brls:Box>

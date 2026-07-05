@@ -69,7 +69,7 @@ bool LocalLibtorrentBackend::open(const ContentRequest& request) {
     }
 
     // Инициализировать 5-зонный планировщик
-    scheduler_.init(handle_, piece_size_, file_offset_in_torrent_, file_first_piece_, file_last_piece_);
+    scheduler_.init(handle_, session_, piece_size_, file_offset_in_torrent_, file_first_piece_, file_last_piece_);
     stall_monitor_.init(handle_, session_);
     stall_monitor_initialized_ = true;
 

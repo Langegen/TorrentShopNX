@@ -28,6 +28,7 @@
 #include <libtorrent/peer_info.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/download_priority.hpp>
+#include <libtorrent/session.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -35,6 +36,7 @@
 #include <vector>
 #include <unordered_map>
 #include <mutex>
+#include <memory>
 
 namespace datasource {
 
@@ -100,6 +102,7 @@ public:
     // =========================================================================
 
     void init(lt::torrent_handle handle,
+              std::shared_ptr<lt::session> session,
               int piece_size,
               uint64_t file_offset_in_torrent,
               int file_first_piece,
@@ -212,6 +215,7 @@ private:
 
     SchedulerConfig    cfg_;
     lt::torrent_handle handle_;
+    std::shared_ptr<lt::session> session_;
     bool               initialized_    = false;
 
     int piece_size_        = 0;

@@ -12,6 +12,7 @@ public:
     std::shared_ptr<bool> imageToken;
     static GameRowCell* create();
     void prepareForReuse() override;
+    brls::View* getDefaultFocus() override;
 
     // Bind cards 0 to 5
     BRLS_BIND(brls::Box, card0, "card0");
@@ -61,6 +62,7 @@ public:
     void filterCatalog();
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
+    BRLS_BIND(brls::Label, statsHint, "statsHint");
 
 private:
     std::string searchQuery_;

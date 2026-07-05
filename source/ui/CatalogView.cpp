@@ -4,6 +4,7 @@
 #include "../utils/log.h"
 #include <sstream>
 #include <set>
+#include "../config/config.h"
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -28,9 +29,22 @@ extern std::vector<Game> g_games;
 
 namespace ui {
 
+static int s_lastFocusedColumn = 0;
+
 // GAMEROWCELL IMPLEMENTATION
 GameRowCell::GameRowCell() {
     this->inflateFromXMLRes("xml/catalog_cell.xml");
+    
+    brls::Box* cards[] = { card0, card1, card2, card3, card4, card5 };
+    for (int i = 0; i < 6; ++i) {
+        if (cards[i]) {
+            cards[i]->getFocusEvent()->subscribe([i](brls::View* v) {
+                if (v->isFocused()) {
+                    s_lastFocusedColumn = i;
+                }
+            });
+        }
+    }
 }
 
 GameRowCell::~GameRowCell() {
@@ -61,6 +75,19 @@ void GameRowCell::prepareForReuse() {
     }
 }
 
+brls::View* GameRowCell::getDefaultFocus() {
+    brls::Box* cards[] = { card0, card1, card2, card3, card4, card5 };
+    if (s_lastFocusedColumn >= 0 && s_lastFocusedColumn < 6) {
+        if (cards[s_lastFocusedColumn] && cards[s_lastFocusedColumn]->getVisibility() == brls::Visibility::VISIBLE) {
+            return cards[s_lastFocusedColumn];
+        }
+    }
+    for (auto* card : cards) {
+        if (card && card->getVisibility() == brls::Visibility::VISIBLE) return card;
+    }
+    return nullptr;
+}
+
 // CATALOGVIEW IMPLEMENTATION
 CatalogView::CatalogView() {
     // Empty constructor
@@ -70,6 +97,10 @@ void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: onContentAvailable start");
 
     // Genre tabs have been removed to save screen space
+
+    std::string updateDate = config::ConfigManager::instance().getLastCatalogUpdateDate();
+    if (updateDate.empty()) updateDate = "Никогда";
+    statsHint->setText("Игр: " + std::to_string(g_games.size()) + " | Обновлено: " + updateDate);
 
     // Register search/filter action keys
     this->registerAction("Поиск", brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
@@ -139,7 +170,9 @@ void CatalogView::filterCatalog() {
     recycler->reloadData();
 
     // Reset focus to the recycler to select the new cells and avoid referencing old/reused cells
-    brls::Application::giveFocus(recycler);
+    brls::sync([this]() {
+        brls::Application::giveFocus(this->recycler);
+    });
 }
 
 // DATASOURCE IMPLEMENTATION
@@ -191,7 +224,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
             try {
                 brls::Box* cardBox = cards[i].card;
                 if (!cardBox) continue;
-                
+
                 const auto& game = parent_->filteredGames_[gameIdx];
                 
                 cardBox->setVisibility(brls::Visibility::VISIBLE);

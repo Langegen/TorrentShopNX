@@ -4,6 +4,7 @@
 #include "FavoritesView.hpp"
 #include "DownloadsView.hpp"
 #include "SettingsTab.hpp"
+#include "RemoteAddView.hpp"
 #include "../GameData.hpp"
 #include "../config/config.h"
 #include "../utils/log.h"
@@ -22,6 +23,11 @@ void MainMenu::onContentAvailable() {
     // Register button click actions
     btnCatalog->registerClickAction([](brls::View* view) {
         brls::Application::pushActivity(new ui::CatalogView());
+        return true;
+    });
+
+    btnRemoteAdd->registerClickAction([](brls::View* view) {
+        brls::Application::pushActivity(new ui::RemoteAddView());
         return true;
     });
 
@@ -51,11 +57,11 @@ void MainMenu::onContentAvailable() {
 }
 
 void MainMenu::updateDownloadsBadge(int count) {
-    if (btnDownloads) {
+    if (lblDownloads) {
         if (count > 0) {
-            btnDownloads->setText("Загрузки (" + std::to_string(count) + ")");
+            lblDownloads->setText("Загрузки (" + std::to_string(count) + ")");
         } else {
-            btnDownloads->setText("Загрузки");
+            lblDownloads->setText("Загрузки");
         }
     }
 }

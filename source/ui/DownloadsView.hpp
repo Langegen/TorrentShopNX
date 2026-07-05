@@ -34,8 +34,10 @@ public:
     DownloadsView();
     ~DownloadsView() override;
     void onContentAvailable() override;
+    void willAppear(bool resetState) override;
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
+    BRLS_BIND(brls::Label, emptyLabel, "emptyLabel");
 
     void updateCell(DownloadCell* cell, const download::DownloadItem& item);
     size_t lastRows_ = 0;

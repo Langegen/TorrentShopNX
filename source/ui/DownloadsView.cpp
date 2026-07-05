@@ -32,6 +32,15 @@ void DownloadsView::onContentAvailable() {
     ui::DownloadManager::instance().setProgressCallback([this]() {
         brls::sync([this]() {
             const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+            
+            if (queue.empty()) {
+                emptyLabel->setVisibility(brls::Visibility::VISIBLE);
+                recycler->setVisibility(brls::Visibility::GONE);
+            } else {
+                emptyLabel->setVisibility(brls::Visibility::GONE);
+                recycler->setVisibility(brls::Visibility::VISIBLE);
+            }
+
             size_t currentRows = queue.size();
             if (currentRows != lastRows_) {
                 lastRows_ = currentRows;
@@ -71,6 +80,13 @@ void DownloadsView::onContentAvailable() {
 DownloadsView::~DownloadsView() {
     // Unregister callback on destruction to avoid crashes
     ui::DownloadManager::instance().setProgressCallback(nullptr);
+}
+
+void DownloadsView::willAppear(bool resetState) {
+    brls::Activity::willAppear(resetState);
+    if (!ui::DownloadManager::instance().getImpl().queue().empty()) {
+        brls::Application::giveFocus(recycler);
+    }
 }
 
 

@@ -16,7 +16,7 @@
         <brls:Box width="auto" height="auto" axis="column">
 
             <brls:Box
-                width="10000"
+                width="auto"
                 height="auto"
                 axis="column"
                 alignItems="stretch"
@@ -31,10 +31,10 @@
                 <brls:SelectorCell
                     id="modeCell" />
                     
-                <brls:InputCell
+                <brls:DetailCell
                     id="remoteUrlCell" />
                     
-                <brls:InputCell
+                <brls:DetailCell
                     id="catalogUrlCell" />
 
             </brls:Box>

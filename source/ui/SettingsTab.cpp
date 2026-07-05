@@ -35,25 +35,79 @@ void SettingsTab::onContentAvailable() {
     });
 
     // 3. Remote TorrServer URL
-    remoteUrlCell->init("Адрес TorrServer", cfg.getTorrServerUrl(), [&cfg, &dm](std::string value) {
-        if (!value.empty()) {
-            cfg.setTorrServerUrl(value);
-            dm.dataSourceManager().setRemoteUrl(value);
-            cfg.save();
-            brls::Application::notify("Адрес TorrServer обновлен");
+    remoteUrlCell->setText("Адрес TorrServer");
+    auto updateRemoteUrlDisplay = [this, &cfg]() {
+        std::string url = cfg.getTorrServerUrl();
+        if (url.length() > 35) {
+            url = url.substr(0, 32) + "...";
+        } else if (url.empty()) {
+            url = "http://127.0.0.1:8090";
         }
-    }, "http://127.0.0.1:8090", "Введите адрес удаленного TorrServer");
+        remoteUrlCell->setDetailText(url);
+    };
+    updateRemoteUrlDisplay();
+    remoteUrlCell->registerClickAction([this, updateRemoteUrlDisplay, &cfg, &dm](brls::View* view) {
+        brls::Application::getImeManager()->openForText(
+            [updateRemoteUrlDisplay, &cfg, &dm](std::string text) {
+                if (!text.empty()) {
+                    cfg.setTorrServerUrl(text);
+                    dm.dataSourceManager().setRemoteUrl(text);
+                    cfg.save();
+                    brls::Application::notify("Адрес TorrServer обновлен");
+                    updateRemoteUrlDisplay();
+                }
+            },
+            "Адрес TorrServer",
+            "Введите адрес удаленного TorrServer",
+            255,
+            cfg.getTorrServerUrl(),
+            0
+        );
+        return true;
+    });
 
     // 4. Catalog JSON URL
-    catalogUrlCell->init("URL каталога JSON", cfg.getCatalogSourceUrl(), [&cfg](std::string value) {
-        if (!value.empty()) {
-            cfg.setCatalogSourceUrl(value);
-            cfg.save();
-            brls::Application::notify("Адрес каталога обновлен");
+    catalogUrlCell->setText("URL каталога JSON");
+    auto updateCatalogUrlDisplay = [this, &cfg]() {
+        std::string url = cfg.getCatalogSourceUrl();
+        if (url.length() > 35) {
+            url = url.substr(0, 32) + "...";
+        } else if (url.empty()) {
+            url = "http://example.com/games.json";
         }
-    }, "http://example.com/games.json", "Введите адрес JSON файла каталога игр");
+        catalogUrlCell->setDetailText(url);
+    };
+    updateCatalogUrlDisplay();
+    catalogUrlCell->registerClickAction([this, updateCatalogUrlDisplay, &cfg](brls::View* view) {
+        brls::Application::getImeManager()->openForText(
+            [updateCatalogUrlDisplay, &cfg](std::string text) {
+                if (!text.empty()) {
+                    cfg.setCatalogSourceUrl(text);
+                    cfg.save();
+                    brls::Application::notify("Адрес каталога обновлен");
+                    updateCatalogUrlDisplay();
+                }
+            },
+            "URL каталога JSON",
+            "Введите адрес JSON файла каталога игр",
+            255,
+            cfg.getCatalogSourceUrl(),
+            0
+        );
+        return true;
+    });
 }
 
+void SettingsTab::willAppear(bool resetState) {
+    brls::Activity::willAppear(resetState);
+    if (resetState) {
+        brls::Application::giveFocus(this->keepAwakeCell);
+    }
+}
 
+void SettingsTab::willDisappear(bool resetState) {
+    brls::Activity::willDisappear(resetState);
+    brls::Application::giveFocus(nullptr);
+}
 
 } // namespace ui

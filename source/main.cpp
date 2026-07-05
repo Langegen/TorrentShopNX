@@ -18,6 +18,7 @@
 #include "ui/SettingsTab.hpp"
 #include "ui/FavoritesManager.hpp"
 #include "ui/DownloadUiManager.hpp"
+#include "ui/QrCodeView.hpp"
 #include "config/config.h"
 #include "torrent/torrent_engine.h"
 #include "utils/log.h"
@@ -37,21 +38,21 @@ extern "C" void __wrap_socketExit(void) {
 }
 
 extern "C" {
-    u32 __nx_socket_mem_size = 0x10000000; // 256MB socket memory pool
-    size_t __nx_socket_tcp_tx_buf_size = 0x100000; // 1MB
-    size_t __nx_socket_tcp_rx_buf_size = 0x100000; // 1MB
+    u32 __nx_socket_mem_size = 0x02000000; // 32MB socket memory pool (saves 224MB RAM!)
+    size_t __nx_socket_tcp_tx_buf_size = 0x40000; // 256KB
+    size_t __nx_socket_tcp_rx_buf_size = 0x40000; // 256KB
 
     void userAppInit(void) {
         appletLockExit();
 
         // Custom network initialization configured for TorrentShopNX
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
-        cfg.num_bsd_sessions  = 12; // Increased from 8: need headroom for 40 peer connections + DHT + trackers
-        cfg.sb_efficiency = 32;
-        cfg.tcp_tx_buf_max_size = 1048576;
-        cfg.tcp_rx_buf_max_size = 1048576;
-        cfg.udp_rx_buf_size = 1048576;
-        cfg.udp_tx_buf_size = 1048576;
+        cfg.num_bsd_sessions  = 12; // Restore to 12 (Switch OS limit)
+        cfg.sb_efficiency = 4; // Restored to standard 4 to prevent socket memory exhaustion (32 was taking 16MB per socket!)
+        cfg.tcp_tx_buf_max_size = 131072; // 128KB (optimized for 32MB socket pool)
+        cfg.tcp_rx_buf_max_size = 131072; // 128KB
+        cfg.udp_rx_buf_size = 32768; // 32KB
+        cfg.udp_tx_buf_size = 32768; // 32KB
         socketInitialize(&cfg);
 
         romfsInit();
@@ -142,7 +143,7 @@ int main(int argc, char** argv) {
 
     util::logInit();
     util::logLine("main: start");
-    cacheImagesInit();
+    clearCaches();
 
     bool romfs_ok = true; // romfs was initialized in userAppInit
 
@@ -155,6 +156,7 @@ int main(int argc, char** argv) {
     brls::Application::createWindow("TorrentShopNX");
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
     brls::Application::setGlobalQuit(false);
+    brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
 
     // Initialize managers and load configurations
     auto& cfg = config::ConfigManager::instance();
@@ -233,5 +235,9 @@ int main(int argc, char** argv) {
     if (romfs_ok) {
         romfsExit();
     }
+    
+    // Clear all caches right before exiting
+    clearCaches();
+    
     quick_exit(0);
 }

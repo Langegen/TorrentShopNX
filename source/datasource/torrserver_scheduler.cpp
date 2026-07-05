@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <unordered_map>
+#include <future>
 
 namespace datasource {
 
@@ -25,12 +26,14 @@ TorrServerScheduler::TorrServerScheduler(const SchedulerConfig& cfg)
 // =============================================================================
 
 void TorrServerScheduler::init(lt::torrent_handle handle,
+                                std::shared_ptr<lt::session> session,
                                 int piece_size,
                                 uint64_t file_offset_in_torrent,
                                 int file_first_piece,
                                 int file_last_piece) {
     std::lock_guard<std::mutex> lock(mutex_);
     handle_            = std::move(handle);
+    session_           = std::move(session);
     piece_size_        = piece_size;
     file_offset_in_torrent_ = file_offset_in_torrent;
     file_first_piece_  = file_first_piece;
@@ -116,6 +119,8 @@ void TorrServerScheduler::reset() {
     peer_ewma_stats_.clear();
     last_isolated_.clear();
     last_starvation_recovery_.clear();
+    session_           = nullptr;
+    initialized_       = false;
 }
 
 // =============================================================================
@@ -562,25 +567,70 @@ int TorrServerScheduler::apply_slow_peer_isolation(const std::vector<lt::peer_in
                                                    const PieceRange& critical_range) {
     if (!critical_range.valid() || peers.empty()) return 0;
 
-    // 1. Получаем подробную очередь закачки из libtorrent, чтобы узнать,
-    //    какие пиры реально удерживают блоки критических кусков (даже если downloading_piece_index == -1).
-    std::vector<lt::partial_piece_info> download_queue;
-    try {
-        handle_.get_download_queue(download_queue);
-    } catch (...) {}
-
     // Карта: piece_index -> список IP-адресов пиров, у которых запрошены блоки этого куска
     std::unordered_map<int, std::vector<lt::address>> piece_to_peer_ips;
-    for (const auto& ppi : download_queue) {
-        int p_idx = static_cast<int>(ppi.piece_index);
-        if (p_idx < critical_range.start || p_idx > critical_range.end) continue;
-        if (ppi.blocks == nullptr) continue;
 
-        for (int i = 0; i < ppi.blocks_in_piece; ++i) {
-            if (ppi.blocks[i].state == lt::block_info::requested) {
-                piece_to_peer_ips[p_idx].push_back(ppi.blocks[i].peer().address());
-            }
+    // 1. Безопасно получаем подробную очередь закачки из libtorrent, запуская опрос в потоке io_service
+    if (session_ && handle_.is_valid()) {
+        struct PromiseData {
+            std::promise<std::unordered_map<int, std::vector<lt::address>>> promise;
+            lt::torrent_handle handle;
+            PieceRange critical_range;
+        };
+        auto data = std::make_shared<PromiseData>();
+        data->handle = handle_;
+        data->critical_range = critical_range;
+        auto future = data->promise.get_future();
+
+        session_->get_io_service().post([data]() {
+            std::unordered_map<int, std::vector<lt::address>> result;
+            try {
+                if (data->handle.is_valid()) {
+                    std::vector<lt::partial_piece_info> download_queue;
+                    data->handle.get_download_queue(download_queue);
+                    for (const auto& ppi : download_queue) {
+                        int p_idx = static_cast<int>(ppi.piece_index);
+                        if (p_idx < data->critical_range.start || p_idx > data->critical_range.end) continue;
+                        if (ppi.blocks == nullptr) continue;
+
+                        for (int i = 0; i < ppi.blocks_in_piece; ++i) {
+                            if (ppi.blocks[i].state == lt::block_info::requested) {
+                                result[p_idx].push_back(ppi.blocks[i].peer().address());
+                            }
+                        }
+                    }
+                }
+            } catch (...) {}
+            try {
+                data->promise.set_value(std::move(result));
+            } catch (...) {}
+        });
+
+        // Ждем выполнения до 150мс. Если таймаут — пропускаем эту итерацию изоляции ради стабильности
+        if (future.wait_for(std::chrono::milliseconds(150)) == std::future_status::ready) {
+            try {
+                piece_to_peer_ips = future.get();
+            } catch (...) {}
+        } else {
+            util::logLine("scheduler: WARNING: apply_slow_peer_isolation get_download_queue timed out!");
         }
+    } else if (handle_.is_valid()) {
+        // Fallback: если session_ недоступна, пытаемся прочесть напрямую (но ловим исключения)
+        std::vector<lt::partial_piece_info> download_queue;
+        try {
+            handle_.get_download_queue(download_queue);
+            for (const auto& ppi : download_queue) {
+                int p_idx = static_cast<int>(ppi.piece_index);
+                if (p_idx < critical_range.start || p_idx > critical_range.end) continue;
+                if (ppi.blocks == nullptr) continue;
+
+                for (int i = 0; i < ppi.blocks_in_piece; ++i) {
+                    if (ppi.blocks[i].state == lt::block_info::requested) {
+                        piece_to_peer_ips[p_idx].push_back(ppi.blocks[i].peer().address());
+                    }
+                }
+            }
+        } catch (...) {}
     }
 
     int isolated = 0;

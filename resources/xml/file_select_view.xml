@@ -23,7 +23,8 @@
                 id="fileListBox"
                 width="auto"
                 height="auto"
-                axis="column" />
+                axis="column"
+                paddingRight="30" />
 
         </brls:ScrollingFrame>
 

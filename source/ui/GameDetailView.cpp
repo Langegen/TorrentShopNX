@@ -1,6 +1,7 @@
 #include "GameDetailView.hpp"
 #include "FileSelectView.hpp"
 #include "FavoritesManager.hpp"
+#include "ScreenshotViewer.hpp"
 #include <sstream>
 
 namespace ui {
@@ -124,14 +125,16 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Screenshots Horizontal Scroll
-    for (const auto& scrUrl : game_.screenshots) {
+    for (size_t i = 0; i < game_.screenshots.size(); ++i) {
+        const auto& scrUrl = game_.screenshots[i];
         if (scrUrl.empty()) continue;
         brls::Image* scrImg = new brls::Image();
         scrImg->setWidth(240); // 16:9 ratio
         scrImg->setHeight(135);
         scrImg->setMarginRight(15);
         scrImg->setFocusable(true);
-        scrImg->registerClickAction([](brls::View* view) {
+        scrImg->registerClickAction([this, i](brls::View* view) {
+            brls::Application::pushActivity(new ScreenshotViewer(game_.screenshots, i));
             return true;
         });
         setImageFromHTTPS(scrImg, scrUrl, imageToken);

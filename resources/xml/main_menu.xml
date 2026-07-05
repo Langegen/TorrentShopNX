@@ -5,11 +5,44 @@
 
     <brls:ScrollingFrame width="auto" height="auto" grow="1.0">
         <brls:Box width="auto" height="auto" axis="column" padding="40" justifyContent="center" alignItems="center" grow="1.0">
-            <brls:Image image="@res/img/borealis_256.png" width="256px" height="256px" marginBottom="40" />
-            <brls:Button id="btnCatalog" text="Каталог" width="400px" height="80px" marginBottom="20" style="primary" />
-            <brls:Button id="btnFavorites" text="Избранное" width="400px" height="80px" marginBottom="20" />
-            <brls:Button id="btnDownloads" text="Загрузки" width="400px" height="80px" marginBottom="20" />
-            <brls:Button id="btnSettings" text="Настройки" width="400px" height="80px" />
+            
+            <!-- Logo TorrentShopNX -->
+            <brls:Image image="@res/img/torrentshopnx_logo.png" width="600px" height="150px" marginBottom="40" />
+
+            <!-- Row of 5 tiles -->
+            <brls:Box width="auto" height="auto" axis="row" justifyContent="center" alignItems="center">
+                
+                <!-- Catalog -->
+                <brls:Box id="btnCatalog" width="200px" height="280px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_catalog.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Каталог" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                </brls:Box>
+
+                <!-- Remote Add -->
+                <brls:Box id="btnRemoteAdd" width="200px" height="280px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_remote.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="По сети" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                </brls:Box>
+
+                <!-- Favorites -->
+                <brls:Box id="btnFavorites" width="200px" height="280px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_favorites.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Избранное" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                </brls:Box>
+
+                <!-- Downloads -->
+                <brls:Box id="btnDownloads" width="200px" height="280px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_downloads.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label id="lblDownloads" text="Загрузки" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                </brls:Box>
+
+                <!-- Settings -->
+                <brls:Box id="btnSettings" width="200px" height="280px" focusable="true">
+                    <brls:Image image="@res/img/icon_settings.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Настройки" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                </brls:Box>
+
+            </brls:Box>
         </brls:Box>
     </brls:ScrollingFrame>
 

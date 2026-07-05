@@ -40,15 +40,36 @@ void FavoritesView::willDisappear(bool resetState) {
 
 
 void FavoritesView::filterFavorites() {
-    favoritedGames_.clear();
+    std::vector<Game> newFavorited;
     auto& fm = catalog::FavoritesManager::instance();
     for (const auto& game : g_games) {
         if (fm.isFavorite(game.topic_id)) {
-            favoritedGames_.push_back(game);
+            newFavorited.push_back(game);
         }
     }
-    recycler->reloadData();
-    brls::Application::giveFocus(recycler);
+
+    bool changed = false;
+    if (newFavorited.size() != favoritedGames_.size()) {
+        changed = true;
+    } else {
+        for (size_t i = 0; i < newFavorited.size(); ++i) {
+            if (newFavorited[i].topic_id != favoritedGames_[i].topic_id) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    if (changed) {
+        favoritedGames_ = std::move(newFavorited);
+        recycler->reloadData();
+    }
+
+    if (!favoritedGames_.empty()) {
+        brls::sync([this]() {
+            brls::Application::giveFocus(this->recycler);
+        });
+    }
 }
 
 int FavoritesView::FavoritesDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {

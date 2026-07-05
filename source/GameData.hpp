@@ -149,28 +149,28 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
 #include <unordered_set>
 #include <dirent.h>
 
-inline std::unordered_set<std::string> g_cached_images;
-
-inline void cacheImagesInit() {
-    g_cached_images.clear();
+inline void clearCaches() {
     struct stat st;
     if (stat("sdmc:/switch/TorrentShopNX", &st) != 0) {
         mkdir("sdmc:/switch/TorrentShopNX", 0777);
     }
-    if (stat("sdmc:/switch/TorrentShopNX/cache", &st) != 0) {
-        mkdir("sdmc:/switch/TorrentShopNX/cache", 0777);
-    }
 
-    DIR* dir = opendir("sdmc:/switch/TorrentShopNX/cache");
-    if (!dir) return;
-    struct dirent* entry;
-    while ((entry = readdir(dir))) {
-        if (entry->d_type == DT_REG || entry->d_type == DT_UNKNOWN) {
-            g_cached_images.insert(entry->d_name);
+    std::error_code ec;
+    // Clean up entire cache directory to free up space (catalog, local_engine, old images)
+    if (std::filesystem::exists("sdmc:/switch/TorrentShopNX/cache", ec)) {
+        std::filesystem::remove_all("sdmc:/switch/TorrentShopNX/cache", ec);
+        if (!ec) {
+            util::logLine("GameData: cleared all caches");
         }
     }
-    closedir(dir);
-    util::logLine("GameData: cached images count=" + std::to_string(g_cached_images.size()));
+
+    // Clean up duplicated TorrentShopNX folder caused by a bug in older versions
+    if (std::filesystem::exists("sdmc:/switch/TorrentShopNX/TorrentShopNX", ec)) {
+        std::filesystem::remove_all("sdmc:/switch/TorrentShopNX/TorrentShopNX", ec);
+        if (!ec) {
+            util::logLine("GameData: removed duplicated TorrentShopNX folder");
+        }
+    }
 }
 
 // Helper to convert thumbnail URLs from popular image hostings to their original/full-size versions
@@ -238,7 +238,7 @@ inline std::string getOriginalImageUrl(const std::string& url) {
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download
-inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false) {
+inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false, const std::string& fallbackUrl = "") {
     if (url.empty() || !img) {
         if (img) img->setImageFromFile(placeholder);
         return;
@@ -248,7 +248,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         img->setImageFromFile(placeholder);
         img->setFreeTexture(true);
         
-        brls::async([img, url, token]() {
+        brls::async([img, url, token, fallbackUrl, placeholder, bypassCache]() {
             net::HttpClient http;
             auto res = http.httpGet(url);
             if (res.status_code == 200 && !res.body.empty()) {
@@ -265,6 +265,11 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
                         img->innerSetImage(tex);
                     }
                 });
+            } else if (!fallbackUrl.empty()) {
+                brls::sync([img, fallbackUrl, token, placeholder, bypassCache]() {
+                    if (token && !*token) return;
+                    setImageFromHTTPS(img, fallbackUrl, token, placeholder, bypassCache, "");
+                });
             }
         });
         return;
@@ -277,64 +282,26 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     }
     std::string fileName = safeName + ".png";
-    std::string cachePath = "sdmc:/switch/TorrentShopNX/cache/" + fileName;
+    std::string cacheKey = "memory_cache:/" + fileName;
     
-    // 1. If it's already in the GPU/RAM texture cache, use it immediately (super fast, no file I/O)
-    if (brls::TextureCache::instance().getCache(cachePath) > 0) {
-        img->setImageFromFile(cachePath);
+    // 1. If it's already in the GPU/RAM texture cache, use it immediately
+    if (brls::TextureCache::instance().getCache(cacheKey) > 0) {
+        img->setImageFromFile(cacheKey);
         return;
     }
     
-    // 2. If it's cached on the SD card, read it asynchronously on a background thread
-    if (g_cached_images.count(fileName) > 0) {
-        img->setImageFromFile(placeholder); // Show placeholder while reading
-        
-        brls::async([img, cachePath, token]() {
-            std::ifstream in(cachePath, std::ios::binary | std::ios::ate);
-            if (!in.is_open()) return;
-            
-            std::streamsize size = in.tellg();
-            in.seekg(0, std::ios::beg);
-            std::vector<unsigned char> buffer(size);
-            if (in.read(reinterpret_cast<char*>(buffer.data()), size)) {
-                in.close();
-                
-                brls::sync([img, cachePath, buffer = std::move(buffer), token]() {
-                    if (token && !*token) return;
-                    
-                    if (brls::TextureCache::instance().getCache(cachePath) == 0) {
-                        int tex = nvgCreateImageMem(brls::Application::getNVGContext(), NVG_IMAGE_GENERATE_MIPMAPS, const_cast<unsigned char*>(buffer.data()), buffer.size());
-                        if (tex > 0) {
-                            brls::TextureCache::instance().addCache(cachePath, tex);
-                        }
-                    }
-                    img->setImageFromFile(cachePath);
-                });
-            }
-        });
-        return;
-    }
-    
-    // 3. Otherwise, download it from the network asynchronously
+    // 2. Otherwise, download it from the network asynchronously
     img->setImageFromFile(placeholder);
     
-    brls::async([img, url, cachePath, fileName, token]() {
+    brls::async([img, url, cacheKey, token, fallbackUrl, placeholder, bypassCache]() {
         net::HttpClient http;
         auto res = http.httpGet(url);
         if (res.status_code == 200 && !res.body.empty()) {
-            // Save to SD card for future runs
-            std::ofstream out(cachePath, std::ios::binary);
-            if (out.is_open()) {
-                out.write(res.body.data(), res.body.size());
-                out.close();
-            }
-            
-            // Upload to GPU directly from the downloaded buffer (avoiding SD card read)
-            brls::sync([img, cachePath, fileName, body = std::move(res.body), token]() {
-                g_cached_images.insert(fileName);
+            // Upload to GPU directly from the downloaded buffer
+            brls::sync([img, cacheKey, body = std::move(res.body), token]() {
                 if (token && !*token) return;
                 
-                if (brls::TextureCache::instance().getCache(cachePath) == 0) {
+                if (brls::TextureCache::instance().getCache(cacheKey) == 0) {
                     int tex = nvgCreateImageMem(
                         brls::Application::getNVGContext(), 
                         NVG_IMAGE_GENERATE_MIPMAPS, 
@@ -342,10 +309,16 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
                         body.size()
                     );
                     if (tex > 0) {
-                        brls::TextureCache::instance().addCache(cachePath, tex);
+                        brls::TextureCache::instance().addCache(cacheKey, tex);
                     }
                 }
-                img->setImageFromFile(cachePath);
+                img->setImageFromFile(cacheKey);
+            });
+        } else if (!fallbackUrl.empty()) {
+            brls::sync([img, fallbackUrl, token, placeholder, bypassCache]() {
+                if (token && !*token) return;
+                // If primary URL failed, try the fallback URL without fallback to prevent infinite loop
+                setImageFromHTTPS(img, fallbackUrl, token, placeholder, bypassCache, "");
             });
         }
     });
