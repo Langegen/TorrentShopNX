@@ -1,88 +1,158 @@
 # TorrentShopNX
 
-A Nintendo Switch homebrew app for browsing decentralized torrent catalogs and streaming installs while downloading. It communicates with TorrServer over HTTP API.
+**TorrentShopNX** — homebrew-приложение для Nintendo Switch, которое помогает работать с торрент-раздачами прямо на консоли: просматривать игровой каталог, выбирать файлы внутри раздачи, добавлять magnet/.torrent по сети и запускать загрузку через удалённый TorrServer или встроенный локальный клиент на базе libtorrent.
 
-## Features
+> Проект находится в активной разработке. Используйте приложение только с контентом, на который у вас есть законные права.
 
-- Catalog browser for JSON, RSS, magnet indexes, and torrent-distributed catalogs
-- Torrent queue and download tracking
-- Stream install pipeline with PFS0/NSP extraction to SD (streamed)
-- FAT32-safe design by streaming data in chunks
-- Minimal UI using libnx console
-- HTTPS support via libcurl (portlibs)
-- Catalog cache stored on SD
-- TorrServer backend (local on-device or remote over network)
+## Что уже умеет приложение
 
-## Requirements
+- **Главное меню Borealis** с разделами: каталог, добавление по сети, избранное, загрузки и настройки.
+- **Каталог игр** из JSON/RSS/magnet/torrent-источников с кэшированием на SD-карте.
+- **Поиск по каталогу** с экранной клавиатурой Switch и быстрым сбросом фильтров.
+- **Карточки игр** с обложками, скриншотами, описанием, размером, языками и кнопкой добавления в избранное.
+- **Избранное** с локальным сохранением выбранных позиций.
+- **Добавление раздачи по сети**: приложение поднимает веб-страницу на Switch, показывает адрес и QR-код; с телефона или ПК можно отправить magnet-ссылку или загрузить `.torrent` файл.
+- **Выбор файлов перед загрузкой**: для magnet/.torrent можно получить список файлов и выбрать нужный файл из раздачи.
+- **Очередь загрузок** с прогрессом, скоростью, состояниями подготовки/загрузки/установки и возможностью отмены.
+- **Два режима источника данных**:
+  - удалённый **TorrServer** по HTTP API;
+  - встроенный **локальный клиент libtorrent** без отдельного TorrServer.
+- **Потоковое чтение данных** во время загрузки с приоритизацией нужных частей раздачи.
+- **FAT32-friendly подход**: приложение ориентировано на потоковую обработку данных и избегает сценариев, где один большой промежуточный файл становится обязательным.
+- **Настройки в приложении**: режим работы, адрес TorrServer, URL JSON-каталога и предотвращение сна во время загрузки.
 
-- devkitPro with libnx
-- portlibs (libcurl, mbedtls)
-- SD card with `/switch/TorrentShopNX/`
-- TorrServer instance reachable from Switch (default `http://127.0.0.1:8090`)
+## Быстрый старт для пользователя
 
-## Setup
+1. Скачайте или соберите `TorrentShopNX.nro`.
+2. Скопируйте файл на SD-карту:
 
-1. Install devkitPro + libnx + portlibs:
-   - Follow the official devkitPro instructions for your OS.
-2. Build:
+   ```text
+   sdmc:/switch/TorrentShopNX/TorrentShopNX.nro
+   ```
+
+3. Запустите приложение через Homebrew Menu.
+4. Откройте **Настройки** и выберите режим работы:
+   - **Локальный клиент (libtorrent)** — если хотите работать без внешнего TorrServer.
+   - **Удаленный TorrServer** — если у вас уже запущен TorrServer в сети.
+5. При необходимости укажите:
+   - адрес TorrServer, например `http://192.168.1.100:8090`;
+   - URL JSON-каталога игр.
+6. Откройте **Каталог**, выберите игру или добавьте раздачу через раздел **По сети**.
+
+## Добавление раздачи с телефона или ПК
+
+Раздел **По сети** запускает небольшой HTTP-сервер на Switch и показывает URL вместе с QR-кодом.
+
+1. Откройте раздел **По сети**.
+2. Отсканируйте QR-код или вручную откройте показанный адрес в браузере устройства из той же сети.
+3. Отправьте magnet-ссылку или `.torrent` файл.
+4. После получения раздачи приложение перейдёт к выбору файлов и запуску загрузки.
+
+По умолчанию веб-страница доступна на порту `8080` текущего IP-адреса консоли.
+
+## Конфигурация
+
+Основной файл настроек создаётся автоматически:
+
+```text
+sdmc:/switch/TorrentShopNX/config.ini
+```
+
+Пример:
+
+```ini
+[general]
+torrserver_url=http://192.168.1.100:8090
+catalog_source_url=https://example.com/games.json
+data_mode=local_client
+keep_awake_during_downloads=true
+last_catalog_update_date=2026-07-07
+```
+
+Поддерживаемые параметры:
+
+| Параметр | Описание |
+| --- | --- |
+| `torrserver_url` | Адрес удалённого TorrServer для режима `torrserver`. |
+| `catalog_source_url` | URL основного JSON-каталога. |
+| `data_mode` | `local_client` для встроенного libtorrent-клиента или `torrserver` для внешнего TorrServer. |
+| `keep_awake_during_downloads` | Не давать консоли уйти в сон во время активной загрузки. |
+| `last_catalog_update_date` | Служебная дата последнего обновления каталога. |
+
+Старый файл `config.txt` с одним адресом TorrServer всё ещё читается и автоматически мигрирует в `config.ini`.
+
+## Источники каталога
+
+В репозитории есть пример файла источников:
+
+```text
+resources/sources.json
+```
+
+Формат:
+
+```json
+{
+  "sources": [
+    {
+      "name": "Community Catalog",
+      "type": "json",
+      "url": "https://example.com/catalog.json"
+    },
+    {
+      "name": "RSS Feed",
+      "type": "rss",
+      "url": "https://example.com/rss"
+    }
+  ]
+}
+```
+
+Поддерживаемые типы источников:
+
+- `json` — HTTP/HTTPS JSON-каталог с полями вроде `title`, `size`, `magnet`, `category`, `description`, `icon`.
+- `rss` — RSS-лента, где magnet-ссылка находится в `magnet` или `link`.
+- `magnet` — прямой magnet URL в поле `url`.
+- `torrent` — прямая ссылка на `.torrent` или magnet URL в поле `url`.
+
+## Сборка
+
+### Требования
+
+- devkitPro;
+- libnx;
+- portlibs, включая libcurl/mbedtls;
+- libtorrent 1.2.x для сборки локального клиента;
+- SD-карта с каталогом `sdmc:/switch/TorrentShopNX/`.
+
+### Команда сборки
 
 ```sh
 make
 ```
 
-3. Copy the NRO:
-   - Output: `TorrentShopNX.nro`
-   - Place it in `sdmc:/switch/TorrentShopNX/`
+Результат сборки:
 
-4. Optional TorrServer config file:
-   - `sdmc:/switch/TorrentShopNX/torrserver.conf`
-   - Example:
-
-```ini
-torrserver_url=http://127.0.0.1:8090
-download_dir=sdmc:/switch/TorrentShopNX/downloads
+```text
+TorrentShopNX.nro
 ```
 
-## Catalog Sources
+## Архитектура проекта
 
-Edit `data/sources.json` to add sources. Example:
+- `source/ui/` — экраны Borealis: главное меню, каталог, избранное, загрузки, настройки, добавление по сети.
+- `source/catalog/` — загрузка, парсинг, поиск и кэширование каталогов.
+- `source/download/` — очередь загрузок, состояния, интеграция с источниками данных.
+- `source/torrent/` — работа с TorrServer и встроенным torrent engine.
+- `source/datasource/` — абстракции удалённого TorrServer и локального libtorrent-бэкенда.
+- `source/config/` — загрузка и сохранение настроек.
+- `resources/xml/` — разметка интерфейса.
+- `resources/img/` — иконки и изображения интерфейса.
+- `docs/` — технические заметки по libtorrent и стабильности загрузок.
 
-```json
-{
-  "sources": [
-    {"name": "Community Catalog", "type": "json", "url": "http://example.org/catalog.json"},
-    {"name": "RSS Feed", "type": "rss", "url": "http://example.org/rss"}
-  ]
-}
-```
+## Текущий статус
 
-### Supported source types
+Основной фокус проекта — стабильная потоковая загрузка и удобный интерфейс для Nintendo Switch. В кодовой базе уже есть локальный libtorrent-бэкенд, планировщик чтения частей, мониторинг зависаний, настройки режима работы и веб-добавление раздач. Отдельные сценарии установки/стриминга всё ещё требуют тестирования на реальном устройстве и могут меняться.
 
-- `json`: HTTP/HTTPS JSON catalogs with entries containing `title`, `size`, `magnet`, `category`, `description`, `icon`
-- `rss`: RSS feed with items containing `title` and magnet link (in `magnet` or `link`)
-- `magnet`: Direct magnet link in `url`
-- `torrent`: Direct torrent or magnet URL in `url`
+## Лицензия
 
-## Cache
-
-- Cache folder: `sdmc:/switch/TorrentShopNX/cache/`
-- Default TTL: 30 minutes
-
-## Stream Install (while downloading)
-
-- While downloading, the app streams `.nsp`/`.pfs0` data from partially written files and extracts to `sdmc:/switch/TorrentShopNX/stream_install/<name>/`.
-- This avoids FAT32 4GB single-file limits by using libtorrent's file storage piece support.
-- This is a safe extraction pipeline; integrating a real system install is left as a future step.
-
-## Future Features (Placeholders)
-
-- Stream install optimization
-- Peer statistics
-- Auto-seeding
-- Catalog caching policies
-- Offline mode
-- Plugin catalogs
-
-## License
-
-This project is licensed under GPLv3 (or later) due to the embedded libtorrent dependency.
+Проект распространяется под лицензией GPLv3 или более поздней версии из-за зависимости от libtorrent.
