@@ -82,10 +82,10 @@ last_catalog_update_date=2026-07-07
 
 ## Источники каталога
 
-В репозитории есть пример файла источников:
+Пример файла источников:
 
 ```text
-resources/sources.json
+switch_games.json
 ```
 
 Формат:
