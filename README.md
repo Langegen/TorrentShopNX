@@ -79,7 +79,6 @@ last_catalog_update_date=2026-07-07
 | `keep_awake_during_downloads` | Не давать консоли уйти в сон во время активной загрузки. |
 | `last_catalog_update_date` | Служебная дата последнего обновления каталога. |
 
-Старый файл `config.txt` с одним адресом TorrServer всё ещё читается и автоматически мигрирует в `config.ini`.
 
 ## Источники каталога
 
@@ -93,19 +92,26 @@ resources/sources.json
 
 ```json
 {
-  "sources": [
-    {
-      "name": "Community Catalog",
-      "type": "json",
-      "url": "https://example.com/catalog.json"
-    },
-    {
-      "name": "RSS Feed",
-      "type": "rss",
-      "url": "https://example.com/rss"
+        "title": "Game name",
+        "size": "2.73 GB",
+        "magnet": "magnet:?xt=***",
+        "topic_id": "6879123",
+        "url": "https://***.org/forum/***",
+        "year": "2020, сентябрь",
+        "genre": "Visual Novel",
+        "developer": "Madosoft",
+        "publisher": "iMel Inc, Sekai Project",
+        "image_format": "NSP",
+        "interface_lang": "Японский [JAP]",
+        "voice_lang": "японская",
+        "cover": "https://i4.imageban.ru/***.png",
+        "screenshots": [
+            "https://i127.fastpic.org/3.jpeg",
+            "https://i127.fastpic.org/6e.jpeg",
+            "https://i127.fastpic.org/2c.jpeg"
+        ],
+        "description": ": Описание."
     }
-  ]
-}
 ```
 
 Поддерживаемые типы источников:
