@@ -90,8 +90,8 @@ bool readWholeFile(const std::string& path, std::string& out) {
 } // namespace
 
 ConfigManager& ConfigManager::instance() {
-    static ConfigManager inst;
-    return inst;
+    static ConfigManager* inst = new ConfigManager();
+    return *inst;
 }
 
 ConfigManager::ConfigManager() {

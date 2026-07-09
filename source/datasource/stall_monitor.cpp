@@ -14,6 +14,19 @@
 #include "../utils/log.h"
 
 #include <algorithm>
+#include <chrono>
+#include <map>
+#include <string>
+#include <boost/system/error_code.hpp>
+
+namespace {
+    std::string safePeerAddress(const lt::peer_info& pi) {
+        boost::system::error_code ec;
+        std::string ip_str = pi.ip.address().to_string(ec);
+        if (ec) ip_str = "unknown";
+        return ip_str + ":" + std::to_string(pi.ip.port());
+    }
+}
 
 namespace datasource {
 
@@ -93,7 +106,7 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
     // Обновляем карту времени первого обнаружения пиров
     std::map<std::string, std::chrono::steady_clock::time_point> new_seen;
     for (const auto& pi : peers) {
-        std::string ip_port = pi.ip.address().to_string() + ":" + std::to_string(pi.ip.port());
+        std::string ip_port = safePeerAddress(pi);
         auto it = peer_first_seen_.find(ip_port);
         if (it != peer_first_seen_.end()) {
             new_seen[ip_port] = it->second;
@@ -104,8 +117,15 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
     peer_first_seen_ = std::move(new_seen);
 
     int disconnected = 0;
+    const int total_peers = static_cast<int>(peers.size());
+
     for (const auto& pi : peers) {
         if (disconnected >= kMaxDisconnectsPerTick) {
+            break;
+        }
+
+        // Защита роя: не отключаем, если останется меньше kMinSwarmPeers пиров
+        if (total_peers - disconnected <= kMinSwarmPeers) {
             break;
         }
 
@@ -125,7 +145,7 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
         }
 
         // Новички имеют индивидуальный grace period
-        std::string ip_port = pi.ip.address().to_string() + ":" + std::to_string(pi.ip.port());
+        std::string ip_port = safePeerAddress(pi);
         auto seen_it = peer_first_seen_.find(ip_port);
         if (seen_it != peer_first_seen_.end()) {
             auto elapsed_peer_sec = std::chrono::duration_cast<std::chrono::seconds>(now_time - seen_it->second).count();
@@ -136,9 +156,7 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
 
         // Медленный пир на urgent куске — отключаем
         util::logLine("stall_monitor: disconnecting slow peer " +
-                      pi.ip.address().to_string() + ":" +
-                      std::to_string(pi.ip.port()) +
-                      " speed=" + std::to_string(pi.down_speed) + " B/s"
+                      safePeerAddress(pi) + " speed=" + std::to_string(pi.down_speed) + " B/s" +
                       " pieces=" + std::to_string(pi.num_pieces));
 
         if (session_) {
@@ -165,7 +183,69 @@ int StallMonitor::on_tick(int urgent_start, int urgent_end, bool is_stalled_stat
                       " dl_rate=" + std::to_string(last_download_rate_) + " B/s");
     }
 
-    return disconnected;
+    // === Проактивная очистка idle-пиров ===
+    // Отключаем пиров с нулевой скоростью, которые подключены давно
+    // и занимают драгоценные слоты без пользы.
+    // Работает ВСЕГДА (не зависит от stall_ticks), но только после warmup.
+    int idle_disconnected = 0;
+    const int kMaxIdleDisconnectsPerTick = 2;
+
+    for (const auto& pi : peers) {
+        if (idle_disconnected >= kMaxIdleDisconnectsPerTick) break;
+        if (disconnected + idle_disconnected >= kMaxDisconnectsPerTick + kMaxIdleDisconnectsPerTick) break;
+
+        // Защита роя: не отключаем, если останется меньше kMinSwarmPeers пиров
+        if (total_peers - disconnected - idle_disconnected <= kMinSwarmPeers) break;
+
+        // Только пиры с нулевой скоростью
+        if (pi.down_speed > 0) continue;
+
+        // Не трогаем, если мы не заинтересованы (нечего качать)
+        if (!(pi.flags & lt::peer_info::interesting)) continue;
+
+        // Не трогаем choked пиров — они могут unchoke'нуться
+        if (pi.flags & lt::peer_info::choked) continue;
+
+        // Проверяем возраст подключения
+        std::string ip_port = safePeerAddress(pi);
+        auto seen_it = peer_first_seen_.find(ip_port);
+        if (seen_it != peer_first_seen_.end()) {
+            auto age_sec = std::chrono::duration_cast<std::chrono::seconds>(now_time - seen_it->second).count();
+            if (age_sec < kIdlePeerMaxAgeSeconds) continue;
+        } else {
+            continue; // Только что обнаружен — пропускаем
+        }
+
+        util::logLine("stall_monitor: disconnecting idle peer " +
+                      safePeerAddress(pi) +
+                      " speed=0 B/s age=" + std::to_string(
+                          std::chrono::duration_cast<std::chrono::seconds>(now_time - seen_it->second).count()) + "s"
+                      " client=" + pi.client);
+
+        if (session_) {
+            lt::torrent_handle h = handle_;
+            lt::tcp::endpoint ep = pi.ip;
+            session_->get_io_service().post([h, ep]() {
+                if (h.is_valid()) {
+                    auto t = h.native_handle();
+                    if (t) {
+                        auto* peer_conn = t->find_peer(ep);
+                        if (peer_conn) {
+                            peer_conn->disconnect(lt::error_code(lt::errors::optimistic_disconnect, lt::libtorrent_category()), lt::operation_t::unknown);
+                        }
+                    }
+                }
+            });
+        }
+        ++idle_disconnected;
+    }
+
+    if (idle_disconnected > 0) {
+        util::logLine("stall_monitor: disconnected " + std::to_string(idle_disconnected) +
+                      " idle peers (speed=0, age>" + std::to_string(kIdlePeerMaxAgeSeconds) + "s)");
+    }
+
+    return disconnected + idle_disconnected;
 }
 
 bool StallMonitor::is_stalled() const {

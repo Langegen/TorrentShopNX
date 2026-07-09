@@ -62,7 +62,6 @@ bool DownloadManager::pauseDownload(const std::string& topic_id) {
                     impl_.dataSourceManager().getSource(); // Ensure torrent engine gets initialized
                     // We can pause via API
                     // In torrent_manager: pauseTorrent(id)
-                    auto torrent = impl_.dataSourceManager().getSource();
                     if (item.torrent_id >= 0 && impl_.hasActiveTransfers()) {
                         // Pause the torrent using our wrapper or engine
                         torrent::TorrentEngine::instance().pauseTorrent(item.torrent_hash);

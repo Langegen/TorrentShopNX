@@ -8,8 +8,8 @@ namespace catalog {
 class FavoritesManager {
 public:
     static FavoritesManager& instance() {
-        static FavoritesManager inst;
-        return inst;
+        static FavoritesManager* inst = new FavoritesManager();
+        return *inst;
     }
 
     void init(const std::string& path);

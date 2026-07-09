@@ -80,9 +80,9 @@ BOREALIS_LIBS := $(BOREALIS_BUILD_DIR)/libborealis.a \
                  $(BOREALIS_BUILD_DIR)/libtinyxml2.a
 
 CFLAGS      +=  $(INCLUDE) -D__SWITCH__
-CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions
+CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions -Wno-deprecated
 ASFLAGS     :=  -g $(ARCH)
-LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map) -Wl,--wrap=socketExit
+LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lzstd -lnx -lm
 
 #---------------------------------------------------------------------------------
@@ -149,7 +149,7 @@ all : $(OUTPUT).nro
 $(OUTPUT).nro : $(OUTPUT).elf
 	@echo building romfs ...
 	@$(DEVKITPRO)/tools/bin/build_romfs $(TOPDIR)/$(ROMFS) $(CURDIR)/romfs.bin
-	@$(DEVKITPRO)/tools/bin/elf2nro $< $@ --romfs=$(CURDIR)/romfs.bin
+	@$(DEVKITPRO)/tools/bin/elf2nro $< $@ --icon=$(TOPDIR)/$(ROMFS)/icon.jpg --romfs=$(CURDIR)/romfs.bin
 	@echo built ... $(notdir $@)
 
 $(OUTPUT).elf : $(OFILES)

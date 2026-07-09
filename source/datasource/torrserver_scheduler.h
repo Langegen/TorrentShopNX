@@ -47,8 +47,8 @@ struct SchedulerConfig {
     // === Размеры зон (в кусках) ===
     int critical_pieces    = 2;    ///< Зона 1: ~0.6 с при 24MB/s (было 4)
     int urgent_pieces      = 8;    ///< Зона 2: ~2.6 с (было 16)
-    int prefetch_pieces    = 16;   ///< Зона 3: последовательная загрузка (было 24)
-    int speculative_pieces = 8;    ///< Зона 4: speculative (было 16)
+    int prefetch_pieces    = 10;   ///< Зона 3: последовательная загрузка (было 24)
+    int speculative_pieces = 6;    ///< Зона 4: speculative (было 16)
     int tail_pieces        = 2;    ///< Куски позади (кэш-пинне)
 
     // === Дедлайны ===

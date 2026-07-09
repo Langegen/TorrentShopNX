@@ -76,7 +76,7 @@ constexpr int kSequentialReadaheadMaxPieces = 64; // Increased from 48
 constexpr int kTorrestStyleReadAheadDivisor = 100;
 constexpr size_t kHttpSequentialPrefetch = 8 * 1024 * 1024;
 constexpr size_t kPreparedStreamReadChunk = 8 * 1024 * 1024;
-constexpr size_t kPieceCacheEntries = 64; // Increased to 64 for better buffer starvation resistance
+constexpr size_t kPieceCacheEntries = 32; // Reduced to 32 to prevent OOM in Applet mode
 
 #ifdef TSNX_USE_LIBTORRENT
 
@@ -93,8 +93,11 @@ static std::mutex                          g_piece_pool_mutex;
 std::shared_ptr<buffer::PiecePool> getOrCreatePiecePool(int piece_size) {
     std::lock_guard<std::mutex> lock(g_piece_pool_mutex);
     if (!g_piece_pool || g_piece_pool->piece_size() != piece_size) {
-        // kPieceCacheEntries + kQueueDepth(8) буферов для запаса
-        const int pool_size = kPieceCacheEntries + 8;
+        // Limit RAM strictly to ~128MB for pieces to avoid OOM in Applet mode
+        int max_pool_bytes = 128 * 1024 * 1024;
+        int dynamic_cache_entries = std::max<int>(12, max_pool_bytes / piece_size);
+        const int pool_size = dynamic_cache_entries + 4; // Reserve a few extra slots
+        
         g_piece_pool = std::shared_ptr<buffer::PiecePool>(
             buffer::PiecePool::create(piece_size, pool_size).release()
         );
@@ -147,7 +150,7 @@ const DhtBootstrapNode kDhtBootstrapNodes[] = {
     {"dht.transmissionbt.com", 6881},
     {"dht.aelitis.com",        6881},
     {"dht.libtorrent.org",     25401},
-    // Дополнительные актуальные узлы
+    {"bootstrap.libtorrent.org", 25401},
     {"dht.opentrackr.org",     1337},
 };
 
@@ -155,8 +158,9 @@ const DhtBootstrapNode kDhtBootstrapNodes[] = {
 const DhtBootstrapNode kDhtBootstrapIPFallbacks[] = {
     {"82.221.103.244",  6881},  // router.utorrent.com
     {"67.215.246.10",   6881},  // router.bittorrent.com
-    {"212.129.33.59",   6881},  // dht.transmissionbt.com
-    {"185.157.221.247", 25401}, // dht.libtorrent.org
+    {"87.98.162.88",    6881},  // dht.transmissionbt.com (new IP)
+    {"212.129.33.59",   6881},  // dht.transmissionbt.com (old IP)
+    {"185.157.221.247", 25401}, // dht.libtorrent.org / bootstrap.libtorrent.org
 };
 
 const char* kFallbackTrackers[] = {
@@ -306,7 +310,7 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::tick_interval, 200);
     settings.set_int(lt::settings_pack::cache_size, 512); // 8MB cache
     settings.set_int(lt::settings_pack::connections_limit, cfg.connections_limit);
-    settings.set_int(lt::settings_pack::unchoke_slots_limit, 100);
+    settings.set_int(lt::settings_pack::unchoke_slots_limit, 100); 
     settings.set_int(lt::settings_pack::choking_algorithm, lt::settings_pack::fixed_slots_choker);
     settings.set_int(lt::settings_pack::connection_speed, cfg.connection_speed);
     settings.set_int(lt::settings_pack::peer_connect_timeout, cfg.peer_connect_timeout);
@@ -339,7 +343,7 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::send_buffer_low_watermark, 128 * 1024);
     settings.set_int(lt::settings_pack::send_buffer_watermark, 256 * 1024);
     settings.set_int(lt::settings_pack::mixed_mode_algorithm, lt::settings_pack::prefer_tcp); // TCP is more stable on Switch than UTP under load
-    settings.set_int(lt::settings_pack::num_optimistic_unchoke_slots, 30); 
+    settings.set_int(lt::settings_pack::num_optimistic_unchoke_slots, 30);
     settings.set_bool(lt::settings_pack::use_parole_mode, cfg.use_parole_mode);
     settings.set_bool(lt::settings_pack::low_prio_disk, false); // Performance is priority
     settings.set_bool(lt::settings_pack::coalesce_reads, false);
@@ -614,6 +618,7 @@ struct TorrentEngine::Impl {
     std::thread alert_thread;
     std::atomic<bool> alert_thread_running{false};
     std::vector<std::pair<std::string, int>> resolved_dht_nodes;
+    bool dht_resolved_success = false;
 
     void distributeAlertsLocked(std::vector<lt::alert*>& alerts) {
         for (lt::alert* alert : alerts) {
@@ -737,14 +742,33 @@ struct TorrentEngine::Impl {
                     static int dht_bootstrap_tick = 0;
                     if (++dht_bootstrap_tick >= 15) {
                         dht_bootstrap_tick = 0;
-                        if (session && !resolved_dht_nodes.empty()) {
+                        if (session) {
                             auto sess_status = session->status();
                             if (sess_status.dht_nodes == 0) {
-                                util::logLine("torrent_engine: DHT nodes = 0, re-injecting " +
-                                              std::to_string(resolved_dht_nodes.size()) + " bootstrap nodes...");
-                                for (const auto& pair : resolved_dht_nodes) {
-                                    session->add_dht_router({pair.first, pair.second});
-                                    session->add_dht_node({pair.first, pair.second});
+                                if (!dht_resolved_success) {
+                                    util::logLine("torrent_engine: DHT nodes = 0 and DNS resolution failed at startup, retrying DNS resolution...");
+                                    resolved_dht_nodes.clear();
+                                    for (const auto& node : kDhtBootstrapNodes) {
+                                        const std::string port = std::to_string(node.port);
+                                        const std::string ip = resolveIPv4Address(node.host, port.c_str());
+                                        if (ip.empty()) continue;
+                                        if (ip.rfind("198.18.", 0) == 0 || ip.rfind("127.", 0) == 0 || ip == "0.0.0.0") continue;
+                                        resolved_dht_nodes.push_back({ip, node.port});
+                                        dht_resolved_success = true;
+                                    }
+                                    // Append fallbacks
+                                    for (const auto& node : kDhtBootstrapIPFallbacks) {
+                                        resolved_dht_nodes.push_back({node.host, node.port});
+                                    }
+                                }
+
+                                if (!resolved_dht_nodes.empty()) {
+                                    util::logLine("torrent_engine: DHT nodes = 0, re-injecting " +
+                                                  std::to_string(resolved_dht_nodes.size()) + " bootstrap nodes...");
+                                    for (const auto& pair : resolved_dht_nodes) {
+                                        session->add_dht_router({pair.first, pair.second});
+                                        session->add_dht_node({pair.first, pair.second});
+                                    }
                                 }
                             }
                         }
@@ -857,6 +881,7 @@ class MemoryStorage : public lt::storage_interface {
     std::set<lt::piece_index_t> pinned_pieces_;
     uint64_t min_keep_offset_ = 0;
     std::shared_ptr<buffer::PiecePool> pool_;
+    int cache_limit_ = 32;
     mutable std::mutex mutex_;
 
 public:
@@ -866,6 +891,10 @@ public:
         , piece_size_(params.files.piece_length())
         , num_pieces_(params.files.num_pieces()) {
         pool_ = getOrCreatePiecePool(piece_size_);
+        if (pool_) {
+            // Pool capacity includes a small overhead (+4 buffers), cache limit should match the dynamic entries
+            cache_limit_ = std::max(12, pool_->capacity() - 4);
+        }
         std::lock_guard<std::mutex> registry_lock(g_memory_storage_mutex);
         g_memory_storages[info_hash_] = this;
     }
@@ -1150,7 +1179,7 @@ public:
         lru_order_.push_back(piece);
 
         // Limit RAM usage: Reduce to 24-32 pieces to prevent OOM with NCZ buffers
-        while (pieces_.size() > kPieceCacheEntries && !lru_order_.empty()) {
+        while (pieces_.size() > static_cast<size_t>(cache_limit_) && !lru_order_.empty()) {
             bool evicted = false;
             for (auto it = lru_order_.begin(); it != lru_order_.end(); ++it) {
                 const lt::piece_index_t p = *it;
@@ -1489,6 +1518,7 @@ bool ensureSessionLocked(TorrentEngine::Impl& impl, std::string& error_out) {
 
     util::logLine("ensureSessionLocked adding resolved DHT routers");
     impl.resolved_dht_nodes.clear();
+    impl.dht_resolved_success = false;
     for (const auto& node : kDhtBootstrapNodes) {
         const std::string port = std::to_string(node.port);
         const std::string ip = resolveIPv4Address(node.host, port.c_str());
@@ -1506,6 +1536,7 @@ bool ensureSessionLocked(TorrentEngine::Impl& impl, std::string& error_out) {
         }
 
         impl.resolved_dht_nodes.push_back({ip, node.port});
+        impl.dht_resolved_success = true;
         util::logLine(std::string("torrent_engine: resolved DHT router ") +
                       node.host + ":" + port + " -> " + ip);
     }
@@ -2319,8 +2350,8 @@ TorrentEngine::~TorrentEngine() {
 }
 
 TorrentEngine& TorrentEngine::instance() {
-    static TorrentEngine engine;
-    return engine;
+    static TorrentEngine* inst = new TorrentEngine();
+    return *inst;
 }
 
 bool TorrentEngine::isEnabled() const {
@@ -2429,7 +2460,11 @@ void TorrentEngine::stop() {
             alert_thread_to_join = std::move(impl_->alert_thread);
         }
 
-        session_to_leak = impl_->session;
+        // DESTROY the session explicitly now instead of leaking it.
+        // Joining std::thread during static destructors on Switch causes a crash,
+        // but destroying the session here inside main() is perfectly safe and ensures
+        // the background threads are fully stopped before virtmemExit() unmaps memory.
+        impl_->session.reset();
     }
 
     // Join alert thread OUTSIDE the lock

@@ -78,16 +78,21 @@ private:
     // --- Конфигурация ---
     // Порог скорости, ниже которого считаем "stall" (50 KB/s)
     static constexpr int kStallThresholdBps = 50 * 1024;
-    // Скорость пира, ниже которой считаем его "медленным" (5 KB/s)
-    static constexpr int kSlowPeerThresholdBps = 5 * 1024;
+    // Скорость пира, ниже которой считаем его "медленным" (10 KB/s)
+    // Не ставить выше: при stall мгновенная скорость временно падает у хороших пиров
+    static constexpr int kSlowPeerThresholdBps = 10 * 1024;
     // Сколько тиков подряд должен быть stall до начала отключения пиров (3 секунды)
     static constexpr int kStallTicksBeforeAction = 3;
-    // Максимум пиров для отключения за один тик
-    static constexpr int kMaxDisconnectsPerTick = 2;
+    // Максимум пиров для отключения за один тик (увеличено для быстрого освобождения слотов)
+    static constexpr int kMaxDisconnectsPerTick = 3;
     // Общий период прогрева после инициализации перед началом работы монитора (секунд)
-    static constexpr int kWarmupGracePeriodSeconds = 30;
+    static constexpr int kWarmupGracePeriodSeconds = 15;
     // Индивидуальный период прогрева для пиров после их первого обнаружения (секунд)
-    static constexpr int kMinPeerConnectionAgeSeconds = 15;
+    static constexpr int kMinPeerConnectionAgeSeconds = 10;
+    // Порог возраста idle-пира (speed=0) для проактивного отключения (секунд)
+    static constexpr int kIdlePeerMaxAgeSeconds = 20;
+    // Минимальное количество пиров в рое: не отключаем, если останется меньше
+    static constexpr int kMinSwarmPeers = 3;
 };
 
 } // namespace datasource

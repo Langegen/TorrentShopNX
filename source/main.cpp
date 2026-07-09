@@ -1,4 +1,5 @@
 #include <switch.h>
+#include <unistd.h>  // for _exit()
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -27,15 +28,7 @@
 // Global list of catalog games
 std::vector<Game> g_games;
 
-// Override libnx's socketExit() with a no-op via the --wrap linker flag.
-// Rationale: libtorrent's io_service/disk threads are kept alive (we leak the
-// session to avoid a blocking join crash on Switch). The normal exit path calls
-// __appExit() -> socketExit() -> free(socket_mem_pool). Freeing that pool while
-// libtorrent threads still hold socket references crashes the process.
-// We use std::quick_exit() in main() which skips C++ static destructors and calls _exit().
-extern "C" void __wrap_socketExit(void) {
-    util::logLine("__wrap_socketExit: no-op called");
-}
+
 
 extern "C" {
     u32 __nx_socket_mem_size = 0x02000000; // 32MB socket memory pool (saves 224MB RAM!)
@@ -43,7 +36,8 @@ extern "C" {
     size_t __nx_socket_tcp_rx_buf_size = 0x40000; // 256KB
 
     void userAppInit(void) {
-        appletLockExit();
+        // We do NOT call appletLockExit() because we want the OS to be able to cleanly exit the app.
+        // Calling it and failing to unlock it perfectly before process teardown causes the OS "An error occurred" dialog.
 
         // Custom network initialization configured for TorrentShopNX
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
@@ -78,11 +72,6 @@ extern "C" {
         romfsExit();
         socketExit();
         appletUnlockExit();
-    }
-
-    void __appExit(void) {
-        util::logLine("__appExit: custom no-op called, closing log file");
-        util::logClose();
     }
 }
 
@@ -144,8 +133,6 @@ int main(int argc, char** argv) {
     util::logInit();
     util::logLine("main: start");
     clearCaches();
-
-    bool romfs_ok = true; // romfs was initialized in userAppInit
 
     // Initialize Borealis UI
     brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
@@ -229,15 +216,28 @@ int main(int argc, char** argv) {
         util::logLine("main: UNKNOWN EXCEPTION in mainLoop");
     }
 
-    // Clean exit
+    util::logLine("main: mainLoop exited, starting shutdown sequence");
+
+    // Stop threads
+    util::logLine("main: calling DownloadManager::shutdown");
     ui::DownloadManager::instance().shutdown();
+    
+    util::logLine("main: calling TorrentEngine::stop");
     torrent::TorrentEngine::instance().stop();
-    if (romfs_ok) {
-        romfsExit();
-    }
     
-    // Clear all caches right before exiting
-    clearCaches();
-    
-    quick_exit(0);
+    util::logLine("main: all threads requested to stop");
+
+    // Do NOT call curl_global_cleanup() because it might crash if curl threads are alive
+
+    // Use _exit(0) to exit cleanly:
+    //   - Skips C++ atexit handlers / global destructors (prevents libtorrent crash)
+    //   - Calls __libnx_exit → __appExit → userAppExit (proper service teardown)
+    //   - Calls envGetExitFuncPtr() to return to Homebrew Menu (not svcExitProcess!)
+    //
+    // svcExitProcess() was killing the ENTIRE HBMenu process because NROs share
+    // HBMenu's address space. _exit() is the correct way to return to HBMenu.
+    util::logLine("main: closing log and returning 0 to HBMenu. Goodbye!");
+    util::logClose();  // close log file before __appExit calls fsExit
+
+    return 0;
 }

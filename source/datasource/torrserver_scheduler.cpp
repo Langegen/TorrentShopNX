@@ -710,7 +710,10 @@ int TorrServerScheduler::apply_slow_peer_isolation(const std::vector<lt::peer_in
             try {
                 handle_.reset_piece_deadline(lt::piece_index_t(dl_piece_to_isolate));
                 handle_.set_piece_deadline(dl_piece_to_isolate, 0, lt::torrent_handle::alert_when_available);
-                util::logLine("scheduler: ISOLATED slow peer " + pi.ip.address().to_string() +
+                boost::system::error_code ec;
+                std::string ip_str = pi.ip.address().to_string(ec);
+                if (ec) ip_str = "unknown";
+                util::logLine("scheduler: ISOLATED slow peer " + ip_str +
                               " for piece " + std::to_string(dl_piece_to_isolate) +
                               " (active blocks detected!)" +
                               " speed=" + std::to_string(pi.down_speed / 1024) + "KB/s" +

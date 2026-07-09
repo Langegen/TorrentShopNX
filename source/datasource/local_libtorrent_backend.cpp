@@ -665,8 +665,11 @@ void LocalLibtorrentBackend::tick_thread_func() {
                 if (pi.flags & lt::peer_info::local_connection) flags_str += "L";
                 if (pi.flags & lt::peer_info::utp_socket) flags_str += "U";
                 
+                boost::system::error_code ec;
+                std::string ip_str = pi.ip.address().to_string(ec);
+                if (ec) ip_str = "unknown";
                 util::logLine("   peer[" + std::to_string(logged) + "]: " +
-                              pi.ip.address().to_string() + ":" + std::to_string(pi.ip.port()) +
+                              ip_str + ":" + std::to_string(pi.ip.port()) +
                               " speed=" + std::to_string(pi.down_speed / 1024) + "KB/s" +
                               " rtt=" + std::to_string(pi.rtt) + "ms" +
                               " piece=" + std::to_string(pi.downloading_piece_index) +

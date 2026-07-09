@@ -6,8 +6,8 @@
 namespace datasource {
 
 InternalTorrentEngine& InternalTorrentEngine::instance() {
-    static InternalTorrentEngine inst;
-    return inst;
+    static InternalTorrentEngine* inst = new InternalTorrentEngine();
+    return *inst;
 }
 
 bool InternalTorrentEngine::isEnabled() const {

@@ -12,8 +12,8 @@ namespace ui {
 class DownloadManager {
 public:
     static DownloadManager& instance() {
-        static DownloadManager inst;
-        return inst;
+        static DownloadManager* inst = new DownloadManager();
+        return *inst;
     }
 
     void init();

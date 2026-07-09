@@ -42,10 +42,4 @@ Thumbs.db
 *.opendb
 .vs/
 
-# External Dependencies & Cloned Repositories
-# (fetched by fetch scripts or stored locally)
-_external/
 
-# Third-Party Go TorrServer Source (Not part of the client build)
-# Exclude from client repository to keep repo size clean and lightweight
-TorrServer/
