@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include "log.h"
+#include <string>
 #include <errno.h>
 #include <cstring>
 #include <mutex>
@@ -81,66 +83,95 @@ extern "C" int pipe(int pipefd[2]) {
     pipefd[0] = -1;
     pipefd[1] = -1;
 
-    int listener = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listener < 0) {
-        return -1;
-    }
+    util::logLine("posix_compat: pipe() called (UDP socketpair)");
 
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;
-
-    if (::bind(listener, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+    int s1 = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s1 < 0) {
         int err = errno;
-        ::close(listener);
+        util::logLine("posix_compat: UDP socket 1 creation failed: " + std::to_string(err));
         errno = err;
         return -1;
     }
 
-    if (::listen(listener, 1) != 0) {
+    sockaddr_in addr1{};
+    addr1.sin_family = AF_INET;
+    addr1.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr1.sin_port = 0;
+
+    if (::bind(s1, reinterpret_cast<sockaddr*>(&addr1), sizeof(addr1)) != 0) {
         int err = errno;
-        ::close(listener);
+        util::logLine("posix_compat: UDP bind 1 failed: " + std::to_string(err));
+        ::close(s1);
         errno = err;
         return -1;
     }
 
-    socklen_t addr_len = sizeof(addr);
-    if (::getsockname(listener, reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    socklen_t addr1_len = sizeof(addr1);
+    if (::getsockname(s1, reinterpret_cast<sockaddr*>(&addr1), &addr1_len) != 0) {
         int err = errno;
-        ::close(listener);
+        util::logLine("posix_compat: UDP getsockname 1 failed: " + std::to_string(err));
+        ::close(s1);
         errno = err;
         return -1;
     }
 
-    int writer = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (writer < 0) {
+    int s2 = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s2 < 0) {
         int err = errno;
-        ::close(listener);
+        util::logLine("posix_compat: UDP socket 2 creation failed: " + std::to_string(err));
+        ::close(s1);
         errno = err;
         return -1;
     }
 
-    if (::connect(writer, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+    sockaddr_in addr2{};
+    addr2.sin_family = AF_INET;
+    addr2.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr2.sin_port = 0;
+
+    if (::bind(s2, reinterpret_cast<sockaddr*>(&addr2), sizeof(addr2)) != 0) {
         int err = errno;
-        ::close(writer);
-        ::close(listener);
+        util::logLine("posix_compat: UDP bind 2 failed: " + std::to_string(err));
+        ::close(s2);
+        ::close(s1);
         errno = err;
         return -1;
     }
 
-    int reader = ::accept(listener, nullptr, nullptr);
-    if (reader < 0) {
+    socklen_t addr2_len = sizeof(addr2);
+    if (::getsockname(s2, reinterpret_cast<sockaddr*>(&addr2), &addr2_len) != 0) {
         int err = errno;
-        ::close(writer);
-        ::close(listener);
+        util::logLine("posix_compat: UDP getsockname 2 failed: " + std::to_string(err));
+        ::close(s2);
+        ::close(s1);
         errno = err;
         return -1;
     }
 
-    ::close(listener);
-    pipefd[0] = reader;
-    pipefd[1] = writer;
+    // Connect s1 to s2
+    if (::connect(s1, reinterpret_cast<sockaddr*>(&addr2), sizeof(addr2)) != 0) {
+        int err = errno;
+        util::logLine("posix_compat: UDP connect 1->2 failed: " + std::to_string(err));
+        ::close(s2);
+        ::close(s1);
+        errno = err;
+        return -1;
+    }
+
+    // Connect s2 to s1
+    if (::connect(s2, reinterpret_cast<sockaddr*>(&addr1), sizeof(addr1)) != 0) {
+        int err = errno;
+        util::logLine("posix_compat: UDP connect 2->1 failed: " + std::to_string(err));
+        ::close(s2);
+        ::close(s1);
+        errno = err;
+        return -1;
+    }
+
+    util::logLine("posix_compat: UDP pipe() succeeded, port1=" + std::to_string(ntohs(addr1.sin_port)) + " port2=" + std::to_string(ntohs(addr2.sin_port)));
+
+    pipefd[0] = s1;
+    pipefd[1] = s2;
     return 0;
 }
 

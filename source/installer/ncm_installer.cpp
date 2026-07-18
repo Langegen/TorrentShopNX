@@ -110,17 +110,28 @@ bool NcmInstaller::writePlaceHolder(const NcmContentId& id,
     NcmPlaceHolderId placeholder_id;
     std::memcpy(&placeholder_id, &id, sizeof(NcmPlaceHolderId));
 
-    Result rc = ncmContentStorageWritePlaceHolder(&content_storage_,
-                                                   &placeholder_id,
-                                                   static_cast<s64>(offset),
-                                                   data,
-                                                   size);
-    if (R_FAILED(rc)) {
-        util::logLine("ncm: writePlaceHolder failed, offset="
-                       + std::to_string(offset)
-                       + " size=" + std::to_string(size)
-                       + " rc=" + std::to_string(rc));
-        return false;
+    const uint8_t* ptr = static_cast<const uint8_t*>(data);
+    size_t remaining = size;
+    uint64_t current_offset = offset;
+    constexpr size_t kMaxChunkSize = 512 * 1024; // 512 KB
+
+    while (remaining > 0) {
+        size_t chunk = std::min(remaining, kMaxChunkSize);
+        Result rc = ncmContentStorageWritePlaceHolder(&content_storage_,
+                                                       &placeholder_id,
+                                                       static_cast<s64>(current_offset),
+                                                       ptr,
+                                                       chunk);
+        if (R_FAILED(rc)) {
+            util::logLine("ncm: writePlaceHolder failed, offset="
+                           + std::to_string(current_offset)
+                           + " size=" + std::to_string(chunk)
+                           + " rc=" + std::to_string(rc));
+            return false;
+        }
+        ptr += chunk;
+        current_offset += chunk;
+        remaining -= chunk;
     }
 
     return true;

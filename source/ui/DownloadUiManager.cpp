@@ -123,25 +123,15 @@ bool DownloadManager::cancelDownload(const std::string& topic_id) {
 
 bool DownloadManager::deleteDownload(const std::string& topic_id) {
     auto& queue = const_cast<std::vector<download::DownloadItem>&>(impl_.queue());
-    auto it = std::remove_if(queue.begin(), queue.end(), [&topic_id, this](const download::DownloadItem& item) {
-        if (item.topic_id == topic_id) {
-            // Cancel if active
-            if (item.state != download::DownloadState::Completed && 
-                item.state != download::DownloadState::Cancelled && 
-                item.state != download::DownloadState::Failed) {
-                // Should cancel first
-            }
+    for (size_t i = 0; i < queue.size(); ++i) {
+        if (queue[i].topic_id == topic_id) {
+            impl_.cancelDownload(i);
             util::logLine("download_ui: deleted topic_id=" + topic_id + " from queue");
+            queue.erase(queue.begin() + i);
+            saveDownloads();
+            triggerCallback();
             return true;
         }
-        return false;
-    });
-    
-    if (it != queue.end()) {
-        queue.erase(it, queue.end());
-        saveDownloads();
-        triggerCallback();
-        return true;
     }
     return false;
 }

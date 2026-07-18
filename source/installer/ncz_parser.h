@@ -72,6 +72,7 @@ private:
     uint32_t block_size_ = 0;
     std::vector<uint32_t> compressed_block_sizes_;
     size_t current_block_id_ = 0;
+    std::vector<uint8_t> compressed_block_buf_;
     
     // Текущая секция для AES-CTR
     void applyAesCtrIfNeed(void* buf, size_t size, uint64_t global_offset);

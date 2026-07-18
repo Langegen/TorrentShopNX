@@ -9,7 +9,7 @@
     paddingLeft="20">
 
     <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="20">
-        <brls:Label text="Настройки" fontSize="28" />
+        <brls:Label text="Инструменты" fontSize="28" />
     </brls:Box>
 
     <brls:ScrollingFrame width="auto" height="auto" grow="1.0">
@@ -25,6 +25,9 @@
                 paddingBottom="40"
                 paddingLeft="40">
                 
+                <brls:DetailCell
+                    id="updatesCell" />
+
                 <brls:BooleanCell
                     id="keepAwakeCell" />
                     

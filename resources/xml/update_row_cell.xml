@@ -1,0 +1,102 @@
+<brls:Box
+    width="auto"
+    height="90px"
+    focusable="true"
+    paddingTop="10"
+    paddingBottom="10"
+    paddingLeft="20"
+    paddingRight="20"
+    axis="row"
+    alignItems="center">
+
+    <!-- Cover -->
+    <brls:Image
+        id="cover"
+        width="45px"
+        height="70px"
+        marginRight="20" />
+
+    <!-- Details Column (Title & TitleID) -->
+    <brls:Box
+        width="auto"
+        height="auto"
+        grow="1.0"
+        axis="column"
+        marginRight="20">
+
+        <!-- Title -->
+        <brls:Label
+            id="title"
+            fontSize="18"
+            singleLine="true" />
+
+        <!-- Title ID -->
+        <brls:Label
+            id="titleId"
+            fontSize="13"
+            textColor="#888888"
+            marginTop="4"
+            singleLine="true" />
+
+    </brls:Box>
+
+    <!-- Current Version -->
+    <brls:Box
+        width="150px"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        marginRight="15">
+        
+        <brls:Label
+            text="Установлена"
+            fontSize="11"
+            textColor="#888888"
+            marginBottom="4" />
+            
+        <brls:Label
+            id="currentVersion"
+            fontSize="15"
+            textColor="#FFFFFF" />
+            
+    </brls:Box>
+
+    <!-- Latest Version -->
+    <brls:Box
+        width="150px"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        marginRight="15">
+        
+        <brls:Label
+            text="Доступна"
+            fontSize="11"
+            textColor="#888888"
+            marginBottom="4" />
+            
+        <brls:Label
+            id="latestVersion"
+            fontSize="15"
+            textColor="#FFFFFF" />
+            
+    </brls:Box>
+
+    <!-- Status / Action -->
+    <brls:Box
+        id="statusBox"
+        width="160px"
+        height="32px"
+        justifyContent="center"
+        alignItems="center"
+        cornerRadius="4">
+        
+        <brls:Label
+            id="statusBadge"
+            fontSize="13"
+            textColor="#FFFFFF"
+            horizontalAlign="center" />
+            
+    </brls:Box>
+
+</brls:Box>

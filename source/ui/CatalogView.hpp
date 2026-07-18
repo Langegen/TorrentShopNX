@@ -56,8 +56,10 @@ class CatalogView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("catalog_view.xml");
     
-    CatalogView();
+    CatalogView(const std::string& searchQuery = "");
     void onContentAvailable() override;
+    void willAppear(bool resetState) override;
+    void willDisappear(bool resetState) override;
     
     void filterCatalog();
 
@@ -83,5 +85,7 @@ private:
         CatalogView* parent_;
     };
 };
+
+extern CatalogView* g_activeCatalogView;
 
 } // namespace ui

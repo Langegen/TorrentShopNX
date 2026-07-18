@@ -29,6 +29,8 @@ extern std::vector<Game> g_games;
 
 namespace ui {
 
+CatalogView* g_activeCatalogView = nullptr;
+
 static int s_lastFocusedColumn = 0;
 
 // GAMEROWCELL IMPLEMENTATION
@@ -89,7 +91,7 @@ brls::View* GameRowCell::getDefaultFocus() {
 }
 
 // CATALOGVIEW IMPLEMENTATION
-CatalogView::CatalogView() {
+CatalogView::CatalogView(const std::string& searchQuery) : searchQuery_(searchQuery) {
     // Empty constructor
 }
 
@@ -131,6 +133,9 @@ void CatalogView::onContentAvailable() {
     recycler->setDataSource(ds);
     brls::Logger::info("CatalogView: data source set, constructor done");
     // RecyclerFrame will call reloadData() on its first onLayout()
+    if (!searchQuery_.empty()) {
+        filterCatalog();
+    }
 }
 
 
@@ -290,6 +295,18 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
     }
     
     return rowCell;
+}
+
+void CatalogView::willAppear(bool resetState) {
+    brls::Activity::willAppear(resetState);
+    g_activeCatalogView = this;
+}
+
+void CatalogView::willDisappear(bool resetState) {
+    brls::Activity::willDisappear(resetState);
+    if (g_activeCatalogView == this) {
+        g_activeCatalogView = nullptr;
+    }
 }
 
 } // namespace ui

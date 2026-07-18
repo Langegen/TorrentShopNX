@@ -2,9 +2,14 @@
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
+#include "../datasource/internal_torrent_engine.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
+
+#include <mutex>
+
+extern std::recursive_mutex g_switch_service_mutex;
 
 namespace ui {
 
@@ -32,12 +37,105 @@ static bool isSwitchGameFile(const std::string& filename) {
             lower.rfind(".xci") == lower.size() - 4 ||
             lower.rfind(".xcz") == lower.size() - 4);
 }
+#ifdef __SWITCH__
+#include <switch.h>
+
+struct SwitchServiceGuard {
+    bool ns_ok = false;
+    bool ncm_ok = false;
+    NcmContentMetaDatabase db;
+    bool db_open = false;
+
+    SwitchServiceGuard() {
+        g_switch_service_mutex.lock();
+        ns_ok = R_SUCCEEDED(nsInitialize());
+        ncm_ok = R_SUCCEEDED(ncmInitialize());
+        if (ncm_ok) {
+            Result rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
+            if (R_FAILED(rc)) {
+                rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
+            }
+            db_open = R_SUCCEEDED(rc);
+        }
+    }
+
+    ~SwitchServiceGuard() {
+        if (db_open) {
+            ncmContentMetaDatabaseClose(&db);
+        }
+        if (ncm_ok) {
+            ncmExit();
+        }
+        if (ns_ok) {
+            nsExit();
+        }
+        g_switch_service_mutex.unlock();
+    }
+};
+
+static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
+    if (tid == 0) return false;
+    bool installed = false;
+    if (guard.ns_ok) {
+        auto ctrl = std::make_unique<NsApplicationControlData>();
+        size_t ctrl_size = 0;
+        Result rc = nsGetApplicationControlData(
+            NsApplicationControlSource_Storage,
+            tid,
+            ctrl.get(),
+            sizeof(NsApplicationControlData),
+            &ctrl_size);
+        if (R_SUCCEEDED(rc)) {
+            installed = true;
+        }
+    }
+    
+    if (!installed && guard.db_open) {
+        NcmContentMetaKey key;
+        Result rc = ncmContentMetaDatabaseGetLatestContentMetaKey(&guard.db, &key, tid);
+        if (R_SUCCEEDED(rc)) {
+            installed = true;
+        }
+    }
+    return installed;
+}
+#else
+struct SwitchServiceGuard {};
+static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
+    (void)guard;
+    if (tid == 0x01000BF0152FB131ULL) return true; // DLC Left 4 Dead Bundle (mock)
+    return false;
+}
+#endif
+
+static uint64_t parseTitleIdFromFilename(const std::string& name) {
+    size_t start = name.find('[');
+    while (start != std::string::npos) {
+        size_t end = name.find(']', start);
+        if (end != std::string::npos && (end - start) == 17) {
+            std::string tid_str = name.substr(start + 1, 16);
+            try {
+                return std::stoull(tid_str, nullptr, 16);
+            } catch (...) {}
+        }
+        start = name.find('[', start + 1);
+    }
+    return 0;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FileSelectView
 // ─────────────────────────────────────────────────────────────────────────────
 
-FileSelectView::FileSelectView(const Game& game) : game_(game) {}
+FileSelectView::FileSelectView(const Game& game)
+    : game_(game),
+      alive_flag_(std::make_shared<std::atomic<bool>>(true)) {}
+
+FileSelectView::~FileSelectView() {
+    // Signal both async threads that this object is being destroyed.
+    // They must NOT touch any member after this flag is false.
+    alive_flag_->store(false);
+}
 
 void FileSelectView::onContentAvailable() {
     util::logLine("FileSelectView: onContentAvailable start");
@@ -54,7 +152,26 @@ void FileSelectView::onContentAvailable() {
     this->registerAction("Начать загрузку", brls::ControllerButton::BUTTON_START,
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
 
-    brls::async([this]() {
+    auto alive = alive_flag_;
+    auto status_running = std::make_shared<std::atomic<bool>>(true);
+    brls::async([this, status_running, alive]() {
+        while (status_running->load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            if (!status_running->load()) break;
+            
+            auto status = datasource::InternalTorrentEngine::instance().probeStatus();
+            brls::sync([this, status, status_running, alive]() {
+                if (!alive->load() || !status_running->load()) return;
+                std::string text = "Получение списка файлов... ";
+                text += "(Сиды: " + std::to_string(status.seeds) + 
+                        ", Пиры: " + std::to_string(status.peers) + 
+                        ", DHT: " + std::to_string(status.dht_nodes) + ")";
+                subtitle->setText(text);
+            });
+        }
+    });
+
+    brls::async([this, status_running, alive]() {
         util::logLine("FileSelectView: probe thread started");
         std::vector<torrent::TorrentFileInfo> probedFiles;
         std::string err;
@@ -65,19 +182,29 @@ void FileSelectView::onContentAvailable() {
         util::logLine("FileSelectView: probe done, success=" + std::to_string(success) +
                       " count=" + std::to_string(probedFiles.size()));
 
-        brls::sync([this, success, probedFiles, err]() {
+        status_running->store(false);
+
+        brls::sync([this, success, probedFiles, err, alive]() {
+            if (!alive->load()) {
+                util::logLine("FileSelectView: view already destroyed, aborting sync");
+                return;
+            }
             util::logLine("FileSelectView: sync callback, success=" +
                           std::to_string(success) + " count=" +
                           std::to_string(probedFiles.size()));
 
-            if (!this->getContentView()) {
-                util::logLine("FileSelectView: view gone, aborting");
-                return;
-            }
-
             if (success && !probedFiles.empty()) {
                 files_    = probedFiles;
-                selected_.assign(files_.size(), true);
+                selected_.assign(files_.size(), false);
+                SwitchServiceGuard guard;
+                for (size_t i = 0; i < files_.size(); ++i) {
+                    uint64_t tid = parseTitleIdFromFilename(files_[i].name);
+                    bool isGame = isSwitchGameFile(files_[i].name);
+                    bool installed = isTitleIdInstalled(tid, guard);
+                    if (isGame && !installed) {
+                        selected_[i] = true;
+                    }
+                }
                 subtitle->setText("Выберите файлы для загрузки");
                 updateTotalSize();
                 rebuildFileList();
@@ -113,63 +240,142 @@ brls::View* FileSelectView::create() { return nullptr; }
 void FileSelectView::rebuildFileList() {
     // Remove all existing child rows
     fileListBox->clearViews();
+    checkboxLabels_.assign(files_.size(), nullptr);
 
+    SwitchServiceGuard guard;
+
+    struct DisplayItem {
+        size_t originalIndex;
+        bool isHeader;
+        std::string headerTitle;
+    };
+    std::vector<DisplayItem> displayItems;
+
+    // 1. Group: NOT INSTALLED
+    displayItems.push_back({0, true, "НЕ УСТАНОВЛЕННЫЕ"});
+    bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        const auto& file = files_[i];
-        bool isSel = (i < selected_.size()) && selected_[i];
+        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard)) {
+            displayItems.push_back({i, false, ""});
+            hasUninstalled = true;
+        }
+    }
+    if (!hasUninstalled) {
+        displayItems.push_back({0, true, "  (нет файлов)"});
+    }
 
-        // Row container
-        auto* row = new brls::Box();
-        row->setAxis(brls::Axis::ROW);
-        row->setAlignItems(brls::AlignItems::CENTER);
-        row->setHeight(60);
-        row->setWidth(brls::View::AUTO);
-        row->setPaddingLeft(10);
-        row->setPaddingRight(10);
-        row->setFocusable(true);
+    // 2. Group: OTHER FILES
+    displayItems.push_back({0, true, "ПРОЧИЕ ФАЙЛЫ (РУСИФИКАТОРЫ И ДОП. ФАЙЛЫ)"});
+    bool hasOther = false;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        if (!isSwitchGameFile(files_[i].name)) {
+            displayItems.push_back({i, false, ""});
+            hasOther = true;
+        }
+    }
+    if (!hasOther) {
+        displayItems.push_back({0, true, "  (нет файлов)"});
+    }
 
-        // Checkbox label
-        auto* chk = new brls::Label();
-        chk->setWidth(40);
-        chk->setHeight(brls::View::AUTO);
-        chk->setFontSize(20);
-        chk->setText(isSel ? "[V]" : "[ ]");
-        chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : nvgRGB(180, 180, 180));
-        row->addView(chk);
+    // 3. Group: INSTALLED
+    displayItems.push_back({0, true, "УСТАНОВЛЕННЫЕ"});
+    bool hasInstalled = false;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard)) {
+            displayItems.push_back({i, false, ""});
+            hasInstalled = true;
+        }
+    }
+    if (!hasInstalled) {
+        displayItems.push_back({0, true, "  (нет файлов)"});
+    }
 
-        // File name label
-        auto* nameLbl = new brls::Label();
-        nameLbl->setGrow(1.0f);
-        nameLbl->setHeight(brls::View::AUTO);
-        nameLbl->setFontSize(16);
-        nameLbl->setText(file.name);
-        nameLbl->setMarginLeft(10);
-        nameLbl->setMarginRight(10);
-        row->addView(nameLbl);
-
-        // File size label
-        auto* sizeLbl = new brls::Label();
-        sizeLbl->setWidth(140);
-        sizeLbl->setHeight(brls::View::AUTO);
-        sizeLbl->setFontSize(14);
-        sizeLbl->setText(formatBytes(file.size));
-        sizeLbl->setTextColor(nvgRGB(136, 136, 136));
-        row->addView(sizeLbl);
-
-        // Click to toggle
-        size_t idx = i; // capture by value
-        row->registerClickAction([this, idx](brls::View*) {
-            if (idx < selected_.size()) {
-                selected_[idx] = !selected_[idx];
-                updateTotalSize();
-                updateRowSelectionState(idx);
+    // Now render them
+    for (const auto& item : displayItems) {
+        if (item.isHeader) {
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setHeight(50);
+            row->setWidth(brls::View::AUTO);
+            row->setPaddingLeft(10);
+            row->setPaddingRight(10);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            
+            auto* label = new brls::Label();
+            label->setFontSize(16);
+            label->setText(item.headerTitle);
+            
+            if (item.headerTitle.find("(нет файлов)") != std::string::npos) {
+                label->setTextColor(nvgRGB(150, 150, 150));
+            } else {
+                label->setTextColor(nvgRGB(255, 87, 34)); // Orange/red accent for headers
             }
-            return true;
-        });
+            row->addView(label);
+            fileListBox->addView(row);
+        } else {
+            size_t idx = item.originalIndex;
+            const auto& file = files_[idx];
+            bool isSel = (idx < selected_.size()) && selected_[idx];
 
-        fileListBox->addView(row);
-        util::logLine("FileSelectView: added row " + std::to_string(i) +
-                      " name='" + file.name + "'");
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setHeight(60);
+            row->setWidth(brls::View::AUTO);
+            row->setPaddingLeft(10);
+            row->setPaddingRight(10);
+            row->setFocusable(true);
+
+            // Checkbox label
+            auto* chk = new brls::Label();
+            chk->setWidth(40);
+            chk->setHeight(brls::View::AUTO);
+            chk->setFontSize(20);
+            chk->setText(isSel ? "[V]" : "[ ]");
+            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : nvgRGB(180, 180, 180));
+            row->addView(chk);
+            checkboxLabels_[idx] = chk;
+
+            // File name label
+            auto* nameLbl = new brls::Label();
+            nameLbl->setGrow(1.0f);
+            nameLbl->setHeight(brls::View::AUTO);
+            nameLbl->setFontSize(16);
+            nameLbl->setText(file.name);
+            nameLbl->setMarginLeft(10);
+            nameLbl->setMarginRight(10);
+            
+            uint64_t tid = parseTitleIdFromFilename(file.name);
+            if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard)) {
+                nameLbl->setTextColor(nvgRGB(120, 120, 120)); // Gray out slightly
+            }
+            row->addView(nameLbl);
+
+            // File size label
+            auto* sizeLbl = new brls::Label();
+            sizeLbl->setWidth(140);
+            sizeLbl->setHeight(brls::View::AUTO);
+            sizeLbl->setFontSize(14);
+            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setTextColor(nvgRGB(136, 136, 136));
+            row->addView(sizeLbl);
+
+            // Click to toggle
+            row->registerClickAction([this, idx](brls::View*) {
+                if (idx < selected_.size()) {
+                    selected_[idx] = !selected_[idx];
+                    updateTotalSize();
+                    updateRowSelectionState(idx);
+                }
+                return true;
+            });
+
+            fileListBox->addView(row);
+            util::logLine("FileSelectView: added row " + std::to_string(idx) +
+                          " name='" + file.name + "'");
+        }
     }
 }
 
@@ -254,21 +460,18 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
-    // Pop back to MainMenu
-    while (brls::Application::getActivitiesStack().size() > 1)
-        brls::Application::popActivity(brls::TransitionAnimation::NONE);
-
-    // Redirect directly to the Downloads window
-    brls::Application::pushActivity(new ui::DownloadsView());
+    // Defer navigation to avoid destroying 'this' while still executing member code.
+    // popActivity deletes FileSelectView immediately, so we must not touch 'this' after.
+    brls::sync([]() {
+        while (brls::Application::getActivitiesStack().size() > 1)
+            brls::Application::popActivity(brls::TransitionAnimation::NONE);
+        brls::Application::pushActivity(new ui::DownloadsView());
+    });
 }
 
 void FileSelectView::updateRowSelectionState(size_t idx) {
-    if (!fileListBox || idx >= fileListBox->getChildren().size()) return;
-    brls::View* rowView = fileListBox->getChildren()[idx];
-    brls::Box* row = dynamic_cast<brls::Box*>(rowView);
-    if (!row || row->getChildren().empty()) return;
-
-    brls::Label* chk = dynamic_cast<brls::Label*>(row->getChildren().front());
+    if (idx >= checkboxLabels_.size()) return;
+    brls::Label* chk = checkboxLabels_[idx];
     if (!chk) return;
 
     bool isSel = (idx < selected_.size()) && selected_[idx];

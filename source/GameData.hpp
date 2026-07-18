@@ -70,6 +70,28 @@ inline void from_json(const nlohmann::json& j, Game& g) {
     g.description = safeGetStr(j, "description");
 }
 
+// nlohmann::json serialization
+inline void to_json(nlohmann::json& j, const Game& g) {
+    j = nlohmann::json{
+        {"title", g.title},
+        {"size", g.size},
+        {"magnet", g.magnet},
+        {"topic_id", g.topic_id},
+        {"url", g.url},
+        {"year", g.year},
+        {"genre", g.genre},
+        {"developer", g.developer},
+        {"publisher", g.publisher},
+        {"image_format", g.image_format},
+        {"interface_lang", g.interface_lang},
+        {"voice_lang", g.voice_lang},
+        {"cover", g.cover},
+        {"screenshots", g.screenshots},
+        {"description", g.description}
+    };
+}
+
+
 // Clean title: removes everything from the first '[' to the end of string, and trims trailing spaces
 inline std::string cleanTitle(const std::string& title) {
     size_t pos = title.find('[');
@@ -148,6 +170,64 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
 
 #include <unordered_set>
 #include <dirent.h>
+#include <atomic>
+
+inline std::vector<std::string> g_pathsToDelete;
+inline std::atomic<bool> g_cleanupCancelled{false};
+inline std::atomic<bool> g_cleanupRunning{false};
+inline std::atomic<bool> g_catalogUpdateRunning{false};
+
+inline void deleteDirectoryIterative(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) return;
+
+    try {
+        std::vector<std::filesystem::path> paths;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(path, std::filesystem::directory_options::skip_permission_denied, ec)) {
+            if (g_cleanupCancelled.load()) return;
+            paths.push_back(entry.path());
+        }
+
+        // Delete files first, then directories (reverse order)
+        std::reverse(paths.begin(), paths.end());
+        for (const auto& p : paths) {
+            if (g_cleanupCancelled.load()) return;
+            std::filesystem::remove(p, ec);
+        }
+        // Finally, delete the root folder
+        std::filesystem::remove(path, ec);
+    } catch (...) {
+        if (!g_cleanupCancelled.load()) {
+            std::filesystem::remove_all(path, ec);
+        }
+    }
+}
+
+inline bool writeTextFile(const std::string& path, const std::string& body) {
+    std::filesystem::path p(path);
+    if (p.has_parent_path()) {
+        std::error_code ec;
+        std::filesystem::create_directories(p.parent_path(), ec);
+    }
+    std::ofstream out(path, std::ios::binary);
+    if (!out.is_open()) return false;
+    out.write(body.data(), body.size());
+    return true;
+}
+
+inline std::string extractBtihHashLocal(std::string magnet) {
+    std::transform(magnet.begin(), magnet.end(), magnet.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    const std::string marker = "xt=urn:btih:";
+    size_t pos = magnet.find(marker);
+    if (pos == std::string::npos) return {};
+    pos += marker.size();
+    size_t end = magnet.find('&', pos);
+    if (end == std::string::npos) end = magnet.size();
+    if (end <= pos) return {};
+    return magnet.substr(pos, end - pos);
+}
 
 inline void clearCaches() {
     struct stat st;
@@ -156,19 +236,55 @@ inline void clearCaches() {
     }
 
     std::error_code ec;
-    // Clean up entire cache directory to free up space (catalog, local_engine, old images)
-    if (std::filesystem::exists("sdmc:/switch/TorrentShopNX/cache", ec)) {
-        std::filesystem::remove_all("sdmc:/switch/TorrentShopNX/cache", ec);
+#ifndef __SWITCH__
+    std::filesystem::path localEngineCache = "./cache/local_engine";
+    std::filesystem::path tempDeletePath = "./cache/local_engine_old";
+#else
+    std::filesystem::path localEngineCache = "sdmc:/switch/TorrentShopNX/cache/local_engine";
+    std::filesystem::path tempDeletePath = "sdmc:/switch/TorrentShopNX/cache/local_engine_old";
+#endif
+
+    // Safely and instantly rename the directory to prevent any race conditions with TorrentEngine.
+    // The directory will be deleted asynchronously later on the main loop.
+    if (std::filesystem::exists(localEngineCache, ec)) {
+        int suffix = 0;
+        std::filesystem::path targetDelete = tempDeletePath;
+        while (std::filesystem::exists(targetDelete, ec)) {
+            targetDelete = tempDeletePath.string() + "_" + std::to_string(++suffix);
+        }
+        std::filesystem::rename(localEngineCache, targetDelete, ec);
         if (!ec) {
-            util::logLine("GameData: cleared all caches");
+            g_pathsToDelete.push_back(targetDelete.string());
+        } else {
+            // Fallback to synchronous delete if rename failed
+            std::filesystem::remove_all(localEngineCache, ec);
+            util::logLine("GameData: cleared local_engine cache synchronously (rename failed)");
         }
     }
 
-    // Clean up duplicated TorrentShopNX folder caused by a bug in older versions
-    if (std::filesystem::exists("sdmc:/switch/TorrentShopNX/TorrentShopNX", ec)) {
-        std::filesystem::remove_all("sdmc:/switch/TorrentShopNX/TorrentShopNX", ec);
+    // Move duplicate TorrentShopNX folder cleanup to queue as well
+#ifndef __SWITCH__
+    std::filesystem::path duplicateFolder = "./TorrentShopNX";
+#else
+    std::filesystem::path duplicateFolder = "sdmc:/switch/TorrentShopNX/TorrentShopNX";
+#endif
+    if (std::filesystem::exists(duplicateFolder, ec)) {
+#ifndef __SWITCH__
+        std::filesystem::path tempDuplicateDelete = "./TorrentShopNX_old";
+#else
+        std::filesystem::path tempDuplicateDelete = "sdmc:/switch/TorrentShopNX/TorrentShopNX_old";
+#endif
+        int suffix = 0;
+        std::filesystem::path targetDelete = tempDuplicateDelete;
+        while (std::filesystem::exists(targetDelete, ec)) {
+            targetDelete = tempDuplicateDelete.string() + "_" + std::to_string(++suffix);
+        }
+        std::filesystem::rename(duplicateFolder, targetDelete, ec);
         if (!ec) {
-            util::logLine("GameData: removed duplicated TorrentShopNX folder");
+            g_pathsToDelete.push_back(targetDelete.string());
+        } else {
+            std::filesystem::remove_all(duplicateFolder, ec);
+            util::logLine("GameData: removed duplicated TorrentShopNX folder synchronously (rename failed)");
         }
     }
 }
@@ -250,6 +366,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         
         brls::async([img, url, token, fallbackUrl, placeholder, bypassCache]() {
             net::HttpClient http;
+            http.setTimeout(5);
             auto res = http.httpGet(url);
             if (res.status_code == 200 && !res.body.empty()) {
                 brls::sync([img, body = std::move(res.body), token]() {
@@ -295,6 +412,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
     
     brls::async([img, url, cacheKey, token, fallbackUrl, placeholder, bypassCache]() {
         net::HttpClient http;
+        http.setTimeout(5);
         auto res = http.httpGet(url);
         if (res.status_code == 200 && !res.body.empty()) {
             // Upload to GPU directly from the downloaded buffer
@@ -323,3 +441,82 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     });
 }
+
+#include <sstream>
+
+inline uint64_t parseTitleIdFromString(const std::string& text) {
+    size_t start = text.find('[');
+    while (start != std::string::npos) {
+        size_t end = text.find(']', start);
+        if (end == std::string::npos) break;
+        std::string inner = text.substr(start + 1, end - start - 1);
+        if (inner.size() == 16) {
+            bool isHex = true;
+            for (char c : inner) {
+                if (!std::isxdigit(static_cast<unsigned char>(c))) {
+                    isHex = false;
+                    break;
+                }
+            }
+            if (isHex) {
+                try {
+                    return std::stoull(inner, nullptr, 16);
+                } catch (...) {}
+            }
+        }
+        start = text.find('[', end);
+    }
+    return 0;
+}
+
+inline std::string parseVersionFromTitle(const std::string& text) {
+    size_t start = text.find('[');
+    while (start != std::string::npos) {
+        size_t end = text.find(']', start);
+        if (end == std::string::npos) break;
+        std::string inner = text.substr(start + 1, end - start - 1);
+        if (!inner.empty() && inner[0] == 'v') {
+            return inner.substr(1);
+        }
+        start = text.find('[', end);
+    }
+    return "";
+}
+
+inline uint32_t convertVersionStringToNumber(const std::string& versionStr) {
+    if (versionStr.empty()) return 0;
+    
+    // Check if it's already a single integer (e.g. "65536")
+    bool isNumeric = true;
+    for (char c : versionStr) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
+            isNumeric = false;
+            break;
+        }
+    }
+    if (isNumeric) {
+        try {
+            return static_cast<uint32_t>(std::stoul(versionStr));
+        } catch (...) {}
+    }
+    
+    // Parse semver (e.g. "1.3.0")
+    std::stringstream ss(versionStr);
+    std::string item;
+    uint32_t parts[3] = {0, 0, 0};
+    int i = 0;
+    while (std::getline(ss, item, '.') && i < 3) {
+        try {
+            parts[i] = static_cast<uint32_t>(std::stoul(item));
+        } catch (...) {}
+        i++;
+    }
+    return (parts[0] << 16) | (parts[1] << 8) | parts[2];
+}
+
+inline bool compareVersions(const std::string& current, const std::string& available) {
+    uint32_t curNum = convertVersionStringToNumber(current);
+    uint32_t availNum = convertVersionStringToNumber(available);
+    return availNum > curNum;
+}
+

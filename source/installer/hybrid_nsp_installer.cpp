@@ -55,11 +55,11 @@ static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 4 * 1024 * 1024; // Increased 
 static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 32 * 1024 * 1024; // Increased from 8MB to 32MB for smoother play buffer
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
-static constexpr size_t MIN_BUFFER_SIZE = 64 * 1024 * 1024; // 64MB (saves 192MB RAM!)
+static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (saves RAM in Applet mode)
 static constexpr size_t DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;  // 4MB chunk
 #ifdef __SWITCH__
 static constexpr size_t COLLECTOR_THREAD_STACK_SIZE = 0x20000; // 128KB
-static constexpr size_t INSTALLER_THREAD_STACK_SIZE = 0x40000; // 256KB, phase 5 is stack-heavy
+static constexpr size_t INSTALLER_THREAD_STACK_SIZE = 0x80000; // 512KB (was 256KB, increased to prevent stack overflow)
 #endif
 
 namespace {
@@ -144,7 +144,8 @@ size_t HybridNspInstaller::autoBufferSize() {
     if (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet) {
         return 16 * 1024 * 1024; // 16MB для аплет-режима
     }
-    return 128 * 1024 * 1024; // full application mode has enough memory for a larger streaming cushion
+    // Application/Title Mode: 128MB.
+    return 128 * 1024 * 1024;
 #else
     return 128 * 1024 * 1024;
 #endif
@@ -162,7 +163,7 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     source_ = source;
     config_ = config;
 
-    size_t buf_size = 64 * 1024 * 1024;
+    size_t buf_size = autoBufferSize();
     if (buf_size < MIN_BUFFER_SIZE) buf_size = MIN_BUFFER_SIZE;
 
     ring_buffer_.reinit(buf_size);
@@ -697,7 +698,10 @@ void HybridNspInstaller::installerThreadFunc() {
 
     while (!cancel_requested_) {
         const auto read_wait_start = std::chrono::steady_clock::now();
+        util::logLine("installer: [RingBuffer] read start rb_avail=" + std::to_string(ring_buffer_.available()) +
+                      " downloaded=" + std::to_string(bytes_downloaded_.load()));
         size_t read = ring_buffer_.read(chunk_buf.data(), chunk_size);
+        util::logLine("installer: [RingBuffer] read done got=" + std::to_string(read));
         const auto read_wait_end = std::chrono::steady_clock::now();
         const auto read_wait_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(read_wait_end - read_wait_start).count();
@@ -909,6 +913,8 @@ void HybridNspInstaller::installerThreadFunc() {
                                               chunk_buf.data() + processed + to_process);
                     }
 
+                    util::logLine("installer: [NcaWrite] start content=" + current_entry->name + 
+                                  " offset=" + std::to_string(offset_in_file) + " size=" + std::to_string(to_process));
                     if (!ncm_.writePlaceHolder(current_entry->content_id,
                                                 offset_in_file,
                                                 chunk_buf.data() + processed,
@@ -917,19 +923,24 @@ void HybridNspInstaller::installerThreadFunc() {
                         ring_buffer_.setEof();
                         goto cleanup_sha;
                     }
+                    util::logLine("installer: [NcaWrite] success");
 
                     if (config_.verify_sha256 && hashing_active) {
+                        util::logLine("installer: [SHA256] update start");
                         mbedtls_sha256_update(&sha_ctx,
                                                chunk_buf.data() + processed,
                                                to_process);
+                        util::logLine("installer: [SHA256] update success");
                     }
 
                     if (offset_in_file + to_process >= current_entry->size) {
+                        util::logLine("installer: [NcaFinalize] start content=" + current_entry->name);
                         if (!ncm_.finalizePlaceHolder(current_entry->content_id)) {
                             setError("Failed to finalize NCA: " + current_entry->name);
                             ring_buffer_.setEof();
                             goto cleanup_sha;
                         }
+                        util::logLine("installer: [NcaFinalize] success");
                         util::logLine("installer: NCA installed: " + current_entry->name);
                         hashing_active = false;
                     }

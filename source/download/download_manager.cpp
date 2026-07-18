@@ -5,6 +5,7 @@
 #include <cctype>
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 
 #include "../config/config.h"
 #include "../datasource/internal_torrent_engine.h"
@@ -231,6 +232,82 @@ static uint64_t parseTitleIdFromFileName(const std::string& name) {
         start = name.find('[', start + 1);
     }
     return 0;
+}
+
+static bool isSwitchGameFile(const std::string& filename) {
+    std::string lower = filename;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.size() >= 4 &&
+           (lower.rfind(".nsp") == lower.size() - 4 ||
+            lower.rfind(".nsz") == lower.size() - 4 ||
+            lower.rfind(".xci") == lower.size() - 4 ||
+            lower.rfind(".xcz") == lower.size() - 4);
+}
+
+static void copyDownloadedOtherFiles(const download::DownloadItem& item) {
+    std::filesystem::path srcDir;
+#ifndef __SWITCH__
+    srcDir = std::filesystem::path("./cache/local_engine") / item.torrent_hash;
+#else
+    srcDir = std::filesystem::path("sdmc:/switch/TorrentShopNX/cache/local_engine") / item.torrent_hash;
+#endif
+
+    std::filesystem::path destDir;
+#ifndef __SWITCH__
+    destDir = "./downloads";
+#else
+    destDir = "sdmc:/switch/TorrentShopNX/downloads";
+#endif
+
+    std::error_code ec;
+    std::filesystem::create_directories(destDir, ec);
+
+    std::vector<torrent::TorrentEngineFileInfo> engine_files;
+    if (torrent::TorrentEngine::instance().getTorrentFiles(item.torrent_hash, engine_files)) {
+        for (int selIdx : item.selected_files) {
+            if (selIdx >= 0 && selIdx < static_cast<int>(engine_files.size())) {
+                const auto& ef = engine_files[selIdx];
+                if (!isSwitchGameFile(ef.name)) {
+                    std::filesystem::path srcFile = srcDir / ef.name;
+                    std::filesystem::path fileName = std::filesystem::path(ef.name).filename();
+                    std::filesystem::path destFile = destDir / fileName;
+                    
+                    if (std::filesystem::exists(srcFile)) {
+                        util::logLine("download: copying other file from " + srcFile.string() + " to " + destFile.string());
+                        std::filesystem::copy_file(srcFile, destFile, std::filesystem::copy_options::overwrite_existing, ec);
+                        if (ec) {
+                            util::logLine("download: failed to copy file: " + ec.message());
+                        }
+                    } else {
+                        util::logLine("download: other file " + srcFile.string() + " does not exist in cache");
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void clearTorrentCache(const std::string& hash) {
+    if (hash.empty()) return;
+    
+    torrent::TorrentEngine::instance().removeTorrent(hash);
+    
+    std::filesystem::path cachePath;
+#ifndef __SWITCH__
+    cachePath = std::filesystem::path("./cache/local_engine") / hash;
+#else
+    cachePath = std::filesystem::path("sdmc:/switch/TorrentShopNX/cache/local_engine") / hash;
+#endif
+
+    std::error_code ec;
+    if (std::filesystem::exists(cachePath)) {
+        util::logLine("download: explicitly deleting cache path " + cachePath.string());
+        std::filesystem::remove_all(cachePath, ec);
+        if (ec) {
+            util::logLine("download: failed to delete cache path: " + ec.message());
+        }
+    }
 }
 
 static std::string streamRouteNameFromPath(const std::string& path_or_name, const std::string& fallback) {
@@ -686,12 +763,34 @@ void DownloadManager::trackProgress() {
                     util::logLine("download: hybrid install failed: " + item.error_message);
                 } else {
                     item.state = DownloadState::Completed;
+                    copyDownloadedOtherFiles(item);
                     item.download_speed_kbps = 0.0f;
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
                     } else if (!item.torrent_hash.empty()) {
-                        torrent::TorrentEngine::instance().removeTorrent(item.torrent_hash);
+                        bool still_needed = false;
+                        for (size_t j = 0; j < queue_.size(); ++j) {
+                            if (i == j) continue;
+                            const auto& other = queue_[j];
+                            std::string other_hash = other.torrent_hash;
+                            if (other_hash.empty() && !other.magnet.empty()) {
+                                other_hash = extractBtihHash(normalizeTorrentLink(other.magnet));
+                            }
+                            if (other_hash == item.torrent_hash &&
+                                (other.state == DownloadState::Queued ||
+                                 other.state == DownloadState::Downloading ||
+                                 other.state == DownloadState::StreamPreparing ||
+                                 other.state == DownloadState::StreamInstalling)) {
+                                still_needed = true;
+                                break;
+                            }
+                        }
+                        if (!still_needed) {
+                            clearTorrentCache(item.torrent_hash);
+                        } else {
+                            util::logLine("download: keeping torrent in cache as it is needed by another queued item, hash=" + item.torrent_hash);
+                        }
                     }
                     util::logLine("download: hybrid install completed: " + item.title);
                 }
@@ -711,6 +810,7 @@ void DownloadManager::trackProgress() {
         if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
             item.state == DownloadState::Downloading &&
             item.forced_file_index >= 0 &&
+            isSwitchGameFile(item.forced_stream_name) &&
             !item.auto_hybrid_started &&
             !item.hybrid_installer) {
             item.preload_started = true;
@@ -842,13 +942,15 @@ void DownloadManager::trackProgress() {
                 if (item.preload_started) {
                     if (item.state == DownloadState::Downloading &&
                         !item.auto_hybrid_started &&
-                        !item.hybrid_installer) {
+                        !item.hybrid_installer &&
+                        isSwitchGameFile(item.preload_stream_name)) {
                         if (startHybridInstall(i)) {
                             item.auto_hybrid_started = true;
                         }
                     }
                     if (item.state == DownloadState::Downloading &&
                         !item.hybrid_installer &&
+                        isSwitchGameFile(item.preload_stream_name) &&
                         ds_manager_.mode() != datasource::DataSourceMode::LocalClient) {
                         ensureStreamConsumer(item);
                     }
@@ -937,6 +1039,7 @@ void DownloadManager::trackProgress() {
             }
             if (item.stream_done || item.stream_ready || (!item.stream_ready && item.progress >= 1.0f)) {
                 item.state = DownloadState::Completed;
+                copyDownloadedOtherFiles(item);
                 item.download_speed_kbps = 0.0f;
                 item.speed_sample_at = std::chrono::steady_clock::time_point{};
                 if (item.stream_consumer_started && item.torrent_id >= 0) {
@@ -1185,6 +1288,29 @@ bool DownloadManager::cancelDownload(size_t index) {
 
     if (item.torrent_id >= 0 && torrent_) {
         torrent_->cancelTorrent(item.torrent_id);
+    } else if (!item.torrent_hash.empty()) {
+        bool still_needed = false;
+        for (size_t j = 0; j < queue_.size(); ++j) {
+            if (index == j) continue;
+            const auto& other = queue_[j];
+            std::string other_hash = other.torrent_hash;
+            if (other_hash.empty() && !other.magnet.empty()) {
+                other_hash = extractBtihHash(normalizeTorrentLink(other.magnet));
+            }
+            if (other_hash == item.torrent_hash &&
+                (other.state == DownloadState::Queued ||
+                 other.state == DownloadState::Downloading ||
+                 other.state == DownloadState::StreamPreparing ||
+                 other.state == DownloadState::StreamInstalling)) {
+                still_needed = true;
+                break;
+            }
+        }
+        if (!still_needed) {
+            clearTorrentCache(item.torrent_hash);
+        } else {
+            util::logLine("download: keeping torrent in cache on cancellation as it is needed by another queued item, hash=" + item.torrent_hash);
+        }
     }
     item.state = DownloadState::Cancelled;
     item.download_speed_kbps = 0.0f;

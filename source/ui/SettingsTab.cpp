@@ -1,5 +1,6 @@
 #include "SettingsTab.hpp"
 #include "DownloadUiManager.hpp"
+#include "UpdatesView.hpp"
 #include "../config/config.h"
 
 namespace ui {
@@ -11,6 +12,14 @@ void SettingsTab::onContentAvailable() {
 
     auto& cfg = config::ConfigManager::instance();
     auto& dm = ui::DownloadManager::instance().getImpl();
+
+    // 0. Updates manager
+    updatesCell->setText("Менеджер обновлений");
+    updatesCell->setDetailText("Проверить наличие и установить обновления");
+    updatesCell->registerClickAction([](brls::View* view) {
+        brls::Application::pushActivity(new ui::UpdatesView());
+        return true;
+    });
 
     // 1. Prevent sleep
     keepAwakeCell->init("Предотвращать сон при скачивании", cfg.getKeepAwakeDuringDownloads(), [&cfg](bool value) {
@@ -101,7 +110,7 @@ void SettingsTab::onContentAvailable() {
 void SettingsTab::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     if (resetState) {
-        brls::Application::giveFocus(this->keepAwakeCell);
+        brls::Application::giveFocus(this->updatesCell);
     }
 }
 

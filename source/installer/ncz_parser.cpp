@@ -406,8 +406,10 @@ size_t NczDecompressor::read(void* buffer, size_t size) {
                     expected_decomp_size = static_cast<uint32_t>(comp_area_total_size - offset_in_comp_area);
                 }
 
-                std::vector<uint8_t> cbuf(comp_size);
-                if (fetchInput(cbuf.data(), comp_size) != comp_size) {
+                if (compressed_block_buf_.size() < comp_size) {
+                    compressed_block_buf_.resize(comp_size);
+                }
+                if (fetchInput(compressed_block_buf_.data(), comp_size) != comp_size) {
                     util::logLine("ncz: failed to fetch compressed block " + std::to_string(current_block_id_ - 1));
                     failed_ = true;
                     break;
@@ -415,11 +417,12 @@ size_t NczDecompressor::read(void* buffer, size_t size) {
                 
                 if (comp_size >= expected_decomp_size) {
                     // STORED block (uncompressed)
-                    block_decomp_buf_ = std::move(cbuf);
+                    block_decomp_buf_.resize(comp_size);
+                    std::memcpy(block_decomp_buf_.data(), compressed_block_buf_.data(), comp_size);
                 } else {
                     // COMPRESSED block
                     block_decomp_buf_.resize(expected_decomp_size);
-                    size_t dSize = ZSTD_decompressDCtx(zstd_dctx_, block_decomp_buf_.data(), expected_decomp_size, cbuf.data(), comp_size);
+                    size_t dSize = ZSTD_decompressDCtx(zstd_dctx_, block_decomp_buf_.data(), expected_decomp_size, compressed_block_buf_.data(), comp_size);
                     if (ZSTD_isError(dSize)) {
                         util::logLine(std::string("ncz: zstd err in block ") + std::to_string(current_block_id_-1) + ": " + ZSTD_getErrorName(dSize));
                         failed_ = true;

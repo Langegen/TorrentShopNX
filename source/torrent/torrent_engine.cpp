@@ -43,6 +43,10 @@
 #include <algorithm>
 #endif
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 namespace torrent {
 
 
@@ -93,9 +97,15 @@ static std::mutex                          g_piece_pool_mutex;
 std::shared_ptr<buffer::PiecePool> getOrCreatePiecePool(int piece_size) {
     std::lock_guard<std::mutex> lock(g_piece_pool_mutex);
     if (!g_piece_pool || g_piece_pool->piece_size() != piece_size) {
-        // Limit RAM strictly to ~128MB for pieces to avoid OOM in Applet mode
+        // Limit RAM strictly to ~128MB for pieces to avoid OOM, or ~48MB in Applet Mode
         int max_pool_bytes = 128 * 1024 * 1024;
-        int dynamic_cache_entries = std::max<int>(12, max_pool_bytes / piece_size);
+#ifdef __SWITCH__
+        AppletType type = appletGetAppletType();
+        if (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet) {
+            max_pool_bytes = 48 * 1024 * 1024; // Strict limit in Applet mode
+        }
+#endif
+        int dynamic_cache_entries = std::max<int>(10, max_pool_bytes / piece_size);
         const int pool_size = dynamic_cache_entries + 4; // Reserve a few extra slots
         
         g_piece_pool = std::shared_ptr<buffer::PiecePool>(
@@ -161,6 +171,10 @@ const DhtBootstrapNode kDhtBootstrapIPFallbacks[] = {
     {"87.98.162.88",    6881},  // dht.transmissionbt.com (new IP)
     {"212.129.33.59",   6881},  // dht.transmissionbt.com (old IP)
     {"185.157.221.247", 25401}, // dht.libtorrent.org / bootstrap.libtorrent.org
+    {"34.238.164.218",  6881},  // dht.aelitis.com fallback 1
+    {"35.172.19.123",   6881},  // dht.aelitis.com fallback 2
+    {"104.28.16.120",   1337},  // dht.opentrackr.org fallback 1
+    {"104.28.17.120",   1337},  // dht.opentrackr.org fallback 2
 };
 
 const char* kFallbackTrackers[] = {
@@ -176,7 +190,19 @@ const char* kFallbackTrackers[] = {
     "udp://tracker.dler.org:6969/announce",
     "udp://tracker.internetwarriors.net:1337/announce",
     "udp://p4p.arenabg.ch:1337/announce",
-    "udp://retracker.lanta-net.ru:2710/announce"
+    "udp://retracker.lanta-net.ru:2710/announce",
+    "udp://tracker.coppersurfer.tk:6969/announce",
+    "udp://tracker.cyberia.is:6969/announce",
+    "udp://tracker.moeking.me:6969/announce",
+    "udp://tracker.ipv6tracker.ru:80/announce",
+    "http://tracker.ipv6tracker.ru:80/announce",
+    "udp://retracker.krs-net.ru:2710/announce",
+    "udp://retracker.net/announce",
+    "http://retracker.local/announce",
+    "udp://9.rarbg.to:2710/announce",
+    "udp://9.rarbg.me:2780/announce",
+    "udp://tracker.moack.co.kr:80/announce",
+    "udp://tracker.pomf.se:80/announce"
 };
 
 
@@ -338,10 +364,10 @@ lt::settings_pack make_torrserver_like_settings(const LibtorrentLikeSettingsConf
     settings.set_int(lt::settings_pack::max_peer_recv_buffer_size, 8 * 1024 * 1024); // Increased to 8MB
     settings.set_bool(lt::settings_pack::predictive_piece_announce, false); // v63: disabled — causes stall at piece boundaries (unnecessary pre-announce flood)
 
-    settings.set_int(lt::settings_pack::recv_socket_buffer_size, 256 * 1024); // 256 KB
-    settings.set_int(lt::settings_pack::send_socket_buffer_size, 256 * 1024); // 256 KB
-    settings.set_int(lt::settings_pack::send_buffer_low_watermark, 128 * 1024);
-    settings.set_int(lt::settings_pack::send_buffer_watermark, 256 * 1024);
+    settings.set_int(lt::settings_pack::recv_socket_buffer_size, 64 * 1024); // 64 KB (matches main.cpp TCP buffer max)
+    settings.set_int(lt::settings_pack::send_socket_buffer_size, 64 * 1024); // 64 KB
+    settings.set_int(lt::settings_pack::send_buffer_low_watermark, 32 * 1024); // 32 KB
+    settings.set_int(lt::settings_pack::send_buffer_watermark, 64 * 1024); // 64 KB
     settings.set_int(lt::settings_pack::mixed_mode_algorithm, lt::settings_pack::prefer_tcp); // TCP is more stable on Switch than UTP under load
     settings.set_int(lt::settings_pack::num_optimistic_unchoke_slots, 30);
     settings.set_bool(lt::settings_pack::use_parole_mode, cfg.use_parole_mode);

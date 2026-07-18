@@ -24,6 +24,8 @@
 #include "torrent/torrent_engine.h"
 #include "utils/log.h"
 #include "net/http_client.h"
+#include <thread>
+#include <borealis/extern/nlohmann/json.hpp>
 
 // Global list of catalog games
 std::vector<Game> g_games;
@@ -31,23 +33,49 @@ std::vector<Game> g_games;
 
 
 extern "C" {
-    u32 __nx_socket_mem_size = 0x02000000; // 32MB socket memory pool (saves 224MB RAM!)
-    size_t __nx_socket_tcp_tx_buf_size = 0x40000; // 256KB
-    size_t __nx_socket_tcp_rx_buf_size = 0x40000; // 256KB
+    u32 __nx_socket_mem_size = 0x02000000; // Default to 32MB for Title Mode
+    size_t __nx_socket_tcp_tx_buf_size = 0x10000; // Default to 64KB TCP send buffer
+    size_t __nx_socket_tcp_rx_buf_size = 0x10000; // Default to 64KB TCP recv buffer
+
+    Result g_socket_init_result = 0xFFFFFFFF;
+    u32 g_socket_mem_size_used = 0;
+    int g_applet_type_detected = -1;
 
     void userAppInit(void) {
         // We do NOT call appletLockExit() because we want the OS to be able to cleanly exit the app.
         // Calling it and failing to unlock it perfectly before process teardown causes the OS "An error occurred" dialog.
 
+        // Dynamically adjust socket pool and buffer sizes for Applet vs Title mode to prevent socket memory exhaustion
+        AppletType applet_type = appletGetAppletType();
+        g_applet_type_detected = static_cast<int>(applet_type);
+        if (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet) {
+            __nx_socket_mem_size = 0x00400000;        // 4MB socket pool for Applet Mode
+            __nx_socket_tcp_tx_buf_size = 0x8000;      // 32KB default send buffer
+            __nx_socket_tcp_rx_buf_size = 0x8000;      // 32KB default recv buffer
+        } else {
+            __nx_socket_mem_size = 0x02000000;        // 32MB socket pool for Title Mode
+            __nx_socket_tcp_tx_buf_size = 0x10000;     // 64KB default send buffer
+            __nx_socket_tcp_rx_buf_size = 0x10000;     // 64KB default recv buffer
+        }
+
         // Custom network initialization configured for TorrentShopNX
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
-        cfg.num_bsd_sessions  = 12; // Restore to 12 (Switch OS limit)
-        cfg.sb_efficiency = 4; // Restored to standard 4 to prevent socket memory exhaustion (32 was taking 16MB per socket!)
-        cfg.tcp_tx_buf_max_size = 131072; // 128KB (optimized for 32MB socket pool)
-        cfg.tcp_rx_buf_max_size = 131072; // 128KB
-        cfg.udp_rx_buf_size = 32768; // 32KB
-        cfg.udp_tx_buf_size = 32768; // 32KB
-        socketInitialize(&cfg);
+        cfg.num_bsd_sessions  = 12; // Allow up to 12 sessions for multiple connections
+        if (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet) {
+            cfg.sb_efficiency = 4;
+            cfg.tcp_tx_buf_max_size = 32768; // 32KB max for Applet Mode
+            cfg.tcp_rx_buf_max_size = 32768;
+            cfg.udp_rx_buf_size = 32768;
+            cfg.udp_tx_buf_size = 32768;
+        } else {
+            cfg.sb_efficiency = 8; // Optimal efficiency to prevent fragmentation while saving memory
+            cfg.tcp_tx_buf_max_size = 65536; // 64KB max for Title Mode
+            cfg.tcp_rx_buf_max_size = 65536;
+            cfg.udp_rx_buf_size = 32768; // 32KB UDP buffer is plenty for DHT/trackers
+            cfg.udp_tx_buf_size = 32768;
+        }
+        g_socket_init_result = socketInitialize(&cfg);
+        g_socket_mem_size_used = __nx_socket_mem_size;
 
         romfsInit();
         hidsysInitialize();
@@ -77,61 +105,15 @@ extern "C" {
 
 static const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
 
-static bool writeTextFile(const std::string& path, const std::string& body) {
-    std::filesystem::path p(path);
-    if (p.has_parent_path()) {
-        std::error_code ec;
-        std::filesystem::create_directories(p.parent_path(), ec);
-    }
-    std::ofstream out(path, std::ios::binary);
-    if (!out.is_open()) return false;
-    out.write(body.data(), body.size());
-    return true;
-}
-
-static bool updateCatalogFromUrlIfNeeded(config::ConfigManager& cfg) {
-    const std::string& url = cfg.getCatalogSourceUrl();
-    if (url.empty()) return false;
-    if (!cfg.shouldUpdateCatalogToday()) return false;
-
-    util::logLine("catalog: daily update started from " + url);
-    net::HttpClient http;
-    auto res = http.httpGet(url);
-    if (res.status_code != 200 || res.body.empty()) {
-        util::logLine("catalog: daily update failed, status=" + std::to_string(res.status_code));
-        return false;
-    }
-
-    if (!writeTextFile(kCatalogPath, res.body)) {
-        util::logLine("catalog: daily update failed to write file");
-        return false;
-    }
-
-    cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
-    util::logLine("catalog: daily update completed");
-    return true;
-}
-
-static std::string extractBtihHashLocal(std::string magnet) {
-    std::transform(magnet.begin(), magnet.end(), magnet.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    const std::string marker = "xt=urn:btih:";
-    size_t pos = magnet.find(marker);
-    if (pos == std::string::npos) return {};
-    pos += marker.size();
-    size_t end = magnet.find('&', pos);
-    if (end == std::string::npos) end = magnet.size();
-    if (end <= pos) return {};
-    return magnet.substr(pos, end - pos);
-}
-
 int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
     util::logInit();
     util::logLine("main: start");
+    util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
+                  " mem_size=" + std::to_string(g_socket_mem_size_used) +
+                  " applet_type=" + std::to_string(g_applet_type_detected));
     clearCaches();
 
     // Initialize Borealis UI
@@ -157,39 +139,17 @@ int main(int argc, char** argv) {
     auto& eng = torrent::TorrentEngine::instance();
     util::logLine("main: TorrentEngine eagerly initialized, address=" + std::to_string((uintptr_t)&eng));
 
-    // Check for catalog updates
-    updateCatalogFromUrlIfNeeded(cfg);
-
-    // Load database games
-    brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
-
+    // Initialize curl first, so background network threads can safely use it.
 #if __has_include(<curl/curl.h>)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    util::logLine("config: loaded config.ini");
+    // Load database games instantly on the main thread (takes <50ms)
     g_games = loadGamesFromFile(kCatalogPath);
-    util::logLine("main: loaded g_games count=" + std::to_string(g_games.size()));
+    util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()));
 
-    // Fallback parser if JSON games catalog doesn't exist
-    if (g_games.empty()) {
-        catalog::CatalogManager catalog_mgr;
-        bool sources_loaded = catalog_mgr.loadSourcesWithFallback("sdmc:/switch/TorrentShopNX/sources.json", "romfs:/sources.json");
-        if (sources_loaded) {
-            catalog_mgr.updateCatalogs();
-            catalog_mgr.mergeCatalogEntries();
-            for (const auto& entry : catalog_mgr.entries()) {
-                Game g;
-                g.title = entry.title;
-                g.size = entry.size;
-                g.magnet = entry.magnet;
-                g.description = entry.description;
-                g.cover = entry.icon;
-                g.topic_id = extractBtihHashLocal(entry.magnet);
-                g_games.push_back(g);
-            }
-        }
-    }
+    // Logger configuration
+    brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
     // Sub-views are now Activities and do not need XML registration.
 
@@ -217,6 +177,18 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
+
+    // Signal background cleanup to cancel immediately
+    g_cleanupCancelled = true;
+
+    // Wait for background tasks (cleanup and catalog update) to complete safely before deinitializing systems
+    util::logLine("main: waiting for background threads to exit...");
+    int waitCount = 0;
+    while ((g_cleanupRunning.load() || g_catalogUpdateRunning.load()) && waitCount < 100) {
+        usleep(10000); // 10ms
+        waitCount++;
+    }
+    util::logLine("main: background threads exited after " + std::to_string(waitCount * 10) + "ms, proceeding with shutdown");
 
     // Stop threads
     util::logLine("main: calling DownloadManager::shutdown");

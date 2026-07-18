@@ -1,6 +1,8 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <memory>
+#include <atomic>
 #include "../GameData.hpp"
 #include "../torrent/torrent_manager.h"
 
@@ -11,6 +13,7 @@ public:
     CONTENT_FROM_XML_RES("file_select_view.xml");
 
     FileSelectView(const Game& game);
+    ~FileSelectView();
     void onContentAvailable() override;
     static brls::View* create(); // XML support stub
 
@@ -22,6 +25,8 @@ private:
     Game game_;
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;
+    std::vector<brls::Label*> checkboxLabels_;
+    std::shared_ptr<std::atomic<bool>> alive_flag_;
 
     BRLS_BIND(brls::Label,          title,          "title");
     BRLS_BIND(brls::Label,          subtitle,       "subtitle");

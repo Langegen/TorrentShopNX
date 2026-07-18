@@ -13,36 +13,46 @@
             <brls:Box width="auto" height="auto" axis="row" justifyContent="center" alignItems="center">
                 
                 <!-- Catalog -->
-                <brls:Box id="btnCatalog" width="200px" height="280px" focusable="true" marginRight="20">
-                    <brls:Image image="@res/img/icon_catalog.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
-                    <brls:Label text="Каталог" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                <brls:Box id="btnCatalog" width="200px" height="300px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_catalog.png" width="200px" height="300px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Каталог" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
-
+ 
                 <!-- Remote Add -->
-                <brls:Box id="btnRemoteAdd" width="200px" height="280px" focusable="true" marginRight="20">
-                    <brls:Image image="@res/img/icon_remote.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
-                    <brls:Label text="По сети" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                <brls:Box id="btnRemoteAdd" width="200px" height="300px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_remote.png" width="200px" height="300px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Добавить" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
-
+ 
                 <!-- Favorites -->
-                <brls:Box id="btnFavorites" width="200px" height="280px" focusable="true" marginRight="20">
-                    <brls:Image image="@res/img/icon_favorites.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
-                    <brls:Label text="Избранное" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                <brls:Box id="btnFavorites" width="200px" height="300px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_favorites.png" width="200px" height="300px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Избранное" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
-
+ 
                 <!-- Downloads -->
-                <brls:Box id="btnDownloads" width="200px" height="280px" focusable="true" marginRight="20">
-                    <brls:Image image="@res/img/icon_downloads.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
-                    <brls:Label id="lblDownloads" text="Загрузки" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                <brls:Box id="btnDownloads" width="200px" height="300px" focusable="true" marginRight="20">
+                    <brls:Image image="@res/img/icon_downloads.png" width="200px" height="300px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label id="lblDownloads" text="Загрузки" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
-
+ 
                 <!-- Settings -->
-                <brls:Box id="btnSettings" width="200px" height="280px" focusable="true">
-                    <brls:Image image="@res/img/icon_settings.png" width="200px" height="280px" positionType="absolute" positionLeft="0" positionTop="0" />
-                    <brls:Label text="Настройки" width="200px" height="auto" fontSize="20" horizontalAlign="center" marginTop="210px" textColor="#FFFFFF" />
+                <brls:Box id="btnSettings" width="200px" height="300px" focusable="true">
+                    <brls:Image image="@res/img/icon_settings.png" width="200px" height="300px" positionType="absolute" positionLeft="0" positionTop="0" />
+                    <brls:Label text="Инструменты" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
-
+ 
             </brls:Box>
+
+            <!-- Legal Disclaimer -->
+            <brls:Label
+                text="Disclaimer: This application utilizes torrent technology. Torrent protocols may be restricted or prohibited in certain jurisdictions. Please verify the legality of torrent downloads in your country before use. The authors assume no liability for misuse."
+                width="850px"
+                height="auto"
+                fontSize="15"
+                marginTop="40px"
+                textColor="#777777"
+                horizontalAlign="center" />
         </brls:Box>
     </brls:ScrollingFrame>
 

@@ -134,7 +134,7 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_reset(curl);
 
         struct curl_slist* headers = nullptr;
-        headers = curl_slist_append(headers, "User-Agent: TorrentShopNX/0.2");
+        headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         if (method == "POST") {
             headers = curl_slist_append(headers, "Content-Type: application/json");
         }
@@ -155,6 +155,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
         curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
         curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 
         if (keep_alive_) {
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
