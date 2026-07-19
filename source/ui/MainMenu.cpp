@@ -16,7 +16,7 @@ extern std::vector<Game> g_games;
 
 MainMenu::MainMenu() {
     util::logLine("MainMenu: constructor start");
-    brls::Application::setCommonFooter("TorrentShopNX v1.0.0 | Игр в каталоге: " + std::to_string(g_games.size()));
+    brls::Application::setCommonFooter("TorrentShopNX v2.0 | Игр в каталоге: " + std::to_string(g_games.size()));
     util::logLine("MainMenu: constructor end");
 }
 
@@ -119,7 +119,7 @@ void MainMenu::onContentAvailable() {
 
                         brls::sync([fallback_games]() {
                             g_games = fallback_games;
-                            brls::Application::setCommonFooter("TorrentShopNX v1.0.0 | Игр в каталоге: " + std::to_string(g_games.size()));
+                            brls::Application::setCommonFooter("TorrentShopNX v2.0 | Игр в каталоге: " + std::to_string(g_games.size()));
                             if (ui::g_activeCatalogView) {
                                 ui::g_activeCatalogView->filterCatalog();
                             }
@@ -130,7 +130,7 @@ void MainMenu::onContentAvailable() {
                 // Reload games from updated file in main thread
                 brls::sync([]() {
                     g_games = loadGamesFromFile("sdmc:/switch/TorrentShopNX/switch_games.json");
-                    brls::Application::setCommonFooter("TorrentShopNX v1.0.0 | Игр в каталоге: " + std::to_string(g_games.size()));
+                    brls::Application::setCommonFooter("TorrentShopNX v2.0 | Игр в каталоге: " + std::to_string(g_games.size()));
                     
                     // Write new update date in config on main thread
                     auto& main_cfg = config::ConfigManager::instance();

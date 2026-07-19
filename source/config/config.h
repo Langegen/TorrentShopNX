@@ -28,6 +28,12 @@ public:
     bool shouldUpdateCatalogToday() const;
     static std::string currentDateString();
 
+    const std::string& getInstallLocation() const;
+    void setInstallLocation(const std::string& location);
+
+    const std::string& getAppUpdateUrl() const;
+    void setAppUpdateUrl(const std::string& url);
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -37,6 +43,8 @@ private:
     std::string data_mode_;
     bool keep_awake_during_downloads_;
     std::string last_catalog_update_date_;
+    std::string install_location_;
+    std::string app_update_url_;
     std::string config_path_;
     std::string legacy_config_path_;
 };

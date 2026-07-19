@@ -15,6 +15,7 @@ public:
 
 private:
     BRLS_BIND(brls::DetailCell, updatesCell, "updatesCell");
+    BRLS_BIND(brls::DetailCell, appUpdateCell, "appUpdateCell");
     BRLS_BIND(brls::BooleanCell, keepAwakeCell, "keepAwakeCell");
     BRLS_BIND(brls::SelectorCell, modeCell, "modeCell");
     BRLS_BIND(brls::DetailCell, remoteUrlCell, "remoteUrlCell");

@@ -860,7 +860,9 @@ struct TorrentEngine::Impl {
 
                                 // При обрыве: сразу переподключить известные адреса пиров
                                 if (no_peers || peers_just_dropped) {
-                                    record->handle.resume(); // на случай если torrent был pause'd
+                                    if (!probe_status.active) {
+                                        record->handle.resume(); // на случай если torrent был pause'd
+                                    }
                                     reconnectKnownPeersLocked(*record, 4);
                                 }
 
@@ -2465,6 +2467,8 @@ void TorrentEngine::stop() {
 
     {
         std::lock_guard<Spinlock> lock(impl_->mutex);
+        // (Disabled: let session destructor clean up torrents synchronously to prevent race conditions during async removal)
+        /*
         if (impl_->session) {
             util::logLine("torrent_engine: removing all torrents to close file handles");
             for (auto it = impl_->torrents.begin(); it != impl_->torrents.end(); ++it) {
@@ -2475,6 +2479,7 @@ void TorrentEngine::stop() {
                 }
             }
         }
+        */
         impl_->torrents.clear();
         impl_->prepared_stream = {};
         impl_->probe_status = {};

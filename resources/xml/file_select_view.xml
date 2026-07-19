@@ -28,10 +28,25 @@
 
         </brls:ScrollingFrame>
 
-        <!-- Bottom Summary -->
-        <brls:Box width="auto" height="50px" axis="row" alignItems="center" justifyContent="spaceBetween" padding="10" backgroundColor="#2C2C2C" cornerRadius="5">
-            <brls:Label text="Всего выбрано:" fontSize="16" />
-            <brls:Label id="totalSizeText" text="0 MB" fontSize="16" textColor="#00FF00" />
+        <!-- Bottom Summary & Storage Selector -->
+        <brls:Box width="auto" axis="column" padding="15" backgroundColor="#2C2C2C" cornerRadius="5">
+            <!-- Row 1: Selected files size & Free space -->
+            <brls:Box width="auto" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+                <brls:Box axis="row" alignItems="center">
+                    <brls:Label text="Всего выбрано: " fontSize="16" />
+                    <brls:Label id="totalSizeText" text="0 MB" fontSize="16" textColor="#00FF00" />
+                </brls:Box>
+                <brls:Box axis="column" alignItems="flexEnd">
+                    <brls:Label id="freeSpaceSdText" text="Свободно на SD: ---" fontSize="13" textColor="#AAAAAA" />
+                    <brls:Label id="freeSpaceNandText" text="Свободно на консоли: ---" fontSize="13" textColor="#AAAAAA" />
+                </brls:Box>
+            </brls:Box>
+            
+            <!-- Row 2: Install location selector (clickable & focusable) -->
+            <brls:Box id="installLocationBox" width="auto" height="50px" axis="row" alignItems="center" justifyContent="spaceBetween" paddingLeft="10" paddingRight="10" backgroundColor="#3C3C3C" cornerRadius="5" focusable="true">
+                <brls:Label text="Место установки (нажмите для смены):" fontSize="16" />
+                <brls:Label id="installLocationText" text="Авто" fontSize="16" textColor="#3498db" />
+            </brls:Box>
         </brls:Box>
 
     </brls:Box>

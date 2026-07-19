@@ -103,11 +103,13 @@ extern "C" {
     }
 }
 
+std::string g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
 static const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
 
 int main(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
+    if (argc > 0 && argv[0] && std::string(argv[0]).find(".nro") != std::string::npos) {
+        g_nroPath = argv[0];
+    }
 
     util::logInit();
     util::logLine("main: start");
@@ -126,6 +128,16 @@ int main(int argc, char** argv) {
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
     brls::Application::setGlobalQuit(false);
     brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
+
+    // Register focus change listener to handle console sleep / wake safely
+    brls::Application::getWindowFocusChangedEvent()->subscribe([](bool focused) {
+        if (!focused) {
+            util::logLine("main: focus lost (console going to sleep / minimized), stopping TorrentEngine to prevent crash...");
+            torrent::TorrentEngine::instance().stop();
+        } else {
+            util::logLine("main: focus regained (console waking up)");
+        }
+    });
 
     // Initialize managers and load configurations
     auto& cfg = config::ConfigManager::instance();

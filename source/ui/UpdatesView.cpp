@@ -383,7 +383,6 @@ void UpdatesView::scanForUpdates() {
         std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
         Result rc = nsInitialize();
         if (R_SUCCEEDED(rc)) {
-            s32 total = 0;
             s32 offset = 0;
             s32 entry_count = 0;
             std::vector<NsApplicationRecord> records;

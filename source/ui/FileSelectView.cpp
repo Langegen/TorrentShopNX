@@ -3,6 +3,8 @@
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
 #include "../datasource/internal_torrent_engine.h"
+#include "../config/config.h"
+#include "../utils/switch_utils.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
@@ -127,20 +129,60 @@ static uint64_t parseTitleIdFromFilename(const std::string& name) {
 // FileSelectView
 // ─────────────────────────────────────────────────────────────────────────────
 
+std::atomic<bool> g_file_select_view_active{false};
+
 FileSelectView::FileSelectView(const Game& game)
     : game_(game),
-      alive_flag_(std::make_shared<std::atomic<bool>>(true)) {}
+      alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
+    g_file_select_view_active = true;
+}
 
 FileSelectView::~FileSelectView() {
     // Signal both async threads that this object is being destroyed.
     // They must NOT touch any member after this flag is false.
     alive_flag_->store(false);
+    g_file_select_view_active = false;
 }
 
 void FileSelectView::onContentAvailable() {
     util::logLine("FileSelectView: onContentAvailable start");
     title->setText(cleanTitle(game_.title));
     subtitle->setText("Получение списка файлов торрента...");
+
+    // Configure install location selector
+    auto& cfg = config::ConfigManager::instance();
+    auto updateInstallLocationDisplay = [this, &cfg]() {
+        if (!installLocationText) return;
+        std::string loc = cfg.getInstallLocation();
+        if (loc == "sd") {
+            installLocationText->setText("Карта памяти (SD)");
+            installLocationText->setTextColor(nvgRGB(46, 204, 113)); // green
+        } else if (loc == "nand") {
+            installLocationText->setText("Память консоли (NAND)");
+            installLocationText->setTextColor(nvgRGB(231, 76, 60)); // red/orange
+        } else {
+            installLocationText->setText("Авто (выбор системы)");
+            installLocationText->setTextColor(nvgRGB(52, 152, 219)); // blue
+        }
+    };
+    updateInstallLocationDisplay();
+
+    if (installLocationBox) {
+        installLocationBox->registerClickAction([this, updateInstallLocationDisplay, &cfg](brls::View* view) {
+            std::string loc = cfg.getInstallLocation();
+            if (loc == "auto") {
+                cfg.setInstallLocation("sd");
+            } else if (loc == "sd") {
+                cfg.setInstallLocation("nand");
+            } else {
+                cfg.setInstallLocation("auto");
+            }
+            cfg.save();
+            updateInstallLocationDisplay();
+            updateTotalSize(); // Recheck space if we changed storage
+            return true;
+        });
+    }
 
     // Grab focus to prevent navigation events from reaching the background catalog view
     fileListScroll->setFocusable(true);
@@ -214,9 +256,18 @@ void FileSelectView::onContentAvailable() {
                 // Allow focus to leave the scroll frame now that items are focusable
                 fileListScroll->setFocusable(false);
 
-                // Set default focus to the first file item
-                if (fileListBox && !fileListBox->getChildren().empty()) {
-                    brls::Application::giveFocus(fileListBox->getChildren().front());
+                // Set default focus to the first focusable file item
+                if (fileListBox) {
+                    brls::View* firstFocusable = nullptr;
+                    for (auto* child : fileListBox->getChildren()) {
+                        if (child->isFocusable()) {
+                            firstFocusable = child;
+                            break;
+                        }
+                    }
+                    if (firstFocusable) {
+                        brls::Application::giveFocus(firstFocusable);
+                    }
                 }
             } else {
                 subtitle->setText("Ошибка загрузки метаданных");
@@ -293,6 +344,7 @@ void FileSelectView::rebuildFileList() {
     }
 
     // Now render them
+    brls::View* lastFocusable = nullptr;
     for (const auto& item : displayItems) {
         if (item.isHeader) {
             auto* row = new brls::Box();
@@ -373,9 +425,15 @@ void FileSelectView::rebuildFileList() {
             });
 
             fileListBox->addView(row);
+            lastFocusable = row;
             util::logLine("FileSelectView: added row " + std::to_string(idx) +
                           " name='" + file.name + "'");
         }
+    }
+
+    if (lastFocusable && installLocationBox) {
+        lastFocusable->setCustomNavigationRoute(brls::FocusDirection::DOWN, installLocationBox);
+        installLocationBox->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
     }
 }
 
@@ -390,6 +448,25 @@ void FileSelectView::updateTotalSize() {
             total += files_[i].size;
     }
     totalSizeText->setText(formatBytes(total));
+
+    // Update free space displays
+    int64_t sdFree = 0;
+    int64_t nandFree = 0;
+    if (freeSpaceSdText) {
+        if (util::getStorageFreeSpace(1, sdFree)) {
+            freeSpaceSdText->setText("Свободно на SD: " + formatBytes(sdFree));
+        } else {
+            freeSpaceSdText->setText("Свободно на SD: ---");
+        }
+    }
+
+    if (freeSpaceNandText) {
+        if (util::getStorageFreeSpace(0, nandFree)) {
+            freeSpaceNandText->setText("Свободно на консоли: " + formatBytes(nandFree));
+        } else {
+            freeSpaceNandText->setText("Свободно на консоли: ---");
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -416,10 +493,12 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     int forcedIndex = -1;
     std::string forcedName;
     unsigned long long largestGameSize = 0;
+    unsigned long long totalNeededSize = 0;
 
     for (size_t i = 0; i < files_.size(); ++i) {
         if (i < selected_.size() && selected_[i]) {
             selectedIndices.push_back(files_[i].index);
+            totalNeededSize += files_[i].size;
             if (isSwitchGameFile(files_[i].name) && files_[i].size > largestGameSize) {
                 largestGameSize = files_[i].size;
                 forcedIndex     = files_[i].index;
@@ -445,6 +524,68 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
+    // Check free space depending on install_location setting
+    auto& cfg = config::ConfigManager::instance();
+    std::string loc = cfg.getInstallLocation();
+    
+    int64_t freeSpace = 0;
+    std::string targetStorageName;
+    bool checkPassed = true;
+
+    if (loc == "sd") {
+        targetStorageName = "карте памяти (SD)";
+        util::getStorageFreeSpace(1, freeSpace);
+        if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
+            checkPassed = false;
+        }
+    } else if (loc == "nand") {
+        targetStorageName = "памяти консоли (NAND)";
+        util::getStorageFreeSpace(0, freeSpace);
+        if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
+            checkPassed = false;
+        }
+    } else { // "auto"
+        targetStorageName = "системе (SD или NAND)";
+        int64_t sdFree = 0;
+        int64_t nandFree = 0;
+        util::getStorageFreeSpace(1, sdFree);
+        util::getStorageFreeSpace(0, nandFree);
+
+        if (static_cast<int64_t>(totalNeededSize) <= sdFree) {
+            freeSpace = sdFree;
+        } else if (static_cast<int64_t>(totalNeededSize) <= nandFree) {
+            freeSpace = nandFree;
+        } else {
+            freeSpace = sdFree; // default display
+            checkPassed = false;
+        }
+    }
+
+    if (!checkPassed) {
+        std::string msg = "Внимание: Недостаточно свободного места на " + targetStorageName + "!\n" +
+                          "Требуется: " + formatBytes(totalNeededSize) + "\n" +
+                          "Доступно: " + formatBytes(freeSpace) + "\n\n" +
+                          "Продолжить установку?";
+        
+        brls::Dialog* dialog = new brls::Dialog(msg);
+        dialog->addButton("Продолжить", [this, selectedIndices, forcedIndex, forcedName, dialog]() {
+            dialog->close([this, selectedIndices, forcedIndex, forcedName]() {
+                this->executeDownloads(selectedIndices, forcedIndex, forcedName);
+            });
+        });
+        dialog->addButton("Отмена", [dialog]() {
+            dialog->close();
+        });
+        dialog->open();
+        return;
+    }
+
+    executeDownloads(selectedIndices, forcedIndex, forcedName);
+}
+
+void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
+    (void)forcedIndex;
+    (void)forcedName;
     for (size_t i = 0; i < files_.size(); ++i) {
         if (i < selected_.size() && selected_[i]) {
             std::vector<int> singleSelected = { files_[i].index };
@@ -460,8 +601,6 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
-    // Defer navigation to avoid destroying 'this' while still executing member code.
-    // popActivity deletes FileSelectView immediately, so we must not touch 'this' after.
     brls::sync([]() {
         while (brls::Application::getActivitiesStack().size() > 1)
             brls::Application::popActivity(brls::TransitionAnimation::NONE);

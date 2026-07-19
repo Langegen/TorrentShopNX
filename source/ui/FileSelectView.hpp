@@ -20,6 +20,7 @@ public:
     void toggleAllSelection();
     void updateTotalSize();
     void startDownloadAndGoToDownloads();
+    void executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName);
 
 private:
     Game game_;
@@ -33,6 +34,10 @@ private:
     BRLS_BIND(brls::ScrollingFrame, fileListScroll, "fileListScroll");
     BRLS_BIND(brls::Box,            fileListBox,    "fileListBox");
     BRLS_BIND(brls::Label,          totalSizeText,  "totalSizeText");
+    BRLS_BIND(brls::Label,          freeSpaceSdText, "freeSpaceSdText");
+    BRLS_BIND(brls::Label,          freeSpaceNandText, "freeSpaceNandText");
+    BRLS_BIND(brls::Box,            installLocationBox, "installLocationBox");
+    BRLS_BIND(brls::Label,          installLocationText, "installLocationText");
 
     // Rebuild the visible list from files_ / selected_
     void rebuildFileList();

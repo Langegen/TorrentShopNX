@@ -24,7 +24,9 @@ bool parseConfigBody(const std::string& body,
                      std::string& catalog_source_url,
                      std::string& data_mode,
                      bool& keep_awake_during_downloads,
-                     std::string& last_catalog_update_date) {
+                     std::string& last_catalog_update_date,
+                     std::string& install_location,
+                     std::string& app_update_url) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
 
@@ -61,6 +63,12 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "last_catalog_update_date") {
                     last_catalog_update_date = val;
+                    parsed_known_keys = true;
+                } else if (key == "install_location") {
+                    install_location = val;
+                    parsed_known_keys = true;
+                } else if (key == "app_update_url") {
+                    app_update_url = val;
                     parsed_known_keys = true;
                 }
             } else if (legacy_single_value.empty()) {
@@ -102,6 +110,8 @@ ConfigManager::ConfigManager() {
     data_mode_ = "torrserver";
     keep_awake_during_downloads_ = true;
     last_catalog_update_date_.clear();
+    install_location_ = "auto";
+    app_update_url_ = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
     load();
 }
 
@@ -109,17 +119,19 @@ void ConfigManager::load() {
     std::string body;
     if (readWholeFile(config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, last_catalog_update_date_);
+                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_);
         if (data_mode_ != "local_client") data_mode_ = "torrserver";
-        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_);
+        if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
+        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", install_location: " + install_location_);
         return;
     }
 
     // Backward compatibility: migrate old config.txt on first run.
     if (readWholeFile(legacy_config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, last_catalog_update_date_);
+                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_);
         if (data_mode_ != "local_client") data_mode_ = "torrserver";
+        if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         util::logLine("config: loaded legacy config.txt, migrating to config.ini");
         save();
         return;
@@ -147,6 +159,8 @@ void ConfigManager::save() {
     file << "data_mode=" << data_mode_ << "\n";
     file << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
+    file << "install_location=" << install_location_ << "\n";
+    file << "app_update_url=" << app_update_url_ << "\n";
     util::logLine("config: saved config.ini");
 }
 
@@ -224,6 +238,24 @@ bool ConfigManager::shouldUpdateCatalogToday() const {
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_catalog_update_date_ != today;
+}
+
+const std::string& ConfigManager::getInstallLocation() const {
+    return install_location_;
+}
+
+void ConfigManager::setInstallLocation(const std::string& location) {
+    install_location_ = location;
+    save();
+}
+
+const std::string& ConfigManager::getAppUpdateUrl() const {
+    return app_update_url_;
+}
+
+void ConfigManager::setAppUpdateUrl(const std::string& url) {
+    app_update_url_ = url;
+    save();
 }
 
 } // namespace config

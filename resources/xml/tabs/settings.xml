@@ -27,6 +27,9 @@
                 
                 <brls:DetailCell
                     id="updatesCell" />
+                    
+                <brls:DetailCell
+                    id="appUpdateCell" />
 
                 <brls:BooleanCell
                     id="keepAwakeCell" />

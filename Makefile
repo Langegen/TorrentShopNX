@@ -18,6 +18,9 @@ include $(DEVKITPRO)/libnx/switch_rules
 # ROMFS is the directory containing data to be added to RomFS, relative to the Makefile (Optional)
 #---------------------------------------------------------------------------------
 TARGET      :=  TorrentShopNX
+APP_TITLE   :=  TorrentShopNX
+APP_AUTHOR  :=  Langegen
+APP_VERSION :=  2.0
 BUILD       :=  build
 SOURCES     :=  source source/ui source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
 DATA        :=
@@ -146,10 +149,10 @@ DEPENDS := $(OFILES:.o=.d)
 
 all : $(OUTPUT).nro
 
-$(OUTPUT).nro : $(OUTPUT).elf
+$(OUTPUT).nro : $(OUTPUT).elf $(OUTPUT).nacp
 	@echo building romfs ...
 	@$(DEVKITPRO)/tools/bin/build_romfs $(TOPDIR)/$(ROMFS) $(CURDIR)/romfs.bin
-	@$(DEVKITPRO)/tools/bin/elf2nro $< $@ --icon=$(TOPDIR)/$(ROMFS)/icon.jpg --romfs=$(CURDIR)/romfs.bin
+	@$(DEVKITPRO)/tools/bin/elf2nro $< $@ --icon=$(TOPDIR)/$(ROMFS)/icon.jpg --nacp=$(OUTPUT).nacp --romfs=$(CURDIR)/romfs.bin
 	@echo built ... $(notdir $@)
 
 $(OUTPUT).elf : $(OFILES)

@@ -12,10 +12,11 @@
 #include "../net/http_client.h"
 #include "../torrent/torrent_engine.h"
 #include "../utils/log.h"
+#include "../utils/switch_utils.h"
 
-#ifdef __SWITCH__
-#include <switch.h>
-#endif
+namespace ui {
+    extern std::atomic<bool> g_file_select_view_active;
+}
 
 namespace download {
 
@@ -1100,12 +1101,17 @@ void DownloadManager::trackProgress() {
     updateSleepPolicy(has_active);
 
     // Auto-stop local torrent engine when completely idle to release memory and prevent background crashes/deadlocks
+    // (Disabled to prevent random background crashes/deadlocks during menu navigation on Switch)
+    /*
     if (is_local_client && torrent::TorrentEngine::instance().isRunning()) {
-        if (!has_active && !has_queued && !has_paused && !torrent::TorrentEngine::instance().probeStatus().active) {
+        if (!has_active && !has_queued && !has_paused && 
+            !torrent::TorrentEngine::instance().probeStatus().active &&
+            !ui::g_file_select_view_active.load()) {
             util::logLine("download: local engine is idle, stopping TorrentEngine to release resources");
             torrent::TorrentEngine::instance().stop();
         }
     }
+    */
 }
 
 bool DownloadManager::hasActiveTransfers() const {
@@ -1255,7 +1261,25 @@ bool DownloadManager::startHybridInstall(size_t index) {
         config.verify_sha256 = true;
         config.install_ticket = true;
 #ifdef __SWITCH__
-        config.storage = NcmStorageId_SdCard;
+        std::string loc = config::ConfigManager::instance().getInstallLocation();
+        if (loc == "sd") {
+            config.storage = NcmStorageId_SdCard;
+        } else if (loc == "nand") {
+            config.storage = NcmStorageId_BuiltInUser;
+        } else { // "auto"
+            s64 sdFree = 0;
+            s64 nandFree = 0;
+            uint64_t needed = source->totalSize();
+            util::getStorageFreeSpace(1, sdFree);
+            util::getStorageFreeSpace(0, nandFree);
+            if (static_cast<s64>(needed) <= sdFree) {
+                config.storage = NcmStorageId_SdCard;
+            } else if (static_cast<s64>(needed) <= nandFree) {
+                config.storage = NcmStorageId_BuiltInUser;
+            } else {
+                config.storage = NcmStorageId_SdCard; // Default fallback
+            }
+        }
 #endif
 
         item.hybrid_installer->setSourceFileNameHint(install_stream_name);
