@@ -14,6 +14,8 @@ public:
     void prepareForReuse() override;
     brls::View* getDefaultFocus() override;
 
+    static int s_lastFocusedColumn;
+
     // Bind cards 0 to 5
     BRLS_BIND(brls::Box, card0, "card0");
     BRLS_BIND(brls::Image, cover0, "cover0");

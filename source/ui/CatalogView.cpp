@@ -31,7 +31,7 @@ namespace ui {
 
 CatalogView* g_activeCatalogView = nullptr;
 
-static int s_lastFocusedColumn = 0;
+int GameRowCell::s_lastFocusedColumn = 0;
 
 // GAMEROWCELL IMPLEMENTATION
 GameRowCell::GameRowCell() {
@@ -248,7 +248,10 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cardBox->getFocusLostEvent()->clear();
 
                 // On focus → switch to full title and start scrolling animation (scissor-clipped by Borealis)
-                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle](brls::View*) {
+                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle, i](brls::View* v) {
+                    if (v->isFocused()) {
+                        GameRowCell::s_lastFocusedColumn = i;
+                    }
                     titleLabel->setText(fullTitle);
                     titleLabel->setAnimated(true);
                 });

@@ -119,7 +119,10 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             cards[i].card->getFocusEvent()->clear();
             cards[i].card->getFocusLostEvent()->clear();
 
-            cards[i].card->getFocusEvent()->subscribe([titleLabel, fullTitle](brls::View*) {
+            cards[i].card->getFocusEvent()->subscribe([titleLabel, fullTitle, i](brls::View* v) {
+                if (v->isFocused()) {
+                    GameRowCell::s_lastFocusedColumn = i;
+                }
                 titleLabel->setText(fullTitle);
                 titleLabel->setAnimated(true);
             });

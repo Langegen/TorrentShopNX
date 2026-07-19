@@ -1098,6 +1098,14 @@ void DownloadManager::trackProgress() {
     }
 
     updateSleepPolicy(has_active);
+
+    // Auto-stop local torrent engine when completely idle to release memory and prevent background crashes/deadlocks
+    if (is_local_client && torrent::TorrentEngine::instance().isRunning()) {
+        if (!has_active && !has_queued && !has_paused && !torrent::TorrentEngine::instance().probeStatus().active) {
+            util::logLine("download: local engine is idle, stopping TorrentEngine to release resources");
+            torrent::TorrentEngine::instance().stop();
+        }
+    }
 }
 
 bool DownloadManager::hasActiveTransfers() const {

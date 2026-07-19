@@ -2460,7 +2460,7 @@ void TorrentEngine::stop() {
 #ifndef TSNX_USE_LIBTORRENT
     return;
 #else
-    std::shared_ptr<lt::session> session_to_leak;
+    std::shared_ptr<lt::session> session_to_destroy;
     std::thread alert_thread_to_join;
 
     {
@@ -2470,8 +2470,7 @@ void TorrentEngine::stop() {
             for (auto it = impl_->torrents.begin(); it != impl_->torrents.end(); ++it) {
                 if (it->second && it->second->handle.is_valid()) {
                     try {
-                        impl_->session->remove_torrent(it->second->handle,
-                                                       lt::session::delete_files | lt::session::delete_partfile);
+                        impl_->session->remove_torrent(it->second->handle);
                     } catch (...) {}
                 }
             }
@@ -2486,11 +2485,8 @@ void TorrentEngine::stop() {
             alert_thread_to_join = std::move(impl_->alert_thread);
         }
 
-        // DESTROY the session explicitly now instead of leaking it.
-        // Joining std::thread during static destructors on Switch causes a crash,
-        // but destroying the session here inside main() is perfectly safe and ensures
-        // the background threads are fully stopped before virtmemExit() unmaps memory.
-        impl_->session.reset();
+        // Move to local shared_ptr to destroy OUTSIDE the lock
+        session_to_destroy = std::move(impl_->session);
     }
 
     // Join alert thread OUTSIDE the lock
@@ -2500,16 +2496,17 @@ void TorrentEngine::stop() {
         util::logLine("torrent_engine: alert thread stopped and joined");
     }
 
-    if (session_to_leak) {
-        util::logLine("torrent_engine: leaking session to prevent thread-exit crash, waiting 400ms for torrent removal and file close to settle...");
-        std::this_thread::sleep_for(std::chrono::milliseconds(400));
-        util::logLine("torrent_engine: session leaked, files should be closed");
+    // Destroy session OUTSIDE the lock
+    if (session_to_destroy) {
+        util::logLine("torrent_engine: destroying libtorrent session");
+        session_to_destroy.reset();
+        util::logLine("torrent_engine: libtorrent session destroyed cleanly");
     }
 
     std::lock_guard<std::mutex> state_lock(state_mutex_);
     server_running_ = false;
     last_error_.clear();
-    util::logLine("torrent_engine: stopped cleanly (leaked after removal)");
+    util::logLine("torrent_engine: stopped cleanly");
     return;
 #endif
 }
