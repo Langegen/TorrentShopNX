@@ -9,6 +9,9 @@
 #include <filesystem>
 #include <curl/curl.h>
 #include <atomic>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 extern std::string g_nroPath;
 
@@ -48,7 +51,75 @@ static int curlProgressCallback(void* clientp, curl_off_t dltotal, curl_off_t dl
     return 0;
 }
 
-static void downloadAndInstallNro(const std::string& url, const std::string& version) {
+static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
+    std::ifstream in(src, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) {
+        util::logLine("copyFileOverwrite: failed to open src " + src);
+        return false;
+    }
+    
+    std::streamsize fileSize = in.tellg();
+    in.seekg(0, std::ios::beg);
+    
+    if (fileSize < 100 * 1024) {
+        util::logLine("copyFileOverwrite: src file " + src + " size too small (" + std::to_string(fileSize) + " bytes)");
+        return false;
+    }
+    
+    std::ofstream out(dst, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        util::logLine("copyFileOverwrite: failed to open dst " + dst);
+        return false;
+    }
+    
+    char buffer[65536];
+    std::streamsize copied = 0;
+    while (in.read(buffer, sizeof(buffer)) || in.gcount() > 0) {
+        std::streamsize bytes = in.gcount();
+        if (bytes > 0) {
+            out.write(buffer, bytes);
+            if (out.fail()) {
+                util::logLine("copyFileOverwrite: write failed on dst " + dst);
+                out.close();
+                in.close();
+                return false;
+            }
+            copied += bytes;
+        }
+    }
+    
+    out.flush();
+    out.close();
+    in.close();
+    
+    util::logLine("copyFileOverwrite: successfully copied " + std::to_string(copied) + " bytes from " + src + " to " + dst);
+    return (copied >= 100 * 1024);
+}
+
+[[maybe_unused]] static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
+    std::string oldPath = dstPath + ".old";
+    std::remove(oldPath.c_str());
+    
+    int r1 = ::rename(dstPath.c_str(), oldPath.c_str());
+    util::logLine("replaceNroFile: rename dst -> old (" + dstPath + " -> " + oldPath + ") res=" + std::to_string(r1));
+    
+    int r2 = ::rename(srcPath.c_str(), dstPath.c_str());
+    util::logLine("replaceNroFile: rename src -> dst (" + srcPath + " -> " + dstPath + ") res=" + std::to_string(r2));
+    
+    if (r2 == 0) {
+        std::remove(oldPath.c_str());
+        return true;
+    }
+    
+    bool ok = copyFileOverwrite(srcPath, dstPath);
+    if (ok) {
+        std::remove(srcPath.c_str());
+        std::remove(oldPath.c_str());
+    }
+    return ok;
+}
+
+void downloadAndInstallAppUpdate(const std::string& url, const std::string& version) {
     brls::Box* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setPadding(20);
@@ -98,11 +169,18 @@ static void downloadAndInstallNro(const std::string& url, const std::string& ver
         long http_code = 0;
         
         if (curl) {
+            std::error_code dirEc;
+            std::filesystem::create_directories(std::filesystem::path(tmpPath).parent_path(), dirEc);
+            
             std::ofstream file(tmpPath, std::ios::binary);
             if (file.is_open()) {
                 progressObj->file = &file;
                 
+                struct curl_slist* headers = nullptr;
+                headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                
                 curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+                curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
                 curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteCallback);
                 curl_easy_setopt(curl, CURLOPT_WRITEDATA, progressObj.get());
                 curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -119,6 +197,7 @@ static void downloadAndInstallNro(const std::string& url, const std::string& ver
                     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
                 }
                 file.close();
+                curl_slist_free_all(headers);
             }
             curl_easy_cleanup(curl);
         }
@@ -127,17 +206,33 @@ static void downloadAndInstallNro(const std::string& url, const std::string& ver
         
         brls::sync([res, http_code, tmpPath, progressDialog]() {
             progressDialog->close([res, http_code, tmpPath]() {
-                if (res == CURLE_OK && http_code == 200) {
+                struct stat st;
+                bool validDownloadedFile = (stat(tmpPath.c_str(), &st) == 0 && st.st_size > 100 * 1024);
+                
+                util::logLine("downloadAndInstallAppUpdate: res=" + std::to_string(res) + " http=" + std::to_string(http_code) + " size=" + (validDownloadedFile ? std::to_string(st.st_size) : "invalid"));
+                
+                if (res == CURLE_OK && http_code == 200 && validDownloadedFile) {
                     try {
-                        std::error_code ec;
-                        std::filesystem::rename(tmpPath, g_nroPath, ec);
-                        if (!ec) {
-                            brls::Dialog* successDialog = new brls::Dialog("Обновление успешно установлено!\nПерезапустите приложение, чтобы применить изменения.");
-                            successDialog->addButton("Выход", []() { brls::Application::quit(); });
-                            successDialog->setCancelable(false);
-                            successDialog->open();
+                        std::string updatePath = g_nroPath + ".update";
+                        
+                        bool updateSaved = copyFileOverwrite(tmpPath, updatePath);
+                        std::remove(tmpPath.c_str());
+                        
+                        if (updateSaved) {
+                            brls::Dialog* pendingDialog = new brls::Dialog("Обновление скачано!\nПерезапустить приложение для завершения установки?");
+                            pendingDialog->addButton("Перезапустить", []() {
+#ifdef __SWITCH__
+                                if (envHasNextLoad()) {
+                                    std::string updatePath = g_nroPath + ".update";
+                                    envSetNextLoad(updatePath.c_str(), updatePath.c_str());
+                                }
+#endif
+                                brls::Application::quit();
+                            });
+                            pendingDialog->addButton("Позже", [pendingDialog]() { pendingDialog->close(); });
+                            pendingDialog->open();
                         } else {
-                            brls::Dialog* errDialog = new brls::Dialog("Ошибка замены файла приложения:\n" + ec.message());
+                            brls::Dialog* errDialog = new brls::Dialog("Ошибка сохранения файла обновления.");
                             errDialog->addButton("ОК", [errDialog]() { errDialog->close(); });
                             errDialog->open();
                         }
@@ -150,11 +245,13 @@ static void downloadAndInstallNro(const std::string& url, const std::string& ver
                     std::error_code ec;
                     std::filesystem::remove(tmpPath, ec);
                     
-                    std::string errMsg = "Ошибка при скачивании обновления.\n";
+                    std::string errMsg = "Не удалось скачать файл обновления.\n";
                     if (res != CURLE_OK) {
-                        errMsg += "Curl error: " + std::to_string(res);
-                    } else {
-                        errMsg += "HTTP status: " + std::to_string(http_code);
+                        errMsg += "cURL ошибка: " + std::to_string(res);
+                    } else if (http_code != 200) {
+                        errMsg += "HTTP статус: " + std::to_string(http_code);
+                    } else if (!validDownloadedFile) {
+                        errMsg += "Скачанный файл недействителен или повреждён (" + (stat(tmpPath.c_str(), &st) == 0 ? std::to_string(st.st_size) : "0") + " байт).";
                     }
                     brls::Dialog* errDialog = new brls::Dialog(errMsg);
                     errDialog->addButton("ОК", [errDialog]() { errDialog->close(); });
@@ -201,7 +298,7 @@ void SettingsTab::onContentAvailable() {
         
         brls::async([checkDialog, &cfg]() {
             net::HttpClient http;
-            auto res = http.httpGet(cfg.getAppUpdateUrl());
+            auto res = http.httpGet(cfg.getEffectiveAppUpdateUrl());
             
             brls::sync([res, checkDialog]() {
                 checkDialog->close([res]() {
@@ -238,7 +335,7 @@ void SettingsTab::onContentAvailable() {
                             url = j.value("url", "");
                         }
                         
-                        std::string currentVersion = "2.0"; // Current app version
+                        std::string currentVersion = "2.1"; // Current app version
                         
                         std::string cleanVersion = version;
                         if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) {
@@ -263,16 +360,12 @@ void SettingsTab::onContentAvailable() {
                             return;
                         }
                         
-                        std::string msg = "Доступна новая версия: " + version + "\n\n";
-                        if (!changelog.empty()) {
-                            msg += "Список изменений:\n" + changelog + "\n\n";
-                        }
-                        msg += "Хотите скачать и установить обновление?";
+                        std::string msg = "Доступна новая версия: " + version + "\n\nХотите скачать и установить обновление?";
                         
                         brls::Dialog* dialog = new brls::Dialog(msg);
                         dialog->addButton("Да", [url, version, dialog]() {
                             dialog->close([url, version]() {
-                                downloadAndInstallNro(url, version);
+                                downloadAndInstallAppUpdate(url, version);
                             });
                         });
                         dialog->addButton("Нет", [dialog]() { dialog->close(); });
@@ -287,6 +380,12 @@ void SettingsTab::onContentAvailable() {
             });
         });
         return true;
+    });
+
+    // 0.3 Auto App Update
+    autoAppUpdateCell->init("Авто-проверка обновлений", cfg.getAutoAppUpdate(), [&cfg](bool value) {
+        cfg.setAutoAppUpdate(value);
+        cfg.save();
     });
 
     // 1. Prevent sleep
@@ -347,10 +446,11 @@ void SettingsTab::onContentAvailable() {
     catalogUrlCell->setText("URL каталога JSON");
     auto updateCatalogUrlDisplay = [this, &cfg]() {
         std::string url = cfg.getCatalogSourceUrl();
+        if (url.empty()) {
+            url = cfg.getEffectiveCatalogSourceUrl();
+        }
         if (url.length() > 35) {
             url = url.substr(0, 32) + "...";
-        } else if (url.empty()) {
-            url = "http://example.com/games.json";
         }
         catalogUrlCell->setDetailText(url);
     };
