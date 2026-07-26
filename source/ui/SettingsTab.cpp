@@ -223,8 +223,7 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                             pendingDialog->addButton("Перезапустить", []() {
 #ifdef __SWITCH__
                                 if (envHasNextLoad()) {
-                                    std::string updatePath = g_nroPath + ".update";
-                                    envSetNextLoad(updatePath.c_str(), updatePath.c_str());
+                                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
                                 }
 #endif
                                 brls::Application::quit();

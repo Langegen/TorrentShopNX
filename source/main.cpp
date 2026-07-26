@@ -141,35 +141,59 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
 }
 
 static bool checkAndApplyPendingUpdate() {
-    std::string updatePath = g_nroPath + ".update";
-    if (g_nroPath.find(".update") == std::string::npos) {
-        // We are running from main NRO. Check if .update file exists.
-        struct stat st;
-        if (stat(updatePath.c_str(), &st) == 0 && st.st_size > 100 * 1024) {
-            util::logLine("main: pending update file found at " + updatePath + " (" + std::to_string(st.st_size) + " bytes). Relaunching into update file...");
-#ifdef __SWITCH__
-            if (envHasNextLoad()) {
-                envSetNextLoad(updatePath.c_str(), updatePath.c_str());
-                return true; // Signal main to exit so HBL chainloads updatePath
-            }
-#endif
-        }
-    } else {
-        // We are running AS the .update file! Overwrite main NRO.
+    // 1. If we are running AS the .update file (e.g. TorrentShopNX.nro.update)
+    if (g_nroPath.find(".update") != std::string::npos) {
         std::string mainNroPath = g_nroPath.substr(0, g_nroPath.find(".update"));
-        util::logLine("main: running from update NRO. Overwriting main NRO: " + mainNroPath);
+        util::logLine("main: running as update NRO (" + g_nroPath + "). Overwriting main NRO: " + mainNroPath);
         
-        if (copyFileOverwrite(g_nroPath, mainNroPath)) {
-            util::logLine("main: update successfully copied to " + mainNroPath + "!");
+        bool ok = copyFileOverwrite(g_nroPath, mainNroPath);
+        util::logLine("main: copy result=" + std::to_string(ok));
+        
+        // Remove the .update file so we NEVER enter a bootloop
+        std::remove(g_nroPath.c_str());
+        
 #ifdef __SWITCH__
-            if (envHasNextLoad()) {
-                envSetNextLoad(mainNroPath.c_str(), mainNroPath.c_str());
-                util::logLine("main: relaunching into main NRO: " + mainNroPath);
-                return true; // Signal main to exit so HBL chainloads mainNroPath
-            }
+        if (envHasNextLoad()) {
+            envSetNextLoad(mainNroPath.c_str(), mainNroPath.c_str());
+            util::logLine("main: relaunching main NRO via envSetNextLoad: " + mainNroPath);
+            return true; // Signal main to exit so HBL chainloads mainNroPath
+        }
 #endif
-        } else {
-            util::logLine("main: failed to copy update to " + mainNroPath);
+        return false;
+    }
+
+    // 2. We are running as regular TorrentShopNX.nro. Check for pending .update files.
+    std::string updatePath = g_nroPath + ".update";
+    std::vector<std::string> possibleUpdates = {
+        updatePath,
+        "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro.update",
+        "sdmc:/switch/TorrentShopNX.nro.update"
+    };
+
+    for (const auto& upPath : possibleUpdates) {
+        struct stat st;
+        if (stat(upPath.c_str(), &st) == 0) {
+            if (st.st_size >= 100 * 1024) {
+                util::logLine("main: found pending update at " + upPath + " (" + std::to_string(st.st_size) + " bytes), applying...");
+                
+                // Copy the update over main NRO. Since no RomFS is mounted yet at top of main(), this succeeds
+                bool ok = copyFileOverwrite(upPath, g_nroPath);
+                util::logLine("main: copyFileOverwrite to " + g_nroPath + " result=" + std::to_string(ok));
+                
+                // CRITICAL: ALWAYS delete the .update file after processing it
+                std::remove(upPath.c_str());
+                
+#ifdef __SWITCH__
+                if (ok && envHasNextLoad()) {
+                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                    util::logLine("main: relaunching updated NRO via envSetNextLoad");
+                    return true; // Signal main to exit so HBL chainloads the freshly updated NRO
+                }
+#endif
+            } else {
+                util::logLine("main: removing invalid/small update file at " + upPath + " (" + std::to_string(st.st_size) + " bytes)");
+                std::remove(upPath.c_str());
+            }
         }
     }
     return false;
