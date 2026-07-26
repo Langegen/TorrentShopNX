@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <atomic>
 
 namespace net {
 
@@ -36,19 +37,23 @@ public:
 
     /// Потоковый GET с Range-заголовком и callback.
     /// Данные передаются callback'у по мере получения.
-    /// @param url     адрес
-    /// @param offset  начальный байт (для Range)
-    /// @param length  количество запрашиваемых байт (0 = до конца)
-    /// @param cb      callback для обработки данных
+    /// @param url          адрес
+    /// @param offset       начальный байт (для Range)
+    /// @param length       количество запрашиваемых байт (0 = до конца)
+    /// @param cb           callback для обработки данных
+    /// @param cancel_flag  опциональный флаг мгновенной отмены
     /// @return HTTP-код ответа (200/206 = успех)
     int httpGetStream(const std::string& url, uint64_t offset, uint64_t length,
-                      StreamCallback cb);
+                      StreamCallback cb, const std::atomic<bool>* cancel_flag = nullptr);
 
     /// Установить таймаут (секунды)
     void setTimeout(int seconds) { timeout_sec_ = seconds; }
 
     /// Включить/выключить Keep-Alive
     void setKeepAlive(bool enabled) { keep_alive_ = enabled; }
+
+    /// Установить флаг отмены для вызовов
+    void setCancelFlag(const std::atomic<bool>* cancel_flag) { cancel_flag_ = cancel_flag; }
 
 private:
     HttpResponse request(const std::string& method, const std::string& url,
@@ -62,6 +67,7 @@ private:
 
     int  timeout_sec_ = 30;
     bool keep_alive_  = true;
+    const std::atomic<bool>* cancel_flag_ = nullptr;
     void* curl_handle_ = nullptr;
 };
 

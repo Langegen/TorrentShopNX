@@ -130,7 +130,22 @@ View* RecyclerContentBox::getNextFocus(FocusDirection direction, View* currentVi
 
 View* RecyclerFrame::getNextCellFocus(FocusDirection direction, View* currentView)
 {
+    if (!currentView)
+    {
+        View* next = getParentNavigationDecision(this, nullptr, direction);
+        if (!next && hasParent())
+            next = getParent()->getNextFocus(direction, this);
+        return next;
+    }
+
     void* parentUserData = currentView->getParentUserData();
+    if (!parentUserData)
+    {
+        View* next = getParentNavigationDecision(this, nullptr, direction);
+        if (!next && hasParent())
+            next = getParent()->getNextFocus(direction, this);
+        return next;
+    }
 
     // Return nullptr immediately if focus direction mismatches the box axis (clang-format refuses to split it in multiple lines...)
     if ((this->contentBox->getAxis() == Axis::ROW && direction != FocusDirection::LEFT && direction != FocusDirection::RIGHT) || (this->contentBox->getAxis() == Axis::COLUMN && direction != FocusDirection::UP && direction != FocusDirection::DOWN))
@@ -156,7 +171,7 @@ View* RecyclerFrame::getNextCellFocus(FocusDirection direction, View* currentVie
     {
         for (auto it : this->contentBox->getChildren())
         {
-            if (*((size_t*)it->getParentUserData()) == currentFocusIndex)
+            if (it->getParentUserData() && *((size_t*)it->getParentUserData()) == currentFocusIndex)
             {
                 currentFocus = it->getDefaultFocus();
                 break;
@@ -498,6 +513,18 @@ void RecyclerFrame::removeCell(View* view)
 {
     if (!view)
         return;
+
+    View* currentFocus = Application::getCurrentFocus();
+    View* check = currentFocus;
+    while (check)
+    {
+        if (check == view)
+        {
+            Application::giveFocus(nullptr);
+            break;
+        }
+        check = check->getParent();
+    }
 
     // Find the index of the view
     size_t index;

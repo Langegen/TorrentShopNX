@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "i_data_source.h"
 #include "../net/http_client.h"
@@ -22,6 +22,7 @@ public:
     SourceType type() const override { return SourceType::Remote; }
     void close() override;
 
+    void setCancelFlag(const std::atomic<bool>* flag) override { cancel_flag_ = flag; }
     void setTimeout(int seconds) { timeout_sec_ = seconds; }
     void setRetryCount(int count) { max_retries_ = count; }
 
@@ -41,6 +42,7 @@ private:
     bool        opened_        = false;
     int         timeout_sec_   = 30;
     int         max_retries_   = 6;
+    const std::atomic<bool>* cancel_flag_ = nullptr;
     void*       curl_handle_   = nullptr;
     ReadFailureKind last_failure_ = ReadFailureKind::None;
 };

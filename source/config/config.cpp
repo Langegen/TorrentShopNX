@@ -26,7 +26,9 @@ bool parseConfigBody(const std::string& body,
                      bool& keep_awake_during_downloads,
                      std::string& last_catalog_update_date,
                      std::string& install_location,
-                     std::string& app_update_url) {
+                     std::string& app_update_url,
+                     bool& auto_app_update,
+                     std::string& last_app_update_check_date) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
 
@@ -70,6 +72,12 @@ bool parseConfigBody(const std::string& body,
                 } else if (key == "app_update_url") {
                     app_update_url = val;
                     parsed_known_keys = true;
+                } else if (key == "auto_app_update") {
+                    auto_app_update = parseBool(val, auto_app_update);
+                    parsed_known_keys = true;
+                } else if (key == "last_app_update_check_date") {
+                    last_app_update_check_date = val;
+                    parsed_known_keys = true;
                 }
             } else if (legacy_single_value.empty()) {
                 // Legacy format: config.txt contained only TorrServer URL in one line.
@@ -112,6 +120,8 @@ ConfigManager::ConfigManager() {
     last_catalog_update_date_.clear();
     install_location_ = "auto";
     app_update_url_ = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
+    auto_app_update_ = true;
+    last_app_update_check_date_.clear();
     load();
 }
 
@@ -119,7 +129,8 @@ void ConfigManager::load() {
     std::string body;
     if (readWholeFile(config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_);
+                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_,
+                        auto_app_update_, last_app_update_check_date_);
         if (data_mode_ != "local_client") data_mode_ = "torrserver";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", install_location: " + install_location_);
@@ -129,7 +140,8 @@ void ConfigManager::load() {
     // Backward compatibility: migrate old config.txt on first run.
     if (readWholeFile(legacy_config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_);
+                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_,
+                        auto_app_update_, last_app_update_check_date_);
         if (data_mode_ != "local_client") data_mode_ = "torrserver";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         util::logLine("config: loaded legacy config.txt, migrating to config.ini");
@@ -161,6 +173,8 @@ void ConfigManager::save() {
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
     file << "install_location=" << install_location_ << "\n";
     file << "app_update_url=" << app_update_url_ << "\n";
+    file << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
+    file << "last_app_update_check_date=" << last_app_update_check_date_ << "\n";
     util::logLine("config: saved config.ini");
 }
 
@@ -174,6 +188,13 @@ void ConfigManager::setTorrServerUrl(const std::string& url) {
 }
 
 const std::string& ConfigManager::getCatalogSourceUrl() const {
+    return catalog_source_url_;
+}
+
+std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
+    if (catalog_source_url_.empty()) {
+        return DEFAULT_CATALOG_URL;
+    }
     return catalog_source_url_;
 }
 
@@ -234,7 +255,6 @@ std::string ConfigManager::currentDateString() {
 }
 
 bool ConfigManager::shouldUpdateCatalogToday() const {
-    if (catalog_source_url_.empty()) return false;
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_catalog_update_date_ != today;
@@ -253,9 +273,40 @@ const std::string& ConfigManager::getAppUpdateUrl() const {
     return app_update_url_;
 }
 
+std::string ConfigManager::getEffectiveAppUpdateUrl() const {
+    if (app_update_url_.empty()) {
+        return DEFAULT_APP_UPDATE_URL;
+    }
+    return app_update_url_;
+}
+
 void ConfigManager::setAppUpdateUrl(const std::string& url) {
     app_update_url_ = url;
     save();
+}
+
+bool ConfigManager::getAutoAppUpdate() const {
+    return auto_app_update_;
+}
+
+void ConfigManager::setAutoAppUpdate(bool enabled) {
+    auto_app_update_ = enabled;
+    save();
+}
+
+const std::string& ConfigManager::getLastAppUpdateCheckDate() const {
+    return last_app_update_check_date_;
+}
+
+void ConfigManager::setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd) {
+    last_app_update_check_date_ = date_yyyy_mm_dd;
+    save();
+}
+
+bool ConfigManager::shouldCheckAppUpdateToday() const {
+    const std::string today = currentDateString();
+    if (today.empty()) return false;
+    return last_app_update_check_date_ != today;
 }
 
 } // namespace config

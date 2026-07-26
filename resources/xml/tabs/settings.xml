@@ -32,6 +32,9 @@
                     id="appUpdateCell" />
 
                 <brls:BooleanCell
+                    id="autoAppUpdateCell" />
+
+                <brls:BooleanCell
                     id="keepAwakeCell" />
                     
                 <brls:SelectorCell

@@ -46,12 +46,12 @@
 
             <!-- Legal Disclaimer -->
             <brls:Label
-                text="Disclaimer: This application utilizes torrent technology. Torrent protocols may be restricted or prohibited in certain jurisdictions. Please verify the legality of torrent downloads in your country before use. The authors assume no liability for misuse."
-                width="850px"
+                text="Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse."
+                width="800px"
                 height="auto"
-                fontSize="15"
-                marginTop="40px"
-                textColor="#777777"
+                fontSize="13"
+                marginTop="25px"
+                textColor="#666666"
                 horizontalAlign="center" />
         </brls:Box>
     </brls:ScrollingFrame>

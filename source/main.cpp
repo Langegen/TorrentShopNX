@@ -24,6 +24,7 @@
 #include "torrent/torrent_engine.h"
 #include "utils/log.h"
 #include "net/http_client.h"
+#include "net/image_downloader.h"
 #include <thread>
 #include <borealis/extern/nlohmann/json.hpp>
 
@@ -60,21 +61,25 @@ extern "C" {
 
         // Custom network initialization configured for TorrentShopNX
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
-        cfg.num_bsd_sessions  = 12; // Allow up to 12 sessions for multiple connections
+        cfg.num_bsd_sessions = 16; // 16 is the max supported by Horizon OS BSD service
         if (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet) {
             cfg.sb_efficiency = 4;
             cfg.tcp_tx_buf_max_size = 32768; // 32KB max for Applet Mode
             cfg.tcp_rx_buf_max_size = 32768;
-            cfg.udp_rx_buf_size = 32768;
-            cfg.udp_tx_buf_size = 32768;
+            cfg.udp_rx_buf_size = 16384;
+            cfg.udp_tx_buf_size = 16384;
         } else {
-            cfg.sb_efficiency = 8; // Optimal efficiency to prevent fragmentation while saving memory
+            cfg.sb_efficiency = 4; // Balanced efficiency (libnx standard) to avoid socket pool exhaustion
             cfg.tcp_tx_buf_max_size = 65536; // 64KB max for Title Mode
             cfg.tcp_rx_buf_max_size = 65536;
-            cfg.udp_rx_buf_size = 32768; // 32KB UDP buffer is plenty for DHT/trackers
-            cfg.udp_tx_buf_size = 32768;
+            cfg.udp_rx_buf_size = 16384;
+            cfg.udp_tx_buf_size = 16384;
         }
         g_socket_init_result = socketInitialize(&cfg);
+        if (R_FAILED(g_socket_init_result)) {
+            // Fallback to default libnx socket initialization if custom config is rejected by OS
+            g_socket_init_result = socketInitializeDefault();
+        }
         g_socket_mem_size_used = __nx_socket_mem_size;
 
         romfsInit();
@@ -89,6 +94,7 @@ extern "C" {
     }
 
     void userAppExit(void) {
+        net::ImageDownloader::instance().stop();
         lblExit();
         nifmExit();
         psmExit();
@@ -106,13 +112,83 @@ extern "C" {
 std::string g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
 static const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
 
+static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
+    std::ifstream in(src, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) return false;
+    std::streamsize fileSize = in.tellg();
+    in.seekg(0, std::ios::beg);
+    if (fileSize < 100 * 1024) return false;
+    std::ofstream out(dst, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) return false;
+    char buffer[65536];
+    std::streamsize copied = 0;
+    while (in.read(buffer, sizeof(buffer)) || in.gcount() > 0) {
+        std::streamsize bytes = in.gcount();
+        if (bytes > 0) {
+            out.write(buffer, bytes);
+            if (out.fail()) {
+                out.close();
+                in.close();
+                return false;
+            }
+            copied += bytes;
+        }
+    }
+    out.flush();
+    out.close();
+    in.close();
+    return (copied >= 100 * 1024);
+}
+
+static bool checkAndApplyPendingUpdate() {
+    std::string updatePath = g_nroPath + ".update";
+    if (g_nroPath.find(".update") == std::string::npos) {
+        // We are running from main NRO. Check if .update file exists.
+        struct stat st;
+        if (stat(updatePath.c_str(), &st) == 0 && st.st_size > 100 * 1024) {
+            util::logLine("main: pending update file found at " + updatePath + " (" + std::to_string(st.st_size) + " bytes). Relaunching into update file...");
+#ifdef __SWITCH__
+            if (envHasNextLoad()) {
+                envSetNextLoad(updatePath.c_str(), updatePath.c_str());
+                return true; // Signal main to exit so HBL chainloads updatePath
+            }
+#endif
+        }
+    } else {
+        // We are running AS the .update file! Overwrite main NRO.
+        std::string mainNroPath = g_nroPath.substr(0, g_nroPath.find(".update"));
+        util::logLine("main: running from update NRO. Overwriting main NRO: " + mainNroPath);
+        
+        if (copyFileOverwrite(g_nroPath, mainNroPath)) {
+            util::logLine("main: update successfully copied to " + mainNroPath + "!");
+#ifdef __SWITCH__
+            if (envHasNextLoad()) {
+                envSetNextLoad(mainNroPath.c_str(), mainNroPath.c_str());
+                util::logLine("main: relaunching into main NRO: " + mainNroPath);
+                return true; // Signal main to exit so HBL chainloads mainNroPath
+            }
+#endif
+        } else {
+            util::logLine("main: failed to copy update to " + mainNroPath);
+        }
+    }
+    return false;
+}
+
 int main(int argc, char** argv) {
     if (argc > 0 && argv[0] && std::string(argv[0]).find(".nro") != std::string::npos) {
         g_nroPath = argv[0];
     }
 
     util::logInit();
-    util::logLine("main: start");
+    util::logLine("main: start g_nroPath=" + g_nroPath);
+
+    if (checkAndApplyPendingUpdate()) {
+        util::logLine("main: exiting for update relaunch");
+        util::logClose();
+        return 0;
+    }
+
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
                   " mem_size=" + std::to_string(g_socket_mem_size_used) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
@@ -155,6 +231,7 @@ int main(int argc, char** argv) {
 #if __has_include(<curl/curl.h>)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
+    net::ImageDownloader::instance().init(2);
 
     // Load database games instantly on the main thread (takes <50ms)
     g_games = loadGamesFromFile(kCatalogPath);
@@ -190,7 +267,8 @@ int main(int argc, char** argv) {
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
 
-    // Signal background cleanup to cancel immediately
+    // Signal background tasks and network transfers to cancel immediately
+    g_appExiting.store(true);
     g_cleanupCancelled = true;
 
     // Wait for background tasks (cleanup and catalog update) to complete safely before deinitializing systems
@@ -205,6 +283,9 @@ int main(int argc, char** argv) {
     // Stop threads
     util::logLine("main: calling DownloadManager::shutdown");
     ui::DownloadManager::instance().shutdown();
+
+    util::logLine("main: calling ImageDownloader::stop");
+    net::ImageDownloader::instance().stop();
     
     util::logLine("main: calling TorrentEngine::stop");
     torrent::TorrentEngine::instance().stop();

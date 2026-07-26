@@ -1,4 +1,5 @@
 #include "http_client.h"
+#include "../utils/log.h"
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -9,6 +10,7 @@
 #include <cstring>
 #include <sstream>
 #include <algorithm>
+#include <mutex>
 
 #if __has_include(<curl/curl.h>)
 #define TSNX_HAVE_CURL 1
@@ -76,11 +78,59 @@ std::string HttpClient::buildRangeHeader(uint64_t offset, uint64_t length) const
 // curl callbacks
 // =============================================================================
 #if TSNX_HAVE_CURL
+
+static CURLSH* g_curlShareHandle = nullptr;
+static std::mutex g_shareMutexes[CURL_LOCK_DATA_LAST];
+
+static void curlShareLock(CURL*, curl_lock_data data, curl_lock_access, void*) {
+    if (data < CURL_LOCK_DATA_LAST) {
+        g_shareMutexes[data].lock();
+    }
+}
+
+static void curlShareUnlock(CURL*, curl_lock_data data, void*) {
+    if (data < CURL_LOCK_DATA_LAST) {
+        g_shareMutexes[data].unlock();
+    }
+}
+
+static void initGlobalCurlShare() {
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        g_curlShareHandle = curl_share_init();
+        if (g_curlShareHandle) {
+            curl_share_setopt(g_curlShareHandle, CURLSHOPT_LOCKFUNC, curlShareLock);
+            curl_share_setopt(g_curlShareHandle, CURLSHOPT_UNLOCKFUNC, curlShareUnlock);
+            curl_share_setopt(g_curlShareHandle, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+            curl_share_setopt(g_curlShareHandle, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+        }
+    });
+}
+
+static int curlXferInfoCb(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+    if (g_appExiting.load()) {
+        return 1;
+    }
+    if (clientp) {
+        auto* cancel_flag = static_cast<const std::atomic<bool>*>(clientp);
+        if (cancel_flag && cancel_flag->load()) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static CURL* getReusableCurl(void*& handle) {
     auto* curl = static_cast<CURL*>(handle);
     if (!curl) {
         curl = curl_easy_init();
         handle = curl;
+    }
+    if (curl) {
+        initGlobalCurlShare();
+        if (g_curlShareHandle) {
+            curl_easy_setopt(curl, CURLOPT_SHARE, g_curlShareHandle);
+        }
     }
     return curl;
 }
@@ -157,6 +207,9 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel_flag_);
 
         if (keep_alive_) {
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -317,7 +370,7 @@ HttpResponse HttpClient::httpPost(const std::string& url, const std::string& jso
 // httpGetStream — потоковый GET с Range и callback
 // =============================================================================
 int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t length,
-                               StreamCallback cb) {
+                               StreamCallback cb, const std::atomic<bool>* cancel_flag) {
 #if TSNX_HAVE_CURL
     CURL* curl = getReusableCurl(curl_handle_);
     if (!curl) return 0;
@@ -342,6 +395,8 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
     ctx.cb = &cb;
     ctx.total = 0;
 
+    const std::atomic<bool>* effective_flag = cancel_flag ? cancel_flag : cancel_flag_;
+
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteStream);
@@ -353,6 +408,9 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
     curl_easy_setopt(curl, CURLOPT_HTTP_CONTENT_DECODING, 0L);
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
     curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, effective_flag);
 
     if (keep_alive_) {
         curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);

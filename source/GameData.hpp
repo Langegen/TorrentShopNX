@@ -11,6 +11,7 @@
 #include <borealis.hpp>
 #include <borealis/core/cache_helper.hpp>
 #include "net/http_client.h"
+#include "net/image_downloader.h"
 #include "utils/log.h"
 #include <borealis/extern/nlohmann/json.hpp>
 
@@ -132,18 +133,13 @@ inline std::string extractLangBadge(const std::string& interface_lang) {
     return interface_lang.substr(start + 1, end - start - 1);
 }
 
-// Load games from JSON file
-inline std::vector<Game> loadGamesFromFile(const std::string& path) {
-    util::logLine("GameData: loading games from " + path);
+// Parse games directly from a JSON string in memory
+inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent) {
+    util::logLine("GameData: parsing games from JSON string (size=" + std::to_string(jsonContent.size()) + ")");
     std::vector<Game> games;
-    std::ifstream in(path);
-    if (!in.is_open()) {
-        util::logLine("GameData: failed to open file " + path);
-        return games;
-    }
+    if (jsonContent.empty()) return games;
     try {
-        nlohmann::json j;
-        in >> j;
+        nlohmann::json j = nlohmann::json::parse(jsonContent);
         if (j.is_array()) {
             games = j.get<std::vector<Game>>();
             util::logLine("GameData: loaded array, count=" + std::to_string(games.size()));
@@ -168,11 +164,24 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
     return games;
 }
 
+// Load games from JSON file
+inline std::vector<Game> loadGamesFromFile(const std::string& path) {
+    util::logLine("GameData: loading games from " + path);
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) {
+        util::logLine("GameData: failed to open file " + path);
+        return {};
+    }
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return parseGamesFromJsonString(content);
+}
+
 #include <unordered_set>
 #include <dirent.h>
 #include <atomic>
 
 inline std::vector<std::string> g_pathsToDelete;
+inline std::atomic<bool> g_appExiting{false};
 inline std::atomic<bool> g_cleanupCancelled{false};
 inline std::atomic<bool> g_cleanupRunning{false};
 inline std::atomic<bool> g_catalogUpdateRunning{false};
@@ -360,38 +369,6 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         return;
     }
     
-    if (bypassCache) {
-        img->setImageFromFile(placeholder);
-        img->setFreeTexture(true);
-        
-        brls::async([img, url, token, fallbackUrl, placeholder, bypassCache]() {
-            net::HttpClient http;
-            http.setTimeout(5);
-            auto res = http.httpGet(url);
-            if (res.status_code == 200 && !res.body.empty()) {
-                brls::sync([img, body = std::move(res.body), token]() {
-                    if (token && !*token) return;
-                    
-                    int tex = nvgCreateImageMem(
-                        brls::Application::getNVGContext(), 
-                        NVG_IMAGE_GENERATE_MIPMAPS, 
-                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())), 
-                        body.size()
-                    );
-                    if (tex > 0) {
-                        img->innerSetImage(tex);
-                    }
-                });
-            } else if (!fallbackUrl.empty()) {
-                brls::sync([img, fallbackUrl, token, placeholder, bypassCache]() {
-                    if (token && !*token) return;
-                    setImageFromHTTPS(img, fallbackUrl, token, placeholder, bypassCache, "");
-                });
-            }
-        });
-        return;
-    }
-    
     std::string safeName = url;
     for (char& c : safeName) {
         if (!std::isalnum(static_cast<unsigned char>(c))) {
@@ -400,46 +377,8 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
     }
     std::string fileName = safeName + ".png";
     std::string cacheKey = "memory_cache:/" + fileName;
-    
-    // 1. If it's already in the GPU/RAM texture cache, use it immediately
-    if (brls::TextureCache::instance().getCache(cacheKey) > 0) {
-        img->setImageFromFile(cacheKey);
-        return;
-    }
-    
-    // 2. Otherwise, download it from the network asynchronously
-    img->setImageFromFile(placeholder);
-    
-    brls::async([img, url, cacheKey, token, fallbackUrl, placeholder, bypassCache]() {
-        net::HttpClient http;
-        http.setTimeout(5);
-        auto res = http.httpGet(url);
-        if (res.status_code == 200 && !res.body.empty()) {
-            // Upload to GPU directly from the downloaded buffer
-            brls::sync([img, cacheKey, body = std::move(res.body), token]() {
-                if (token && !*token) return;
-                
-                if (brls::TextureCache::instance().getCache(cacheKey) == 0) {
-                    int tex = nvgCreateImageMem(
-                        brls::Application::getNVGContext(), 
-                        NVG_IMAGE_GENERATE_MIPMAPS, 
-                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())), 
-                        body.size()
-                    );
-                    if (tex > 0) {
-                        brls::TextureCache::instance().addCache(cacheKey, tex);
-                    }
-                }
-                img->setImageFromFile(cacheKey);
-            });
-        } else if (!fallbackUrl.empty()) {
-            brls::sync([img, fallbackUrl, token, placeholder, bypassCache]() {
-                if (token && !*token) return;
-                // If primary URL failed, try the fallback URL without fallback to prevent infinite loop
-                setImageFromHTTPS(img, fallbackUrl, token, placeholder, bypassCache, "");
-            });
-        }
-    });
+
+    net::ImageDownloader::instance().enqueue(img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl);
 }
 
 #include <sstream>

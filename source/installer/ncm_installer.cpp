@@ -7,6 +7,11 @@
 #include <limits>
 #include "../utils/log.h"
 
+#ifdef __SWITCH__
+#include <mutex>
+extern std::recursive_mutex g_switch_service_mutex;
+#endif
+
 namespace installer {
 
 static bool endsWithInsensitive(const std::string& value, const std::string& suffix) {
@@ -41,6 +46,7 @@ NcmInstaller::~NcmInstaller() {
 #ifdef __SWITCH__
 
 bool NcmInstaller::begin(NcmStorageId storage) {
+    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
     if (initialized_) {
         util::logLine("ncm: already initialized, resetting...");
         cleanup();
@@ -48,14 +54,14 @@ bool NcmInstaller::begin(NcmStorageId storage) {
 
     storage_id_ = storage;
 
-    // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃРµСЂРІРёСЃР° ncm
+    // Инициализация сервиса ncm
     Result rc = ncmInitialize();
     if (R_FAILED(rc)) {
         util::logLine("ncm: ncmInitialize failed, rc=" + std::to_string(rc));
         return false;
     }
 
-    // РћС‚РєСЂС‹С‚СЊ ContentStorage РґР»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ С…СЂР°РЅРёР»РёС‰Р°
+    // Открыть ContentStorage для выбранного хранилища
     rc = ncmOpenContentStorage(&content_storage_, storage_id_);
     if (R_FAILED(rc)) {
         util::logLine("ncm: ncmOpenContentStorage failed, rc=" + std::to_string(rc));
@@ -64,7 +70,7 @@ bool NcmInstaller::begin(NcmStorageId storage) {
     }
     storage_opened_ = true;
 
-    // РћС‚РєСЂС‹С‚СЊ ContentMetaDatabase
+    // Открыть ContentMetaDatabase
     rc = ncmOpenContentMetaDatabase(&meta_db_, storage_id_);
     if (R_FAILED(rc)) {
         util::logLine("ncm: ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));

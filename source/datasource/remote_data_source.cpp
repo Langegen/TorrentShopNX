@@ -1,4 +1,4 @@
-﻿#include "remote_data_source.h"
+#include "remote_data_source.h"
 #include "../utils/log.h"
 
 #include <cstring>
@@ -17,6 +17,19 @@
 #endif
 
 namespace {
+
+static int curlXferInfoCb(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+    if (g_appExiting.load()) {
+        return 1;
+    }
+    if (clientp) {
+        auto* cancel_flag = static_cast<const std::atomic<bool>*>(clientp);
+        if (cancel_flag && cancel_flag->load()) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 constexpr size_t kLocalProxyRangeSlice = 1024 * 1024;
 
@@ -386,6 +399,9 @@ bool RemoteDataSource::resolveFileSize() {
         curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
         curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel_flag_);
 
         struct curl_slist* headers = nullptr;
         headers = curl_slist_append(headers, "Range: bytes=0-0");
@@ -425,6 +441,7 @@ bool RemoteDataSource::isLikelyLocalProxy() const {
 
 size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size) {
     if (!opened_ || !buf || size == 0) return 0;
+    if (g_appExiting.load() || (cancel_flag_ && cancel_flag_->load())) return 0;
     last_failure_ = ReadFailureKind::None;
     if (file_size_ > 0 && offset >= file_size_) return 0;
 
@@ -444,7 +461,9 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
     }
 
     for (int attempt = 0; attempt < max_retries_; ++attempt) {
+        if (g_appExiting.load() || (cancel_flag_ && cancel_flag_->load())) return 0;
         for (const auto& url : urls) {
+            if (g_appExiting.load() || (cancel_flag_ && cancel_flag_->load())) return 0;
             curl_easy_reset(curl);
 
             CurlReadContext ctx;
@@ -478,6 +497,9 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 10L);
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 5L);
+            curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+            curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
+            curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel_flag_);
 
             CURLcode res = curl_easy_perform(curl);
 

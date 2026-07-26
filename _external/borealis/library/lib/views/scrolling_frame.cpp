@@ -158,7 +158,7 @@ void ScrollingFrame::naturalScrollingBehaviour()
         // If current focus view is outside scrolling bounds,
         // change focus to this.
         View* currentFocus = Application::getCurrentFocus();
-        if (!currentFocus->getFrame().inscribed(getFrame()))
+        if (currentFocus && !currentFocus->getFrame().inscribed(getFrame()))
         {
             Application::giveFocus(this);
         }

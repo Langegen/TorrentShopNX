@@ -54,6 +54,7 @@ struct DownloadItem {
     std::shared_ptr<std::future<bool>> open_future;
     std::shared_ptr<std::atomic<bool>> open_done;
     std::shared_ptr<std::atomic<bool>> open_success;
+    std::shared_ptr<std::atomic<bool>> cancel_flag = std::make_shared<std::atomic<bool>>(false);
 
     // Старый streaming install (для совместимости)
     bool stream_ready = false;

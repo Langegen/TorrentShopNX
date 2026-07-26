@@ -63,17 +63,30 @@ GameRowCell* GameRowCell::create() {
 void GameRowCell::prepareForReuse() {
     util::logLine("GameRowCell::prepareForReuse - Resetting card highlight/focus states");
     brls::RecyclerCell::prepareForReuse();
+
+    if (imageToken) {
+        *imageToken = false;
+        imageToken.reset();
+    }
+
     brls::Box* cards[] = { card0, card1, card2, card3, card4, card5 };
-    int i = 0;
-    for (auto* card : cards) {
-        if (card) {
-            if (card->isFocused()) {
+    brls::Label* titles[] = { title0, title1, title2, title3, title4, title5 };
+
+    for (int i = 0; i < 6; ++i) {
+        if (cards[i]) {
+            if (cards[i]->isFocused()) {
                 util::logLine("GameRowCell::prepareForReuse - Card " + std::to_string(i) + " was focused, resetting.");
+                cards[i]->onFocusLost();
+                if (brls::Application::getCurrentFocus() == cards[i]) {
+                    brls::Application::giveFocus(nullptr);
+                }
             }
-            card->setHighlighted(false);
-            card->setHighlightProgress(0.0f);
+            cards[i]->setHighlighted(false);
+            cards[i]->setHighlightProgress(0.0f);
         }
-        i++;
+        if (titles[i]) {
+            titles[i]->setAnimated(false);
+        }
     }
 }
 
@@ -171,13 +184,11 @@ void CatalogView::filterCatalog() {
         filteredGames_.push_back(game);
     }
     
-    // Reload recycler view
-    recycler->reloadData();
-
-    // Reset focus to the recycler to select the new cells and avoid referencing old/reused cells
-    brls::sync([this]() {
+    // Safely shift focus to recycler before reloading cells
+    if (recycler) {
         brls::Application::giveFocus(this->recycler);
-    });
+        recycler->reloadData();
+    }
 }
 
 // DATASOURCE IMPLEMENTATION
@@ -273,8 +284,10 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken);
                 
                 cardBox->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
-                    catalog::FavoritesManager::instance().toggleFavorite(game.topic_id);
-                    brls::Application::notify(catalog::FavoritesManager::instance().isFavorite(game.topic_id) ? "Добавлено в избранное" : "Удалено из избранного");
+                    if (!game.topic_id.empty()) {
+                        bool fav = catalog::FavoritesManager::instance().toggleFavorite(game.topic_id);
+                        brls::Application::notify(fav ? "Добавлено в избранное" : "Удалено из избранного");
+                    }
                     return true;
                 });
 

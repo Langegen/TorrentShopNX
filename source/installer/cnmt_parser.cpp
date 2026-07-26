@@ -2,6 +2,7 @@
 #include "../utils/log.h"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <algorithm>
 
@@ -117,10 +118,15 @@ bool CnmtParser::parse(const void* data, size_t size, CnmtData& out) {
     // Р РЋР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎРЏР ВµР С РЎРѓРЎвЂ№РЎР‚РЎвЂ№Р Вµ Р Т‘Р В°Р Р…Р Р…РЎвЂ№Р Вµ CNMT Р Т‘Р В»РЎРЏ Р С—Р ВµРЎР‚Р ВµР Т‘Р В°РЎвЂЎР С‘ Р Р† NCM API
     out.raw_data.assign(d, d + size);
 
-    util::logLine("cnmt: parsed, title_id=0x" + std::to_string(out.title_id)
-                   + " ver=" + std::to_string(out.version)
-                   + " type=0x" + std::to_string(out.meta_type)
-                   + " contents=" + std::to_string(out.content_count));
+    {
+        char tid_hex[32], type_hex[8];
+        std::snprintf(tid_hex, sizeof(tid_hex), "0x%016llX", (unsigned long long)out.title_id);
+        std::snprintf(type_hex, sizeof(type_hex), "0x%02X", out.meta_type);
+        util::logLine("cnmt: parsed, title_id=" + std::string(tid_hex)
+                       + " ver=" + std::to_string(out.version)
+                       + " type=" + std::string(type_hex)
+                       + " contents=" + std::to_string(out.content_count));
+    }
 
     return true;
 }

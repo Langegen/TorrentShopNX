@@ -255,15 +255,14 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
                 }
             } // end: if (now >= next_slow_read_log_at)
 
-            // Paradox recovery: If libtorrent thinks it's done (seeding or finished), but we are stalled
-            // waiting for a piece, it means MemoryStorage dropped it or it was never fully written (e.g. zero padding pieces).
-            // Mark all pieces as available since libtorrent verified them, avoiding destructive force_recheck which resets RAM cache.
+            // Paradox recovery: If libtorrent actually HAS verified piece_start (handle_.have_piece == true),
+            // but MemoryStorage dropped it or didn't record it, mark that specific piece available.
+            // DO NOT mark all pieces available if libtorrent doesn't have the piece yet!
             if (waited_ms >= 5000 && handle_.is_valid()) {
-                auto status = handle_.status(lt::torrent_handle::query_accurate_download_counters);
-                if (status.state == lt::torrent_status::seeding || status.state == lt::torrent_status::finished) {
+                if (handle_.have_piece(static_cast<lt::piece_index_t>(piece_start))) {
                     if (now >= next_slow_read_log_at - std::chrono::seconds(5)) {
-                        util::logLine("backend/local: PARADOX DETECTED (state=" + std::to_string(status.state) + " but missing piece " + std::to_string(piece_start) + "). Recovering by marking all pieces available!");
-                        torrent::markMemoryStorageAllPiecesAvailable(info_hash_str_);
+                        util::logLine("backend/local: PARADOX RECOVERY (libtorrent has piece " + std::to_string(piece_start) + " but MemoryStorage missing). Marking piece available!");
+                        torrent::markMemoryStoragePieceAvailable(info_hash_str_, piece_start);
                     }
                 }
             }

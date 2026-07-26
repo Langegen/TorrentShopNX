@@ -14,7 +14,10 @@ public:
     const std::string& getTorrServerUrl() const;
     void setTorrServerUrl(const std::string& url);
 
+    static constexpr const char* DEFAULT_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
+
     const std::string& getCatalogSourceUrl() const;
+    std::string getEffectiveCatalogSourceUrl() const;
     void setCatalogSourceUrl(const std::string& url);
 
     const std::string& getDataMode() const;
@@ -31,8 +34,18 @@ public:
     const std::string& getInstallLocation() const;
     void setInstallLocation(const std::string& location);
 
+    static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
+
     const std::string& getAppUpdateUrl() const;
+    std::string getEffectiveAppUpdateUrl() const;
     void setAppUpdateUrl(const std::string& url);
+
+    bool getAutoAppUpdate() const;
+    void setAutoAppUpdate(bool enabled);
+
+    const std::string& getLastAppUpdateCheckDate() const;
+    void setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd);
+    bool shouldCheckAppUpdateToday() const;
 
 private:
     ConfigManager();
@@ -45,6 +58,8 @@ private:
     std::string last_catalog_update_date_;
     std::string install_location_;
     std::string app_update_url_;
+    bool auto_app_update_;
+    std::string last_app_update_check_date_;
     std::string config_path_;
     std::string legacy_config_path_;
 };

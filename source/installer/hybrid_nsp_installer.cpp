@@ -13,8 +13,10 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+#include <mutex>
 // Для SHA-256 используем mbedtls (уже в зависимостях проекта)
 #include <mbedtls/sha256.h>
+extern std::recursive_mutex g_switch_service_mutex;
 #endif
 
 namespace installer {
@@ -177,6 +179,9 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     current_nca_offset_ = 0;
     error_message_.clear();
     header_data_.clear();
+    if (source_) {
+        source_->setCancelFlag(&cancel_requested_);
+    }
 
 #ifdef __SWITCH__
     last_bytes_ = 0;
@@ -504,12 +509,13 @@ void HybridNspInstaller::collectorThreadFunc() {
         last_collector_stats_bytes = downloaded;
     };
 
-    while (current_offset < data_end && !cancel_requested_) {
+    while (current_offset < data_end && !cancel_requested_.load() && !g_appExiting.load()) {
         size_t to_read = static_cast<size_t>(
             std::min(static_cast<uint64_t>(chunk_size), data_end - current_offset));
         to_read = limitReadToPieceBoundary(source_, current_offset, to_read);
 
         size_t read = source_->read(current_offset, chunk_buf.data(), to_read);
+        if (cancel_requested_.load() || g_appExiting.load()) break;
 
         if (read == 0 || read < to_read) {
             if (read > 0 && allow_partial_progress) {
@@ -574,13 +580,14 @@ void HybridNspInstaller::collectorThreadFunc() {
 
 #ifdef __SWITCH__
 // =========================================================================
-// Custom IPC wrappers for Push/Delete ApplicationRecord (removed from modern libnx)
+// Custom IPC wrappers for Push/List/Delete ApplicationRecord
 // =========================================================================
 
 struct ContentStorageRecord {
     NcmContentMetaKey key;
     u64 storage_id;
 };
+static_assert(sizeof(ContentStorageRecord) == 24, "ContentStorageRecord must be exactly 24 bytes");
 
 static Result nsPushApplicationRecordCustom(u64 application_id, u8 record_type, const ContentStorageRecord* records, s32 count) {
     Service app_manager;
@@ -593,11 +600,32 @@ static Result nsPushApplicationRecordCustom(u64 application_id, u8 record_type, 
         u64 application_id;
     } in;
     in.record_type = record_type;
+    in.pad[0] = 0; in.pad[1] = 0; in.pad[2] = 0; in.pad[3] = 0; in.pad[4] = 0; in.pad[5] = 0; in.pad[6] = 0;
     in.application_id = application_id;
 
     rc = serviceDispatchIn(&app_manager, 16, in,
         .buffer_attrs = { SfBufferAttr_In | SfBufferAttr_HipcMapAlias },
         .buffers = { { records, static_cast<size_t>(count * sizeof(ContentStorageRecord)) } }
+    );
+    serviceClose(&app_manager);
+    return rc;
+}
+
+static Result nsListApplicationRecordContentMetaCustom(u64 offset, u64 application_id, ContentStorageRecord* out_records, size_t out_buf_size, u32* out_entries_read) {
+    Service app_manager;
+    Result rc = nsGetApplicationManagerInterface(&app_manager);
+    if (R_FAILED(rc)) return rc;
+
+    struct {
+        u64 offset;
+        u64 application_id;
+    } in;
+    in.offset = offset;
+    in.application_id = application_id;
+
+    rc = serviceDispatchInOut(&app_manager, 17, in, *out_entries_read,
+        .buffer_attrs = { SfBufferAttr_Out | SfBufferAttr_HipcMapAlias },
+        .buffers = { { out_records, out_buf_size } }
     );
     serviceClose(&app_manager);
     return rc;
@@ -617,6 +645,8 @@ static Result nsDeleteApplicationRecordCustom(u64 application_id) {
     serviceClose(&app_manager);
     return rc;
 }
+
+
 
 static constexpr u8 NsApplicationRecordType_Installed = 0x3;
 #endif
@@ -1114,7 +1144,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     //          (как в Awoo-Installer — GetInstallContentMeta)
     // =========================================================================
     std::vector<NcmContentInfo> content_infos;
-    content_infos.reserve(cnmt.contents.size());
+    content_infos.reserve(cnmt.contents.size() + 1);
 
     // Контент из CNMT (Awoo отбрасывает delta fragments > 5)
     for (const auto& ce : cnmt.contents) {
@@ -1129,18 +1159,17 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         content_infos.push_back(ci);
     }
 
-    // Запись для самой CNMT NCA (Meta) должна быть первой.
-    NcmContentInfo cnmt_content_info = {};
-    bool has_cnmt_content_info = false;
+    // Запись для самой CNMT NCA (Meta) по стандарту Awoo/HOS добавляется В КОНЕЦ массива NcmContentInfo.
     {
         const NspFileEntry* e = is_xci_ ? xci_header_.findByType(NspEntryType::CnmtNca)
                                         : nsp_header_.findByType(NspEntryType::CnmtNca);
         if (e) {
-            cnmt_content_info.content_id = e->content_id;
-            ncmU64ToContentInfoSize(e->size, &cnmt_content_info);
-            cnmt_content_info.content_type = NcmContentType_Meta;
-            cnmt_content_info.id_offset = 0;
-            has_cnmt_content_info = true;
+            NcmContentInfo cnmt_ci = {};
+            cnmt_ci.content_id = e->content_id;
+            ncmU64ToContentInfoSize(e->size, &cnmt_ci);
+            cnmt_ci.content_type = NcmContentType_Meta;
+            cnmt_ci.id_offset = 0;
+            content_infos.push_back(cnmt_ci);
         } else {
             util::logLine("hybrid: CNMT content entry not found in header");
         }
@@ -1152,8 +1181,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         ext_hdr_size = 0;
     }
 
-    size_t records_count = content_infos.size() + (has_cnmt_content_info ? 1u : 0u);
-    if (records_count == 0) {
+    if (content_infos.empty()) {
         util::logLine("hybrid: no content records for ContentMetaDatabaseSet");
         return true;
     }
@@ -1161,14 +1189,14 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     // Буфер: NcmContentMetaHeader + ExtendedHeader + NcmContentInfo[]
     size_t buf_size = sizeof(NcmContentMetaHeader)
                     + ext_hdr_size
-                    + records_count * sizeof(NcmContentInfo);
+                    + content_infos.size() * sizeof(NcmContentInfo);
     std::vector<uint8_t> meta_buf(buf_size, 0);
     auto* hdr = reinterpret_cast<NcmContentMetaHeader*>(meta_buf.data());
     hdr->extended_header_size = ext_hdr_size;
-    hdr->content_count      = static_cast<uint16_t>(records_count);
+    hdr->content_count      = static_cast<uint16_t>(content_infos.size());
     hdr->content_meta_count = cnmt.content_meta_count;
     hdr->attributes         = cnmt.attributes;
-    hdr->storage_id         = 0;
+    hdr->storage_id         = static_cast<uint8_t>(config_.storage);
 
     size_t write_off = sizeof(NcmContentMetaHeader);
     if (ext_hdr_size > 0) {
@@ -1178,16 +1206,9 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         write_off += ext_hdr_size;
     }
 
-    if (has_cnmt_content_info) {
-        std::memcpy(meta_buf.data() + write_off, &cnmt_content_info, sizeof(NcmContentInfo));
-        write_off += sizeof(NcmContentInfo);
-    }
-
-    if (!content_infos.empty()) {
-        std::memcpy(meta_buf.data() + write_off,
-                    content_infos.data(),
-                    content_infos.size() * sizeof(NcmContentInfo));
-    }
+    std::memcpy(meta_buf.data() + write_off,
+                content_infos.data(),
+                content_infos.size() * sizeof(NcmContentInfo));
 
     // =========================================================================
     // Шаг 5в: Записываем в ContentMetaDatabase
@@ -1218,68 +1239,100 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     ncmContentMetaDatabaseClose(&meta_db);
 
     // =========================================================================
-    // Шаг 5г: nsPushApplicationRecord — КЛЮЧЕВОЙ ВЫЗОВ
-    //          Без него игра НЕ появляется в Home Menu Nintendo Switch!
-    //          (Именно это делает Awoo-Installer в InstallApplicationRecord)
+    // Шаг 5г: nsPushApplicationRecord
     // =========================================================================
     {
-        // Вычисляем base title id
         u64 base_tid = cnmt.title_id;
         if (base_tid == 0 && hint_title_id_ != 0) {
-            util::logLine("hybrid: using hint Title ID as fallback: 0x" + std::to_string(hint_title_id_));
+            char tid_hex[32];
+            std::snprintf(tid_hex, sizeof(tid_hex), "0x%016llX", (unsigned long long)hint_title_id_);
+            util::logLine("hybrid: using hint Title ID as fallback: " + std::string(tid_hex));
             base_tid = hint_title_id_;
         }
         
         if (cnmt.meta_type == 0x81) {
-            base_tid ^= 0x800ULL;                        // Patch
+            base_tid ^= 0x800ULL;                        // Patch → base
         } else if (cnmt.meta_type == 0x82) {
-            base_tid = (base_tid ^ 0x1000ULL) & ~0xFFFULL; // DLC
+            base_tid = (base_tid ^ 0x1000ULL) & ~0xFFFULL; // DLC → base
         }
         // Application (0x80): base_tid без изменений
 
+#ifdef __SWITCH__
+        std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+#endif
         Result ns_rc = nsInitialize();
         if (R_SUCCEEDED(ns_rc)) {
-            ContentStorageRecord rec = {};
-            rec.key        = key;
-            rec.storage_id = static_cast<u64>(config_.storage);
+            // 1. Читаем существующие записи для base_tid из NS
+            s32 existing_count = 0;
+            nsCountApplicationContentMeta(base_tid, &existing_count);
 
-            ns_rc = nsPushApplicationRecordCustom(base_tid,
-                                             NsApplicationRecordType_Installed,
-                                             &rec, 1);
-            if (R_FAILED(ns_rc)) {
-                // Запись уже есть — удаляем и перезаписываем (переустановка)
-                nsDeleteApplicationRecordCustom(base_tid);
-                ns_rc = nsPushApplicationRecordCustom(base_tid,
-                                                 NsApplicationRecordType_Installed,
-                                                 &rec, 1);
+            std::vector<ContentStorageRecord> records;
+
+            if (existing_count > 0) {
+                records.resize(existing_count);
+                u32 entries_read = 0;
+                Result list_rc = nsListApplicationRecordContentMetaCustom(0, base_tid, records.data(),
+                                    existing_count * sizeof(ContentStorageRecord), &entries_read);
+                if (R_SUCCEEDED(list_rc)) {
+                    records.resize(entries_read);
+                    util::logLine("hybrid: read " + std::to_string(entries_read) + " existing NS records");
+                } else {
+                    records.clear();
+                }
             }
 
-            if (R_SUCCEEDED(ns_rc)) {
-                util::logLine("hybrid: nsPushApplicationRecord OK"
-                               ", base_tid=0x" + std::to_string(base_tid));
+            // Ищем или добавляем текущий контент в список
+            bool found = false;
+            for (auto& r : records) {
+                if (r.key.id == key.id && r.key.type == key.type) {
+                    r.storage_id = static_cast<u64>(config_.storage);
+                    r.key.version = cnmt.version;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                ContentStorageRecord new_rec = {};
+                new_rec.key.id = key.id;
+                new_rec.key.version = cnmt.version;
+                new_rec.key.type = cnmt.meta_type;
+                new_rec.key.install_type = 0; // 0 = Full
+                new_rec.storage_id = static_cast<u64>(config_.storage);
+                records.push_back(new_rec);
+            }
 
-                std::vector<NsApplicationControlData> app_ctrl(1);
-                size_t app_ctrl_size = 0;
-                Result ctrl_rc = nsGetApplicationControlData(
-                    NsApplicationControlSource_Storage,
-                    base_tid,
-                    app_ctrl.data(),
-                    sizeof(NsApplicationControlData),
-                    &app_ctrl_size);
-                if (R_SUCCEEDED(ctrl_rc) && app_ctrl_size >= sizeof(app_ctrl[0].nacp)) {
-                    NacpLanguageEntry* lang = nullptr;
-                    Result lang_rc = nacpGetLanguageEntry(&app_ctrl[0].nacp, &lang);
-                    if (R_SUCCEEDED(lang_rc) && lang) {
-                        util::logLine("hybrid: application title from NACP: " + std::string(lang->name));
-                    } else {
-                        util::logLine("hybrid: nacpGetLanguageEntry failed, rc=" + std::to_string(lang_rc));
-                    }
+            nsDeleteApplicationRecordCustom(base_tid);
+            ns_rc = nsPushApplicationRecordCustom(base_tid,
+                                                  NsApplicationRecordType_Installed,
+                                                  records.data(),
+                                                  static_cast<s32>(records.size()));
+            if (R_SUCCEEDED(ns_rc)) {
+                char base_hex[32];
+                std::snprintf(base_hex, sizeof(base_hex), "0x%016llX", (unsigned long long)base_tid);
+                util::logLine("hybrid: nsPushApplicationRecord OK, base_tid="
+                               + std::string(base_hex) + " total_records=" + std::to_string(records.size()));
+            } else {
+                util::logLine("hybrid: nsPushApplicationRecord FAILED, rc=" + std::to_string(ns_rc));
+            }
+
+            std::vector<NsApplicationControlData> app_ctrl(1);
+            size_t app_ctrl_size = 0;
+            Result ctrl_rc = nsGetApplicationControlData(
+                NsApplicationControlSource_Storage,
+                base_tid,
+                app_ctrl.data(),
+                sizeof(NsApplicationControlData),
+                &app_ctrl_size);
+            if (R_SUCCEEDED(ctrl_rc) && app_ctrl_size >= sizeof(app_ctrl[0].nacp)) {
+                NacpLanguageEntry* lang = nullptr;
+                Result lang_rc = nacpGetLanguageEntry(&app_ctrl[0].nacp, &lang);
+                if (R_SUCCEEDED(lang_rc) && lang) {
+                    util::logLine("hybrid: application title from NACP: " + std::string(lang->name));
                 } else {
-                    util::logLine("hybrid: nsGetApplicationControlData failed, rc=" + std::to_string(ctrl_rc));
+                    util::logLine("hybrid: nacpGetLanguageEntry failed, rc=" + std::to_string(lang_rc));
                 }
             } else {
-                util::logLine("hybrid: nsPushApplicationRecord FAILED"
-                               ", rc=" + std::to_string(ns_rc));
+                util::logLine("hybrid: nsGetApplicationControlData failed, rc=" + std::to_string(ctrl_rc));
             }
             nsExit();
         } else {
@@ -1287,10 +1340,15 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         }
     }
 
-    util::logLine("hybrid: phase 5 complete: tid=0x" + std::to_string(cnmt.title_id)
-                   + " v=" + std::to_string(cnmt.version)
-                   + " type=0x" + std::to_string(cnmt.meta_type)
-                   + " files=" + std::to_string(cnmt.content_count));
+    {
+        char tid_hex[32], type_hex[8];
+        std::snprintf(tid_hex, sizeof(tid_hex), "0x%016llX", (unsigned long long)cnmt.title_id);
+        std::snprintf(type_hex, sizeof(type_hex), "0x%02X", cnmt.meta_type);
+        util::logLine("hybrid: phase 5 complete: tid=" + std::string(tid_hex)
+                       + " v=" + std::to_string(cnmt.version)
+                       + " type=" + std::string(type_hex)
+                       + " files=" + std::to_string(cnmt.content_count));
+    }
 #endif
 
     return true;
@@ -1310,6 +1368,10 @@ void HybridNspInstaller::cancel() {
     util::logLine("hybrid: cancelling installation...");
     cancel_requested_ = true;
     ring_buffer_.setEof();
+
+    if (source_) {
+        source_->setCancelFlag(&cancel_requested_);
+    }
 
 #ifdef __SWITCH__
     if (threads_started_) {

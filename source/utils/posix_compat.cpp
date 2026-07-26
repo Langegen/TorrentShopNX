@@ -93,6 +93,10 @@ extern "C" int pipe(int pipefd[2]) {
         return -1;
     }
 
+    int buf_size = 4096;
+    ::setsockopt(s1, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
+    ::setsockopt(s1, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
+
     sockaddr_in addr1{};
     addr1.sin_family = AF_INET;
     addr1.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -123,6 +127,9 @@ extern "C" int pipe(int pipefd[2]) {
         errno = err;
         return -1;
     }
+
+    ::setsockopt(s2, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
+    ::setsockopt(s2, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
 
     sockaddr_in addr2{};
     addr2.sin_family = AF_INET;

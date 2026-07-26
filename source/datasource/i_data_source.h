@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <atomic>
 
 namespace datasource {
 
@@ -23,6 +24,8 @@ enum class ReadFailureKind {
 class IDataSource {
 public:
     virtual ~IDataSource() = default;
+
+    virtual void setCancelFlag(const std::atomic<bool>* /*flag*/) {}
 
     // Optional context for sources that need magnet/.torrent metadata.
     virtual void setTorrentContext(const std::string& /*info_hash*/,

@@ -25,6 +25,8 @@ public:
     SourceType type() const override { return SourceType::LocalInternal; }
     void close() override;
 
+    void setCancelFlag(const std::atomic<bool>* flag) override { local_remote_.setCancelFlag(flag); }
+
     /// Запустить локальный TorrServer.
     /// @return true если сервер успешно запущен
     bool startServer();

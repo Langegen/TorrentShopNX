@@ -72,6 +72,8 @@ DownloadManager::~DownloadManager() {
 }
 
 void DownloadManager::shutdown() {
+    g_appExiting.store(true);
+
     if (progress_thread_running_.load()) {
         progress_thread_running_.store(false);
         progress_cv_.notify_all();
@@ -80,13 +82,20 @@ void DownloadManager::shutdown() {
         }
     }
 
-    stopAllStreamConsumers();
-
     for (auto& item : queue_) {
+        if (item.cancel_flag) {
+            item.cancel_flag->store(true);
+        }
         if (item.hybrid_installer) {
+            item.hybrid_installer->cancel();
             item.hybrid_installer.reset();
         }
+        if (item.open_future) {
+            item.open_future.reset();
+        }
     }
+
+    stopAllStreamConsumers();
 
     datasource::IDataSource* source = ds_manager_.getSource();
     if (source) {
@@ -1217,15 +1226,21 @@ bool DownloadManager::startHybridInstall(size_t index) {
     }
 
     if (item.state == DownloadState::Downloading) {
+        if (!item.cancel_flag) {
+            item.cancel_flag = std::make_shared<std::atomic<bool>>(false);
+        }
+        item.cancel_flag->store(false);
         source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
 
         item.state = DownloadState::StreamPreparing;
         util::logLine("download: starting async open for hybrid hash=" + item.torrent_hash +
                       " index=" + std::to_string(install_file_index));
         
+        auto cancel_flag = item.cancel_flag;
         item.open_future = std::make_shared<std::future<bool>>(
-            std::async(std::launch::async, [source, hash = item.torrent_hash, idx = install_file_index]() {
-                return source->open(hash, idx);
+            std::async(std::launch::async, [source, hash = item.torrent_hash, idx = install_file_index, cancel_flag]() {
+                if (source) source->setCancelFlag(cancel_flag.get());
+                return source ? source->open(hash, idx) : false;
             })
         );
         return true;
@@ -1309,8 +1324,16 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.state == DownloadState::Completed ||
         item.state == DownloadState::Cancelled) return false;
 
+    if (item.cancel_flag) {
+        item.cancel_flag->store(true);
+    }
+
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
+    }
+
+    if (item.open_future) {
+        item.open_future.reset();
     }
 
     if (item.stream_consumer_started && item.torrent_id >= 0) {

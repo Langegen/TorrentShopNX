@@ -9,7 +9,6 @@ namespace util {
 
 static const char* kLogPath = "sdmc:/switch/TorrentShopNX/log.txt";
 static std::mutex g_log_mutex;
-static std::ofstream g_log_file;
 
 static bool pathExists(const std::string& path) {
     struct stat st;
@@ -45,26 +44,24 @@ static void ensureDirRecursive(const std::string& path) {
 void logInit() {
     ensureDirRecursive("sdmc:/switch/TorrentShopNX");
     std::lock_guard<std::mutex> lock(g_log_mutex);
-    g_log_file.open(kLogPath, std::ios::trunc);
-    if (g_log_file.is_open()) {
-        g_log_file << "TorrentShopNX log start" << std::endl;
-        g_log_file.flush();
+    std::ofstream file(kLogPath, std::ios::trunc);
+    if (file.is_open()) {
+        file << "TorrentShopNX log start\n";
+        file.close();
     }
 }
 
 void logLine(const std::string& line) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
-    if (g_log_file.is_open()) {
-        g_log_file << line << "\n";
-        g_log_file.flush();
+    std::ofstream file(kLogPath, std::ios::app);
+    if (file.is_open()) {
+        file << line << "\n";
+        file.close();
     }
 }
 
 void logClose() {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    if (g_log_file.is_open()) {
-        g_log_file.close();
-    }
+    // File is closed after every line write to avoid file locks
 }
 
 } // namespace util

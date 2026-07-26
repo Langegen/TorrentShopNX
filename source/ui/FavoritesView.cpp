@@ -62,13 +62,10 @@ void FavoritesView::filterFavorites() {
 
     if (changed) {
         favoritedGames_ = std::move(newFavorited);
-        recycler->reloadData();
-    }
-
-    if (!favoritedGames_.empty()) {
-        brls::sync([this]() {
+        if (recycler) {
             brls::Application::giveFocus(this->recycler);
-        });
+            recycler->reloadData();
+        }
     }
 }
 
@@ -143,10 +140,14 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             
             // Toggle favorite on Y button press inside card
             cards[i].card->registerAction("Убрать из избранного", brls::ControllerButton::BUTTON_Y, [this, game](brls::View* view) {
-                catalog::FavoritesManager::instance().toggleFavorite(game.topic_id);
-                brls::Application::notify("Удалено из избранного");
-                // Refresh list
-                parent_->filterFavorites();
+                if (!game.topic_id.empty()) {
+                    catalog::FavoritesManager::instance().toggleFavorite(game.topic_id);
+                    brls::Application::notify("Удалено из избранного");
+                    // Refresh list on next frame so current action loop completes safely
+                    brls::sync([this]() {
+                        if (parent_) parent_->filterFavorites();
+                    });
+                }
                 return true;
             });
 
