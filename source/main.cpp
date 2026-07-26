@@ -19,6 +19,7 @@
 #include "ui/SettingsTab.hpp"
 #include "ui/FavoritesManager.hpp"
 #include "ui/DownloadUiManager.hpp"
+#include "ui/AppletWarningView.hpp"
 #include "ui/QrCodeView.hpp"
 #include "config/config.h"
 #include "torrent/torrent_engine.h"
@@ -30,6 +31,16 @@
 
 // Global list of catalog games
 std::vector<Game> g_games;
+
+// Helper to check Applet Mode
+static bool checkAppletMode() {
+#ifdef __SWITCH__
+    AppletType type = appletGetAppletType();
+    return (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet);
+#else
+    return false;
+#endif
+}
 
 
 
@@ -43,69 +54,75 @@ extern "C" {
     int g_applet_type_detected = -1;
 
     void userAppInit(void) {
-        // We do NOT call appletLockExit() because we want the OS to be able to cleanly exit the app.
-        // Calling it and failing to unlock it perfectly before process teardown causes the OS "An error occurred" dialog.
-
-        // Dynamically adjust socket pool and buffer sizes for Applet vs Title mode to prevent socket memory exhaustion
         AppletType applet_type = appletGetAppletType();
         g_applet_type_detected = static_cast<int>(applet_type);
-        if (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet) {
-            __nx_socket_mem_size = 0x00400000;        // 4MB socket pool for Applet Mode
-            __nx_socket_tcp_tx_buf_size = 0x8000;      // 32KB default send buffer
-            __nx_socket_tcp_rx_buf_size = 0x8000;      // 32KB default recv buffer
+        bool is_applet = (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet);
+
+        if (is_applet) {
+            __nx_socket_mem_size = 0x00100000;        // 1MB minimal socket pool for Applet Mode
+            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB default send buffer
+            __nx_socket_tcp_rx_buf_size = 0x4000;      // 16KB default recv buffer
         } else {
             __nx_socket_mem_size = 0x02000000;        // 32MB socket pool for Title Mode
             __nx_socket_tcp_tx_buf_size = 0x10000;     // 64KB default send buffer
             __nx_socket_tcp_rx_buf_size = 0x10000;     // 64KB default recv buffer
         }
 
-        // Custom network initialization configured for TorrentShopNX
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
-        cfg.num_bsd_sessions = 16; // 16 is the max supported by Horizon OS BSD service
-        if (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet) {
-            cfg.sb_efficiency = 4;
-            cfg.tcp_tx_buf_max_size = 32768; // 32KB max for Applet Mode
-            cfg.tcp_rx_buf_max_size = 32768;
-            cfg.udp_rx_buf_size = 16384;
-            cfg.udp_tx_buf_size = 16384;
+        if (is_applet) {
+            cfg.num_bsd_sessions = 4;
+            cfg.sb_efficiency = 2;
+            cfg.tcp_tx_buf_max_size = 16384;
+            cfg.tcp_rx_buf_max_size = 16384;
+            cfg.udp_rx_buf_size = 8192;
+            cfg.udp_tx_buf_size = 8192;
         } else {
-            cfg.sb_efficiency = 4; // Balanced efficiency (libnx standard) to avoid socket pool exhaustion
-            cfg.tcp_tx_buf_max_size = 65536; // 64KB max for Title Mode
+            cfg.num_bsd_sessions = 16;
+            cfg.sb_efficiency = 4;
+            cfg.tcp_tx_buf_max_size = 65536;
             cfg.tcp_rx_buf_max_size = 65536;
             cfg.udp_rx_buf_size = 16384;
             cfg.udp_tx_buf_size = 16384;
         }
         g_socket_init_result = socketInitialize(&cfg);
         if (R_FAILED(g_socket_init_result)) {
-            // Fallback to default libnx socket initialization if custom config is rejected by OS
             g_socket_init_result = socketInitializeDefault();
         }
         g_socket_mem_size_used = __nx_socket_mem_size;
 
         romfsInit();
-        hidsysInitialize();
-        inssInitialize();
         plInitialize(PlServiceType_User);
         setsysInitialize();
         setInitialize();
         psmInitialize();
-        nifmInitialize(NifmServiceType_User);
-        lblInitialize();
+
+        // Privileged services (hidsys, inss, lbl, nifm) are only available in Title Mode.
+        // Calling them in Applet Mode causes OS service permission failure and system crashes.
+        if (!is_applet) {
+            hidsysInitialize();
+            inssInitialize();
+            nifmInitialize(NifmServiceType_User);
+            lblInitialize();
+        }
     }
 
     void userAppExit(void) {
-        net::ImageDownloader::instance().stop();
-        lblExit();
-        nifmExit();
+        AppletType applet_type = appletGetAppletType();
+        bool is_applet = (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet);
+
+        if (!is_applet) {
+            net::ImageDownloader::instance().stop();
+            lblExit();
+            nifmExit();
+            inssExit();
+            hidsysExit();
+        }
         psmExit();
         setExit();
         setsysExit();
         plExit();
-        inssExit();
-        hidsysExit();
         romfsExit();
         socketExit();
-        appletUnlockExit();
     }
 }
 
@@ -229,48 +246,54 @@ int main(int argc, char** argv) {
     brls::Application::setGlobalQuit(false);
     brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
 
-    // Register focus change listener to handle console sleep / wake safely
-    brls::Application::getWindowFocusChangedEvent()->subscribe([](bool focused) {
-        if (!focused) {
-            util::logLine("main: focus lost (console going to sleep / minimized), stopping TorrentEngine to prevent crash...");
-            torrent::TorrentEngine::instance().stop();
-        } else {
-            util::logLine("main: focus regained (console waking up)");
-        }
-    });
+    // Register focus change listener to handle console sleep / wake safely (Title Mode only)
+    if (!checkAppletMode()) {
+        brls::Application::getWindowFocusChangedEvent()->subscribe([](bool focused) {
+            if (!focused) {
+                util::logLine("main: focus lost (console going to sleep / minimized), stopping TorrentEngine to prevent crash...");
+                torrent::TorrentEngine::instance().stop();
+            } else {
+                util::logLine("main: focus regained (console waking up)");
+            }
+        });
+    }
 
-    // Initialize managers and load configurations
-    auto& cfg = config::ConfigManager::instance();
-    cfg.load();
-    
-    catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
-    ui::DownloadManager::instance().init();
-    
-    // Force eager initialization of TorrentEngine in the main thread to prevent background thread crashes
-    util::logLine("main: initializing TorrentEngine eagerly");
-    auto& eng = torrent::TorrentEngine::instance();
-    util::logLine("main: TorrentEngine eagerly initialized, address=" + std::to_string((uintptr_t)&eng));
+    // Check if running in Applet Mode (Album launch)
+    if (checkAppletMode()) {
+        util::logLine("main: Applet Mode detected! Displaying AppletWarningView...");
+        brls::Application::pushActivity(new ui::AppletWarningView());
+    } else {
+        // Initialize managers and load configurations for Title Mode
+        auto& cfg = config::ConfigManager::instance();
+        cfg.load();
+        
+        catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
+        ui::DownloadManager::instance().init();
+        
+        // Force eager initialization of TorrentEngine in the main thread to prevent background thread crashes
+        util::logLine("main: initializing TorrentEngine eagerly");
+        auto& eng = torrent::TorrentEngine::instance();
+        util::logLine("main: TorrentEngine eagerly initialized, address=" + std::to_string((uintptr_t)&eng));
 
-    // Initialize curl first, so background network threads can safely use it.
-#if __has_include(<curl/curl.h>)
-    curl_global_init(CURL_GLOBAL_ALL);
-#endif
-    net::ImageDownloader::instance().init(2);
+        // Initialize curl first, so background network threads can safely use it.
+    #if __has_include(<curl/curl.h>)
+        curl_global_init(CURL_GLOBAL_ALL);
+    #endif
+        net::ImageDownloader::instance().init(2);
 
-    // Load database games instantly on the main thread (takes <50ms)
-    g_games = loadGamesFromFile(kCatalogPath);
-    util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()));
+        // Load database games instantly on the main thread (takes <50ms)
+        g_games = loadGamesFromFile(kCatalogPath);
+        util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()));
 
-    // Logger configuration
-    brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
+        // Logger configuration
+        brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
-    // Sub-views are now Activities and do not need XML registration.
-
-    // Bootstrap activity
-    util::logLine("main: instantiating and pushing MainMenu...");
-    MainMenu* menu = new MainMenu();
-    util::logLine("main: MainMenu instantiated, pushing...");
-    brls::Application::pushActivity(menu);
+        // Bootstrap activity
+        util::logLine("main: instantiating and pushing MainMenu...");
+        MainMenu* menu = new MainMenu();
+        util::logLine("main: MainMenu instantiated, pushing...");
+        brls::Application::pushActivity(menu);
+    }
 
     util::logLine("main: entering mainLoop");
     // Execute Borealis main loop
@@ -304,17 +327,19 @@ int main(int argc, char** argv) {
     }
     util::logLine("main: background threads exited after " + std::to_string(waitCount * 10) + "ms, proceeding with shutdown");
 
-    // Stop threads
-    util::logLine("main: calling DownloadManager::shutdown");
-    ui::DownloadManager::instance().shutdown();
+    // Stop threads (Title Mode only)
+    if (!checkAppletMode()) {
+        util::logLine("main: calling DownloadManager::shutdown");
+        ui::DownloadManager::instance().shutdown();
 
-    util::logLine("main: calling ImageDownloader::stop");
-    net::ImageDownloader::instance().stop();
-    
-    util::logLine("main: calling TorrentEngine::stop");
-    torrent::TorrentEngine::instance().stop();
-    
-    util::logLine("main: all threads requested to stop");
+        util::logLine("main: calling ImageDownloader::stop");
+        net::ImageDownloader::instance().stop();
+        
+        util::logLine("main: calling TorrentEngine::stop");
+        torrent::TorrentEngine::instance().stop();
+        
+        util::logLine("main: all threads requested to stop");
+    }
 
     // Do NOT call curl_global_cleanup() because it might crash if curl threads are alive
 

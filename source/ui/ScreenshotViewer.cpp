@@ -87,20 +87,11 @@ void ScreenshotViewer::loadCurrent() {
     // Using a clear transparent image temporarily while loading
     image_->setImageFromRes("img/borealis_96.png"); 
     
-    // Attempt to get the high-res version of the screenshot
-    std::string fallbackUrl = urls_[currentIndex_];
-    std::string url = fallbackUrl;
-    size_t pos = url.find("/thumb/");
-    if (pos != std::string::npos) {
-        url.replace(pos, 7, "/big/");
-    }
-    // fastpic thumbnails often have .jpeg while originals have .jpg
-    pos = url.rfind(".jpeg");
-    if (pos != std::string::npos && pos == url.length() - 5) {
-        url.replace(pos, 5, ".jpg");
-    }
+    std::string rawUrl = urls_[currentIndex_];
+    std::string fallbackUrl = normalizeImageUrl(rawUrl);
+    std::string url = getOriginalImageUrl(fallbackUrl);
 
-    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/borealis_96.png", false, fallbackUrl);
+    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/borealis_96.png", false, fallbackUrl, -1, -1, 3000000);
 }
 
 } // namespace ui

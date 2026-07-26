@@ -259,9 +259,10 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cardBox->getFocusLostEvent()->clear();
 
                 // On focus → switch to full title and start scrolling animation (scissor-clipped by Borealis)
-                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
                     if (v->isFocused()) {
                         GameRowCell::s_lastFocusedColumn = i;
+                        net::ImageDownloader::instance().setFocusedPosition(row, i);
                     }
                     titleLabel->setText(fullTitle);
                     titleLabel->setAnimated(true);
@@ -281,7 +282,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                     cards[i].lang->setVisibility(brls::Visibility::GONE);
                 }
                 
-                setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken);
+                setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
                 
                 cardBox->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
                     if (!game.topic_id.empty()) {

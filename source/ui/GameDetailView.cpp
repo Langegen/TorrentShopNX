@@ -64,7 +64,7 @@ void GameDetailView::onContentAvailable() {
     imageToken = std::make_shared<bool>(true);
     // Fill text and images
     title->setText(cleanTitle(game_.title));
-    setImageFromHTTPS(cover, game_.cover, imageToken);
+    setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/borealis_96.png", false, "", -1, -1, 2000000);
     
     // Metadata
     metaDeveloper->setText("Разработчик: " + (game_.developer.empty() ? "(неизвестно)" : game_.developer));
@@ -125,20 +125,27 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Screenshots Horizontal Scroll
-    for (size_t i = 0; i < game_.screenshots.size(); ++i) {
-        const auto& scrUrl = game_.screenshots[i];
-        if (scrUrl.empty()) continue;
-        brls::Image* scrImg = new brls::Image();
-        scrImg->setWidth(240); // 16:9 ratio
-        scrImg->setHeight(135);
-        scrImg->setMarginRight(15);
-        scrImg->setFocusable(true);
-        scrImg->registerClickAction([this, i](brls::View* view) {
-            brls::Application::pushActivity(new ScreenshotViewer(game_.screenshots, i));
-            return true;
-        });
-        setImageFromHTTPS(scrImg, scrUrl, imageToken);
-        screenshotsBox->addView(scrImg);
+    if (game_.screenshots.empty()) {
+        screenshotsScroll->setVisibility(brls::Visibility::GONE);
+    } else {
+        screenshotsScroll->setVisibility(brls::Visibility::VISIBLE);
+        for (size_t i = 0; i < game_.screenshots.size(); ++i) {
+            const auto& scrUrl = game_.screenshots[i];
+            if (scrUrl.empty()) continue;
+            brls::Image* scrImg = new brls::Image();
+            scrImg->setWidth(240); // 16:9 ratio
+            scrImg->setHeight(135);
+            scrImg->setMarginRight(15);
+            scrImg->setScalingType(brls::ImageScalingType::FILL);
+            scrImg->setCornerRadius(6);
+            scrImg->setFocusable(true);
+            scrImg->registerClickAction([this, i](brls::View* view) {
+                brls::Application::pushActivity(new ScreenshotViewer(game_.screenshots, i));
+                return true;
+            });
+            setImageFromHTTPS(scrImg, scrUrl, imageToken, "romfs:/img/borealis_96.png", false, "", -1, -1, 1900000 - static_cast<int>(i) * 10);
+            screenshotsBox->addView(scrImg);
+        }
     }
     
     // Buttons Actions

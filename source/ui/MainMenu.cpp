@@ -16,7 +16,7 @@ extern std::vector<Game> g_games;
 
 MainMenu::MainMenu() {
     util::logLine("MainMenu: constructor start");
-    brls::Application::setCommonFooter("TorrentShopNX v2.1 | Игр в каталоге: " + std::to_string(g_games.size()));
+    brls::Application::setCommonFooter("TorrentShopNX v2.2 | Игр в каталоге: " + std::to_string(g_games.size()));
     util::logLine("MainMenu: constructor end");
 }
 
@@ -114,7 +114,7 @@ void MainMenu::onContentAvailable() {
                 // Update games directly in memory on main thread without downloading to disk file
                 brls::sync([online_games]() {
                     g_games = online_games;
-                    brls::Application::setCommonFooter("TorrentShopNX v2.1 | Игр в каталоге: " + std::to_string(g_games.size()));
+                    brls::Application::setCommonFooter("TorrentShopNX v2.2 | Игр в каталоге: " + std::to_string(g_games.size()));
                     
                     // Write new update date in config on main thread
                     auto& main_cfg = config::ConfigManager::instance();
@@ -159,7 +159,7 @@ void MainMenu::onContentAvailable() {
                         url = j.value("url", "");
                     }
                     
-                    std::string currentVersion = "2.1"; // Current app version
+                    std::string currentVersion = "2.2"; // Current app version
                     std::string cleanVersion = version;
                     if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) cleanVersion = cleanVersion.substr(1);
                     std::string cleanCurrent = currentVersion;

@@ -298,14 +298,36 @@ inline void clearCaches() {
     }
 }
 
+// Helper to normalize image URLs (e.g. FastPic migrated fastpic.ru to fastpic.org and storage servers fail on HTTPS)
+inline std::string normalizeImageUrl(const std::string& url) {
+    std::string norm = url;
+    if (norm.find("fastpic.") != std::string::npos) {
+        if (norm.rfind("https://", 0) == 0) {
+            norm.replace(0, 5, "http");
+        }
+        size_t ruPos = norm.find("fastpic.ru");
+        if (ruPos != std::string::npos) {
+            norm.replace(ruPos, 10, "fastpic.org");
+        }
+    }
+    if (norm.rfind("https://", 0) == 0 && (norm.find("imagebam.com") != std::string::npos || norm.find("vfl.ru") != std::string::npos)) {
+        norm.replace(0, 5, "http");
+    }
+    return norm;
+}
+
 // Helper to convert thumbnail URLs from popular image hostings to their original/full-size versions
 inline std::string getOriginalImageUrl(const std::string& url) {
-    std::string original = url;
+    std::string original = normalizeImageUrl(url);
     
     // FastPic
     size_t fpThumb = original.find("/thumb/");
     if (fpThumb != std::string::npos && (original.find("fastpic.") != std::string::npos)) {
         original.replace(fpThumb, 7, "/big/");
+        size_t pos = original.rfind(".jpeg");
+        if (pos != std::string::npos && pos == original.length() - 5) {
+            original.replace(pos, 5, ".jpg");
+        }
         return original;
     }
     
@@ -363,13 +385,14 @@ inline std::string getOriginalImageUrl(const std::string& url) {
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download
-inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false, const std::string& fallbackUrl = "") {
+inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0) {
     if (url.empty() || !img) {
         if (img) img->setImageFromFile(placeholder);
         return;
     }
     
-    std::string safeName = url;
+    std::string normUrl = normalizeImageUrl(url);
+    std::string safeName = normUrl;
     for (char& c : safeName) {
         if (!std::isalnum(static_cast<unsigned char>(c))) {
             c = '_';
@@ -378,7 +401,15 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
     std::string fileName = safeName + ".png";
     std::string cacheKey = "memory_cache:/" + fileName;
 
-    net::ImageDownloader::instance().enqueue(img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl);
+    std::string effectiveFallback = fallbackUrl;
+    if (effectiveFallback.empty()) {
+        std::string orig = getOriginalImageUrl(normUrl);
+        if (orig != normUrl) {
+            effectiveFallback = orig;
+        }
+    }
+
+    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, placeholder, bypassCache, effectiveFallback, row, col, priorityOverride);
 }
 
 #include <sstream>

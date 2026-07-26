@@ -115,7 +115,7 @@ ConfigManager::ConfigManager() {
     legacy_config_path_ = "sdmc:/switch/TorrentShopNX/config.txt";
     torrserver_url_ = "http://192.168.1.100:8090";
     catalog_source_url_.clear();
-    data_mode_ = "torrserver";
+    data_mode_ = "local_client";
     keep_awake_during_downloads_ = true;
     last_catalog_update_date_.clear();
     install_location_ = "auto";
@@ -131,7 +131,7 @@ void ConfigManager::load() {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
                         keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_);
-        if (data_mode_ != "local_client") data_mode_ = "torrserver";
+        if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", install_location: " + install_location_);
         return;
@@ -142,7 +142,7 @@ void ConfigManager::load() {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
                         keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_);
-        if (data_mode_ != "local_client") data_mode_ = "torrserver";
+        if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         util::logLine("config: loaded legacy config.txt, migrating to config.ini");
         save();
@@ -212,8 +212,8 @@ void ConfigManager::setDataMode(const std::string& mode) {
     std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
-    if (normalized != "local_client") {
-        normalized = "torrserver";
+    if (normalized != "torrserver" && normalized != "local_client") {
+        normalized = "local_client";
     }
     data_mode_ = normalized;
     save();

@@ -35,7 +35,7 @@ public:
     std::string modeDescription() const;
 
 private:
-    DataSourceMode mode_ = DataSourceMode::Remote;
+    DataSourceMode mode_ = DataSourceMode::LocalClient;
     std::string remote_url_ = "http://127.0.0.1:8090";
     std::string local_proxy_url_ = "http://127.0.0.1:8080";
     int local_port_ = 8080;

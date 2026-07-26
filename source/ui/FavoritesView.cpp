@@ -116,9 +116,10 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             cards[i].card->getFocusEvent()->clear();
             cards[i].card->getFocusLostEvent()->clear();
 
-            cards[i].card->getFocusEvent()->subscribe([titleLabel, fullTitle, i](brls::View* v) {
+            cards[i].card->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
                 if (v->isFocused()) {
                     GameRowCell::s_lastFocusedColumn = i;
+                    net::ImageDownloader::instance().setFocusedPosition(row, i);
                 }
                 titleLabel->setText(fullTitle);
                 titleLabel->setAnimated(true);
@@ -136,7 +137,7 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
                 cards[i].lang->setVisibility(brls::Visibility::GONE);
             }
             
-            setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken);
+            setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
             
             // Toggle favorite on Y button press inside card
             cards[i].card->registerAction("Убрать из избранного", brls::ControllerButton::BUTTON_Y, [this, game](brls::View* view) {

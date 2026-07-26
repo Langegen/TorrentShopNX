@@ -20,6 +20,9 @@ struct ImageTask {
     std::string placeholder;
     bool bypassCache = false;
     std::string fallbackUrl;
+    int row = -1;
+    int col = -1;
+    int priorityOverride = 0;
 };
 
 /// Синглтон очереди скачивания изображений с ограничением параллелизма.
@@ -36,6 +39,9 @@ public:
     /// Остановка и очистка очереди
     void stop();
 
+    /// Обновить текущую позицию фокуса для приоритизации очереди обложек
+    void setFocusedPosition(int row, int col);
+
     /// Добавить задачу на скачивание изображения в очередь
     void enqueue(brls::Image* img,
                  const std::string& url,
@@ -43,7 +49,10 @@ public:
                  std::shared_ptr<bool> token = nullptr,
                  const std::string& placeholder = "romfs:/img/borealis_96.png",
                  bool bypassCache = false,
-                 const std::string& fallbackUrl = "");
+                 const std::string& fallbackUrl = "",
+                 int row = -1,
+                 int col = -1,
+                 int priorityOverride = 0);
 
 private:
     ImageDownloader() = default;
@@ -54,12 +63,16 @@ private:
 
     void workerLoop();
     void processTask(const ImageTask& task);
+    int calculatePriority(const ImageTask& task) const;
+    void reprioritizeQueueLocked();
 
     std::vector<std::thread> workers_;
     std::deque<ImageTask> tasks_;
     std::mutex queueMutex_;
     std::condition_variable cv_;
     std::atomic<bool> running_{false};
+    int currentFocusedRow_ = -1;
+    int currentFocusedCol_ = -1;
 };
 
 } // namespace net
