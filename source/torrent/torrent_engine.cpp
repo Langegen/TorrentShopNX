@@ -1,4 +1,5 @@
 #include "torrent_engine.h"
+#include "torrent_health.h"
 
 #include "../utils/log.h"
 #include "../utils/string_utils.h"

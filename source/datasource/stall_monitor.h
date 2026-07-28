@@ -92,7 +92,7 @@ private:
     // Порог возраста idle-пира (speed=0) для проактивного отключения (секунд)
     static constexpr int kIdlePeerMaxAgeSeconds = 20;
     // Минимальное количество пиров в рое: не отключаем, если останется меньше
-    static constexpr int kMinSwarmPeers = 3;
+    static constexpr int kMinSwarmPeers = 5;
 };
 
 } // namespace datasource
