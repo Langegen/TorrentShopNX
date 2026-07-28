@@ -7,6 +7,7 @@ $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/de
 endif
 
 TOPDIR ?= $(CURDIR)
+override TOPDIR := $(subst \,/,$(TOPDIR))
 include $(DEVKITPRO)/libnx/switch_rules
 
 #---------------------------------------------------------------------------------
@@ -50,12 +51,10 @@ ifeq ($(USE_LIBTORRENT),1)
 	CFLAGS += -DTSNX_USE_LIBTORRENT=1 -DTORRENT_BUILDING_LIBRARY=1 \
 	          -DBOOST_ERROR_CODE_HEADER_ONLY -DBOOST_SYSTEM_NO_DEPRECATED \
 	          -DBOOST_SYSTEM_NO_LIB -DBOOST_CHRONO_HEADER_ONLY \
-	          -DBOOST_DATE_TIME_NO_LIB -DBOOST_ALL_NO_LIB
-	LIBDIRS += $(LIBTORRENT_SRCDIR) $(BOOST_INCLUDEDIR)
-	# Extra flags for libtorrent
-	CFLAGS  += -DTSNX_USE_LIBTORRENT -DBOOST_ASIO_ENABLE_CANCELIO \
-	           -include $(TOPDIR)/include/switch_posix_compat.h \
-	           -I$(LIBTORRENT_SRCDIR)/include -I$(BOOST_INCLUDEDIR)
+	          -DBOOST_DATE_TIME_NO_LIB -DBOOST_ALL_NO_LIB \
+	          -DTSNX_USE_LIBTORRENT -DBOOST_ASIO_ENABLE_CANCELIO \
+	          -include $(TOPDIR)/include/switch_posix_compat.h
+	EXTRA_INCLUDES += -I$(LIBTORRENT_SRCDIR)/include -I$(BOOST_INCLUDEDIR)
 endif
 
 #---------------------------------------------------------------------------------
@@ -69,6 +68,7 @@ LIBDIRS += $(PORTLIBS) $(LIBNX)
 #---------------------------------------------------------------------------------
 export INCLUDE  :=  $(foreach dir,$(INCLUDES),-I$(TOPDIR)/$(dir)) \
                     $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+                    $(EXTRA_INCLUDES) \
                     -I$(TOPDIR)/$(BUILD)
 
 export LIBPATHS :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib) $(EXTRA_LIBPATHS)

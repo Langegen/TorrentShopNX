@@ -5,8 +5,10 @@
 #include <switch.h>
 #include <arpa/inet.h>
 
-#if __has_include(<libtorrent/torrent_info.hpp>)
+#ifdef TSNX_USE_LIBTORRENT
 #include <libtorrent/torrent_info.hpp>
+#include <libtorrent/error_code.hpp>
+namespace lt = libtorrent;
 #endif
 
 namespace ui {
@@ -115,7 +117,7 @@ void RemoteAddView::startServer() {
                 fclose(f);
                 
                 // Parse magnet from it using libtorrent
-                #if __has_include(<libtorrent/torrent_info.hpp>)
+                #ifdef TSNX_USE_LIBTORRENT
                 lt::error_code ec;
                 lt::torrent_info ti(tempPath, ec);
                 if (!ec) {

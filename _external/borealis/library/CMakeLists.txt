@@ -10,6 +10,8 @@ if (NOT BRLS_RESOURCES_DIR)
     set(BRLS_RESOURCES_DIR ".")
 endif ()
 
+include_directories("C:/devkitPro/portlibs/switch/include")
+
 # fmt
 if (USE_SYSTEM_FMT)
   find_package(fmt REQUIRED)

@@ -81,8 +81,8 @@ extern "C" {
             cfg.sb_efficiency = 4;
             cfg.tcp_tx_buf_max_size = 65536;
             cfg.tcp_rx_buf_max_size = 65536;
-            cfg.udp_rx_buf_size = 16384;
-            cfg.udp_tx_buf_size = 16384;
+            cfg.udp_rx_buf_size = 32768; // Increased from 16KB to 32KB for DHT + uTP datagram stability
+            cfg.udp_tx_buf_size = 32768; // Increased from 16KB to 32KB
         }
         g_socket_init_result = socketInitialize(&cfg);
         if (R_FAILED(g_socket_init_result)) {

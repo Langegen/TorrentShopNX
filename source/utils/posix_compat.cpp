@@ -1,6 +1,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -97,6 +99,18 @@ extern "C" int pipe(int pipefd[2]) {
     ::setsockopt(s1, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
     ::setsockopt(s1, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
 
+    // Ensure non-blocking mode on s1 via fcntl and ioctl
+    int flags1 = ::fcntl(s1, F_GETFL, 0);
+    if (flags1 != -1) {
+        ::fcntl(s1, F_SETFL, flags1 | O_NONBLOCK);
+    }
+    int nonblock_opt = 1;
+    ::ioctl(s1, FIONBIO, &nonblock_opt);
+
+    timeval tv{2, 0}; // 2-second fallback timeout
+    ::setsockopt(s1, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    ::setsockopt(s1, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+
     sockaddr_in addr1{};
     addr1.sin_family = AF_INET;
     addr1.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -130,6 +144,15 @@ extern "C" int pipe(int pipefd[2]) {
 
     ::setsockopt(s2, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
     ::setsockopt(s2, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&buf_size), sizeof(buf_size));
+
+    // Ensure non-blocking mode on s2 via fcntl and ioctl
+    int flags2 = ::fcntl(s2, F_GETFL, 0);
+    if (flags2 != -1) {
+        ::fcntl(s2, F_SETFL, flags2 | O_NONBLOCK);
+    }
+    ::ioctl(s2, FIONBIO, &nonblock_opt);
+    ::setsockopt(s2, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    ::setsockopt(s2, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
 
     sockaddr_in addr2{};
     addr2.sin_family = AF_INET;
