@@ -28,6 +28,9 @@
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/peer_info.hpp>
 #include <libtorrent/session.hpp>
+#include <libtorrent/torrent.hpp>
+#include <libtorrent/peer_connection.hpp>
+#include <libtorrent/bt_peer_connection.hpp>
 #include <libtorrent/session_status.hpp>
 #include <libtorrent/settings_pack.hpp>
 #include <libtorrent/time.hpp>
@@ -562,6 +565,24 @@ void discardMemoryStoragePiece(const std::string& hash, int piece_index);
 void markMemoryStoragePieceAvailable(const std::string& hash, int piece_index);
 void markMemoryStorageAllPiecesAvailable(const std::string& hash);
 
+struct PeerCandidate {
+    std::string endpoint_str;
+    lt::tcp::endpoint ep;
+    int source_mask = 0; // 1=tracker, 2=dht, 4=pex, 8=alert, 16=manual
+    int fail_count = 0;
+    int connect_count = 0;
+    int disconnect_count = 0;
+    std::chrono::steady_clock::time_point last_seen{};
+    std::chrono::steady_clock::time_point last_connect_attempt{};
+    std::chrono::steady_clock::time_point cooldown_until{};
+    int last_payload_rate_bps = 0;
+    int last_rtt_ms = -1;
+    bool last_utp = false;
+    bool last_choked = false;
+    bool had_window_piece = false;
+    float score = 0.0f;
+};
+
 struct TorrentRecord {
     std::mutex mutex;
     std::string hash;
@@ -576,12 +597,12 @@ struct TorrentRecord {
     std::chrono::steady_clock::time_point last_force_announce_at{};
     int last_dl_rate_bps = 0;    ///< Скорость на предыдущем тике (для детекции sudden drop)
     int last_peer_count  = 0;    ///< Кол-во пиров на предыдущем тике (для peers_just_dropped)
-    // std::unordered_map<int, std::vector<char>> cached_pieces; // REMOVED: use MemoryStorage
-    // std::deque<int> cached_piece_order; // REMOVED
     int active_file_index = -1;
     TorrentState state = TorrentState::Idle;
     std::set<int> verified_pieces;
     std::deque<lt::tcp::endpoint> recent_peer_endpoints;
+    std::unordered_map<std::string, PeerCandidate> discovery_pool;
+    std::chrono::steady_clock::time_point last_cold_eviction_time{};
     size_t reconnect_cursor = 0;
     bool metadata_lockdown_applied = false; // Guard against repeated metadata lockdown race
 };
@@ -600,6 +621,7 @@ int reconnectKnownPeersLocked(TorrentRecord& record, int max_attempts);
 int effectiveConnectedPeerCount(const lt::torrent_handle& handle, int status_num_peers);
 void rememberPeerEndpointFromAlertLocked(TorrentEngine::Impl& impl, const lt::peer_alert& peer_event);
 void rememberConnectedPeerInfosLocked(TorrentRecord& record);
+void managePeerPoolsLocked(TorrentRecord& record, TorrentEngine::Impl& impl);
 #endif
 
 
@@ -805,8 +827,9 @@ struct TorrentEngine::Impl {
                         auto& record = pair.second;
                         if (!record || !record->handle.is_valid()) continue;
 
-                        // Populate recent_peer_endpoints for reconnect on mass disconnect
+                        // Populate discovery pool and manage active execution pool
                         rememberConnectedPeerInfosLocked(*record);
+                        managePeerPoolsLocked(*record, *this);
                         
                         auto status = record->handle.status(lt::torrent_handle::query_accurate_download_counters);
                         const int cur_rate    = status.download_payload_rate;
@@ -1934,6 +1957,45 @@ void rememberPeerEndpointFromAlertLocked(TorrentEngine::Impl& impl,
     }
 }
 
+void rememberPeerCandidateLocked(TorrentRecord& record,
+                                const lt::tcp::endpoint& endpoint,
+                                int source_mask,
+                                int rtt_ms = -1,
+                                int rate = 0,
+                                bool is_utp = false) {
+    if (endpoint.port() == 0) return;
+    lt::error_code ec;
+    if (endpoint.address().is_unspecified() || endpoint.address().is_multicast()) return;
+    const std::string host = endpoint.address().to_string(ec);
+    if (ec || host.empty() || host == "0.0.0.0" || host.rfind("127.", 0) == 0) return;
+
+    rememberPeerEndpointLocked(record, endpoint);
+
+    const std::string key = host + ":" + std::to_string(endpoint.port());
+    auto now = std::chrono::steady_clock::now();
+
+    auto it = record.discovery_pool.find(key);
+    if (it != record.discovery_pool.end()) {
+        it->second.last_seen = now;
+        it->second.source_mask |= source_mask;
+        if (rtt_ms >= 0) it->second.last_rtt_ms = rtt_ms;
+        if (rate > 0) it->second.last_payload_rate_bps = rate;
+        it->second.last_utp = is_utp;
+    } else {
+        if (record.discovery_pool.size() < 512) {
+            PeerCandidate cand;
+            cand.endpoint_str = key;
+            cand.ep = endpoint;
+            cand.source_mask = source_mask;
+            cand.last_seen = now;
+            cand.last_rtt_ms = rtt_ms;
+            cand.last_payload_rate_bps = rate;
+            cand.last_utp = is_utp;
+            record.discovery_pool[key] = cand;
+        }
+    }
+}
+
 int reconnectKnownPeersLocked(TorrentRecord& record, int max_attempts) {
     if (max_attempts <= 0 || record.recent_peer_endpoints.empty()) {
         return 0;
@@ -1964,7 +2026,162 @@ void rememberConnectedPeerInfosLocked(TorrentRecord& record) {
         return;
     }
     for (const auto& peer : peers) {
-        rememberPeerEndpointLocked(record, peer.ip);
+        int src = 0;
+        if (peer.source & lt::peer_info::tracker) src |= 1;
+        if (peer.source & lt::peer_info::dht) src |= 2;
+        if (peer.source & lt::peer_info::pex) src |= 4;
+        rememberPeerCandidateLocked(record, peer.ip, src, peer.rtt, peer.down_speed, (peer.flags & lt::peer_info::utp_socket) != 0);
+    }
+}
+
+float scorePeerCandidate(const PeerCandidate& cand, int urgent_start, int urgent_end, bool has_metadata) {
+    float score = 0.0f;
+
+    if (has_metadata && urgent_start >= 0 && urgent_end >= urgent_start) {
+        if (cand.had_window_piece) {
+            score += 50.0f;
+        } else {
+            score -= 40.0f;
+        }
+    }
+
+    score += std::min(cand.last_payload_rate_bps / 1024.0f, 200.0f);
+
+    if (!cand.last_choked) {
+        score += 20.0f;
+    } else {
+        score -= 30.0f;
+    }
+
+    if (cand.source_mask & 1) score += 10.0f;
+    if (cand.source_mask & 2) score += 10.0f;
+
+    if (cand.last_utp) {
+        if (cand.last_rtt_ms > 300 || cand.last_payload_rate_bps < 10 * 1024) {
+            score -= 25.0f;
+        }
+    } else {
+        score += 5.0f;
+    }
+
+    score -= static_cast<float>(cand.fail_count * 15);
+    score -= static_cast<float>(cand.disconnect_count * 10);
+
+    return score;
+}
+
+void managePeerPoolsLocked(TorrentRecord& record, TorrentEngine::Impl& impl) {
+    if (!record.handle.is_valid()) return;
+
+    auto now = std::chrono::steady_clock::now();
+    lt::torrent_status status = record.handle.status(lt::torrent_handle::query_accurate_download_counters);
+    const int connected = status.num_peers;
+    const bool has_metadata = status.has_metadata;
+
+    std::vector<lt::peer_info> peers;
+    try {
+        record.handle.get_peer_info(peers);
+    } catch (...) {}
+
+    int urgent_start = -1;
+    int urgent_end = -1;
+
+    for (const auto& pi : peers) {
+        lt::error_code ec;
+        const std::string host = pi.ip.address().to_string(ec);
+        if (ec || host.empty()) continue;
+        const std::string key = host + ":" + std::to_string(pi.ip.port());
+
+        rememberPeerCandidateLocked(record, pi.ip, 8, pi.rtt, pi.down_speed, (pi.flags & lt::peer_info::utp_socket) != 0);
+
+        auto it = record.discovery_pool.find(key);
+        if (it != record.discovery_pool.end()) {
+            it->second.last_payload_rate_bps = pi.down_speed;
+            it->second.last_rtt_ms = pi.rtt;
+            it->second.last_choked = (pi.flags & lt::peer_info::choked) != 0;
+            it->second.last_utp = (pi.flags & lt::peer_info::utp_socket) != 0;
+            if (urgent_start >= 0 && urgent_end >= urgent_start && pi.downloading_piece_index >= urgent_start && pi.downloading_piece_index <= urgent_end) {
+                it->second.had_window_piece = true;
+            }
+        }
+    }
+
+    for (auto& pair : record.discovery_pool) {
+        pair.second.score = scorePeerCandidate(pair.second, urgent_start, urgent_end, has_metadata);
+    }
+
+    // Refill Execution Pool (target 48 connected peers)
+    const int kTargetActivePeers = 48;
+    if (connected < kTargetActivePeers && !record.discovery_pool.empty()) {
+        std::vector<PeerCandidate*> sorted_candidates;
+        for (auto& pair : record.discovery_pool) {
+            if (now >= pair.second.cooldown_until) {
+                sorted_candidates.push_back(&pair.second);
+            }
+        }
+        std::sort(sorted_candidates.begin(), sorted_candidates.end(), [](const PeerCandidate* a, const PeerCandidate* b) {
+            return a->score > b->score;
+        });
+
+        int added = 0;
+        const int max_add_per_tick = 6;
+        for (auto* cand : sorted_candidates) {
+            if (connected + added >= kTargetActivePeers || added >= max_add_per_tick) break;
+            try {
+                record.handle.connect_peer(cand->ep);
+                cand->connect_count++;
+                cand->last_connect_attempt = now;
+                added++;
+            } catch (...) {}
+        }
+    }
+
+    // Cold Eviction (every 12 seconds)
+    if (connected >= 24 && std::chrono::duration_cast<std::chrono::seconds>(now - record.last_cold_eviction_time).count() >= 12) {
+        record.last_cold_eviction_time = now;
+        int evicted = 0;
+        const int max_evict_per_cycle = 4;
+
+        for (const auto& pi : peers) {
+            if (evicted >= max_evict_per_cycle) break;
+            if (connected - evicted <= 20) break; // Minimum swarm guard
+
+            const bool choked = (pi.flags & lt::peer_info::choked) != 0;
+            const bool slow = pi.down_speed < 10 * 1024;
+
+            if (choked && slow) {
+                lt::error_code ec;
+                const std::string host = pi.ip.address().to_string(ec);
+                if (!ec && !host.empty()) {
+                    const std::string key = host + ":" + std::to_string(pi.ip.port());
+                    auto it = record.discovery_pool.find(key);
+                    if (it != record.discovery_pool.end()) {
+                        it->second.disconnect_count++;
+                        it->second.cooldown_until = now + std::chrono::seconds(60);
+                    }
+                }
+
+                if (impl.session) {
+                    lt::torrent_handle h = record.handle;
+                    lt::tcp::endpoint ep = pi.ip;
+                    impl.session->get_io_service().post([h, ep]() {
+                        if (h.is_valid()) {
+                            auto t = h.native_handle();
+                            if (t) {
+                                auto* peer_conn = t->find_peer(ep);
+                                if (peer_conn) {
+                                    peer_conn->disconnect(lt::error_code(lt::errors::optimistic_disconnect, lt::libtorrent_category()), lt::operation_t::unknown);
+                                }
+                            }
+                        }
+                    });
+                }
+                evicted++;
+            }
+        }
+        if (evicted > 0) {
+            util::logLine("torrent_engine: [peer_pool] cold evicted " + std::to_string(evicted) + " peers, active=" + std::to_string(connected - evicted) + " known=" + std::to_string(record.discovery_pool.size()));
+        }
     }
 }
 
@@ -2625,6 +2842,7 @@ bool TorrentEngine::getTorrentList(std::vector<TorrentEngineItem>& out_items) {
         item.torrent_size = static_cast<unsigned long long>(status.total_wanted);
         item.seeds = status.num_seeds;
         item.peers = status.num_peers;
+        item.known_peers = static_cast<int>(record->discovery_pool.size());
         item.dht = impl_->session ? impl_->session->status().dht_nodes : 0;
         out_items.push_back(std::move(item));
     }

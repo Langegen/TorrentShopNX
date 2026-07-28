@@ -890,6 +890,7 @@ void DownloadManager::trackProgress() {
                 matched = true;
                 item.seeds = t.seeds;
                 item.peers = t.peers;
+                item.known_peers = t.known_peers;
                 item.dht = t.dht;
                 
                 // If hybrid installer is active, its downloadProgress() is already the overall progress.

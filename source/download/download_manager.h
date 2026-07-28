@@ -44,6 +44,7 @@ struct DownloadItem {
     std::chrono::steady_clock::time_point start_time{};
     int seeds = 0;
     int peers = 0;
+    int known_peers = 0;
     int dht = 0;
 
     // Гибридный инсталлятор (новый режим)

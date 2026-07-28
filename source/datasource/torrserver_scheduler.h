@@ -148,6 +148,12 @@ public:
     int  last_urgent_start() const { std::lock_guard<std::mutex> lock(mutex_); return last_urgent_start_; }
     bool in_stall_mode()     const { std::lock_guard<std::mutex> lock(mutex_); return stall_level_ > 0; }
     SchedulerSnapshot last_snapshot() const { std::lock_guard<std::mutex> lock(mutex_); return last_snapshot_; }
+    std::pair<int, int> currentUrgentPieceRange() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        int s = last_snapshot_.critical.start >= 0 ? last_snapshot_.critical.start : last_snapshot_.urgent.start;
+        int e = last_snapshot_.urgent.end >= 0 ? last_snapshot_.urgent.end : last_snapshot_.critical.end;
+        return {s, e};
+    }
 
 private:
     // =========================================================================

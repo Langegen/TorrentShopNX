@@ -30,6 +30,7 @@ struct TorrentEngineItem {
     unsigned long long torrent_size = 0;
     int seeds = 0;
     int peers = 0;
+    int known_peers = 0;
     int dht = 0;
 };
 

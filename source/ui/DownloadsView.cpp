@@ -300,7 +300,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         item.state == download::DownloadState::StreamPreparing) {
         
         char peersBuf[128];
-        std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d · DHT: %d", item.seeds, item.peers, item.dht);
+        if (item.known_peers > item.peers) {
+            std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d (%d изв.) · DHT: %d", item.seeds, item.peers, item.known_peers, item.dht);
+        } else {
+            std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d · DHT: %d", item.seeds, item.peers, item.dht);
+        }
         cell->peersText->setText(peersBuf);
         cell->peersText->setVisibility(brls::Visibility::VISIBLE);
     } else {
