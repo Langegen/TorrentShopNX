@@ -1272,7 +1272,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
         item.hybrid_installer = std::make_unique<installer::HybridNspInstaller>();
 
         installer::InstallConfig config;
-        config.buffer_size = 128 * 1024 * 1024;
+        config.buffer_size = 64 * 1024 * 1024;
         config.chunk_size = 8 * 1024 * 1024;
         config.verify_sha256 = true;
         config.install_ticket = true;

@@ -40,20 +40,18 @@ void FavoritesView::willDisappear(bool resetState) {
 
 
 void FavoritesView::filterFavorites() {
-    std::vector<Game> newFavorited;
     auto& fm = catalog::FavoritesManager::instance();
-    for (const auto& game : g_games) {
-        if (fm.isFavorite(game.topic_id)) {
-            newFavorited.push_back(game);
-        }
+    if (!g_games.empty()) {
+        fm.syncLegacyFavorites(g_games);
     }
+    const auto& newFavorited = fm.getFavorites();
 
     bool changed = false;
     if (newFavorited.size() != favoritedGames_.size()) {
         changed = true;
     } else {
         for (size_t i = 0; i < newFavorited.size(); ++i) {
-            if (newFavorited[i].topic_id != favoritedGames_[i].topic_id) {
+            if (newFavorited[i].title != favoritedGames_[i].title || newFavorited[i].magnet != favoritedGames_[i].magnet) {
                 changed = true;
                 break;
             }
@@ -61,7 +59,7 @@ void FavoritesView::filterFavorites() {
     }
 
     if (changed) {
-        favoritedGames_ = std::move(newFavorited);
+        favoritedGames_ = newFavorited;
         if (recycler) {
             brls::Application::giveFocus(this->recycler);
             recycler->reloadData();
@@ -141,14 +139,12 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             
             // Toggle favorite on Y button press inside card
             cards[i].card->registerAction("Убрать из избранного", brls::ControllerButton::BUTTON_Y, [this, game](brls::View* view) {
-                if (!game.topic_id.empty()) {
-                    catalog::FavoritesManager::instance().toggleFavorite(game.topic_id);
-                    brls::Application::notify("Удалено из избранного");
-                    // Refresh list on next frame so current action loop completes safely
-                    brls::sync([this]() {
-                        if (parent_) parent_->filterFavorites();
-                    });
-                }
+                catalog::FavoritesManager::instance().toggleFavorite(game);
+                brls::Application::notify("Удалено из избранного");
+                // Refresh list on next frame so current action loop completes safely
+                brls::sync([this]() {
+                    if (parent_) parent_->filterFavorites();
+                });
                 return true;
             });
 
@@ -161,6 +157,10 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
         } else {
             cards[i].card->setVisibility(brls::Visibility::GONE);
             cards[i].card->setFocusable(false);
+            cards[i].card->getFocusEvent()->clear();
+            cards[i].card->getFocusLostEvent()->clear();
+            cards[i].card->registerClickAction([](brls::View*) { return false; });
+            cards[i].card->registerAction("", brls::ControllerButton::BUTTON_Y, [](brls::View*) { return false; });
         }
     }
 

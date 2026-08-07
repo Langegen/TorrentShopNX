@@ -107,14 +107,22 @@ static void initGlobalCurlShare() {
     });
 }
 
-static int curlXferInfoCb(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+struct CurlXferContext {
+    const std::atomic<bool>* cancel_flag = nullptr;
+    ProgressCallback progress_cb = nullptr;
+};
+
+static int curlXferInfoCb(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
     if (g_appExiting.load()) {
         return 1;
     }
     if (clientp) {
-        auto* cancel_flag = static_cast<const std::atomic<bool>*>(clientp);
-        if (cancel_flag && cancel_flag->load()) {
+        auto* ctx = static_cast<CurlXferContext*>(clientp);
+        if (ctx->cancel_flag && ctx->cancel_flag->load()) {
             return 1;
+        }
+        if (ctx->progress_cb) {
+            ctx->progress_cb(static_cast<int64_t>(dltotal), static_cast<int64_t>(dlnow));
         }
     }
     return 0;
@@ -192,6 +200,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
             headers = curl_slist_append(headers, h.c_str());
         }
 
+        CurlXferContext xfer_ctx{cancel_flag_, progress_cb_};
+
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteBody);
@@ -209,7 +219,7 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
-        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel_flag_);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &xfer_ctx);
 
         if (keep_alive_) {
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);

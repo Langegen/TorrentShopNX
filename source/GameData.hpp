@@ -180,6 +180,7 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
 #include <dirent.h>
 #include <atomic>
 
+inline const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
 inline std::vector<std::string> g_pathsToDelete;
 inline std::atomic<bool> g_appExiting{false};
 inline std::atomic<bool> g_cleanupCancelled{false};

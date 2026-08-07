@@ -189,7 +189,21 @@ std::int64_t LocalLibtorrentBackend::read(std::int64_t offset, void* buffer, std
             return 0;
         }
 
-        if (waited_ms >= 3000) {
+        int adaptive_stall_ms = 3000;
+        {
+            std::lock_guard<std::mutex> peers_lock(cached_peers_mutex_);
+            int min_rtt = 0;
+            for (const auto& pi : cached_peers_) {
+                if (pi.rtt > 0) {
+                    if (min_rtt == 0 || pi.rtt < min_rtt) min_rtt = pi.rtt;
+                }
+            }
+            if (min_rtt > 0) {
+                adaptive_stall_ms = std::max(3000, min_rtt * 2);
+            }
+        }
+
+        if (waited_ms >= adaptive_stall_ms) {
             if (now >= next_slow_read_log_at) {
                 util::logLine("backend/local: slow read wait_ms=" + std::to_string(waited_ms) +
                               " piece=" + std::to_string(piece_start) +
@@ -393,11 +407,16 @@ void LocalLibtorrentBackend::set_state(StreamState new_state, const std::string&
 
 void LocalLibtorrentBackend::enter_latency_mode_locked(const char* reason,
                                                        std::chrono::steady_clock::time_point now) {
-    // Во время прогрева (первые 30 секунд после открытия) не входим в LATENCY_MODE,
-    // так как на старте скорость раздачи еще только раскачивается и ограничение
-    // очереди запросов в 1 секунду задушит скорость пиров.
-    if (std::chrono::duration_cast<std::chrono::seconds>(now - open_time_).count() < 30) {
-        return;
+    // В малых роях (<= 4 активных пиров) не входим в LATENCY_MODE, чтобы не резать queue_time
+    {
+        std::lock_guard<std::mutex> peers_lock(cached_peers_mutex_);
+        int active = 0;
+        for (const auto& pi : cached_peers_) {
+            if (pi.down_speed > 0) ++active;
+        }
+        if (active > 0 && active <= 4) {
+            return;
+        }
     }
 
     constexpr auto kLatencyHold = std::chrono::seconds(10);

@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <sstream>
 #include <deque>
@@ -23,8 +24,12 @@
 #include <libtorrent/alert.hpp>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/add_torrent_params.hpp>
+#include <libtorrent/bdecode.hpp>
+#include <libtorrent/bencode.hpp>
 #include <libtorrent/download_priority.hpp>
+#include <libtorrent/entry.hpp>
 #include <libtorrent/error_code.hpp>
+#include <libtorrent/kademlia/dht_state.hpp>
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/peer_info.hpp>
 #include <libtorrent/session.hpp>
@@ -70,7 +75,7 @@ constexpr const char* kCacheRoot = "sdmc:/switch/TorrentShopNX/cache/local_engin
 constexpr int kDefaultPort = 8080;
 constexpr int kLibtorrentListenPort = 50575;
 constexpr int kCacheBlocks16KiB = 0; // Disabled: we use MemoryStorage instead
-constexpr int kConnectionsLimit = 24; // Reduced from 40: Switch BSD socket limit is ~32-64, need headroom for DHT+trackers
+constexpr int kConnectionsLimit = 40; // Increased from 24 to 40 for larger swarm connectivity on Switch
 constexpr int kMetadataTimeoutMs = 300000; // 5 min
 constexpr int kPieceWaitTimeoutMs = 45000;
 constexpr int kPollSleepMs = 50; 
@@ -101,8 +106,8 @@ static std::mutex                          g_piece_pool_mutex;
 std::shared_ptr<buffer::PiecePool> getOrCreatePiecePool(int piece_size) {
     std::lock_guard<std::mutex> lock(g_piece_pool_mutex);
     if (!g_piece_pool || g_piece_pool->piece_size() != piece_size) {
-        // Limit RAM strictly to ~128MB for pieces to avoid OOM, or ~48MB in Applet Mode
-        int max_pool_bytes = 128 * 1024 * 1024;
+        // Limit RAM strictly to ~64MB for pieces to avoid OOM, or ~48MB in Applet Mode
+        int max_pool_bytes = 64 * 1024 * 1024;
 #ifdef __SWITCH__
         AppletType type = appletGetAppletType();
         if (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet) {
@@ -128,7 +133,7 @@ struct LibtorrentLikeSettingsConfig {
     int max_queued_disk_bytes = 32 * 1024 * 1024; 
     int disk_io_read_mode = 2; 
     int disk_io_write_mode = 2; 
-    int request_timeout = 30; // Snub timer tightened from 60 to 30 for fast slow-peer pruning
+    int request_timeout = 15; // Tightened from 30 to 15 for faster pruning of slow block delivery
     int peer_timeout = 30; 
     int inactivity_timeout = 60; 
     int num_want = 200; 
@@ -136,13 +141,13 @@ struct LibtorrentLikeSettingsConfig {
     int max_allowed_in_request_queue = 9000; 
     int request_queue_time = 2; 
     int whole_pieces_threshold = 20; 
-    int half_open_limit = 8; // Reduced from 50 to 8: prevents BSD socket pool exhaustion
-    int connection_speed = 15; // Reduced from 100/s to 15/s for BSD socket stability
+    int half_open_limit = 16; // Increased from 8 to 16 for faster peer discovery
+    int connection_speed = 25; // Increased from 15/s to 25/s for faster swarm building
     int peer_connect_timeout = 15; 
     int torrent_connect_boost = 20; // Reduced from 80 to 20 to prevent socket allocation spikes
     int active_downloads = 30; 
     int active_limit = 100; 
-    int connections_limit = 24; // Reduced from 40: ensures headroom for DHT + trackers + interrupters
+    int connections_limit = 40; // Increased from 24 to 40
     bool prioritize_partial_pieces = true; 
     bool use_parole_mode = true;
     bool strict_end_game_mode = false; // v60: посылаем запрос на последние куски ВСЕМ пирам, а не одному 
@@ -518,6 +523,61 @@ void addResolvedDhtRouters(lt::session& session) {
     }
 }
 
+// Путь к снимку DHT routing table. Лежит ВНЕ cache/local_engine, потому что
+// clearCaches() в main() стирает local_engine при каждом запуске приложения.
+std::filesystem::path dhtStateFilePath(const std::filesystem::path& cache_root) {
+    return cache_root.parent_path() / "dht_state.bin";
+}
+
+// Сохраняет живую DHT routing table на диск. Вызывать только когда dht_nodes > 0 —
+// пустым снимком нельзя затирать ранее сохранённый хороший.
+void saveDhtStateToFile(lt::session& session, const std::filesystem::path& path) {
+    try {
+        const int dht_nodes = session.status().dht_nodes;
+        if (dht_nodes <= 0) return;
+        lt::entry e = session.dht_state();
+        std::string buffer;
+        lt::bencode(std::back_inserter(buffer), e);
+        if (buffer.empty()) return;
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out.is_open()) return;
+        out.write(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        out.flush();
+        util::logLine("torrent_engine: saved DHT state (dht_nodes=" + std::to_string(dht_nodes) +
+                      ", bytes=" + std::to_string(buffer.size()) + ") to " + path.string());
+    } catch (const std::exception& e) {
+        util::logLine(std::string("torrent_engine: failed to save DHT state: ") + e.what());
+    }
+}
+
+// Загружает DHT routing table прошлого запуска. Даёт сотни живых нод для
+// bootstrap в случаях, когда публичные DHT-роутеры заблокированы (DPI/ТСПУ) —
+// достаточно одной достижимой ноды из сохранённых.
+lt::dht::dht_state loadDhtStateFromFile(const std::filesystem::path& path) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        if (!in.is_open()) return {};
+        std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (data.empty()) return {};
+
+        lt::bdecode_node node;
+        lt::error_code ec;
+        if (lt::bdecode(data.data(), data.data() + data.size(), node, ec) != 0 || ec) {
+            util::logLine("torrent_engine: failed to parse DHT state file " + path.string() +
+                          ": " + ec.message());
+            return {};
+        }
+
+        lt::dht::dht_state state = lt::dht::read_dht_state(node);
+        util::logLine("torrent_engine: loaded DHT state from " + path.string() +
+                      " (saved_nodes=" + std::to_string(state.nodes.size()) + ")");
+        return state;
+    } catch (const std::exception& e) {
+        util::logLine(std::string("torrent_engine: failed to load DHT state: ") + e.what());
+    }
+    return {};
+}
+
 std::string extractBtihHash(const std::string& magnet) {
     const std::string lower = util::toLowerCopy(magnet);
     const std::string marker = "xt=urn:btih:";
@@ -605,6 +665,7 @@ struct TorrentRecord {
     std::chrono::steady_clock::time_point last_cold_eviction_time{};
     size_t reconnect_cursor = 0;
     bool metadata_lockdown_applied = false; // Guard against repeated metadata lockdown race
+    int logged_peer_disconnects = 0; // Throttle для диагностического лога причин disconnect
 };
 
 bool readMemoryStorageRange(const TorrentRecord& record,
@@ -669,6 +730,46 @@ struct TorrentEngine::Impl {
     std::vector<std::pair<std::string, int>> resolved_dht_nodes;
     bool dht_resolved_success = false;
 
+    // --- Состояние авто-восстановления при мёртвом UDP (DHT = 0) ---
+    // Симптом: UDP-сокет забинден, но ответов нет (DPI провайдера режет UDP
+    // к торрент-инфраструктуре, либо NAT/CGNAT вытеснил mapping сокета).
+    std::string bind_ip;                    // IP, к которому привязан listen-сокет (для rebind)
+    int dht_zero_ticks = 0;                 // секунд подряд с dht_nodes == 0
+    bool dht_recovery_utp_disabled = false; // исходящий uTP отключён (мёртвый UDP)
+    bool dht_recovery_enc_forced = false;   // принудительное шифрование включено (анти-DPI)
+    int dht_rebind_port_toggle = 0;         // чередование порта при rebind
+    int dht_state_save_ticks = 0;           // таймер периодического сохранения DHT state
+
+    // Реинъекция bootstrap-нод в DHT (при необходимости с повторным DNS-резолвом).
+    void reinjectDhtNodesLocked() {
+        if (!session) return;
+        if (!dht_resolved_success) {
+            util::logLine("torrent_engine: DHT nodes = 0 and DNS resolution failed at startup, retrying DNS resolution...");
+            resolved_dht_nodes.clear();
+            for (const auto& node : kDhtBootstrapNodes) {
+                const std::string port = std::to_string(node.port);
+                const std::string ip = resolveIPv4Address(node.host, port.c_str());
+                if (ip.empty()) continue;
+                if (ip.rfind("198.18.", 0) == 0 || ip.rfind("127.", 0) == 0 || ip == "0.0.0.0") continue;
+                resolved_dht_nodes.push_back({ip, node.port});
+                dht_resolved_success = true;
+            }
+            // Append fallbacks
+            for (const auto& node : kDhtBootstrapIPFallbacks) {
+                resolved_dht_nodes.push_back({node.host, node.port});
+            }
+        }
+
+        if (!resolved_dht_nodes.empty()) {
+            util::logLine("torrent_engine: DHT nodes = 0, re-injecting " +
+                          std::to_string(resolved_dht_nodes.size()) + " bootstrap nodes...");
+            for (const auto& pair : resolved_dht_nodes) {
+                session->add_dht_router({pair.first, pair.second});
+                session->add_dht_node({pair.first, pair.second});
+            }
+        }
+    }
+
     void distributeAlertsLocked(std::vector<lt::alert*>& alerts) {
         for (lt::alert* alert : alerts) {
             if (auto* ta = lt::alert_cast<lt::torrent_alert>(alert)) {
@@ -711,6 +812,12 @@ struct TorrentEngine::Impl {
                     } else if (auto* pda = lt::alert_cast<lt::peer_disconnected_alert>(alert)) {
                         // Remember peer endpoints for reconnection on mass disconnect
                         rememberPeerEndpointFromAlertLocked(*this, *pda);
+                        // Диагностика обрывов сразу после connect (сигнатура DPI-RST):
+                        // логируем первые несколько причин на торрент, без флуда.
+                        if (it->second->logged_peer_disconnects < 8) {
+                            ++it->second->logged_peer_disconnects;
+                            util::logLine("torrent_engine: peer disconnect: " + pda->message());
+                        }
                     } else if (auto* pca = lt::alert_cast<lt::peer_connect_alert>(alert)) {
                         rememberPeerEndpointFromAlertLocked(*this, *pca);
                     }
@@ -787,38 +894,91 @@ struct TorrentEngine::Impl {
                 if (++tick_counter >= 20) {
                     tick_counter = 0;
 
-                    // Periodic DHT bootstrap recovery if nodes == 0 (every ~15s)
-                    static int dht_bootstrap_tick = 0;
-                    if (++dht_bootstrap_tick >= 15) {
-                        dht_bootstrap_tick = 0;
-                        if (session) {
-                            auto sess_status = session->status();
-                            if (sess_status.dht_nodes == 0) {
-                                if (!dht_resolved_success) {
-                                    util::logLine("torrent_engine: DHT nodes = 0 and DNS resolution failed at startup, retrying DNS resolution...");
-                                    resolved_dht_nodes.clear();
-                                    for (const auto& node : kDhtBootstrapNodes) {
-                                        const std::string port = std::to_string(node.port);
-                                        const std::string ip = resolveIPv4Address(node.host, port.c_str());
-                                        if (ip.empty()) continue;
-                                        if (ip.rfind("198.18.", 0) == 0 || ip.rfind("127.", 0) == 0 || ip == "0.0.0.0") continue;
-                                        resolved_dht_nodes.push_back({ip, node.port});
-                                        dht_resolved_success = true;
-                                    }
-                                    // Append fallbacks
-                                    for (const auto& node : kDhtBootstrapIPFallbacks) {
-                                        resolved_dht_nodes.push_back({node.host, node.port});
-                                    }
-                                }
+                    // === Восстановление при мёртвом UDP (DHT nodes == 0) ===
+                    // Если UDP-сокет забинден, но ответов нет (DPI режет UDP к
+                    // торрент-инфраструктуре или NAT/CGNAT вытеснил mapping),
+                    // одна лишь реинъекция нод не помогает — нужна эскалация.
+                    if (session) {
+                        auto sess_status = session->status();
+                        if (sess_status.dht_nodes > 0) {
+                            // UDP жив: откатить аварийные меры и сохранять DHT state.
+                            if (dht_recovery_utp_disabled) {
+                                lt::settings_pack sp;
+                                sp.set_bool(lt::settings_pack::enable_outgoing_utp, true);
+                                session->apply_settings(sp);
+                                dht_recovery_utp_disabled = false;
+                                util::logLine("torrent_engine: DHT recovered (nodes=" +
+                                              std::to_string(sess_status.dht_nodes) +
+                                              "), re-enabled outgoing uTP");
+                            }
+                            dht_zero_ticks = 0;
+                            if (++dht_state_save_ticks >= 60) {
+                                dht_state_save_ticks = 0;
+                                saveDhtStateToFile(*session, dhtStateFilePath(cache_root));
+                            }
+                        } else {
+                            ++dht_zero_ticks;
 
-                                if (!resolved_dht_nodes.empty()) {
-                                    util::logLine("torrent_engine: DHT nodes = 0, re-injecting " +
-                                                  std::to_string(resolved_dht_nodes.size()) + " bootstrap nodes...");
-                                    for (const auto& pair : resolved_dht_nodes) {
-                                        session->add_dht_router({pair.first, pair.second});
-                                        session->add_dht_node({pair.first, pair.second});
-                                    }
-                                }
+                            // Каждые ~15s: реинъекция bootstrap-нод (как раньше).
+                            if (dht_zero_ticks % 15 == 0) {
+                                reinjectDhtNodesLocked();
+                            }
+
+                            // ~20s: UDP мёртв — отключить исходящий uTP, чтобы ВСЕ
+                            // попытки подключения к пирам шли по TCP. uTP-попытки
+                            // улетают в чёрную дыру и занимают half-open слоты.
+                            if (dht_zero_ticks >= 20 && !dht_recovery_utp_disabled) {
+                                lt::settings_pack sp;
+                                sp.set_bool(lt::settings_pack::enable_outgoing_utp, false);
+                                session->apply_settings(sp);
+                                dht_recovery_utp_disabled = true;
+                                util::logLine("torrent_engine: DHT nodes = 0 for " +
+                                              std::to_string(dht_zero_ticks) +
+                                              "s, UDP path is dead — disabled outgoing uTP (TCP-only peer connections)");
+                            }
+
+                            // ~30s: вероятно DPI рвёт plain BT-handshake (пиры
+                            // подключаются и сразу отваливаются) — форсировать
+                            // шифрование исходящих соединений, чтобы скрыть
+                            // сигнатуру BitTorrent-протокола.
+                            if (dht_zero_ticks >= 30 && !dht_recovery_enc_forced) {
+                                lt::settings_pack sp;
+                                sp.set_int(lt::settings_pack::out_enc_policy, lt::settings_pack::pe_forced);
+                                session->apply_settings(sp);
+                                dht_recovery_enc_forced = true;
+                                util::logLine("torrent_engine: DHT nodes = 0 for " +
+                                              std::to_string(dht_zero_ticks) +
+                                              "s — forced encryption for outgoing peer connections (anti-DPI)");
+                            }
+
+                            // 30s и далее каждые 60s: мягкий рестарт DHT
+                            // (переинициализация dht_tracker на том же сокете).
+                            if (dht_zero_ticks >= 30 && (dht_zero_ticks - 30) % 60 == 0) {
+                                util::logLine("torrent_engine: DHT nodes = 0 for " +
+                                              std::to_string(dht_zero_ticks) +
+                                              "s — soft DHT restart (stop_dht/start_dht)");
+                                session->stop_dht();
+                                session->start_dht();
+                                reinjectDhtNodesLocked();
+                            }
+
+                            // 45s и далее каждые 90s: перепривязка listen-сокетов на
+                            // новый порт. Пересоздаёт UDP-сокет (новый NAT/CGNAT
+                            // mapping) без разрушения сессии и торрентов.
+                            if (dht_zero_ticks >= 45 && (dht_zero_ticks - 45) % 90 == 0 && !bind_ip.empty()) {
+                                dht_rebind_port_toggle ^= 1;
+                                const int rebind_port = kLibtorrentListenPort + dht_rebind_port_toggle;
+                                lt::settings_pack sp;
+                                sp.set_str(lt::settings_pack::listen_interfaces,
+                                           bind_ip + ":" + std::to_string(rebind_port));
+                                session->apply_settings(sp);
+                                util::logLine("torrent_engine: DHT nodes = 0 for " +
+                                              std::to_string(dht_zero_ticks) +
+                                              "s — rebinding listen sockets to " + bind_ip + ":" +
+                                              std::to_string(rebind_port) + " (fresh UDP socket/NAT mapping)");
+                                session->stop_dht();
+                                session->start_dht();
+                                reinjectDhtNodesLocked();
                             }
                         }
                     }
@@ -1553,14 +1713,26 @@ bool ensureSessionLocked(TorrentEngine::Impl& impl, std::string& error_out) {
     }
 #endif
 
+    impl.bind_ip = bind_ip;
+    // Свежая сессия — сбросить состояние авто-восстановления UDP/DHT.
+    impl.dht_zero_ticks = 0;
+    impl.dht_recovery_utp_disabled = false;
+    impl.dht_recovery_enc_forced = false;
+    impl.dht_rebind_port_toggle = 0;
+    impl.dht_state_save_ticks = 0;
+
     util::logLine("ensureSessionLocked making settings pack");
     const LibtorrentLikeSettingsConfig tuning_cfg{};
     lt::settings_pack settings = make_torrserver_like_settings(tuning_cfg, bind_ip);
 
     try {
         const auto flags = lt::session::start_default_features | lt::session::add_default_plugins;
+        // Подхватываем DHT routing table прошлого запуска: сотни живых нод
+        // для bootstrap, когда публичные DHT-роутеры недоступны/заблокированы.
+        lt::session_params params(settings);
+        params.dht_state = loadDhtStateFromFile(dhtStateFilePath(impl.cache_root));
         util::logLine("ensureSessionLocked creating lt::session with settings");
-        impl.session = std::make_shared<lt::session>(settings, flags);
+        impl.session = std::make_shared<lt::session>(params, flags);
         util::logLine("ensureSessionLocked lt::session created successfully");
     } catch (const std::exception& e) {
         util::logLine(std::string("ensureSessionLocked lt::session creation failed: ") + e.what());
@@ -2137,14 +2309,14 @@ void managePeerPoolsLocked(TorrentRecord& record, TorrentEngine::Impl& impl) {
     }
 
     // Cold Eviction (every 12 seconds)
-    if (connected >= 24 && std::chrono::duration_cast<std::chrono::seconds>(now - record.last_cold_eviction_time).count() >= 12) {
+    if (connected >= 35 && std::chrono::duration_cast<std::chrono::seconds>(now - record.last_cold_eviction_time).count() >= 12) {
         record.last_cold_eviction_time = now;
         int evicted = 0;
         const int max_evict_per_cycle = 4;
 
         for (const auto& pi : peers) {
             if (evicted >= max_evict_per_cycle) break;
-            if (connected - evicted <= 20) break; // Minimum swarm guard
+            if (connected - evicted <= 25) break; // Minimum swarm guard
 
             const bool choked = (pi.flags & lt::peer_info::choked) != 0;
             const bool slow = pi.down_speed < 10 * 1024;
@@ -2721,6 +2893,9 @@ void TorrentEngine::stop() {
 
     // Destroy session OUTSIDE the lock
     if (session_to_destroy) {
+        // Сохранить DHT routing table для bootstrap при следующем запуске
+        // (внутри функции есть защита: пустая таблица файл не затирает).
+        saveDhtStateToFile(*session_to_destroy, dhtStateFilePath(impl_->cache_root));
         util::logLine("torrent_engine: destroying libtorrent session");
         session_to_destroy.reset();
         util::logLine("torrent_engine: libtorrent session destroyed cleanly");

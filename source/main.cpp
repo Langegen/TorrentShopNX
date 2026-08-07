@@ -127,7 +127,6 @@ extern "C" {
 }
 
 std::string g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
-static const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
 
 static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     std::ifstream in(src, std::ios::binary | std::ios::ate);

@@ -698,10 +698,10 @@ int TorrServerScheduler::apply_slow_peer_isolation(const std::vector<lt::peer_in
                 continue;
             }
 
-            // RATE-LIMIT: не сбрасываем дедлайн одного и того же куска чаще, чем раз в 5 секунд.
+            // RATE-LIMIT: не сбрасываем дедлайн одного и того же куска чаще, чем раз в 2 секунды.
             auto now = std::chrono::steady_clock::now();
             if (last_isolated_.count(dl_piece_to_isolate) &&
-                std::chrono::duration_cast<std::chrono::seconds>(now - last_isolated_[dl_piece_to_isolate]).count() < 5) {
+                std::chrono::duration_cast<std::chrono::seconds>(now - last_isolated_[dl_piece_to_isolate]).count() < 2) {
                 continue;
             }
             last_isolated_[dl_piece_to_isolate] = now;
