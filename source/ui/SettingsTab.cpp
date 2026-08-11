@@ -394,13 +394,17 @@ void SettingsTab::onContentAvailable() {
     });
 
     // 2. Download mode
-    std::vector<std::string> modes = { "Удаленный TorrServer", "Локальный клиент (libtorrent)" };
-    int initialMode = (cfg.getDataMode() == "local_client") ? 1 : 0;
-    
+    std::vector<std::string> modes = {
+        "Удаленный TorrServer",
+        "Собственный движок"
+    };
+    int initialMode = 0;
+    if (cfg.getDataMode() == "local_client" || cfg.getDataMode() == "custom_engine") initialMode = 1;
+
     modeCell->init("Режим работы", modes, initialMode, [](int selected) {}, [&cfg, &dm](int selected) {
         if (selected == 1) {
-            cfg.setDataMode("local_client");
-            dm.dataSourceManager().setMode(datasource::DataSourceMode::LocalClient);
+            cfg.setDataMode("custom_engine");
+            dm.dataSourceManager().setMode(datasource::DataSourceMode::CustomEngine);
         } else {
             cfg.setDataMode("torrserver");
             dm.dataSourceManager().setMode(datasource::DataSourceMode::Remote);

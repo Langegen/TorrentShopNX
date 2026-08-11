@@ -2,7 +2,7 @@
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
-#include "../datasource/internal_torrent_engine.h"
+#include "../datasource/custom_engine_client.h"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
 #include <iomanip>
@@ -201,12 +201,12 @@ void FileSelectView::onContentAvailable() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             if (!status_running->load()) break;
             
-            auto status = datasource::InternalTorrentEngine::instance().probeStatus();
+            auto status = datasource::CustomEngineClient::instance().probeStatus();
             brls::sync([this, status, status_running, alive]() {
                 if (!alive->load() || !status_running->load()) return;
                 std::string text = "Получение списка файлов... ";
-                text += "(Сиды: " + std::to_string(status.seeds) + 
-                        ", Пиры: " + std::to_string(status.peers) + 
+                text += "(Сиды: " + std::to_string(status.seeds) +
+                        ", Пиры: " + std::to_string(status.peers) +
                         ", DHT: " + std::to_string(status.dht_nodes) + ")";
                 subtitle->setText(text);
             });

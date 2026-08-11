@@ -8,15 +8,81 @@
 #include <filesystem>
 
 #include "../config/config.h"
-#include "../datasource/internal_torrent_engine.h"
+#include "../datasource/custom_engine_client.h"
 #include "../net/http_client.h"
-#include "../torrent/torrent_engine.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+
+#include <engine/engine.h>
 
 namespace ui {
     extern std::atomic<bool> g_file_select_view_active;
 }
+
+namespace {
+
+bool customEngineGetFiles(const std::string& hash, std::vector<torrent::TorrentFileInfo>& out) {
+    if (hash.empty()) return false;
+    tsnx_file_info files[TSNX_MAX_FILES];
+    int n = tsnx_engine_get_files(nullptr, hash.c_str(), files, TSNX_MAX_FILES);
+    if (n <= 0) {
+        // Torrent may not be added yet; try a one-shot probe.
+        std::vector<datasource::CustomEngineFileInfo> probed;
+        std::string err;
+        if (!datasource::CustomEngineClient::instance().probeFiles(hash, "", "", probed, &err))
+            return false;
+        out.clear();
+        out.reserve(probed.size());
+        for (const auto& f : probed) {
+            torrent::TorrentFileInfo tf;
+            tf.index = f.index;
+            tf.name = f.path;
+            tf.size = f.size;
+            tf.wanted = true;
+            out.push_back(std::move(tf));
+        }
+        return !out.empty();
+    }
+    out.clear();
+    out.reserve(n);
+    for (int i = 0; i < n; i++) {
+        torrent::TorrentFileInfo tf;
+        tf.index = files[i].index;
+        tf.name = files[i].path;
+        tf.size = files[i].size;
+        tf.wanted = files[i].wanted;
+        out.push_back(std::move(tf));
+    }
+    return true;
+}
+
+bool customEngineSetFileWanted(const std::string& hash, int file_index, bool wanted) {
+    if (hash.empty()) return false;
+    return tsnx_engine_set_file_wanted(nullptr, hash.c_str(), file_index, wanted);
+}
+
+void customEngineGetTorrentList(std::vector<torrent::TorrentInfo>& out) {
+    out.clear();
+    tsnx_torrent_item items[8];
+    int n = tsnx_engine_get_torrents(nullptr, items, 8);
+    for (int i = 0; i < n; i++) {
+        torrent::TorrentInfo ti;
+        ti.id = -1;
+        ti.name = items[i].name;
+        ti.hash = items[i].hash;
+        ti.percent_done = items[i].progress * 100.0f;
+        ti.download_speed_kbps = items[i].download_kbps;
+        ti.loaded_size = items[i].loaded_size;
+        ti.torrent_size = items[i].total_size;
+        ti.seeds = items[i].seeds;
+        ti.peers = items[i].peers;
+        ti.known_peers = items[i].known_peers;
+        ti.dht = items[i].dht_nodes;
+        out.push_back(std::move(ti));
+    }
+}
+
+} // namespace
 
 namespace download {
 
@@ -25,6 +91,11 @@ static bool isTransferActive(download::DownloadState state) {
            state == download::DownloadState::StreamPreparing ||
            state == download::DownloadState::StreamInstalling ||
            state == download::DownloadState::Installing;
+}
+
+bool DownloadManager::isLocalBackend() const {
+    return ds_manager_.mode() == datasource::DataSourceMode::LocalClient ||
+           ds_manager_.mode() == datasource::DataSourceMode::CustomEngine;
 }
 
 static void updateSleepPolicy(bool has_active_transfers) {
@@ -273,36 +344,14 @@ static void copyDownloadedOtherFiles(const download::DownloadItem& item) {
     std::error_code ec;
     std::filesystem::create_directories(destDir, ec);
 
-    std::vector<torrent::TorrentEngineFileInfo> engine_files;
-    if (torrent::TorrentEngine::instance().getTorrentFiles(item.torrent_hash, engine_files)) {
-        for (int selIdx : item.selected_files) {
-            if (selIdx >= 0 && selIdx < static_cast<int>(engine_files.size())) {
-                const auto& ef = engine_files[selIdx];
-                if (!isSwitchGameFile(ef.name)) {
-                    std::filesystem::path srcFile = srcDir / ef.name;
-                    std::filesystem::path fileName = std::filesystem::path(ef.name).filename();
-                    std::filesystem::path destFile = destDir / fileName;
-                    
-                    if (std::filesystem::exists(srcFile)) {
-                        util::logLine("download: copying other file from " + srcFile.string() + " to " + destFile.string());
-                        std::filesystem::copy_file(srcFile, destFile, std::filesystem::copy_options::overwrite_existing, ec);
-                        if (ec) {
-                            util::logLine("download: failed to copy file: " + ec.message());
-                        }
-                    } else {
-                        util::logLine("download: other file " + srcFile.string() + " does not exist in cache");
-                    }
-                }
-            }
-        }
-    }
+    // Custom engine streams into RAM and does not keep a local SD cache,
+    // so there are no "other files" to copy after installation.
+    (void)srcDir; (void)destDir;
 }
 
 static void clearTorrentCache(const std::string& hash) {
     if (hash.empty()) return;
-    
-    torrent::TorrentEngine::instance().removeTorrent(hash);
-    
+
     std::filesystem::path cachePath;
 #ifndef __SWITCH__
     cachePath = std::filesystem::path("./cache/local_engine") / hash;
@@ -397,8 +446,7 @@ static float smoothDownloadSpeedKbps(float displayed_kbps,
     if (dt_sec <= 0.0) dt_sec = 0.8;
 
     // Use a much larger smoothing window (20 seconds) to mask short-term
-    // disk IO bottlenecks which cause libtorrent's network thread to pause and 
-    // the instantaneous speed to drop to 0.
+    // disk IO / OS stalls so the instantaneous speed does not drop to 0.
     const double window_sec = 20.0;
     double alpha = dt_sec / window_sec;
     if (alpha < 0.02) alpha = 0.02;
@@ -418,21 +466,11 @@ static constexpr int kPumpRewindEveryZeroReads = 24;
 
 torrent::TorrentManager* DownloadManager::getTorrent() {
     if (!torrent_) {
-        util::logLine("download: init torrent engine");
+        util::logLine("download: init torrent manager");
         torrent_.reset(new torrent::TorrentManager());
     }
 
-    std::string effective_url = ds_manager_.remoteUrl();
-    if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient) {
-        if (torrent::TorrentEngine::instance().start()) {
-            effective_url = torrent::TorrentEngine::instance().serverUrl();
-            ds_manager_.setLocalPort(torrent::TorrentEngine::instance().port());
-        } else {
-            util::logLine("download: local TorrentEngine start failed: " + torrent::TorrentEngine::instance().lastError());
-        }
-    }
-
-    torrent_->setServerUrl(effective_url);
+    torrent_->setServerUrl(ds_manager_.remoteUrl());
     return torrent_.get();
 }
 
@@ -446,7 +484,7 @@ void DownloadManager::ensureStreamConsumer(DownloadItem& item) {
     }
     if (hash.empty()) return;
 
-    const bool local_engine = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    const bool local_engine = (isLocalBackend());
     const std::string base_url = ensureHttpUrl(
         (torrent_ != nullptr && !torrent_->getServerUrl().empty())
             ? torrent_->getServerUrl()
@@ -610,7 +648,7 @@ bool DownloadManager::startDownload(size_t index) {
     }
 
     const std::string link = normalizeTorrentLink(item.magnet);
-    const bool local_mode_only = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    const bool local_mode_only = (isLocalBackend());
     std::string local_hash;
     int id = -1;
     if (local_mode_only) {
@@ -687,7 +725,7 @@ void DownloadManager::startNextDownload() {
 void DownloadManager::trackProgress() {
     auto now = std::chrono::steady_clock::now();
     bool refreshed_torrent_list = false;
-    const bool is_local_client = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    const bool is_local_client = (isLocalBackend());
     if (torrent_ && !is_local_client) {
         const auto poll_interval = std::chrono::milliseconds(800);
         if (last_torrent_list_.empty() ||
@@ -704,25 +742,14 @@ void DownloadManager::trackProgress() {
         const auto poll_interval = std::chrono::milliseconds(800);
         if (last_torrent_list_poll_.time_since_epoch().count() == 0 ||
             (now - last_torrent_list_poll_) >= poll_interval) {
-            std::vector<torrent::TorrentEngineItem> engine_items;
-            if (torrent::TorrentEngine::instance().getTorrentList(engine_items)) {
-                std::vector<torrent::TorrentInfo> fresh_list;
-                for (const auto& ei : engine_items) {
-                    torrent::TorrentInfo ti;
-                    ti.id = -1;
-                    ti.name = ei.name;
-                    ti.hash = ei.hash;
-                    ti.percent_done = ei.progress;
-                    ti.download_speed_kbps = ei.download_speed_kbps;
-                    ti.loaded_size = ei.loaded_size;
-                    ti.torrent_size = ei.torrent_size;
-                    ti.seeds = ei.seeds;
-                    ti.peers = ei.peers;
-                    ti.dht = ei.dht;
-                    fresh_list.push_back(ti);
-                }
-                last_torrent_list_ = std::move(fresh_list);
+            std::vector<torrent::TorrentInfo> fresh_list;
+            if (ds_manager_.mode() == datasource::DataSourceMode::CustomEngine ||
+                ds_manager_.mode() == datasource::DataSourceMode::LocalClient) {
+                customEngineGetTorrentList(fresh_list);
+            } else if (torrent_) {
+                fresh_list = torrent_->getTorrentList();
             }
+            last_torrent_list_ = std::move(fresh_list);
             last_torrent_list_poll_ = now;
             refreshed_torrent_list = true;
         }
@@ -817,7 +844,7 @@ void DownloadManager::trackProgress() {
             continue;
         }
 
-        if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
+        if (isLocalBackend() &&
             item.state == DownloadState::Downloading &&
             item.forced_file_index >= 0 &&
             isSwitchGameFile(item.forced_stream_name) &&
@@ -839,30 +866,19 @@ void DownloadManager::trackProgress() {
                 bool got_files = false;
                 if (item.torrent_id >= 0 && torrent_) {
                     got_files = torrent_->getTorrentFiles(item.torrent_id, files);
-                } else if (!item.torrent_hash.empty()) {
-                    std::vector<torrent::TorrentEngineFileInfo> engine_files;
-                    if (torrent::TorrentEngine::instance().getTorrentFiles(item.torrent_hash, engine_files)) {
-                        for (const auto& ef : engine_files) {
-                            torrent::TorrentFileInfo f;
-                            f.index = ef.index;
-                            f.name = ef.name;
-                            f.size = ef.size;
-                            f.wanted = ef.wanted;
-                            files.push_back(f);
-                        }
-                        got_files = true;
-                    }
+                } else if (!item.torrent_hash.empty() && isLocalBackend()) {
+                    got_files = customEngineGetFiles(item.torrent_hash, files);
                 }
-                
+
                 if (got_files && !files.empty()) {
                     for (const auto& f : files) {
                         bool wanted = std::find(item.selected_files.begin(), item.selected_files.end(), f.index) != item.selected_files.end();
                         if (item.torrent_id >= 0 && torrent_) {
                             setFileWanted(i, f.index, wanted);
-                        } else if (!item.torrent_hash.empty()) {
-                            torrent::TorrentEngine::instance().setFileWanted(item.torrent_hash, f.index, wanted);
+                        } else if (!item.torrent_hash.empty() && isLocalBackend()) {
+                            customEngineSetFileWanted(item.torrent_hash, f.index, wanted);
                         }
-                        
+
                         if (wanted && f.index == item.forced_file_index) {
                             item.install_total = f.size;
                         }
@@ -894,7 +910,7 @@ void DownloadManager::trackProgress() {
                 item.dht = t.dht;
                 
                 // If hybrid installer is active, its downloadProgress() is already the overall progress.
-                // Otherwise, fallback to libtorrent's progress.
+                // Otherwise, use the engine's per-torrent completion.
                 if (!item.hybrid_installer) {
                     item.progress = t.percent_done;
                 }
@@ -902,13 +918,14 @@ void DownloadManager::trackProgress() {
                 float sampled_speed_kbps = t.download_speed_kbps;
                 if (hybrid_speed_kbps >= 0.0f) {
                     const bool local_hybrid_stream =
-                        ds_manager_.mode() == datasource::DataSourceMode::LocalClient &&
+                        isLocalBackend() &&
                         item.state == DownloadState::StreamInstalling &&
                         item.hybrid_installer != nullptr;
                     
-                    // In LocalClient mode, we prefer libtorrent's actual network speed (t.download_speed_kbps)
-                    // over the installer's internal reading speed (hybrid_speed_kbps), as the latter
-                    // might drop to 0 when the ring buffer is full even if download is active.
+                    // In LocalClient mode, prefer the engine's actual network speed
+                    // (t.download_speed_kbps) over the installer's internal reading speed
+                    // (hybrid_speed_kbps), as the latter can drop to 0 when the ring buffer
+                    // is full even if the download is active.
                     sampled_speed_kbps = local_hybrid_stream
                         ? t.download_speed_kbps
                         : std::max(sampled_speed_kbps, hybrid_speed_kbps);
@@ -962,7 +979,7 @@ void DownloadManager::trackProgress() {
                     if (item.state == DownloadState::Downloading &&
                         !item.hybrid_installer &&
                         isSwitchGameFile(item.preload_stream_name) &&
-                        ds_manager_.mode() != datasource::DataSourceMode::LocalClient) {
+                        !isLocalBackend()) {
                         ensureStreamConsumer(item);
                     }
                 }
@@ -1110,18 +1127,6 @@ void DownloadManager::trackProgress() {
 
     updateSleepPolicy(has_active);
 
-    // Auto-stop local torrent engine when completely idle to release memory and prevent background crashes/deadlocks
-    // (Disabled to prevent random background crashes/deadlocks during menu navigation on Switch)
-    /*
-    if (is_local_client && torrent::TorrentEngine::instance().isRunning()) {
-        if (!has_active && !has_queued && !has_paused && 
-            !torrent::TorrentEngine::instance().probeStatus().active &&
-            !ui::g_file_select_view_active.load()) {
-            util::logLine("download: local engine is idle, stopping TorrentEngine to release resources");
-            torrent::TorrentEngine::instance().stop();
-        }
-    }
-    */
 }
 
 bool DownloadManager::hasActiveTransfers() const {
@@ -1163,7 +1168,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
         return false;
     }
 
-    const bool local_client_mode = (ds_manager_.mode() == datasource::DataSourceMode::LocalClient);
+    const bool local_client_mode = (isLocalBackend());
     const bool has_remote_torrent = (!local_client_mode &&
                                      item.torrent_id >= 0 &&
                                      torrent_ != nullptr &&
@@ -1377,6 +1382,28 @@ bool DownloadManager::cancelDownload(size_t index) {
 bool DownloadManager::getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files) {
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
+
+    if (isLocalBackend()) {
+        std::vector<datasource::CustomEngineFileInfo> local_files;
+        std::string probe_err;
+        if (!datasource::CustomEngineClient::instance().probeFiles(item.torrent_hash, item.magnet, "", local_files, &probe_err)) {
+            util::logLine("download: local getTorrentFiles probe failed: " +
+                          (probe_err.empty() ? std::string("unknown error") : probe_err));
+            return false;
+        }
+        out_files.clear();
+        out_files.reserve(local_files.size());
+        for (const auto& lf : local_files) {
+            torrent::TorrentFileInfo tf;
+            tf.index = lf.index;
+            tf.name = lf.path;
+            tf.size = lf.size;
+            tf.wanted = true;
+            out_files.push_back(std::move(tf));
+        }
+        return !out_files.empty();
+    }
+
     if (item.torrent_id < 0) return false;
     if (!torrent_) return false;
     return torrent_->getTorrentFiles(item.torrent_id, out_files);
@@ -1394,16 +1421,16 @@ bool DownloadManager::probeTorrentFiles(const std::string& magnet,
     }
 
     const std::string link = normalizeTorrentLink(magnet);
-    if (ds_manager_.mode() == datasource::DataSourceMode::LocalClient) {
-        std::vector<datasource::InternalTorrentFileInfo> local_files;
+    if (isLocalBackend()) {
+        std::vector<datasource::CustomEngineFileInfo> local_files;
         std::string probe_err;
-        if (!datasource::InternalTorrentEngine::instance().probeFiles("", link, "", local_files, &probe_err)) {
+        if (!datasource::CustomEngineClient::instance().probeFiles("", link, "", local_files, &probe_err)) {
             util::logLine("download: local probe failed: " +
                           (probe_err.empty() ? std::string("unknown error") : probe_err));
 
             if (out_error) {
                 *out_error = probe_err.empty()
-                    ? "Failed to load torrent file list from local client"
+                    ? "Failed to load torrent file list from custom engine"
                     : probe_err;
             }
             return false;
@@ -1413,9 +1440,9 @@ bool DownloadManager::probeTorrentFiles(const std::string& magnet,
         for (const auto& lf : local_files) {
             torrent::TorrentFileInfo tf;
             tf.index = lf.index;
-            tf.name = lf.name;
+            tf.name = lf.path;
             tf.size = lf.size;
-            tf.wanted = lf.wanted;
+            tf.wanted = true;
             out_files.push_back(std::move(tf));
         }
 
@@ -1455,6 +1482,11 @@ bool DownloadManager::probeTorrentFiles(const std::string& magnet,
 bool DownloadManager::setFileWanted(size_t index, int file_index, bool wanted) {
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
+
+    if (isLocalBackend()) {
+        return customEngineSetFileWanted(item.torrent_hash, file_index, wanted);
+    }
+
     if (item.torrent_id < 0) return false;
     if (!torrent_) return false;
     return torrent_->setFileWanted(item.torrent_id, file_index, wanted);

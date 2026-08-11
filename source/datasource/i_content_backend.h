@@ -10,7 +10,8 @@ namespace datasource {
 
 enum class BackendType {
     ExternalTorrServer,
-    LocalLibtorrent
+    LocalLibtorrent,
+    CustomEngine
 };
 
 enum class StreamState {

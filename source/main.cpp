@@ -22,7 +22,6 @@
 #include "ui/AppletWarningView.hpp"
 #include "ui/QrCodeView.hpp"
 #include "config/config.h"
-#include "torrent/torrent_engine.h"
 #include "utils/log.h"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
@@ -249,8 +248,7 @@ int main(int argc, char** argv) {
     if (!checkAppletMode()) {
         brls::Application::getWindowFocusChangedEvent()->subscribe([](bool focused) {
             if (!focused) {
-                util::logLine("main: focus lost (console going to sleep / minimized), stopping TorrentEngine to prevent crash...");
-                torrent::TorrentEngine::instance().stop();
+                util::logLine("main: focus lost (console going to sleep / minimized)");
             } else {
                 util::logLine("main: focus regained (console waking up)");
             }
@@ -265,14 +263,9 @@ int main(int argc, char** argv) {
         // Initialize managers and load configurations for Title Mode
         auto& cfg = config::ConfigManager::instance();
         cfg.load();
-        
+
         catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
         ui::DownloadManager::instance().init();
-        
-        // Force eager initialization of TorrentEngine in the main thread to prevent background thread crashes
-        util::logLine("main: initializing TorrentEngine eagerly");
-        auto& eng = torrent::TorrentEngine::instance();
-        util::logLine("main: TorrentEngine eagerly initialized, address=" + std::to_string((uintptr_t)&eng));
 
         // Initialize curl first, so background network threads can safely use it.
     #if __has_include(<curl/curl.h>)
@@ -334,16 +327,13 @@ int main(int argc, char** argv) {
         util::logLine("main: calling ImageDownloader::stop");
         net::ImageDownloader::instance().stop();
         
-        util::logLine("main: calling TorrentEngine::stop");
-        torrent::TorrentEngine::instance().stop();
-        
         util::logLine("main: all threads requested to stop");
     }
 
     // Do NOT call curl_global_cleanup() because it might crash if curl threads are alive
 
     // Use _exit(0) to exit cleanly:
-    //   - Skips C++ atexit handlers / global destructors (prevents libtorrent crash)
+    //   - Skips C++ atexit handlers / global destructors (prevents engine teardown crashes)
     //   - Calls __libnx_exit → __appExit → userAppExit (proper service teardown)
     //   - Calls envGetExitFuncPtr() to return to Homebrew Menu (not svcExitProcess!)
     //

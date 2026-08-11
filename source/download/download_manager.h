@@ -142,6 +142,7 @@ private:
     std::vector<StreamConsumer> stream_consumers_;
 
     torrent::TorrentManager* getTorrent();
+    bool isLocalBackend() const;
 
     std::thread progress_thread_;
     std::atomic<bool> progress_thread_running_{false};
