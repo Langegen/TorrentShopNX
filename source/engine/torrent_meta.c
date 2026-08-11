@@ -223,6 +223,10 @@ const char *torrent_meta_state_str(int state) {
 // fetch may still be in flight) without ever approaching the cap.
 #define META_WORKERS 8
 
+// How long the DHT lookup is allowed to run when the tracker peers did not
+// serve the metadata. Bounded: the probe happens on the UI-visible path.
+#define META_DHT_BUDGET_MS 20000
+
 typedef struct {
     peer_addr *peers;
     int n;
@@ -285,6 +289,51 @@ static void meta_worker(void *arg) {
     }
 }
 
+// Run the worker pool over the fetch job. Every peer is tried until the list
+// is exhausted or one worker returns the metadata (fetch->metadata != NULL).
+static void meta_run(meta_fetch *fetch) {
+    int nw = fetch->n < META_WORKERS ? fetch->n : META_WORKERS;
+    Thread workers[META_WORKERS];
+    int started = 0;
+    for (int i = 0; i < nw; i++) {
+        if (threadCreate(&workers[started], meta_worker, fetch, NULL, 0x10000,
+                         0x2C, -2) != 0)
+            break;
+        if (threadStart(&workers[started]) != 0) {
+            threadClose(&workers[started]);
+            break;
+        }
+        started++;
+    }
+    // No worker could start: still fetch it, just on this thread. Slow beats
+    // "no peer provided the metadata" when the swarm was fine.
+    if (started == 0)
+        meta_worker(fetch);
+
+    for (int i = 0; i < started; i++) {
+        threadWaitForExit(&workers[i]);
+        threadClose(&workers[i]);
+    }
+}
+
+// One BEP 9 fetch pass over `n` peers. Returns the winning metadata buffer
+// (owned by the caller) or NULL. Progress counters are published for the UI.
+static uint8_t *meta_fetch_pass(meta_fetch *fetch, peer_addr *peers, int n,
+                                const uint8_t info_hash[20],
+                                const uint8_t peer_id[20]) {
+    memset(fetch, 0, sizeof(*fetch));
+    mutexInit(&fetch->lock);
+    fetch->peers     = peers;
+    fetch->n         = n;
+    fetch->info_hash = info_hash;
+    fetch->peer_id   = peer_id;
+
+    torrent_meta_peers_total = n;
+    torrent_meta_peers_tried = 0;
+    meta_run(fetch);
+    return fetch->metadata;
+}
+
 int torrent_load_magnet(torrent_meta *t, const char *magnet_uri,
                         char *err, size_t errlen) {
     return torrent_load_magnet_peers(t, magnet_uri, NULL, 0, NULL, err, errlen);
@@ -312,80 +361,73 @@ int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
     }
     torrent_meta_trackers = m.tracker_count;
 
-    // Announce with a temporary stub (info_hash + borrowed trackers) to find
-    // peers, before we know piece counts or size.
+    // Announce with a temporary stub (info_hash + trackers) to find peers,
+    // before we know piece counts or size. The magnet's own trackers are
+    // appended with the bundled public ones so a magnet with no (or dead)
+    // tr= entries still finds peers.
     torrent_meta stub;
     memset(&stub, 0, sizeof(stub));
     memcpy(stub.info_hash, m.info_hash, 20);
     for (int i = 0; i < m.tracker_count; i++) stub.trackers[i] = m.trackers[i];
     stub.tracker_count = m.tracker_count;
-    stub.total_len = 0;
+    int stub_owned_start = stub.tracker_count;
+    add_default_trackers(&stub);
 
     torrent_meta_state = META_ANNOUNCE;
     peer_addr peers[80];
     int n = torrent_announce(&stub, peers, 80, err, errlen);
-    // stub trackers are borrowed from the magnet; do not unload it.
-    if (n <= 0) {
-        tlog("tracker announce returned no peers; trying DHT");
-        s_dht_peer_count = 0;
-        int dht_n = dht_find_peers(m.info_hash, 80, 15000,
-                                   dht_collect_peers, NULL, NULL, err, errlen);
-        if (dht_n > 0) {
-            n = dht_n < 80 ? dht_n : 80;
-            memcpy(peers, s_dht_peers, (size_t)n * sizeof(peers[0]));
-        }
-    }
-    if (n <= 0) {
-        magnet_free(&m);
-        torrent_meta_state = META_FAIL;
-        set_err(err, errlen, "no peer to fetch metadata from");
-        return -1;
-    }
-    torrent_meta_state = META_FETCH;
+    // The default-tracker URLs are copies owned by the stub; the magnet's
+    // are borrowed from `m`, which magnet_free() releases later.
+    for (int i = stub_owned_start; i < stub.tracker_count; i++)
+        free(stub.trackers[i]);
 
     uint8_t peer_id[20];
     memcpy(peer_id, "-SW0001-", 8);
     srand((unsigned)time(NULL));
     for (int i = 8; i < 20; i++) peer_id[i] = (uint8_t)(rand() % 256);
 
-    // Ask several peers at once for the metadata (BEP 9); the first to answer
-    // wins and the rest stop. Progress is published for the UI to poll.
-    torrent_meta_peers_total = n;
-    torrent_meta_peers_tried = 0;
-
     meta_fetch fetch;
-    memset(&fetch, 0, sizeof(fetch));
-    mutexInit(&fetch.lock);
-    fetch.peers     = peers;
-    fetch.n         = n;
-    fetch.info_hash = m.info_hash;
-    fetch.peer_id   = peer_id;
+    uint8_t *metadata = NULL;
+    size_t meta_len   = 0;
 
-    int nw = n < META_WORKERS ? n : META_WORKERS;
-    Thread workers[META_WORKERS];
-    int started = 0;
-    for (int i = 0; i < nw; i++) {
-        if (threadCreate(&workers[started], meta_worker, &fetch, NULL, 0x10000,
-                         0x2C, -2) != 0)
-            break;
-        if (threadStart(&workers[started]) != 0) {
-            threadClose(&workers[started]);
-            break;
+    // Pass 1: ask the peers the trackers gave us.
+    if (n > 0) {
+        tlog("fetching metadata from %d tracker peers", n);
+        torrent_meta_state = META_FETCH;
+        metadata = meta_fetch_pass(&fetch, peers, n, m.info_hash, peer_id);
+        meta_len = fetch.meta_len;
+    }
+
+    // Pass 2: the tracker peers did not serve the metadata (or there were
+    // none) -- look the swarm up on the DHT as well and retry the union.
+    if (!metadata) {
+        tlog("tracker peers did not serve metadata; trying DHT");
+        s_dht_peer_count = 0;
+        int dht_n = dht_find_peers(m.info_hash, 80, META_DHT_BUDGET_MS,
+                                   dht_collect_peers, NULL, NULL, err, errlen);
+        if (dht_n > 0) {
+            int merged = n;
+            for (int i = 0; i < dht_n && merged < 80; i++) {
+                bool dup = false;
+                for (int j = 0; j < merged; j++)
+                    if (peers[j].ip == s_dht_peers[i].ip &&
+                        peers[j].port == s_dht_peers[i].port) {
+                        dup = true;
+                        break;
+                    }
+                if (dup) continue;
+                peers[merged++] = s_dht_peers[i];
+            }
+            if (merged > n) {
+                n = merged;
+                tlog("retrying metadata with %d peers (tracker+DHT)", n);
+                torrent_meta_state = META_FETCH;
+                metadata = meta_fetch_pass(&fetch, peers, n, m.info_hash, peer_id);
+                meta_len = fetch.meta_len;
+            }
         }
-        started++;
-    }
-    // No worker could start: still fetch it, just on this thread. Slow beats
-    // "no peer provided the metadata" when the swarm was fine.
-    if (started == 0)
-        meta_worker(&fetch);
-
-    for (int i = 0; i < started; i++) {
-        threadWaitForExit(&workers[i]);
-        threadClose(&workers[i]);
     }
 
-    uint8_t *metadata = fetch.metadata;
-    size_t meta_len   = fetch.meta_len;
     if (!metadata) {
         magnet_free(&m);
         torrent_meta_state = META_FAIL;

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <thread>
+#include <vector>
 
 namespace datasource {
 
@@ -90,8 +91,10 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
 
     file_size_ = 0;
     if (file_index_ >= 0 && file_index_ < TSNX_MAX_FILES) {
-        tsnx_file_info files[TSNX_MAX_FILES];
-        int count = tsnx_engine_get_files(engine_, info_hash_str_.c_str(), files, TSNX_MAX_FILES);
+        // Heap-backed: tsnx_file_info is ~536 bytes; a stack array would
+        // overflow the small (64 KB default) libnx pthread stacks.
+        std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
+        int count = tsnx_engine_get_files(engine_, info_hash_str_.c_str(), files.data(), TSNX_MAX_FILES);
         if (file_index_ < count) {
             file_size_ = files[file_index_].size;
             file_offset_in_torrent_ = files[file_index_].offset;

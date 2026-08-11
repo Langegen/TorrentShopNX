@@ -245,7 +245,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             statusColor = nvgRGB(76, 175, 80); // Green
             break;
         case download::DownloadState::StreamPreparing:
-            statusStr = "Ожидание метаданных";
+            statusStr = "Подготовка к установке";
             statusColor = nvgRGB(0, 188, 212); // Cyan
             break;
         case download::DownloadState::StreamInstalling:

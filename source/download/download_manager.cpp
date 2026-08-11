@@ -23,8 +23,10 @@ namespace {
 
 bool customEngineGetFiles(const std::string& hash, std::vector<torrent::TorrentFileInfo>& out) {
     if (hash.empty()) return false;
-    tsnx_file_info files[TSNX_MAX_FILES];
-    int n = tsnx_engine_get_files(nullptr, hash.c_str(), files, TSNX_MAX_FILES);
+    // Heap-backed: tsnx_file_info is ~536 bytes; a stack array would overflow
+    // the small (64 KB default) libnx pthread stack of the progress thread.
+    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
+    int n = tsnx_engine_get_files(nullptr, hash.c_str(), files.data(), TSNX_MAX_FILES);
     if (n <= 0) {
         // Torrent may not be added yet; try a one-shot probe.
         std::vector<datasource::CustomEngineFileInfo> probed;
@@ -163,6 +165,9 @@ void DownloadManager::shutdown() {
         }
         if (item.open_future) {
             item.open_future.reset();
+        }
+        if (item.start_future) {
+            item.start_future.reset();
         }
     }
 
@@ -860,7 +865,9 @@ void DownloadManager::trackProgress() {
             continue;
         }
 
-        if (item.state == DownloadState::Downloading || item.state == DownloadState::StreamInstalling) {
+        if (item.state == DownloadState::Downloading ||
+            item.state == DownloadState::StreamInstalling ||
+            item.state == DownloadState::StreamPreparing) {
             if (!item.priorities_set && !item.selected_files.empty()) {
                 std::vector<torrent::TorrentFileInfo> files;
                 bool got_files = false;
@@ -1156,7 +1163,8 @@ bool DownloadManager::startHybridInstall(size_t index) {
         return false;
     }
 
-    if (item.hybrid_installer && !item.hybrid_installer->isFinished()) {
+    if (item.hybrid_installer && !item.hybrid_installer->isFinished() &&
+        item.state != DownloadState::StreamPreparing) {
         return true;
     }
 
@@ -1253,6 +1261,30 @@ bool DownloadManager::startHybridInstall(size_t index) {
     }
 
     if (item.state == DownloadState::StreamPreparing) {
+        if (item.start_future) {
+            if (item.start_future->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+                return true; // Installer still preparing
+            }
+
+            bool started = item.start_future->get();
+            item.start_future.reset();
+
+            if (!started) {
+                item.error_message = item.hybrid_installer ? item.hybrid_installer->errorMessage()
+                                                           : "failed to start hybrid install";
+                util::logLine("download: failed to start hybrid install: " + item.error_message);
+                item.hybrid_installer.reset();
+                item.state = DownloadState::Failed;
+                return false;
+            }
+
+            item.auto_hybrid_started = true;
+            item.state = DownloadState::StreamInstalling;
+            util::logLine("download: hybrid install started for " + item.title +
+                          " (index=" + std::to_string(install_file_index) + ")");
+            return true;
+        }
+
         if (!item.open_future) {
             item.state = DownloadState::Failed;
             item.error_message = "Stream open task lost.";
@@ -1306,18 +1338,14 @@ bool DownloadManager::startHybridInstall(size_t index) {
         item.hybrid_installer->setSourceFileNameHint(install_stream_name);
         item.hybrid_installer->setHintTitleId(parseTitleIdFromFileName(install_stream_name));
 
-        if (!item.hybrid_installer->start(source, config)) {
-            item.error_message = item.hybrid_installer->errorMessage();
-            util::logLine("download: failed to start hybrid install: " + item.error_message);
-            item.hybrid_installer.reset();
-            item.state = DownloadState::Failed;
-            return false;
-        }
-
-        item.auto_hybrid_started = true;
-        item.state = DownloadState::StreamInstalling;
-        util::logLine("download: hybrid install started for " + item.title +
-                      " (index=" + std::to_string(install_file_index) + ")");
+        // Run start() off the progress thread: the header read blocks until the
+        // engine delivers the first pieces, and the progress thread must keep
+        // polling engine stats for the UI.
+        auto installer_ptr = item.hybrid_installer;
+        item.start_future = std::make_shared<std::future<bool>>(
+            std::async(std::launch::async, [source, installer_ptr, config]() {
+                return installer_ptr->start(source, config);
+            }));
         return true;
     }
 
@@ -1340,6 +1368,10 @@ bool DownloadManager::cancelDownload(size_t index) {
 
     if (item.open_future) {
         item.open_future.reset();
+    }
+
+    if (item.start_future) {
+        item.start_future.reset();
     }
 
     if (item.stream_consumer_started && item.torrent_id >= 0) {

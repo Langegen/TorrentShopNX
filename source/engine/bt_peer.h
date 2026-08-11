@@ -30,9 +30,9 @@ enum {
 // TCP connect timeout. Each worker is blocked for this long on every peer that
 // never answers, and on a big swarm most peers are NAT'd or dead -- so this
 // directly bounds how fast the (few) reachable peers get found. A live peer's
-// SYN-ACK lands in tens of milliseconds; 1 s is already generous, and 2 s was
-// burning ~94% of all worker time on a 256-peer swarm.
-#define PEER_CONNECT_SECS 1
+// SYN-ACK lands in tens of milliseconds; 3 s tolerates a slow/loaded WiFi link
+// while still moving through dead peers quickly.
+#define PEER_CONNECT_SECS 3
 
 typedef struct {
     int sock;           // TCP socket, or -1 when using µTP

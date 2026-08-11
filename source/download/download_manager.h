@@ -53,6 +53,7 @@ struct DownloadItem {
 
     // Асинхронный open
     std::shared_ptr<std::future<bool>> open_future;
+    std::shared_ptr<std::future<bool>> start_future;
     std::shared_ptr<std::atomic<bool>> open_done;
     std::shared_ptr<std::atomic<bool>> open_success;
     std::shared_ptr<std::atomic<bool>> cancel_flag = std::make_shared<std::atomic<bool>>(false);

@@ -47,6 +47,10 @@ static void dht_log_cb(const char *msg) {
     engine_log(ENGINE_LOG_INFO, "[dht] %s", msg);
 }
 
+static void torrent_log_cb(const char *msg) {
+    engine_log(ENGINE_LOG_INFO, "[meta] %s", msg);
+}
+
 static uint64_t now_ms(void) {
 #ifdef __SWITCH__
     return armGetSystemTick() / (armGetSystemTickFreq() / 1000);
@@ -75,6 +79,7 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
     engine_log_init("sdmc:/switch/TorrentShopNX/engine.log");
     engine_log(ENGINE_LOG_INFO, "engine start port=%d", listen_port);
     dht_set_log(dht_log_cb);
+    torrent_set_log(torrent_log_cb);
     torrentfs_set_ram_stream(1);
     utp_nb_init();
     g_engine = eng;

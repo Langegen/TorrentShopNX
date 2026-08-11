@@ -13,6 +13,7 @@ static Mutex g_log_mtx;
 static FILE *g_log_f = NULL;
 static int g_log_level = ENGINE_LOG_INFO;
 static int g_log_init = 0;
+static int g_log_first_open = 1;
 
 void engine_log_init(const char *path) {
     if (g_log_init) return;
@@ -26,7 +27,10 @@ void engine_log_init(const char *path) {
             *slash = '\0';
             mkdir(dir, 0777);
         }
-        g_log_f = fopen(path, "a");
+        // Truncate on the very first open of the process so engine.log reflects
+        // only the current session; reopen after a stop appends.
+        g_log_f = fopen(path, g_log_first_open ? "w" : "a");
+        g_log_first_open = 0;
         if (!g_log_f) g_log_f = stderr;
     } else {
         g_log_f = stderr;

@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -37,8 +38,13 @@ static int set_timeout(int sock, int seconds) {
 }
 
 // Blocking connect() waits for the full TCP timeout (~30s) on an unreachable
-// peer, which stalls the swarm. A non-blocking connect + select lets us give
+// peer, which stalls the swarm. A non-blocking connect + poll lets us give
 // up after a few seconds and move on to another peer.
+//
+// poll() is used on purpose: on Switch, select() does not report the
+// connecting socket as writable (the same limitation as UDP readability),
+// which made every connect wait out its full timeout and starved the
+// BEP-9 metadata fetch even against live peers.
 static int connect_timeout(int sock, const struct sockaddr *sa, socklen_t salen,
                            int seconds) {
     int flags = fcntl(sock, F_GETFL, 0);
@@ -55,11 +61,11 @@ static int connect_timeout(int sock, const struct sockaddr *sa, socklen_t salen,
         return -1;
     }
 
-    fd_set wfds;
-    FD_ZERO(&wfds);
-    FD_SET(sock, &wfds);
-    struct timeval tv = { .tv_sec = seconds, .tv_usec = 0 };
-    rc = select(sock + 1, NULL, &wfds, NULL, &tv);
+    struct pollfd pfd;
+    pfd.fd = sock;
+    pfd.events = POLLOUT;
+    pfd.revents = 0;
+    rc = poll(&pfd, 1, seconds * 1000);
     if (rc <= 0) {
         fcntl(sock, F_SETFL, flags);
         return -1;  // timeout or error
