@@ -93,6 +93,64 @@ int dht_random_bytes(void *buf, size_t size) {
 }
 
 //-----------------------------------------------------------------------------
+// Node cache (fast warm start)
+//-----------------------------------------------------------------------------
+
+#define DHT_CACHE_MAGIC   "TDX1"
+#define DHT_CACHE_MAX_NODES 256
+#define DHT_CACHE_PATH    "sdmc:/switch/TorrentShopNX/dht_cache.bin"
+
+static int dht_cache_read(const char *path, uint8_t node_id[20],
+                          uint8_t (*nodes)[6], int max_nodes) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    uint8_t magic[4];
+    uint8_t cnt_le[2];
+    int ok = fread(magic, 1, 4, f) == 4 &&
+             memcmp(magic, DHT_CACHE_MAGIC, 4) == 0 &&
+             fread(node_id, 1, 20, f) == 20 &&
+             fread(cnt_le, 1, 2, f) == 2;
+    int n = 0;
+    if (ok) {
+        n = cnt_le[0] | (cnt_le[1] << 8);
+        if (n > DHT_CACHE_MAX_NODES) ok = 0;
+    }
+    if (ok) {
+        if (n > max_nodes) n = max_nodes;
+        ok = fread(nodes, 6, (size_t)n, f) == (size_t)n;
+    }
+    fclose(f);
+    return ok ? n : -1;
+}
+
+static int dht_cache_write(const char *path, const uint8_t node_id[20],
+                           const uint8_t (*nodes)[6], int count) {
+    if (count <= 0 || count > DHT_CACHE_MAX_NODES) return 0;
+    char tmp[512];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return 0;
+    uint8_t cnt_le[2] = { (uint8_t)(count & 0xff), (uint8_t)(count >> 8) };
+    int ok = fwrite(DHT_CACHE_MAGIC, 1, 4, f) == 4 &&
+             fwrite(node_id, 1, 20, f) == 20 &&
+             fwrite(cnt_le, 1, 2, f) == 2 &&
+             fwrite(nodes, 6, (size_t)count, f) == (size_t)count;
+    if (fclose(f) != 0) ok = 0;
+    if (!ok) {
+        remove(tmp);
+        return 0;
+    }
+    if (rename(tmp, path) != 0) {
+        remove(path);
+        if (rename(tmp, path) != 0) {
+            remove(tmp);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
 // Lookup
 //-----------------------------------------------------------------------------
 
@@ -100,9 +158,10 @@ static const char *BOOTSTRAP[] = {
     "router.bittorrent.com",
     "router.utorrent.com",
     "dht.transmissionbt.com",
+    "bootstrap.dht.transmissionbt.com",
     "dht.libtorrent.org",
     "dht.aelitis.com",
-    "bootstrap.dht.transmissionbt.com",
+    "dht2.opentracker.is",
 };
 #define BOOTSTRAP_PORT "6881"
 
@@ -146,7 +205,8 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
 
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0) {
-        if (err) snprintf(err, errlen, "DHT socket failed");
+        if (err) snprintf(err, errlen, "DHT socket failed errno=%d", errno);
+        engine_log(ENGINE_LOG_ERROR, "[dht] socket() failed errno=%d", errno);
         return -1;
     }
     struct sockaddr_in me = {0};
@@ -163,11 +223,28 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
     uint8_t node_id[20];
     randomGet(node_id, sizeof(node_id));
 
+    uint8_t cached_nodes[DHT_CACHE_MAX_NODES][6];
+    int cached_count = dht_cache_read(DHT_CACHE_PATH, node_id, cached_nodes,
+                                      DHT_CACHE_MAX_NODES);
+    if (cached_count > 0)
+        dlog("DHT cache: loaded %d nodes", cached_count);
+
     if (dht_init(s, -1, node_id, NULL) < 0) {
         if (err) snprintf(err, errlen, "dht_init failed");
         close(s);
         return -1;
     }
+
+    for (int i = 0; i < cached_count; i++) {
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        memcpy(&addr.sin_addr, cached_nodes[i], 4);
+        memcpy(&addr.sin_port, cached_nodes[i] + 4, 2);
+        dht_ping_node((struct sockaddr *)&addr, sizeof(addr));
+    }
+    if (cached_count > 0)
+        dlog("DHT cache: pinged %d nodes", cached_count);
 
     // Bootstrap: ping the well-known routers so the routing table fills up.
     int booted = 0;
@@ -196,7 +273,7 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
     u64 freq = armGetSystemTickFreq();
     u64 start = armGetSystemTick();
     u64 last_log = start;
-    bool searching = false;
+    double last_search_ms = -10000.0;
     time_t tosleep = 0;
 
     while (1) {
@@ -218,20 +295,20 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
                          &tosleep, on_dht_event, &dc);
         } else {
             dht_periodic(NULL, 0, NULL, 0, &tosleep, on_dht_event, &dc);
-            // Socket is non-blocking: avoid busy-spinning while waiting for
-            // bootstrap replies or search results.
-            usleep(20000);
         }
 
-        // Once the table has a few nodes, start (and keep) searching.
         int good = 0, dubious = 0;
         dht_nodes(AF_INET, &good, &dubious, NULL, NULL);
         s_last_good = good;
         s_last_dubious = dubious;
-        if (!searching && (good + dubious) >= 2) {
+
+        // Issue the search immediately and re-issue every 10 s.  jech deduplicates
+        // active searches, so this is cheap and keeps the lookup moving even when
+        // the first bootstrap replies are slow.
+        if (elapsed_ms - last_search_ms >= 10000.0) {
             dht_search(info_hash, 0, AF_INET, on_dht_event, &dc);  // port 0 = no announce
-            searching = true;
-            dlog("DHT: recherche lancee (%d noeuds)", good + dubious);
+            last_search_ms = elapsed_ms;
+            dlog("DHT: search issued (%d nodes)", good + dubious);
         }
 
         if ((double)(armGetSystemTick() - last_log) / freq >= 2.0) {
@@ -258,6 +335,7 @@ static Thread s_bg_thread;
 static bool s_bg_thread_started = false;
 static int s_bg_sock = -1;
 static bool s_bg_bootstrapped = false;
+static uint8_t s_bg_node_id[20];
 
 typedef struct {
     bool active;
@@ -323,7 +401,7 @@ static void dht_bg_main(void *arg) {
 
     s_bg_sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (s_bg_sock < 0) {
-        engine_log(ENGINE_LOG_ERROR, "[dht] background socket failed");
+        engine_log(ENGINE_LOG_ERROR, "[dht] background socket failed errno=%d", errno);
         return;
     }
     struct sockaddr_in me = {0};
@@ -337,12 +415,31 @@ static void dht_bg_main(void *arg) {
 
     uint8_t node_id[20];
     randomGet(node_id, sizeof(node_id));
+
+    uint8_t cached_nodes[DHT_CACHE_MAX_NODES][6];
+    int cached_count = dht_cache_read(DHT_CACHE_PATH, node_id, cached_nodes,
+                                      DHT_CACHE_MAX_NODES);
+    if (cached_count > 0)
+        engine_log(ENGINE_LOG_INFO, "[dht] cache: loaded %d nodes", cached_count);
+
     if (dht_init(s_bg_sock, -1, node_id, NULL) < 0) {
         engine_log(ENGINE_LOG_ERROR, "[dht] background dht_init failed");
         close(s_bg_sock);
         s_bg_sock = -1;
         return;
     }
+    memcpy(s_bg_node_id, node_id, 20);
+
+    for (int i = 0; i < cached_count; i++) {
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        memcpy(&addr.sin_addr, cached_nodes[i], 4);
+        memcpy(&addr.sin_port, cached_nodes[i] + 4, 2);
+        dht_ping_node((struct sockaddr *)&addr, sizeof(addr));
+    }
+    if (cached_count > 0)
+        engine_log(ENGINE_LOG_INFO, "[dht] cache: pinged %d nodes", cached_count);
 
     s_bg_bootstrapped = false;
     int boot_count = 0;
@@ -408,6 +505,20 @@ static void dht_bg_main(void *arg) {
                        good, dubious, s_last_peers_found);
             last_log = now;
         }
+    }
+
+    /* Persist good nodes for the next warm start. */
+    struct sockaddr_in sins[128];
+    int num = 128, num6 = 0;
+    dht_get_nodes(sins, &num, NULL, &num6);
+    if (num > 0) {
+        uint8_t nodes[128][6];
+        for (int i = 0; i < num; i++) {
+            memcpy(nodes[i], &sins[i].sin_addr, 4);
+            memcpy(nodes[i] + 4, &sins[i].sin_port, 2);
+        }
+        if (dht_cache_write(DHT_CACHE_PATH, s_bg_node_id, nodes, num))
+            engine_log(ENGINE_LOG_INFO, "[dht] saved %d nodes to cache", num);
     }
 
     dht_uninit();

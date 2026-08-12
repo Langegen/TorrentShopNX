@@ -5,6 +5,7 @@
 #include "../datasource/custom_engine_client.h"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
+#include "../net/image_downloader.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
@@ -135,6 +136,9 @@ FileSelectView::FileSelectView(const Game& game)
     : game_(game),
       alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
     g_file_select_view_active = true;
+    // Background cover downloads compete for BSD sockets/sessions with the
+    // custom engine probe. Pause them while this view is open.
+    net::ImageDownloader::instance().pause();
 }
 
 FileSelectView::~FileSelectView() {
@@ -142,6 +146,7 @@ FileSelectView::~FileSelectView() {
     // They must NOT touch any member after this flag is false.
     alive_flag_->store(false);
     g_file_select_view_active = false;
+    net::ImageDownloader::instance().resume();
 }
 
 void FileSelectView::onContentAvailable() {

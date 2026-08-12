@@ -1,5 +1,6 @@
 #include "utp_nb.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -158,7 +159,10 @@ int utp_nb_init(void) {
     if (g_inited) return 0;
 
     g_udp = socket(AF_INET, SOCK_DGRAM, 0);
-    if (g_udp < 0) return -1;
+    if (g_udp < 0) {
+        fprintf(stderr, "[utp_nb] socket() failed errno=%d\n", errno);
+        return -1;
+    }
 
     struct sockaddr_in me = {0};
     me.sin_family = AF_INET;

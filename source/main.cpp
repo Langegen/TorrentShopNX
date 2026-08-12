@@ -63,25 +63,31 @@ extern "C" {
             __nx_socket_tcp_rx_buf_size = 0x4000;      // 16KB default recv buffer
         } else {
             __nx_socket_mem_size = 0x02000000;        // 32MB socket pool for Title Mode
-            __nx_socket_tcp_tx_buf_size = 0x10000;     // 64KB default send buffer
-            __nx_socket_tcp_rx_buf_size = 0x10000;     // 64KB default recv buffer
+            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB initial send buffer
+            __nx_socket_tcp_rx_buf_size = 0x8000;      // 32KB initial recv buffer
         }
 
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
         if (is_applet) {
             cfg.num_bsd_sessions = 4;
             cfg.sb_efficiency = 2;
-            cfg.tcp_tx_buf_max_size = 16384;
-            cfg.tcp_rx_buf_max_size = 16384;
+            cfg.tcp_tx_buf_size = 0x4000;
+            cfg.tcp_rx_buf_size = 0x4000;
+            cfg.tcp_tx_buf_max_size = 0x8000;
+            cfg.tcp_rx_buf_max_size = 0x8000;
             cfg.udp_rx_buf_size = 8192;
             cfg.udp_tx_buf_size = 8192;
         } else {
-            cfg.num_bsd_sessions = 16;
-            cfg.sb_efficiency = 4;
-            cfg.tcp_tx_buf_max_size = 65536;
-            cfg.tcp_rx_buf_max_size = 65536;
-            cfg.udp_rx_buf_size = 32768; // Increased from 16KB to 32KB for DHT + uTP datagram stability
-            cfg.udp_tx_buf_size = 32768; // Increased from 16KB to 32KB
+            // Switch BSD buffer pool is fixed; keep per-socket initial cost low
+            // so the engine can open many peer sockets without ENOBUFS.
+            cfg.num_bsd_sessions = 12;
+            cfg.sb_efficiency = 8;
+            cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
+            cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
+            cfg.tcp_tx_buf_max_size = 0x40000;  // 256 KB stock
+            cfg.tcp_rx_buf_max_size = 0x40000;  // 256 KB stock
+            cfg.udp_rx_buf_size = 0x8000;       // 32 KB
+            cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }
         g_socket_init_result = socketInitialize(&cfg);
         if (R_FAILED(g_socket_init_result)) {

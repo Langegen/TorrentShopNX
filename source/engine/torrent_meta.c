@@ -225,7 +225,7 @@ const char *torrent_meta_state_str(int state) {
 
 // How long the DHT lookup is allowed to run when the tracker peers did not
 // serve the metadata. Bounded: the probe happens on the UI-visible path.
-#define META_DHT_BUDGET_MS 20000
+#define META_DHT_BUDGET_MS 45000
 
 typedef struct {
     peer_addr *peers;

@@ -245,7 +245,12 @@ int peer_connect(peer_conn *p, peer_addr addr, const uint8_t info_hash[20],
     p->choked = true;
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) { set_err(err, errlen, "socket() failed"); return -1; }
+    if (sock < 0) {
+        char e[128];
+        snprintf(e, sizeof(e), "socket() failed errno=%d", errno);
+        set_err(err, errlen, e);
+        return -1;
+    }
     // Short recv timeout: the session loop treats a timeout as "poll for stop and
     // keep waiting" (see run_session), so this bounds how long a worker blocked on
     // a quiet peer takes to notice cancellation — not how long we tolerate a slow
@@ -485,7 +490,12 @@ int peer_fetch_metadata(peer_addr addr, const uint8_t info_hash[20],
                         const uint8_t peer_id[20], uint8_t **out, size_t *out_len,
                         char *err, size_t errlen) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) { set_err(err, errlen, "socket"); return -1; }
+    if (sock < 0) {
+        char e[128];
+        snprintf(e, sizeof(e), "socket() failed errno=%d", errno);
+        set_err(err, errlen, e);
+        return -1;
+    }
     set_timeout(sock, 10);
 
     struct sockaddr_in sa = {0};
