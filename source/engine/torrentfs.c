@@ -269,6 +269,7 @@ struct torrentfs {
     int backlog_ms;            // written by the app thread, read racily
     int calm_now;
     volatile bool announce_now;
+    volatile int paused;       // pause: stop dialing + claiming (sessions stay)
 
     // Transport alternation: 0 = try TCP next, 1 = try µTP next.
     int dial_toggle;
@@ -1515,7 +1516,8 @@ static void netloop_main(void *arg) {
                 }
             }
 
-            while (t->st_live < DIAL_STOP_LIVE && connecting < MAX_CONNECTING) {
+            while (!t->paused &&
+                   t->st_live < DIAL_STOP_LIVE && connecting < MAX_CONNECTING) {
                 bool ok;
                 bool try_utp = utp_nb_fd() >= 0 && !few_peers &&
                                (t->dial_toggle % 4) == 0;
@@ -1558,6 +1560,8 @@ static void netloop_main(void *arg) {
             }
 
             // Claims for idle unchoked sessions, within the calm budget.
+            // Nothing new while paused: existing pipelines are left to drain
+            // (their pieces may as well land) but no fresh work is started.
             int claiming = 0;
             for (int i = 0; i < MAX_SESS; i++)
                 if (t->S[i].active && t->S[i].claim >= 0) claiming++;
@@ -1565,6 +1569,7 @@ static void netloop_main(void *arg) {
                 sess *s = &t->S[i];
                 if (!s->active || s->connecting || !s->nb.handshaked) continue;
                 if (s->nb.choked || s->claim >= 0) continue;
+                if (t->paused) break;
                 claim_piece(t, s, i);
                 if (s->claim >= 0) {
                     claiming++;
@@ -1885,6 +1890,18 @@ int64_t torrentfs_size(const torrentfs *tfs) {
 void torrentfs_set_playhead(torrentfs *tfs, int64_t offset) {
     int64_t abs = tfs->stream_offset + offset;
     ((torrentfs *)tfs)->playhead_piece = abs / tfs->meta.piece_len;
+}
+
+// Pause/resume downloading. Paused: no new dials, no new piece claims;
+// existing sessions stay connected (keep-alives) and in-flight pipelines are
+// left to drain. A blocked read keeps waiting for its piece, so an installer
+// mid-read simply stalls until resume -- the intended backpressure.
+void torrentfs_pause(torrentfs *tfs, int on) {
+    if (!tfs) return;
+    int v = on ? 1 : 0;
+    if (tfs->paused == v) return;  // idempotent: polled from the UI
+    tfs->paused = v;
+    engine_log(ENGINE_LOG_INFO, "[torrentfs] %s", on ? "paused" : "resumed");
 }
 
 static bool have_piece(torrentfs *t, int64_t idx) {

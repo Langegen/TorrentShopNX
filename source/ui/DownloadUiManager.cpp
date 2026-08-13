@@ -59,6 +59,15 @@ bool DownloadManager::pauseDownload(const std::string& topic_id) {
                 item.state == download::DownloadState::StreamPreparing ||
                 item.state == download::DownloadState::StreamInstalling) {
 
+                // Abort an in-flight metadata fetch / stream open so the
+                // resume can restart it cleanly instead of hitting an
+                // already-opened backend.
+                if (item.cancel_flag) {
+                    item.cancel_flag->store(true);
+                }
+
+                // Real pause: the engine stops dialing and claiming pieces
+                // (an installer blocked mid-read simply stalls).
                 if (!item.torrent_hash.empty()) {
                     tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
                 }
@@ -81,10 +90,20 @@ bool DownloadManager::resumeDownload(const std::string& topic_id) {
         auto& item = queue[i];
         if (item.topic_id == topic_id) {
             if (item.state == download::DownloadState::Paused || item.state == download::DownloadState::Installing) {
+                if (item.cancel_flag) {
+                    item.cancel_flag->store(false);
+                }
                 if (!item.torrent_hash.empty()) {
                     tsnx_engine_resume_torrent(nullptr, item.torrent_hash.c_str());
                 }
-                item.state = download::DownloadState::Downloading;
+                // Restore the pre-pause state: a paused hybrid install keeps
+                // installing where it stopped; anything earlier goes back to
+                // Downloading, which re-triggers the stream open.
+                if (item.hybrid_installer && item.auto_hybrid_started) {
+                    item.state = download::DownloadState::StreamInstalling;
+                } else {
+                    item.state = download::DownloadState::Downloading;
+                }
                 util::logLine("download_ui: resumed topic_id=" + topic_id);
                 saveDownloads();
                 triggerCallback();

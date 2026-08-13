@@ -24,6 +24,7 @@ struct tsnx_torrent {
     torrent_meta    meta;
     int             file_index;
     bool            used;
+    bool            paused;
     bool            wanted_files[TSNX_MAX_FILES];
     const volatile bool *cancel; /* polled by (re)opens of this torrent */
     uint64_t        bytes_recv_at_start;
@@ -249,14 +250,20 @@ bool tsnx_engine_remove_torrent(tsnx_engine *eng, const char *hash) {
 }
 
 bool tsnx_engine_pause_torrent(tsnx_engine *eng, const char *hash) {
-    eng = active_engine(eng);
-    (void)eng; (void)hash;
+    tsnx_torrent *t = find_by_hash(eng, hash);
+    if (!t) return false;
+    t->paused = true;
+    if (t->fs) torrentfs_pause(t->fs, 1);
+    engine_log(ENGINE_LOG_INFO, "[engine] pause torrent %s", hash);
     return true;
 }
 
 bool tsnx_engine_resume_torrent(tsnx_engine *eng, const char *hash) {
-    eng = active_engine(eng);
-    (void)eng; (void)hash;
+    tsnx_torrent *t = find_by_hash(eng, hash);
+    if (!t) return false;
+    t->paused = false;
+    if (t->fs) torrentfs_pause(t->fs, 0);
+    engine_log(ENGINE_LOG_INFO, "[engine] resume torrent %s", hash);
     return true;
 }
 
@@ -373,6 +380,7 @@ bool tsnx_engine_prepare_stream(tsnx_engine *eng, const char *hash,
                                        "sdmc:/switch/TorrentShopNX/cache.bin",
                                        file_index, t->cancel, err, sizeof(err));
     if (!t->fs) return false;
+    if (t->paused) torrentfs_pause(t->fs, 1);
     t->file_index = file_index;
     return true;
 }

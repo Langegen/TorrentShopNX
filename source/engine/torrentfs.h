@@ -43,6 +43,10 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
 // Move the download priority window without reading (used by seek).
 void torrentfs_set_playhead(torrentfs *tfs, int64_t offset);
 
+// Pause/resume downloading: no new dials or piece claims while paused; the
+// existing sessions and pipelines are left alone.
+void torrentfs_pause(torrentfs *tfs, int on);
+
 // Unblock any in-progress read so playback can shut down.
 void torrentfs_cancel(torrentfs *tfs);
 

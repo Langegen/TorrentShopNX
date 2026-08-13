@@ -72,7 +72,9 @@ void customEngineGetTorrentList(std::vector<torrent::TorrentInfo>& out) {
         ti.id = -1;
         ti.name = items[i].name;
         ti.hash = items[i].hash;
-        ti.percent_done = items[i].progress * 100.0f;
+        // Same 0..1 convention as the TorrServer path (which normalises its
+        // percent_done in torrent_manager.cpp); the UI treats it as 0..1.
+        ti.percent_done = items[i].progress;
         ti.download_speed_kbps = items[i].download_kbps;
         ti.loaded_size = items[i].loaded_size;
         ti.torrent_size = items[i].total_size;
@@ -918,36 +920,54 @@ void DownloadManager::trackProgress() {
                 item.peers = t.peers;
                 item.known_peers = t.known_peers;
                 item.dht = t.dht;
-                
-                // If hybrid installer is active, its downloadProgress() is already the overall progress.
-                // Otherwise, use the engine's per-torrent completion.
-                if (!item.hybrid_installer) {
-                    item.progress = t.percent_done;
+
+                // Self-heal a pause that raced the stream open: the engine
+                // torrent may have landed after pause_torrent() ran.
+                if (item.state == DownloadState::Paused &&
+                    !item.torrent_hash.empty()) {
+                    tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
                 }
 
-                float sampled_speed_kbps = t.download_speed_kbps;
-                if (hybrid_speed_kbps >= 0.0f) {
-                    const bool local_hybrid_stream =
-                        isLocalBackend() &&
-                        item.state == DownloadState::StreamInstalling &&
-                        item.hybrid_installer != nullptr;
-                    
-                    // In LocalClient mode, prefer the engine's actual network speed
-                    // (t.download_speed_kbps) over the installer's internal reading speed
-                    // (hybrid_speed_kbps), as the latter can drop to 0 when the ring buffer
-                    // is full even if the download is active.
-                    sampled_speed_kbps = local_hybrid_stream
-                        ? t.download_speed_kbps
-                        : std::max(sampled_speed_kbps, hybrid_speed_kbps);
-                }
-                if (refreshed_torrent_list ||
-                    hybrid_speed_kbps >= 0.0f ||
-                    item.speed_sample_at.time_since_epoch().count() == 0) {
-                    item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
-                                                                       sampled_speed_kbps,
-                                                                       item.speed_sample_at,
-                                                                       now);
-                    item.speed_sample_at = now;
+                // Only the actively transferring item takes the torrent's
+                // progress/speed: several queued items can share the same
+                // info-hash (base game + DLC), and they would otherwise all
+                // display the running torrent's numbers.
+                const bool active_transfer =
+                    item.state == DownloadState::Downloading ||
+                    item.state == DownloadState::StreamInstalling ||
+                    item.state == DownloadState::StreamPreparing;
+
+                if (active_transfer) {
+                    // If hybrid installer is active, its downloadProgress() is already the overall progress.
+                    // Otherwise, use the engine's per-torrent completion.
+                    if (!item.hybrid_installer) {
+                        item.progress = t.percent_done;
+                    }
+
+                    float sampled_speed_kbps = t.download_speed_kbps;
+                    if (hybrid_speed_kbps >= 0.0f) {
+                        const bool local_hybrid_stream =
+                            isLocalBackend() &&
+                            item.state == DownloadState::StreamInstalling &&
+                            item.hybrid_installer != nullptr;
+
+                        // In LocalClient mode, prefer the engine's actual network speed
+                        // (t.download_speed_kbps) over the installer's internal reading speed
+                        // (hybrid_speed_kbps), as the latter can drop to 0 when the ring buffer
+                        // is full even if the download is active.
+                        sampled_speed_kbps = local_hybrid_stream
+                            ? t.download_speed_kbps
+                            : std::max(sampled_speed_kbps, hybrid_speed_kbps);
+                    }
+                    if (refreshed_torrent_list ||
+                        hybrid_speed_kbps >= 0.0f ||
+                        item.speed_sample_at.time_since_epoch().count() == 0) {
+                        item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
+                                                                           sampled_speed_kbps,
+                                                                           item.speed_sample_at,
+                                                                           now);
+                        item.speed_sample_at = now;
+                    }
                 }
                 if (item.torrent_hash.empty() && !t.hash.empty()) {
                     item.torrent_hash = t.hash;
@@ -1367,6 +1387,18 @@ bool DownloadManager::cancelDownload(size_t index) {
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
+    }
+
+    // Close the local engine's stream BEFORE joining the futures: the
+    // installer's start() may be blocked inside tsnx_engine_read waiting for
+    // a piece, and only the torrentfs teardown unblocks it. This also drops
+    // the engine torrent + RAM window, which otherwise leaked for good.
+    if (isLocalBackend()) {
+        if (auto* source = ds_manager_.getSource()) {
+            source->close();
+            util::logLine("download: closed local data source after cancel hash=" +
+                          item.torrent_hash);
+        }
     }
 
     if (item.open_future) {
