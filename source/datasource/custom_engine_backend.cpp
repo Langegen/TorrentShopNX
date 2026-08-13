@@ -36,6 +36,10 @@ bool CustomEngineBackend::ensure_engine() {
 
 void CustomEngineBackend::set_state(StreamState new_state, const std::string& detail) {
     std::lock_guard<std::mutex> lock(mutex_);
+    set_state_locked(new_state, detail);
+}
+
+void CustomEngineBackend::set_state_locked(StreamState new_state, const std::string& detail) {
     if (state_ != new_state) {
         StreamState old = state_;
         state_ = new_state;
@@ -50,7 +54,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
     if (opened_) return false;
 
     if (!ensure_engine()) {
-        set_state(StreamState::Error, "engine start failed");
+        set_state_locked(StreamState::Error, "engine start failed");
         return false;
     }
 
@@ -79,12 +83,12 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
                                               file_index_, false, cancel,
                                               hash, sizeof(hash));
         } else {
-            set_state(StreamState::Error, "no magnet or torrent file");
+            set_state_locked(StreamState::Error, "no magnet or torrent file");
             return false;
         }
 
         if (!added) {
-            set_state(StreamState::Error, "add torrent failed");
+            set_state_locked(StreamState::Error, "add torrent failed");
             return false;
         }
     }
@@ -103,7 +107,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
         // The slot was just added: do not leave a half-open torrent behind.
         tsnx_engine_remove_torrent(engine_, info_hash_str_.c_str());
         CustomEngineClient::instance().unmarkInUse(info_hash_str_);
-        set_state(StreamState::Error, "prepare stream failed");
+        set_state_locked(StreamState::Error, "prepare stream failed");
         return false;
     }
 
@@ -137,7 +141,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
 
     opened_ = true;
     open_time_ = std::chrono::steady_clock::now();
-    set_state(StreamState::MainBuffering);
+    set_state_locked(StreamState::MainBuffering);
     return true;
 }
 

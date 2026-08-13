@@ -173,6 +173,8 @@ void DownloadManager::shutdown() {
         }
     }
 
+    has_open_pending_.store(false);
+
     stopAllStreamConsumers();
 
     datasource::IDataSource* source = ds_manager_.getSource();
@@ -1272,6 +1274,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
         item.state = DownloadState::StreamPreparing;
         util::logLine("download: starting async open for hybrid hash=" + item.torrent_hash +
                       " index=" + std::to_string(install_file_index));
+        has_open_pending_.store(true);
         
         auto cancel_flag = item.cancel_flag;
         item.open_future = std::make_shared<std::future<bool>>(
@@ -1309,6 +1312,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
         }
 
         if (!item.open_future) {
+            has_open_pending_.store(false);
             item.state = DownloadState::Failed;
             item.error_message = "Stream open task lost.";
             return false;
@@ -1320,6 +1324,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
 
         bool success = item.open_future->get();
         item.open_future.reset();
+        has_open_pending_.store(false);
 
         if (!success) {
             util::logLine("download: failed to open hybrid stream hash=" + item.torrent_hash +
@@ -1408,6 +1413,8 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.start_future) {
         item.start_future.reset();
     }
+
+    has_open_pending_.store(false);
 
     if (item.stream_consumer_started && item.torrent_id >= 0) {
         stopStreamConsumer(item.torrent_id);

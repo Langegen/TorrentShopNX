@@ -44,6 +44,10 @@ public:
 
 private:
     void set_state(StreamState new_state, const std::string& detail = "");
+    // Внутренний вариант без захвата мьютекса: вызывается из open()/read(),
+    // которые уже держат mutex_ (std::mutex не рекурсивен, повторный lock
+    // внутри set_state() приводил к самодеадлоку и вечной подготовке потока).
+    void set_state_locked(StreamState new_state, const std::string& detail = "");
     bool ensure_engine();
 
     BackendConfig cfg_;
