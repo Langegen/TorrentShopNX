@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #include <switch.h>
@@ -76,6 +77,96 @@ static void add_tracker(torrent_meta *t, const char *url, size_t len) {
     memcpy(copy, url, len);
     copy[len] = '\0';
     t->trackers[t->tracker_count++] = copy;
+}
+
+//-----------------------------------------------------------------------------
+// Persistent metadata cache, keyed by info-hash.
+//
+// Fetching metadata from the swarm is the slow, flaky part of opening a magnet
+// (BEP 9 over mostly-dead peers). Once fetched, the raw info dict is stored on
+// disk so every later open of the same magnet (probe -> download, or a future
+// session) loads it locally instead of re-running the network fetch.
+//-----------------------------------------------------------------------------
+
+#ifdef __SWITCH__
+#define META_CACHE_DIR_DEFAULT "sdmc:/switch/TorrentShopNX/meta"
+#else
+#define META_CACHE_DIR_DEFAULT "./meta_cache"
+#endif
+
+#define META_CACHE_MAX_SIZE (8 * 1024 * 1024)
+
+static char s_meta_cache_dir[256] = META_CACHE_DIR_DEFAULT;
+
+void torrent_meta_cache_set_dir(const char *dir) {
+    if (dir && dir[0])
+        snprintf(s_meta_cache_dir, sizeof(s_meta_cache_dir), "%s", dir);
+}
+
+static void info_hash_hex(const uint8_t info_hash[20], char out[41]) {
+    static const char digits[] = "0123456789abcdef";
+    for (int i = 0; i < 20; i++) {
+        out[i * 2]     = digits[info_hash[i] >> 4];
+        out[i * 2 + 1] = digits[info_hash[i] & 0x0f];
+    }
+    out[40] = '\0';
+}
+
+static int meta_cache_save(const uint8_t info_hash[20],
+                           const uint8_t *info, size_t len) {
+    if (!info || len == 0 || len > META_CACHE_MAX_SIZE) return -1;
+    mkdir(s_meta_cache_dir, 0755);  // ignore EEXIST and friends
+    char hex[41], path[320], tmp[324];
+    info_hash_hex(info_hash, hex);
+    snprintf(path, sizeof(path), "%s/%s.meta", s_meta_cache_dir, hex);
+    snprintf(tmp,  sizeof(tmp),  "%s.tmp", path);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return -1;
+    int ok = fwrite(info, 1, len, f) == len;
+    if (fclose(f) != 0) ok = 0;
+    if (!ok) { remove(tmp); return -1; }
+    if (rename(tmp, path) != 0) {
+        remove(path);
+        if (rename(tmp, path) != 0) { remove(tmp); return -1; }
+    }
+    tlog("metadata cached (%u bytes)", (unsigned)len);
+    return 0;
+}
+
+static int meta_cache_load(const uint8_t info_hash[20],
+                           uint8_t **out, size_t *out_len) {
+    *out = NULL;
+    *out_len = 0;
+    char hex[41], path[320];
+    info_hash_hex(info_hash, hex);
+    snprintf(path, sizeof(path), "%s/%s.meta", s_meta_cache_dir, hex);
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (fsize <= 0 || fsize > META_CACHE_MAX_SIZE) { fclose(f); return -1; }
+    uint8_t *buf = malloc((size_t)fsize);
+    if (!buf || fread(buf, 1, (size_t)fsize, f) != (size_t)fsize) {
+        free(buf);
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+
+    // The cache is trusted storage-adjacent, but an info dict fetched from a
+    // random peer is by definition unauthenticated: verify the SHA-1 against
+    // the requested info hash and drop a mismatch instead of using it.
+    uint8_t digest[20];
+    mbedtls_sha1(buf, (size_t)fsize, digest);
+    if (memcmp(digest, info_hash, 20) != 0) {
+        free(buf);
+        remove(path);
+        return -1;
+    }
+    *out = buf;
+    *out_len = (size_t)fsize;
+    return 0;
 }
 
 // Fills name/piece_len/piece_count/piece_hashes/files/total_len from an info
@@ -232,6 +323,7 @@ typedef struct {
     int n;
     const uint8_t *info_hash;
     const uint8_t *peer_id;
+    const volatile bool *cancel;  // polled: aborts the fetch between peers
 
     Mutex lock;
     int next;             // next peer to hand out
@@ -244,7 +336,7 @@ static void meta_worker(void *arg) {
     meta_fetch *c = (meta_fetch *)arg;
 
     for (;;) {
-        if (c->done) return;
+        if (c->done || (c->cancel && *c->cancel)) return;
 
         mutexLock(&c->lock);
         int i = c->next < c->n ? c->next++ : -1;
@@ -318,15 +410,18 @@ static void meta_run(meta_fetch *fetch) {
 
 // One BEP 9 fetch pass over `n` peers. Returns the winning metadata buffer
 // (owned by the caller) or NULL. Progress counters are published for the UI.
+// `cancel` (may be NULL) makes the workers stop trying new peers.
 static uint8_t *meta_fetch_pass(meta_fetch *fetch, peer_addr *peers, int n,
                                 const uint8_t info_hash[20],
-                                const uint8_t peer_id[20]) {
+                                const uint8_t peer_id[20],
+                                const volatile bool *cancel) {
     memset(fetch, 0, sizeof(*fetch));
     mutexInit(&fetch->lock);
     fetch->peers     = peers;
     fetch->n         = n;
     fetch->info_hash = info_hash;
     fetch->peer_id   = peer_id;
+    fetch->cancel    = cancel;
 
     torrent_meta_peers_total = n;
     torrent_meta_peers_tried = 0;
@@ -336,12 +431,33 @@ static uint8_t *meta_fetch_pass(meta_fetch *fetch, peer_addr *peers, int n,
 
 int torrent_load_magnet(torrent_meta *t, const char *magnet_uri,
                         char *err, size_t errlen) {
-    return torrent_load_magnet_peers(t, magnet_uri, NULL, 0, NULL, err, errlen);
+    return torrent_load_magnet_cancel(t, magnet_uri, NULL, err, errlen);
+}
+
+int torrent_load_magnet_cancel(torrent_meta *t, const char *magnet_uri,
+                               const volatile bool *cancel,
+                               char *err, size_t errlen) {
+    return torrent_load_magnet_peers_cancel(t, magnet_uri, NULL, 0, NULL,
+                                            cancel, err, errlen);
 }
 
 int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
                               peer_addr *out, int max, int *out_n,
                               char *err, size_t errlen) {
+    return torrent_load_magnet_peers_cancel(t, magnet_uri, out, max, out_n,
+                                            NULL, err, errlen);
+}
+
+// Trackers hand out rotating subsets of the swarm; one announce round often
+// yields peers without metadata while the next one yields a reachable metadata
+// peer. Two rounds roughly double the success rate at ~5 s each (the parallel
+// announce is bounded by the slowest tracker's timeout).
+#define META_ANNOUNCE_ROUNDS 2
+
+int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
+                                     peer_addr *out, int max, int *out_n,
+                                     const volatile bool *cancel,
+                                     char *err, size_t errlen) {
     if (out_n) *out_n = 0;
     memset(t, 0, sizeof(*t));
 
@@ -361,6 +477,53 @@ int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
     }
     torrent_meta_trackers = m.tracker_count;
 
+    // t-ru.org rotates its announce mirrors (bt/bt2/bt3) and the magnet only
+    // carries one of them. Add the whole family so a flaky mirror does not
+    // kill the fetch; the duplicates are dropped by add_tracker later.
+    {
+        bool is_tru = false;
+        for (int i = 0; i < m.tracker_count && !is_tru; i++)
+            is_tru = strstr(m.trackers[i], "t-ru.org") != NULL;
+        if (is_tru) {
+            static const char *tru_mirrors[] = {
+                "http://bt.t-ru.org/ann?magnet",
+                "http://bt2.t-ru.org/ann?magnet",
+                "http://bt3.t-ru.org/ann?magnet",
+            };
+            for (size_t i = 0;
+                 i < sizeof(tru_mirrors) / sizeof(*tru_mirrors);
+                 i++) {
+                bool dup = false;
+                for (int j = 0; j < m.tracker_count; j++)
+                    if (strcmp(m.trackers[j], tru_mirrors[i]) == 0) {
+                        dup = true;
+                        break;
+                    }
+                if (!dup && m.tracker_count < MAX_TRACKERS)
+                    m.trackers[m.tracker_count++] = strdup(tru_mirrors[i]);
+            }
+        }
+    }
+
+    // Persistent cache: if this magnet's metadata was already fetched (the
+    // probe a moment ago, or an earlier session), load it from disk instead
+    // of re-running the network fetch. This is the fix for "prepare/install
+    // hangs forever": the download no longer depends on a second BEP 9 fetch.
+    {
+        uint8_t *cached = NULL;
+        size_t cached_len = 0;
+        if (meta_cache_load(m.info_hash, &cached, &cached_len) == 0) {
+            tlog("metadata loaded from cache (%u bytes)", (unsigned)cached_len);
+            torrent_meta_state = META_BUILD;
+            int rc = torrent_load_from_metadata(t, cached, cached_len,
+                                                m.info_hash, m.trackers,
+                                                m.tracker_count, err, errlen);
+            magnet_free(&m);
+            torrent_meta_state = rc == 0 ? META_DONE : META_FAIL;
+            return rc;
+        }
+    }
+
     // Announce with a temporary stub (info_hash + trackers) to find peers,
     // before we know piece counts or size. The magnet's own trackers are
     // appended with the bundled public ones so a magnet with no (or dead)
@@ -373,14 +536,6 @@ int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
     int stub_owned_start = stub.tracker_count;
     add_default_trackers(&stub);
 
-    torrent_meta_state = META_ANNOUNCE;
-    peer_addr peers[80];
-    int n = torrent_announce(&stub, peers, 80, err, errlen);
-    // The default-tracker URLs are copies owned by the stub; the magnet's
-    // are borrowed from `m`, which magnet_free() releases later.
-    for (int i = stub_owned_start; i < stub.tracker_count; i++)
-        free(stub.trackers[i]);
-
     uint8_t peer_id[20];
     memcpy(peer_id, "-SW0001-", 8);
     srand((unsigned)time(NULL));
@@ -389,22 +544,41 @@ int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
     meta_fetch fetch;
     uint8_t *metadata = NULL;
     size_t meta_len   = 0;
+    peer_addr peers[80];
+    int n = 0;
 
-    // Pass 1: ask the peers the trackers gave us.
-    if (n > 0) {
-        tlog("fetching metadata from %d tracker peers", n);
-        torrent_meta_state = META_FETCH;
-        metadata = meta_fetch_pass(&fetch, peers, n, m.info_hash, peer_id);
-        meta_len = fetch.meta_len;
+    // Pass 1: announce (up to META_ANNOUNCE_ROUNDS times) and ask the
+    // announced peers for the metadata.
+    for (int round = 0;
+         round < META_ANNOUNCE_ROUNDS && !metadata && !(cancel && *cancel);
+         round++) {
+        if (round > 0) {
+            tlog("no metadata from tracker round %d; announcing again", round);
+            for (int i = 0; i < 6 && !(cancel && *cancel); i++)
+                svcSleepThread(500000000ULL);  // ~3 s between rounds
+        }
+        torrent_meta_state = META_ANNOUNCE;
+        n = torrent_announce(&stub, peers, 80, cancel, err, errlen);
+        if (n > 0) {
+            tlog("fetching metadata from %d tracker peers", n);
+            torrent_meta_state = META_FETCH;
+            metadata = meta_fetch_pass(&fetch, peers, n, m.info_hash,
+                                       peer_id, cancel);
+            meta_len = fetch.meta_len;
+        }
     }
+    // The default-tracker URLs are copies owned by the stub; the magnet's
+    // are borrowed from `m`, which magnet_free() releases later.
+    for (int i = stub_owned_start; i < stub.tracker_count; i++)
+        free(stub.trackers[i]);
 
     // Pass 2: the tracker peers did not serve the metadata (or there were
     // none) -- look the swarm up on the DHT as well and retry the union.
-    if (!metadata) {
+    if (!metadata && !(cancel && *cancel)) {
         tlog("tracker peers did not serve metadata; trying DHT");
         s_dht_peer_count = 0;
         int dht_n = dht_find_peers(m.info_hash, 80, META_DHT_BUDGET_MS,
-                                   dht_collect_peers, NULL, NULL, err, errlen);
+                                   dht_collect_peers, NULL, cancel, err, errlen);
         if (dht_n > 0) {
             int merged = n;
             for (int i = 0; i < dht_n && merged < 80; i++) {
@@ -422,7 +596,8 @@ int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
                 n = merged;
                 tlog("retrying metadata with %d peers (tracker+DHT)", n);
                 torrent_meta_state = META_FETCH;
-                metadata = meta_fetch_pass(&fetch, peers, n, m.info_hash, peer_id);
+                metadata = meta_fetch_pass(&fetch, peers, n, m.info_hash,
+                                           peer_id, cancel);
                 meta_len = fetch.meta_len;
             }
         }
@@ -431,10 +606,17 @@ int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
     if (!metadata) {
         magnet_free(&m);
         torrent_meta_state = META_FAIL;
-        set_err(err, errlen, "no peer provided the metadata");
+        if (cancel && *cancel)
+            set_err(err, errlen, "metadata fetch cancelled");
+        else
+            set_err(err, errlen, "no peer provided the metadata");
         return -1;
     }
     torrent_meta_state = META_BUILD;
+
+    // Persist the info dict before torrent_load_from_metadata takes ownership
+    // of the buffer, so a later open of this magnet loads it from disk.
+    meta_cache_save(m.info_hash, metadata, meta_len);
 
     // Hand the peers on: the caller is about to want exactly these, and asking
     // the trackers again for the same list costs a round-trip with nothing to
@@ -720,7 +902,25 @@ static int announce_http(const char *tracker, const char *hash_enc,
 
 // One tracker announce, run on its own thread. Each job holds its own result
 // buffer so no locking is needed; results are merged after all threads join.
+// Each announce thread sits in a BLOCKING socket call (curl or SO_RCVTIMEO
+// recvfrom) for its whole lifetime, and the Switch OS allows only 16 such
+// concurrent BSD sessions per process. The metadata fetch and torrentfs's
+// discovery thread can both announce (8 trackers each) at the same moment,
+// which would burn 16 sessions alone -- plus the DHT's permanent recvfrom and
+// the netloop's reads. A global announce lock serialises the two, keeping the
+// worst case at ~12 sessions.
 #define AJOB_PEERS 128
+
+/* At most this many tracker announces run in parallel: every one of them sits
+   in a blocking socket call, and the Switch OS allows 16 concurrent blocking
+   BSD sessions per process. The rest of the trackers are announced inline
+   after the parallel wave. */
+#define ANNOUNCE_MAX_THREADS 8
+
+/* Zero-initialised is a valid Mutex in libnx; the PC compat shim initialises
+   lazily. Serialises metadata-fetch announces with torrentfs discovery
+   announces so they never burn the 16 blocking BSD sessions together. */
+static Mutex s_announce_mtx;
 
 typedef struct {
     const char *tracker;
@@ -733,6 +933,7 @@ typedef struct {
     peer_addr peers[AJOB_PEERS];
     int count;
     double secs;
+    char terr[128];   // failure reason when count < 0
 
     torrent_peer_cb cb;   // delivered from this thread as soon as peers arrive
     void *cb_ctx;
@@ -744,16 +945,17 @@ typedef struct {
 
 static void announce_thread(void *arg) {
     ajob *j = arg;
-    char terr[128];
     u64 freq = armGetSystemTickFreq();
     u64 t0 = armGetSystemTick();
 
     if (strncmp(j->tracker, "udp://", 6) == 0)
         j->count = udp_announce(j->tracker, j->info_hash, j->peer_id, j->left,
-                                j->peers, AJOB_PEERS, j->cancel, terr, sizeof(terr));
+                                j->peers, AJOB_PEERS, j->cancel, j->terr,
+                                sizeof(j->terr));
     else
         j->count = announce_http(j->tracker, j->hash_enc, j->peer_id_enc, j->left,
-                                 j->peers, AJOB_PEERS, j->cancel, terr, sizeof(terr));
+                                 j->peers, AJOB_PEERS, j->cancel, j->terr,
+                                 sizeof(j->terr));
 
     j->secs = (double)(armGetSystemTick() - t0) / freq;
 
@@ -773,10 +975,22 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
     urlencode_bytes(t->info_hash, 20, hash_enc);
     urlencode_bytes(peer_id, 20, peer_id_enc);
 
+    // Serialise with any other announce (metadata fetch vs torrentfs
+    // discovery) so the parallel tracker threads never exhaust the Switch's
+    // 16 blocking BSD sessions together with the rest of the engine.
+    mutexLock(&s_announce_mtx);
+
     // Announce to every tracker in PARALLEL, delivering peers via the callback
     // the moment each tracker answers (so the fastest one unblocks downloading).
     ajob *jobs = calloc(t->tracker_count, sizeof(*jobs));
-    if (!jobs) { set_err(err, errlen, "out of memory (announce)"); return -1; }
+    if (!jobs) {
+        set_err(err, errlen, "out of memory (announce)");
+        mutexUnlock(&s_announce_mtx);
+        return -1;
+    }
+
+    int n_threaded = t->tracker_count;
+    if (n_threaded > ANNOUNCE_MAX_THREADS) n_threaded = ANNOUNCE_MAX_THREADS;
 
     for (int i = 0; i < t->tracker_count; i++) {
         ajob *j = &jobs[i];
@@ -790,11 +1004,11 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         j->cb_ctx = ctx;
         j->cancel = cancel;
 
-        if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
-            j->has_thread = true;
-            threadStart(&j->thread);
-        } else {
-            announce_thread(j);  // fall back to inline if the thread won't start
+        if (i < n_threaded) {
+            if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
+                j->has_thread = true;
+                threadStart(&j->thread);
+            }
         }
     }
 
@@ -804,12 +1018,20 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         if (j->has_thread) {
             threadWaitForExit(&j->thread);
             threadClose(&j->thread);
+        } else if (i >= n_threaded) {
+            announce_thread(j);  // inline wave: bounded by the same timeouts
         }
-        if (j->count > 0) answered++;
-        tlog("tracker %.1fs (%d) %.60s", j->secs, j->count, j->tracker);
+        if (j->count > 0) {
+            answered++;
+            tlog("tracker %.1fs (%d) %.60s", j->secs, j->count, j->tracker);
+        } else {
+            tlog("tracker %.1fs (failed: %s) %.60s", j->secs,
+                 j->terr[0] ? j->terr : "timeout", j->tracker);
+        }
     }
 
     free(jobs);
+    mutexUnlock(&s_announce_mtx);
     return answered;
 }
 
@@ -829,10 +1051,10 @@ static void collect_cb(void *ctx, const peer_addr *peers, int n) {
 }
 
 int torrent_announce(const torrent_meta *t, peer_addr *peers, int max_peers,
-                     char *err, size_t errlen) {
+                     const volatile bool *cancel, char *err, size_t errlen) {
     collector c = { peers, 0, max_peers };
     mutexInit(&c.lock);
-    torrent_announce_cb(t, collect_cb, &c, NULL, err, errlen);
+    torrent_announce_cb(t, collect_cb, &c, cancel, err, errlen);
     if (c.total == 0) { set_err(err, errlen, "no peer from the trackers"); return -1; }
     return c.total;
 }

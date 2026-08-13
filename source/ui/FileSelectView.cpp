@@ -147,6 +147,10 @@ FileSelectView::~FileSelectView() {
     alive_flag_->store(false);
     g_file_select_view_active = false;
     net::ImageDownloader::instance().resume();
+    // Abort a still-running probe and drop its torrent (unless a download has
+    // adopted it) so the engine does not keep it around forever.
+    datasource::CustomEngineClient::instance().cancelProbe();
+    datasource::CustomEngineClient::instance().releaseProbeTorrent();
 }
 
 void FileSelectView::onContentAvailable() {
@@ -210,9 +214,17 @@ void FileSelectView::onContentAvailable() {
             brls::sync([this, status, status_running, alive]() {
                 if (!alive->load() || !status_running->load()) return;
                 std::string text = "Получение списка файлов... ";
-                text += "(Сиды: " + std::to_string(status.seeds) +
-                        ", Пиры: " + std::to_string(status.peers) +
-                        ", DHT: " + std::to_string(status.dht_nodes) + ")";
+                if (status.active && status.meta_peers_total > 0) {
+                    text += "(метаданные: пиры " +
+                            std::to_string(status.meta_peers_tried) + "/" +
+                            std::to_string(status.meta_peers_total) + ")";
+                } else if (status.active) {
+                    text += "(поиск пиров: " + status.phase + ")";
+                } else {
+                    text += "(Сиды: " + std::to_string(status.seeds) +
+                            ", Пиры: " + std::to_string(status.peers) +
+                            ", DHT: " + std::to_string(status.dht_nodes) + ")";
+                }
                 subtitle->setText(text);
             });
         }

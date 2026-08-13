@@ -18,6 +18,12 @@ public:
                            const std::string& magnet_link,
                            const std::string& torrent_file_path) override;
 
+    void setCancelFlag(const std::atomic<bool>* flag) override {
+        if (backend_) {
+            backend_->setCancelFlag(flag);
+        }
+    }
+
     bool open(const std::string& torrent_hash, int file_index) override;
     size_t read(uint64_t offset, void* buf, size_t size) override;
     uint64_t totalSize() const override;

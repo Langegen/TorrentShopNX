@@ -2,6 +2,7 @@
 
 #include "i_data_source.h"
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -88,6 +89,11 @@ public:
     /// Текущая скорость загрузки в KB/s (-1 = неизвестно).
     virtual int downloadSpeedKBps() const { return -1; }
     virtual BackendType type() const = 0;
+
+    /// Флаг отмены (опрашивается во время открытия потока / загрузки
+    /// метаданных). NULL = отмена не требуется.
+    virtual void setCancelFlag(const std::atomic<bool>* /*flag*/) {}
+
     virtual void close() = 0;
 };
 

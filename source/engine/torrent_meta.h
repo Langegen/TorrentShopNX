@@ -59,6 +59,14 @@ int torrent_load(torrent_meta *t, const char *path, char *err, size_t errlen);
 extern volatile int torrent_meta_peers_tried;
 extern volatile int torrent_meta_peers_total;
 
+// Persistent on-disk cache of fetched metadata, keyed by info-hash. Once a
+// magnet's info dict has been fetched it is stored here, so a later open of the
+// same magnet (e.g. probe now, download a moment later, or after a restart)
+// loads it from disk instead of re-fetching it from the swarm. This is what
+// keeps "prepare/install" from stalling on a second network metadata fetch.
+// The directory defaults to a platform-appropriate location; override for tests.
+void torrent_meta_cache_set_dir(const char *dir);
+
 // Coarse phase of the magnet metadata fetch, so the debug overlay can say which
 // step is stuck (the tracker announce in particular is otherwise invisible: it
 // runs before the peer count is even known). Written by the loader thread, read
@@ -84,6 +92,13 @@ extern char torrent_meta_last_err[128];
 int torrent_load_magnet(torrent_meta *t, const char *magnet_uri,
                         char *err, size_t errlen);
 
+// Same as torrent_load_magnet, but polls `cancel` (may be NULL) between every
+// slow step (tracker announce, each peer attempt, DHT) so a teardown or a user
+// cancel aborts the fetch promptly instead of blocking for the full timeout.
+int torrent_load_magnet_cancel(torrent_meta *t, const char *magnet_uri,
+                               const volatile bool *cancel,
+                               char *err, size_t errlen);
+
 // Same, but also hands back the peers the tracker gave us for the metadata
 // fetch (up to `max`, count in `*out_n`). They are the same peers the download
 // needs a moment later: without this the caller announces to the very same
@@ -91,6 +106,12 @@ int torrent_load_magnet(torrent_meta *t, const char *magnet_uri,
 int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
                               peer_addr *out, int max, int *out_n,
                               char *err, size_t errlen);
+
+// Cancellable variant of torrent_load_magnet_peers.
+int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
+                                     peer_addr *out, int max, int *out_n,
+                                     const volatile bool *cancel,
+                                     char *err, size_t errlen);
 
 // Build a torrent_meta from raw metadata (the info dict fetched from peers for
 // a magnet), a known info hash, and a tracker list. Takes ownership of
@@ -108,9 +129,10 @@ void torrent_set_log(void (*fn)(const char *msg));
 
 // Announce to all trackers in parallel, merging unique peers into `peers`.
 // Returns the peer count, or -1 on failure. Blocks until every tracker answers
-// or times out (used by magnet metadata fetch).
+// or times out (used by magnet metadata fetch). `cancel` (may be NULL) is
+// polled so a teardown aborts instead of waiting out the slowest tracker.
 int torrent_announce(const torrent_meta *t, peer_addr *peers, int max_peers,
-                     char *err, size_t errlen);
+                     const volatile bool *cancel, char *err, size_t errlen);
 
 // Same, but delivers peers incrementally through `cb` as each tracker responds
 // (the callback must be thread-safe: trackers run on their own threads). Blocks

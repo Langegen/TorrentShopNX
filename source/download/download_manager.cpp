@@ -664,6 +664,9 @@ bool DownloadManager::startDownload(size_t index) {
             util::logLine("download: local client cannot start without BTIH hash for " + item.title);
             return false;
         }
+        // Adopt the probe's kept torrent (if any) so the file-select cleanup
+        // does not remove it from under the download.
+        datasource::CustomEngineClient::instance().markInUse(local_hash);
         util::logLine("download: local client queued hash=" + local_hash);
     } else {
         id = getTorrent()->addMagnet(link);

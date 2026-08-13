@@ -14,10 +14,6 @@
 
 namespace datasource {
 
-tsnx_engine* CustomEngineBackend::engine_ = nullptr;
-std::mutex CustomEngineBackend::engine_mutex_;
-int CustomEngineBackend::engine_users_ = 0;
-
 CustomEngineBackend::CustomEngineBackend(const BackendConfig& cfg) : cfg_(cfg) {
     status_.state = StreamState::Idle;
 }
@@ -27,15 +23,14 @@ CustomEngineBackend::~CustomEngineBackend() {
 }
 
 bool CustomEngineBackend::ensure_engine() {
-    std::lock_guard<std::mutex> lock(engine_mutex_);
+    // The engine is shared with the file-list probe (CustomEngineClient), so a
+    // torrent probed moments ago is still registered here and the download can
+    // start without a second metadata fetch.
+    engine_ = CustomEngineClient::instance().sharedEngine();
     if (!engine_) {
-        engine_ = tsnx_engine_start(cfg_.local_port);
-        if (!engine_) {
-            util::logLine("CustomEngineBackend: failed to start engine");
-            return false;
-        }
+        util::logLine("CustomEngineBackend: failed to get shared engine");
+        return false;
     }
-    engine_users_++;
     return true;
 }
 
@@ -64,27 +59,50 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
     torrent_file_path_ = request.torrent_file_path;
     file_index_ = request.file_index;
 
-    char hash[41] = {0};
-    bool added = false;
-    if (!torrent_file_path_.empty()) {
-        added = tsnx_engine_add_torrent_file(engine_, torrent_file_path_.c_str(), hash, sizeof(hash));
-    } else if (!magnet_link_.empty()) {
-        added = tsnx_engine_add_magnet(engine_, magnet_link_.c_str(), hash, sizeof(hash));
-    } else {
-        set_state(StreamState::Error, "no magnet or torrent file");
-        return false;
-    }
+    const volatile bool* cancel =
+        reinterpret_cast<const volatile bool*>(cancel_flag_);
 
-    if (!added) {
-        set_state(StreamState::Error, "add torrent failed");
-        return false;
+    char hash[41] = {0};
+    if (!info_hash_str_.empty() &&
+        tsnx_engine_has_torrent(engine_, info_hash_str_.c_str())) {
+        // The probe kept this torrent registered: metadata is already known,
+        // so prepare_stream() below opens the download instantly.
+        snprintf(hash, sizeof(hash), "%s", info_hash_str_.c_str());
+        util::logLine("CustomEngineBackend: reusing probed torrent " + info_hash_str_);
+    } else {
+        bool added = false;
+        if (!torrent_file_path_.empty()) {
+            added = tsnx_engine_add_torrent_file(engine_, torrent_file_path_.c_str(),
+                                                 hash, sizeof(hash));
+        } else if (!magnet_link_.empty()) {
+            added = tsnx_engine_add_magnet_ex(engine_, magnet_link_.c_str(),
+                                              file_index_, false, cancel,
+                                              hash, sizeof(hash));
+        } else {
+            set_state(StreamState::Error, "no magnet or torrent file");
+            return false;
+        }
+
+        if (!added) {
+            set_state(StreamState::Error, "add torrent failed");
+            return false;
+        }
     }
 
     if (info_hash_str_.empty()) {
         info_hash_str_ = hash;
     }
 
+    // The slot survives the probe cleanup and this download owns it now.
+    CustomEngineClient::instance().markInUse(info_hash_str_);
+    // The probe's cancel flag may have been tripped by the file-select view
+    // closing; from here on the slot follows the download's own flag.
+    tsnx_engine_set_cancel(engine_, info_hash_str_.c_str(), cancel);
+
     if (!tsnx_engine_prepare_stream(engine_, info_hash_str_.c_str(), file_index_)) {
+        // The slot was just added: do not leave a half-open torrent behind.
+        tsnx_engine_remove_torrent(engine_, info_hash_str_.c_str());
+        CustomEngineClient::instance().unmarkInUse(info_hash_str_);
         set_state(StreamState::Error, "prepare stream failed");
         return false;
     }
@@ -222,26 +240,20 @@ void CustomEngineBackend::notifyStreamingComplete(bool success) {
 }
 
 void CustomEngineBackend::close() {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (!opened_) return;
-        scheduler_.reset();
-        health_.reset();
-        if (!info_hash_str_.empty()) {
-            tsnx_engine_cancel_read(engine_, info_hash_str_.c_str());
-            tsnx_engine_remove_torrent(engine_, info_hash_str_.c_str());
-        }
-        opened_ = false;
-        state_ = StreamState::Idle;
-        status_.state = StreamState::Idle;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!opened_) return;
+    scheduler_.reset();
+    health_.reset();
+    if (!info_hash_str_.empty()) {
+        tsnx_engine_cancel_read(engine_, info_hash_str_.c_str());
+        tsnx_engine_remove_torrent(engine_, info_hash_str_.c_str());
+        CustomEngineClient::instance().unmarkInUse(info_hash_str_);
     }
-
-    std::lock_guard<std::mutex> lock(engine_mutex_);
-    if (engine_users_ > 0) engine_users_--;
-    if (engine_users_ == 0 && engine_) {
-        tsnx_engine_stop(engine_);
-        engine_ = nullptr;
-    }
+    opened_ = false;
+    state_ = StreamState::Idle;
+    status_.state = StreamState::Idle;
+    // The engine itself stays alive: it is owned by CustomEngineClient and
+    // shared with the probe.
 }
 
 int CustomEngineBackend::downloadSpeedKBps() const {

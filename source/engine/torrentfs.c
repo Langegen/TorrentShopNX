@@ -63,9 +63,13 @@
 //-----------------------------------------------------------------------------
 
 #ifdef __SWITCH__
-#define MAX_SESS         24     // live peers; bounded by the socket buffer pool
-#define MAX_CONNECTING   12     // slots allowed to sit in a pending connect
-#define DIAL_STOP_LIVE   16     // enough live sessions: stop dialing new peers
+/* Live sessions. TCP sockets are non-blocking and don't touch the 16-session
+   blocking-BSD budget; memory is ~40 KB per TCP session plus ~1.25 MB per
+   uTP session (about every 4th dial), ~12 MB worst case -- fine in title
+   mode. 40 sessions with an 8-slot churn reserve. */
+#define MAX_SESS         40
+#define MAX_CONNECTING   16     // slots allowed to sit in a pending connect
+#define DIAL_STOP_LIVE   32     // enough live sessions: stop dialing new peers
 #else
 // PC can hold more concurrent BSD sockets; use them to stress-test the engine.
 #define MAX_SESS         64
@@ -1666,6 +1670,14 @@ torrentfs *torrentfs_open(const char *source, const char *cache_path,
 
 torrentfs *torrentfs_open_file(const char *source, const char *cache_path,
                                int file_index, char *err, size_t errlen) {
+    return torrentfs_open_file_cancel(source, cache_path, file_index, NULL,
+                                      err, errlen);
+}
+
+torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path,
+                                      int file_index,
+                                      const volatile bool *cancel,
+                                      char *err, size_t errlen) {
     torrentfs *t = calloc(1, sizeof(*t));
     if (!t) { snprintf(err, errlen, "out of memory"); return NULL; }
 
@@ -1679,10 +1691,11 @@ torrentfs *torrentfs_open_file(const char *source, const char *cache_path,
     int seed_count = 0;
 
     int rc = strncmp(source, "magnet:", 7) == 0
-                 ? torrent_load_magnet_peers(&t->meta, source, seed_peers,
-                                             (int)(sizeof(seed_peers) /
-                                                   sizeof(seed_peers[0])),
-                                             &seed_count, err, errlen)
+                 ? torrent_load_magnet_peers_cancel(&t->meta, source, seed_peers,
+                                                    (int)(sizeof(seed_peers) /
+                                                          sizeof(seed_peers[0])),
+                                                    &seed_count, cancel,
+                                                    err, errlen)
                  : torrent_load(&t->meta, source, err, errlen);
     if (rc != 0) {
         free(t);
@@ -1932,6 +1945,7 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
 }
 
 void torrentfs_cancel(torrentfs *tfs) {
+    if (!tfs) return;  // metadata-only slots have no torrentfs
     tfs->stop = true;
 }
 

@@ -100,6 +100,13 @@ int dht_random_bytes(void *buf, size_t size) {
 #define DHT_CACHE_MAX_NODES 256
 #define DHT_CACHE_PATH    "sdmc:/switch/TorrentShopNX/dht_cache.bin"
 
+static char s_dht_cache_path[256] = DHT_CACHE_PATH;
+
+void dht_set_cache_path(const char *path) {
+    if (path && path[0])
+        snprintf(s_dht_cache_path, sizeof(s_dht_cache_path), "%s", path);
+}
+
 static int dht_cache_read(const char *path, uint8_t node_id[20],
                           uint8_t (*nodes)[6], int max_nodes) {
     FILE *f = fopen(path, "rb");
@@ -151,7 +158,18 @@ static int dht_cache_write(const char *path, const uint8_t node_id[20],
 }
 
 //-----------------------------------------------------------------------------
-// Lookup
+// Persistent background DHT
+//
+// ONE jech/DHT context (one socket, one routing table) owned by a background
+// thread that lives for the whole engine session. Everything DHT-related --
+// the metadata fetch (dht_find_peers) and the per-torrent peer discovery
+// (dht_background_add) -- attaches to this shared instance instead of
+// creating its own socket and cold table (two parallel dht_init() calls would
+// also corrupt jech's global state).
+//
+// Besides searching the attached info-hashes, the thread runs periodic
+// random-id walks so the routing table keeps growing (~200+ nodes after a few
+// minutes), which is what makes later lookups fast and reliable.
 //-----------------------------------------------------------------------------
 
 static const char *BOOTSTRAP[] = {
@@ -165,168 +183,16 @@ static const char *BOOTSTRAP[] = {
 };
 #define BOOTSTRAP_PORT "6881"
 
+#define DHT_MAX_TARGETS 4
+
 typedef struct {
+    bool active;
+    uint8_t info_hash[20];
     dht_peer_cb cb;
     void *ctx;
-    int delivered;
-} dht_ctx;
-
-// jech/dht calls this when a search yields results or finishes.
-static void on_dht_event(void *closure, int event,
-                         const unsigned char *info_hash,
-                         const void *data, size_t data_len) {
-    (void)info_hash;
-    dht_ctx *dc = closure;
-    if (event != DHT_EVENT_VALUES) return;  // ignore IPv6 + search-done here
-
-    // data is a packed array of 6-byte compact peers (4B IP + 2B port).
-    int n = (int)(data_len / 6);
-    if (n <= 0) return;
-    const uint8_t *b = data;
-
-    peer_addr peers[128];
-    int np = 0;
-    for (int i = 0; i < n && np < 128; i++) {
-        const uint8_t *e = b + i * 6;
-        memcpy(&peers[np].ip, e, 4);                       // network byte order
-        peers[np].port = (uint16_t)((e[4] << 8) | e[5]);   // host byte order
-        if (peers[np].port) np++;
-    }
-    if (np > 0 && dc->cb) {
-        dc->cb(dc->ctx, peers, np);
-        dc->delivered += np;
-    }
-}
-
-int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
-                   dht_peer_cb cb, void *ctx, const volatile bool *cancel,
-                   char *err, size_t errlen) {
-    dlog("DHT demarre (jech)");
-
-    int s = socket(AF_INET, SOCK_DGRAM, 0);
-    if (s < 0) {
-        if (err) snprintf(err, errlen, "DHT socket failed errno=%d", errno);
-        engine_log(ENGINE_LOG_ERROR, "[dht] socket() failed errno=%d", errno);
-        return -1;
-    }
-    struct sockaddr_in me = {0};
-    me.sin_family = AF_INET;
-    me.sin_addr.s_addr = INADDR_ANY;
-    me.sin_port = 0;  // ephemeral; DHT replies come back to the source port
-    bind(s, (struct sockaddr *)&me, sizeof(me));
-
-    // Switch's select() does not report UDP readability, so we use a blocking
-    // recvfrom with a receive timeout instead (the pattern that works here).
-    struct timeval rcvto = { 1, 0 };  // 1s
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
-
-    uint8_t node_id[20];
-    randomGet(node_id, sizeof(node_id));
-
-    uint8_t cached_nodes[DHT_CACHE_MAX_NODES][6];
-    int cached_count = dht_cache_read(DHT_CACHE_PATH, node_id, cached_nodes,
-                                      DHT_CACHE_MAX_NODES);
-    if (cached_count > 0)
-        dlog("DHT cache: loaded %d nodes", cached_count);
-
-    if (dht_init(s, -1, node_id, NULL) < 0) {
-        if (err) snprintf(err, errlen, "dht_init failed");
-        close(s);
-        return -1;
-    }
-
-    for (int i = 0; i < cached_count; i++) {
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        memcpy(&addr.sin_addr, cached_nodes[i], 4);
-        memcpy(&addr.sin_port, cached_nodes[i] + 4, 2);
-        dht_ping_node((struct sockaddr *)&addr, sizeof(addr));
-    }
-    if (cached_count > 0)
-        dlog("DHT cache: pinged %d nodes", cached_count);
-
-    // Bootstrap: ping the well-known routers so the routing table fills up.
-    int booted = 0;
-    for (size_t i = 0; i < sizeof(BOOTSTRAP) / sizeof(*BOOTSTRAP); i++) {
-        struct addrinfo hints = {0}, *res = NULL, *r;
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        if (getaddrinfo(BOOTSTRAP[i], BOOTSTRAP_PORT, &hints, &res) != 0 || !res)
-            continue;
-        for (r = res; r; r = r->ai_next) {
-            dht_ping_node(r->ai_addr, r->ai_addrlen);
-            booted++;
-        }
-        freeaddrinfo(res);
-    }
-    dlog("DHT bootstrap: %d routeurs pingues", booted);
-    if (booted == 0) {
-        if (err) snprintf(err, errlen, "bootstrap DHT injoignable");
-        dht_uninit();
-        close(s);
-        return -1;
-    }
-
-    dht_ctx dc = { cb, ctx, 0 };
-
-    u64 freq = armGetSystemTickFreq();
-    u64 start = armGetSystemTick();
-    u64 last_log = start;
-    double last_search_ms = -10000.0;
-    time_t tosleep = 0;
-
-    while (1) {
-        if (cancel && *cancel) break;
-        double elapsed_ms = (double)(armGetSystemTick() - start) / freq * 1000.0;
-        if (elapsed_ms >= budget_ms) break;
-        if (dc.delivered >= target_peers) break;
-
-        // Blocking recvfrom (up to the 1s SO_RCVTIMEO). On a packet, feed it to
-        // the DHT; on timeout, tick the DHT with no packet.
-        uint8_t buf[3072];
-        struct sockaddr_in from;
-        socklen_t fromlen = sizeof(from);
-        ssize_t n = recvfrom(s, buf, sizeof(buf) - 1, 0,
-                             (struct sockaddr *)&from, &fromlen);
-        if (n > 0) {
-            buf[n] = '\0';  // jech expects a NUL-terminated buffer
-            dht_periodic(buf, n, (struct sockaddr *)&from, fromlen,
-                         &tosleep, on_dht_event, &dc);
-        } else {
-            dht_periodic(NULL, 0, NULL, 0, &tosleep, on_dht_event, &dc);
-        }
-
-        int good = 0, dubious = 0;
-        dht_nodes(AF_INET, &good, &dubious, NULL, NULL);
-        s_last_good = good;
-        s_last_dubious = dubious;
-
-        // Issue the search immediately and re-issue every 10 s.  jech deduplicates
-        // active searches, so this is cheap and keeps the lookup moving even when
-        // the first bootstrap replies are slow.
-        if (elapsed_ms - last_search_ms >= 10000.0) {
-            dht_search(info_hash, 0, AF_INET, on_dht_event, &dc);  // port 0 = no announce
-            last_search_ms = elapsed_ms;
-            dlog("DHT: search issued (%d nodes)", good + dubious);
-        }
-
-        if ((double)(armGetSystemTick() - last_log) / freq >= 2.0) {
-            dlog("DHT: %d noeuds, %d peers", good + dubious, dc.delivered);
-            last_log = armGetSystemTick();
-        }
-    }
-
-    dlog("DHT fin: %d peers", dc.delivered);
-    s_last_peers_found = dc.delivered;
-    dht_uninit();
-    close(s);
-    return dc.delivered;
-}
-
-//-----------------------------------------------------------------------------
-// Persistent background DHT
-//-----------------------------------------------------------------------------
+    int delivered;          // peers delivered to this target
+    u64 last_search;        // tick of the last dht_search issued
+} dht_target;
 
 static Mutex s_bg_mtx;
 static int s_bg_init = 0;
@@ -336,47 +202,8 @@ static bool s_bg_thread_started = false;
 static int s_bg_sock = -1;
 static bool s_bg_bootstrapped = false;
 static uint8_t s_bg_node_id[20];
-
-typedef struct {
-    bool active;
-    uint8_t info_hash[20];
-    dht_peer_cb cb;
-    void *ctx;
-    u64 last_search;
-} bg_target;
-
-static bg_target s_bg_target = {0};
-
-static void bg_on_event(void *closure, int event,
-                        const unsigned char *info_hash,
-                        const void *data, size_t data_len) {
-    (void)info_hash;
-    bg_target *target = closure;
-    if (event != DHT_EVENT_VALUES) return;
-
-    mutexLock(&s_bg_mtx);
-    bool active = target && target->active;
-    dht_peer_cb cb = active ? target->cb : NULL;
-    void *ctx = active ? target->ctx : NULL;
-    mutexUnlock(&s_bg_mtx);
-    if (!cb) return;
-
-    int n = (int)(data_len / 6);
-    if (n <= 0) return;
-    peer_addr peers[128];
-    int np = 0;
-    const uint8_t *b = data;
-    for (int i = 0; i < n && np < 128; i++) {
-        const uint8_t *e = b + i * 6;
-        memcpy(&peers[np].ip, e, 4);
-        peers[np].port = (uint16_t)((e[4] << 8) | e[5]);
-        if (peers[np].port) np++;
-    }
-    if (np > 0) {
-        cb(ctx, peers, np);
-        s_last_peers_found += np;
-    }
-}
+static dht_target s_targets[DHT_MAX_TARGETS];
+static u64 s_last_walk = 0;       // last random-id walk tick
 
 static int bg_bootstrap(int s) {
     int booted = 0;
@@ -395,6 +222,48 @@ static int bg_bootstrap(int s) {
     return booted;
 }
 
+// jech delivers DHT_EVENT_VALUES for the search registered with this closure;
+// route the compact peer list to the matching target.
+static void bg_on_event(void *closure, int event,
+                        const unsigned char *info_hash,
+                        const void *data, size_t data_len) {
+    (void)closure;
+    if (event != DHT_EVENT_VALUES || !info_hash || data_len < 6) return;
+
+    dht_target *target = NULL;
+    mutexLock(&s_bg_mtx);
+    for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+        if (s_targets[i].active &&
+            memcmp(s_targets[i].info_hash, info_hash, 20) == 0) {
+            target = &s_targets[i];
+            break;
+        }
+    }
+    dht_peer_cb cb = target ? target->cb : NULL;
+    void *ctx = target ? target->ctx : NULL;
+    mutexUnlock(&s_bg_mtx);
+    if (!cb) return;
+
+    int n = (int)(data_len / 6);
+    if (n <= 0) return;
+    peer_addr peers[128];
+    int np = 0;
+    const uint8_t *b = data;
+    for (int i = 0; i < n && np < 128; i++) {
+        const uint8_t *e = b + i * 6;
+        memcpy(&peers[np].ip, e, 4);                       // network byte order
+        peers[np].port = (uint16_t)((e[4] << 8) | e[5]);   // host byte order
+        if (peers[np].port) np++;
+    }
+    if (np > 0) {
+        mutexLock(&s_bg_mtx);
+        if (target->active) target->delivered += np;
+        s_last_peers_found += np;
+        mutexUnlock(&s_bg_mtx);
+        cb(ctx, peers, np);
+    }
+}
+
 static void dht_bg_main(void *arg) {
     (void)arg;
     u64 freq = armGetSystemTickFreq();
@@ -408,16 +277,28 @@ static void dht_bg_main(void *arg) {
     me.sin_family = AF_INET;
     me.sin_addr.s_addr = INADDR_ANY;
     me.sin_port = htons(51413);
-    bind(s_bg_sock, (struct sockaddr *)&me, sizeof(me));
+    if (bind(s_bg_sock, (struct sockaddr *)&me, sizeof(me)) != 0) {
+        // The canonical port is taken (another DHT client on the console?);
+        // an ephemeral port still works for outbound lookups.
+        me.sin_port = 0;
+        if (bind(s_bg_sock, (struct sockaddr *)&me, sizeof(me)) != 0) {
+            engine_log(ENGINE_LOG_ERROR, "[dht] background bind failed errno=%d", errno);
+            close(s_bg_sock);
+            s_bg_sock = -1;
+            return;
+        }
+    }
 
-    struct timeval rcvto = {1, 0};
+    // Switch's select() does not report UDP readability, so we use a blocking
+    // recvfrom with a receive timeout instead (the pattern that works here).
+    struct timeval rcvto = { 1, 0 };
     setsockopt(s_bg_sock, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
 
     uint8_t node_id[20];
     randomGet(node_id, sizeof(node_id));
 
     uint8_t cached_nodes[DHT_CACHE_MAX_NODES][6];
-    int cached_count = dht_cache_read(DHT_CACHE_PATH, node_id, cached_nodes,
+    int cached_count = dht_cache_read(s_dht_cache_path, node_id, cached_nodes,
                                       DHT_CACHE_MAX_NODES);
     if (cached_count > 0)
         engine_log(ENGINE_LOG_INFO, "[dht] cache: loaded %d nodes", cached_count);
@@ -442,7 +323,6 @@ static void dht_bg_main(void *arg) {
         engine_log(ENGINE_LOG_INFO, "[dht] cache: pinged %d nodes", cached_count);
 
     s_bg_bootstrapped = false;
-    int boot_count = 0;
     u64 last_bootstrap = 0;
     u64 last_log = 0;
     time_t tosleep = 0;
@@ -457,9 +337,9 @@ static void dht_bg_main(void *arg) {
         if (n > 0) {
             buf[n] = '\0';
             dht_periodic(buf, n, (struct sockaddr *)&from, fromlen,
-                         &tosleep, bg_on_event, &s_bg_target);
+                         &tosleep, bg_on_event, NULL);
         } else {
-            dht_periodic(NULL, 0, NULL, 0, &tosleep, bg_on_event, &s_bg_target);
+            dht_periodic(NULL, 0, NULL, 0, &tosleep, bg_on_event, NULL);
         }
 
         int good = 0, dubious = 0;
@@ -468,7 +348,7 @@ static void dht_bg_main(void *arg) {
         s_last_dubious = dubious;
 
         if (!s_bg_bootstrapped) {
-            boot_count = bg_bootstrap(s_bg_sock);
+            int boot_count = bg_bootstrap(s_bg_sock);
             if (boot_count > 0) {
                 s_bg_bootstrapped = true;
                 last_bootstrap = now;
@@ -476,26 +356,33 @@ static void dht_bg_main(void *arg) {
                            "[dht] background bootstrap: %d routers", boot_count);
             }
         } else if (good == 0 && now - last_bootstrap > (u64)30 * freq) {
-            boot_count = bg_bootstrap(s_bg_sock);
+            int boot_count = bg_bootstrap(s_bg_sock);
             last_bootstrap = now;
             engine_log(ENGINE_LOG_INFO,
                        "[dht] background re-bootstrap: %d routers", boot_count);
         }
 
         if (s_bg_bootstrapped && (good + dubious) >= 2) {
+            // Search every active target every ~15 s.
             mutexLock(&s_bg_mtx);
-            bool active = s_bg_target.active;
-            bool need_search = active &&
-                (s_bg_target.last_search == 0 ||
-                 now - s_bg_target.last_search > (u64)30 * freq);
+            for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+                dht_target *tg = &s_targets[i];
+                if (!tg->active) continue;
+                if (now - tg->last_search > (u64)15 * freq) {
+                    tg->last_search = now;
+                    dht_search(tg->info_hash, 0, AF_INET, bg_on_event, tg);
+                }
+            }
             mutexUnlock(&s_bg_mtx);
-            if (need_search) {
-                dht_search(s_bg_target.info_hash, 0, AF_INET,
-                           bg_on_event, &s_bg_target);
-                mutexLock(&s_bg_mtx);
-                s_bg_target.last_search = now;
-                mutexUnlock(&s_bg_mtx);
-                engine_log(ENGINE_LOG_INFO, "[dht] background search issued");
+
+            // Random-id walk every ~20 s: fills buckets across the whole id
+            // space so the routing table grows instead of stalling around the
+            // few targets we search for.
+            if (now - s_last_walk > (u64)20 * freq) {
+                uint8_t rid[20];
+                randomGet(rid, sizeof(rid));
+                dht_search(rid, 0, AF_INET, NULL, NULL);
+                s_last_walk = now;
             }
         }
 
@@ -508,16 +395,16 @@ static void dht_bg_main(void *arg) {
     }
 
     /* Persist good nodes for the next warm start. */
-    struct sockaddr_in sins[128];
-    int num = 128, num6 = 0;
+    struct sockaddr_in sins[DHT_CACHE_MAX_NODES];
+    int num = DHT_CACHE_MAX_NODES, num6 = 0;
     dht_get_nodes(sins, &num, NULL, &num6);
     if (num > 0) {
-        uint8_t nodes[128][6];
+        uint8_t nodes[DHT_CACHE_MAX_NODES][6];
         for (int i = 0; i < num; i++) {
             memcpy(nodes[i], &sins[i].sin_addr, 4);
             memcpy(nodes[i] + 4, &sins[i].sin_port, 2);
         }
-        if (dht_cache_write(DHT_CACHE_PATH, s_bg_node_id, nodes, num))
+        if (dht_cache_write(s_dht_cache_path, s_bg_node_id, nodes, num))
             engine_log(ENGINE_LOG_INFO, "[dht] saved %d nodes to cache", num);
     }
 
@@ -527,40 +414,39 @@ static void dht_bg_main(void *arg) {
     s_bg_bootstrapped = false;
 }
 
-void dht_background_add(const uint8_t info_hash[20],
-                        dht_peer_cb cb, void *ctx) {
-    if (!s_bg_init) {
-        mutexInit(&s_bg_mtx);
-        s_bg_init = 1;
-    }
+static void dht_bg_ensure_init(void);
+
+static int dht_bg_start(void) {
+    dht_bg_ensure_init();
     mutexLock(&s_bg_mtx);
-    memcpy(s_bg_target.info_hash, info_hash, 20);
-    s_bg_target.cb = cb;
-    s_bg_target.ctx = ctx;
-    s_bg_target.active = true;
-    s_bg_target.last_search = 0;
-    s_last_peers_found = 0;
-    if (!s_bg_thread_started) {
-        s_bg_stop = false;
-        if (threadCreate(&s_bg_thread, dht_bg_main, NULL, NULL,
-                         0x20000, 0x2C, -2) == 0) {
-            threadStart(&s_bg_thread);
-            s_bg_thread_started = true;
-        } else {
-            s_bg_stop = true;
-            engine_log(ENGINE_LOG_ERROR, "[dht] background thread create failed");
-        }
+    if (s_bg_thread_started) {
+        mutexUnlock(&s_bg_mtx);
+        return 1;
     }
+    s_bg_stop = false;
+    if (threadCreate(&s_bg_thread, dht_bg_main, NULL, NULL,
+                     0x20000, 0x2C, -2) == 0) {
+        threadStart(&s_bg_thread);
+        s_bg_thread_started = true;
+        mutexUnlock(&s_bg_mtx);
+        return 1;
+    }
+    s_bg_stop = true;
     mutexUnlock(&s_bg_mtx);
+    engine_log(ENGINE_LOG_ERROR, "[dht] background thread create failed");
+    return 0;
 }
 
-void dht_background_remove(const uint8_t info_hash[20]) {
-    (void)info_hash;
+static void dht_bg_ensure_init(void) {
+    if (s_bg_init) return;
+    mutexInit(&s_bg_mtx);
+    s_bg_init = 1;
+}
+
+// Stop the persistent DHT thread (engine shutdown). Saves the node cache.
+void dht_stop(void) {
     if (!s_bg_init) return;
     mutexLock(&s_bg_mtx);
-    s_bg_target.active = false;
-    s_bg_target.cb = NULL;
-    s_bg_target.ctx = NULL;
     s_bg_stop = true;
     bool started = s_bg_thread_started;
     s_bg_thread_started = false;
@@ -569,4 +455,117 @@ void dht_background_remove(const uint8_t info_hash[20]) {
         threadWaitForExit(&s_bg_thread);
         threadClose(&s_bg_thread);
     }
+}
+
+int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
+                   dht_peer_cb cb, void *ctx, const volatile bool *cancel,
+                   char *err, size_t errlen) {
+    if (!dht_bg_start()) {
+        if (err) snprintf(err, errlen, "DHT thread failed to start");
+        return -1;
+    }
+
+    dht_target *tg = NULL;
+    mutexLock(&s_bg_mtx);
+    for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+        if (!s_targets[i].active) {
+            tg = &s_targets[i];
+            break;
+        }
+    }
+    if (!tg) {
+        mutexUnlock(&s_bg_mtx);
+        if (err) snprintf(err, errlen, "no free DHT target slot");
+        return -1;
+    }
+    tg->active = true;
+    memcpy(tg->info_hash, info_hash, 20);
+    tg->cb = cb;
+    tg->ctx = ctx;
+    tg->delivered = 0;
+    tg->last_search = 0;
+    mutexUnlock(&s_bg_mtx);
+
+    dlog("DHT lookup attached (%d nodes)", s_last_good + s_last_dubious);
+
+    u64 freq = armGetSystemTickFreq();
+    u64 start = armGetSystemTick();
+    u64 last_log = start;
+    for (;;) {
+        if (cancel && *cancel) break;
+        double elapsed_ms = (double)(armGetSystemTick() - start) / freq * 1000.0;
+        if (elapsed_ms >= (double)budget_ms) break;
+
+        mutexLock(&s_bg_mtx);
+        int d = tg->delivered;
+        mutexUnlock(&s_bg_mtx);
+        if (d >= target_peers) break;
+
+        if (armGetSystemTick() - last_log > (u64)2 * freq) {
+            dlog("DHT: %d noeuds, %d peers",
+                 s_last_good + s_last_dubious, d);
+            last_log = armGetSystemTick();
+        }
+        svcSleepThread(50000000ULL);  // 50 ms
+    }
+
+    mutexLock(&s_bg_mtx);
+    int delivered = tg->delivered;
+    tg->active = false;
+    tg->cb = NULL;
+    tg->ctx = NULL;
+    mutexUnlock(&s_bg_mtx);
+
+    dlog("DHT fin: %d peers", delivered);
+    s_last_peers_found = delivered;
+    return delivered;
+}
+
+// Register a persistent target: the background thread keeps searching it and
+// delivers peers through cb until removed. Used by torrentfs for continuous
+// peer discovery while a torrent is open.
+void dht_background_add(const uint8_t info_hash[20],
+                        dht_peer_cb cb, void *ctx) {
+    dht_bg_start();
+
+    mutexLock(&s_bg_mtx);
+    for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+        if (s_targets[i].active &&
+            memcmp(s_targets[i].info_hash, info_hash, 20) == 0) {
+            s_targets[i].cb = cb;
+            s_targets[i].ctx = ctx;
+            mutexUnlock(&s_bg_mtx);
+            return;
+        }
+    }
+    for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+        if (!s_targets[i].active) {
+            dht_target *tg = &s_targets[i];
+            memcpy(tg->info_hash, info_hash, 20);
+            tg->cb = cb;
+            tg->ctx = ctx;
+            tg->active = true;
+            tg->delivered = 0;
+            tg->last_search = 0;
+            break;
+        }
+    }
+    mutexUnlock(&s_bg_mtx);
+}
+
+void dht_background_remove(const uint8_t info_hash[20]) {
+    if (!s_bg_init) return;
+    mutexLock(&s_bg_mtx);
+    for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+        if (s_targets[i].active &&
+            memcmp(s_targets[i].info_hash, info_hash, 20) == 0) {
+            s_targets[i].active = false;
+            s_targets[i].cb = NULL;
+            s_targets[i].ctx = NULL;
+            break;
+        }
+    }
+    mutexUnlock(&s_bg_mtx);
+    // The thread itself keeps running: the routing table stays warm for the
+    // next lookup and is saved on engine shutdown (dht_stop).
 }

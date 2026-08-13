@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/stat.h>
+#include <mbedtls/sha1.h>
 
 #include "torrent_meta.h"
 
@@ -44,10 +46,57 @@ TEST(piece_len_last) {
     torrent_unload(&t);
 }
 
+TEST(meta_cache_hit) {
+    // A magnet whose metadata was fetched earlier must load from the disk
+    // cache without touching the network (no trackers in the magnet).
+    torrent_meta_cache_set_dir("pctest/meta_cache");
+
+    const char *info =
+        "d4:name4:test12:piece lengthi1024e6:pieces20:"
+        "aaaaaaaaaaaaaaaaaaaa6:lengthi1024ee";
+    size_t info_len = strlen(info);
+
+    uint8_t ih[20];
+    mbedtls_sha1((const unsigned char *)info, info_len, ih);
+
+    char hex[41];
+    static const char digits[] = "0123456789abcdef";
+    for (int i = 0; i < 20; i++) {
+        hex[i * 2]     = digits[ih[i] >> 4];
+        hex[i * 2 + 1] = digits[ih[i] & 0x0f];
+    }
+    hex[40] = '\0';
+
+    mkdir("pctest/meta_cache", 0755);
+    char path[320];
+    snprintf(path, sizeof(path), "pctest/meta_cache/%s.meta", hex);
+    FILE *f = fopen(path, "wb");
+    ASSERT(f != NULL);
+    ASSERT(fwrite(info, 1, info_len, f) == info_len);
+    fclose(f);
+
+    char magnet[512];
+    snprintf(magnet, sizeof(magnet), "magnet:?xt=urn:btih:%s", hex);
+
+    torrent_meta t;
+    char err[256] = {0};
+    int rc = torrent_load_magnet_peers(&t, magnet, NULL, 0, NULL,
+                                       err, sizeof(err));
+    ASSERT(rc == 0);
+    ASSERT(t.file_count == 1);
+    ASSERT(strcmp(t.name, "test") == 0);
+    ASSERT(t.piece_len == 1024);
+    ASSERT(t.piece_count == 1);
+    ASSERT(t.files[0].length == 1024);
+    torrent_unload(&t);
+    remove(path);
+}
+
 int main(void) {
     printf("Running torrent_meta unit tests:\n");
     RUN(load_torrent_file);
     RUN(piece_len_last);
+    RUN(meta_cache_hit);
     printf("\n%d tests run, %d failed\n", tests_run, tests_failed);
     return tests_failed ? 1 : 0;
 }

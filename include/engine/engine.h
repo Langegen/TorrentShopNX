@@ -57,6 +57,25 @@ bool         tsnx_engine_running(const tsnx_engine *eng);
 /* Add a torrent from a magnet URI or a local .torrent file. */
 bool tsnx_engine_add_magnet(tsnx_engine *eng, const char *magnet_uri,
                             char *out_hash, size_t out_hash_len);
+
+/* Full-featured magnet add:
+ *   file_index  - file streamed by the initial torrentfs open (-1 = largest)
+ *   meta_only   - true: fetch metadata into the slot but do not start the
+ *                 download threads (used by the file-list probe). The slot
+ *                 stays registered; prepare_stream() opens the stream later.
+ *   cancel      - polled while metadata is fetched (may be NULL). */
+bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
+                               int file_index, bool meta_only,
+                               const volatile bool *cancel,
+                               char *out_hash, size_t out_hash_len);
+
+/* True if a torrent with this info-hash is registered in the engine. */
+bool tsnx_engine_has_torrent(tsnx_engine *eng, const char *hash);
+
+/* Update the cancel flag this torrent's (re)opens poll (may be NULL). */
+void tsnx_engine_set_cancel(tsnx_engine *eng, const char *hash,
+                            const volatile bool *flag);
+
 bool tsnx_engine_add_torrent_file(tsnx_engine *eng, const char *path,
                                   char *out_hash, size_t out_hash_len);
 

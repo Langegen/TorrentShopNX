@@ -25,6 +25,7 @@ struct tsnx_torrent {
     int             file_index;
     bool            used;
     bool            wanted_files[TSNX_MAX_FILES];
+    const volatile bool *cancel; /* polled by (re)opens of this torrent */
     uint64_t        bytes_recv_at_start;
     uint64_t        last_bytes_recv;
     uint64_t        last_speed_time_ms;
@@ -101,6 +102,7 @@ void tsnx_engine_stop(tsnx_engine *eng) {
     eng->running = false;
     if (g_engine == eng) g_engine = NULL;
     engine_log(ENGINE_LOG_INFO, "engine stop");
+    dht_stop();  // persistent DHT: save the routing table for the next start
     utp_nb_exit();
     engine_log_close();
     free(eng);
@@ -152,6 +154,7 @@ bool tsnx_engine_add_torrent_file(tsnx_engine *eng, const char *path,
     }
     slot->used = true;
     slot->file_index = -1;
+    slot->cancel = NULL;
     for (int i = 0; i < TSNX_MAX_FILES; i++) slot->wanted_files[i] = true;
     slot->bytes_recv_at_start = 0;
     slot->last_bytes_recv = 0;
@@ -164,6 +167,24 @@ bool tsnx_engine_add_torrent_file(tsnx_engine *eng, const char *path,
 
 bool tsnx_engine_add_magnet(tsnx_engine *eng, const char *magnet_uri,
                             char *out_hash, size_t out_hash_len) {
+    return tsnx_engine_add_magnet_ex(eng, magnet_uri, -1, false, NULL,
+                                     out_hash, out_hash_len);
+}
+
+/*
+ * Magnet add with the full set of options:
+ *   file_index  - stream target for the initial torrentfs open (-1 = largest)
+ *   meta_only   - fetch metadata into the slot but do NOT open torrentfs
+ *                 (used by the file-list probe: no download threads, no RAM)
+ *   cancel      - polled while metadata is fetched (may be NULL)
+ *
+ * With meta_only the slot stays registered: get_files() and a later
+ * prepare_stream() (which opens torrentfs on demand) both work on it.
+ */
+bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
+                               int file_index, bool meta_only,
+                               const volatile bool *cancel,
+                               char *out_hash, size_t out_hash_len) {
     tsnx_torrent *slot;
     char err[256] = {0};
     eng = active_engine(eng);
@@ -171,19 +192,27 @@ bool tsnx_engine_add_magnet(tsnx_engine *eng, const char *magnet_uri,
         return false;
     slot = find_slot(eng);
     if (!slot) return false;
-    if (torrent_load_magnet(&slot->meta, magnet_uri, err, sizeof(err)) != 0)
+    if (torrent_load_magnet_cancel(&slot->meta, magnet_uri, cancel,
+                                   err, sizeof(err)) != 0)
         return false;
     bin_to_hex(slot->meta.info_hash, slot->hash, 40);
     free(slot->source);
     slot->source = strdup(magnet_uri);
-    slot->fs = torrentfs_open_file(magnet_uri, "sdmc:/switch/TorrentShopNX/cache.bin",
-                                   -1, err, sizeof(err));
-    if (!slot->fs) {
-        torrent_unload(&slot->meta);
-        return false;
+    slot->cancel = cancel;
+    slot->file_index = file_index;
+    if (!meta_only) {
+        slot->fs = torrentfs_open_file_cancel(magnet_uri,
+                                              "sdmc:/switch/TorrentShopNX/cache.bin",
+                                              file_index, cancel, err, sizeof(err));
+        if (!slot->fs) {
+            torrent_unload(&slot->meta);
+            free(slot->source);
+            slot->source = NULL;
+            slot->cancel = NULL;
+            return false;
+        }
     }
     slot->used = true;
-    slot->file_index = -1;
     for (int i = 0; i < TSNX_MAX_FILES; i++) slot->wanted_files[i] = true;
     slot->bytes_recv_at_start = 0;
     slot->last_bytes_recv = 0;
@@ -191,6 +220,19 @@ bool tsnx_engine_add_magnet(tsnx_engine *eng, const char *magnet_uri,
     slot->download_kbps = 0.0f;
     snprintf(out_hash, out_hash_len, "%s", slot->hash);
     return true;
+}
+
+bool tsnx_engine_has_torrent(tsnx_engine *eng, const char *hash) {
+    return find_by_hash(eng, hash) != NULL;
+}
+
+/* Update the cancel flag a torrent's (re)opens poll. The download backend
+ * takes ownership of the slot the probe kept, so the slot must stop polling
+ * the probe's flag and follow the download's instead. */
+void tsnx_engine_set_cancel(tsnx_engine *eng, const char *hash,
+                            const volatile bool *flag) {
+    tsnx_torrent *t = find_by_hash(eng, hash);
+    if (t) t->cancel = flag;
 }
 
 bool tsnx_engine_remove_torrent(tsnx_engine *eng, const char *hash) {
@@ -234,17 +276,35 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
         t = &eng->torrents[i];
         it = &out[count++];
         snprintf(it->hash, sizeof(it->hash), "%s", t->hash);
-        snprintf(it->name, sizeof(it->name), "%s", torrentfs_name(t->fs));
-        torrentfs_stats(t->fs, &done, &total, &ph);
-        it->progress = total > 0 ? (float)done / (float)total : 0.0f;
-        it->loaded_size = done;
-        it->total_size = total;
-        it->seeds = 0;
-        it->peers = torrentfs_peer_count(t->fs);
-        it->known_peers = torrentfs_peer_count(t->fs);
-        it->dht_nodes = 0;
+        // Metadata-only slots (probe result) have no torrentfs yet.
+        if (t->fs) {
+            snprintf(it->name, sizeof(it->name), "%s", torrentfs_name(t->fs));
+            torrentfs_stats(t->fs, &done, &total, &ph);
+            it->progress = total > 0 ? (float)done / (float)total : 0.0f;
+            it->loaded_size = done;
+            it->total_size = total;
 
-        bytes_recv = (uint64_t)torrentfs_bytes_recv(t->fs);
+            int live = 0, peak = 0, connecting = 0;
+            torrentfs_live_peers(t->fs, &live, &peak, &connecting);
+            it->seeds = live;   // sessions actively serving us data
+            it->peers = torrentfs_peer_count(t->fs);
+            it->known_peers = torrentfs_peer_count(t->fs);
+
+            bytes_recv = (uint64_t)torrentfs_bytes_recv(t->fs);
+        } else {
+            snprintf(it->name, sizeof(it->name), "%s",
+                     t->meta.name[0] ? t->meta.name : "torrent");
+            it->progress = 0.0f;
+            it->loaded_size = 0;
+            it->total_size = t->meta.total_len;
+            it->seeds = 0;
+            it->peers = 0;
+            it->known_peers = 0;
+            bytes_recv = 0;
+        }
+        int good = 0, dubious = 0;
+        dhtclient_get_nodes(&good, &dubious);
+        it->dht_nodes = good + dubious;
         now = now_ms();
         if (t->last_speed_time_ms == 0) {
             t->last_speed_time_ms = now;
@@ -306,12 +366,12 @@ bool tsnx_engine_prepare_stream(tsnx_engine *eng, const char *hash,
     t = find_by_hash(eng, hash);
     if (!t) return false;
     if (file_index < 0 || file_index >= t->meta.file_count) return false;
-    if (t->file_index == file_index) return true;
+    if (t->file_index == file_index && t->fs) return true;
     /* Close previous stream and reopen the requested file. */
-    torrentfs_close(t->fs);
-    t->fs = torrentfs_open_file(t->source ? t->source : t->hash,
-                                "sdmc:/switch/TorrentShopNX/cache.bin",
-                                file_index, err, sizeof(err));
+    if (t->fs) torrentfs_close(t->fs);
+    t->fs = torrentfs_open_file_cancel(t->source ? t->source : t->hash,
+                                       "sdmc:/switch/TorrentShopNX/cache.bin",
+                                       file_index, t->cancel, err, sizeof(err));
     if (!t->fs) return false;
     t->file_index = file_index;
     return true;

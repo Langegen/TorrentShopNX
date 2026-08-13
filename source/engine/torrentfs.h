@@ -22,6 +22,13 @@ torrentfs *torrentfs_open(const char *source, const char *cache_path,
 torrentfs *torrentfs_open_file(const char *source, const char *cache_path,
                                int file_index, char *err, size_t errlen);
 
+// Same as torrentfs_open_file, but `cancel` (may be NULL) is polled while the
+// magnet metadata is being fetched, so opening can be aborted mid-fetch.
+torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path,
+                                      int file_index,
+                                      const volatile bool *cancel,
+                                      char *err, size_t errlen);
+
 void torrentfs_close(torrentfs *tfs);
 
 // Total size of the streamed file, in bytes.

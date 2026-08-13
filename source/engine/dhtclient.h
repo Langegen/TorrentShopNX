@@ -23,17 +23,25 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
 // Optional debug logger; if set, the lookup reports progress through it.
 void dht_set_log(void (*fn)(const char *msg));
 
+// Override the node-cache file location (defaults to the SD path on Switch).
+// Mostly useful for PC tests of the warm start.
+void dht_set_cache_path(const char *path);
+
 // Last seen DHT node counts from the most recent lookup (racy but diagnostic).
 void dhtclient_get_nodes(int *good, int *dubious);
 
 // Peers found by the last completed lookup plus the last node counts.
 void dhtclient_get_last_lookup(int *peers_found, int *good_nodes, int *dubious_nodes);
 
-// Start a persistent background DHT process for one info-hash.  The routing
-// table is kept alive and refreshed, and peers are delivered through cb as
-// they are found.  Only one info-hash is tracked at a time; adding a new one
-// replaces the previous.  The background process stops when remove is called.
+// Register a persistent target on the shared background DHT: it keeps
+// searching the info-hash and delivers peers through cb until removed. The
+// background process itself keeps running across add/remove (one warm
+// routing table for the whole engine session) and stops with dht_stop().
 void dht_background_add(const uint8_t info_hash[20], dht_peer_cb cb, void *ctx);
 void dht_background_remove(const uint8_t info_hash[20]);
+
+// Stop the persistent background DHT (engine shutdown). Saves the node cache
+// for the next session's warm start.
+void dht_stop(void);
 
 #endif
