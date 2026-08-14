@@ -293,9 +293,9 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
 
             int live = 0, peak = 0, connecting = 0;
             torrentfs_live_peers(t->fs, &live, &peak, &connecting);
-            it->seeds       = torrentfs_seed_count(t->fs); // peers holding the whole file
-            it->peers       = live;                        // currently connected sessions
-            it->known_peers = torrentfs_peer_count(t->fs); // discovered pool
+            it->seeds = live;   // sessions actively serving us data
+            it->peers = torrentfs_peer_count(t->fs);
+            it->known_peers = torrentfs_peer_count(t->fs);
 
             bytes_recv = (uint64_t)torrentfs_bytes_recv(t->fs);
         } else {
@@ -319,22 +319,10 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
             t->download_kbps = 0.0f;
         } else {
             uint64_t dt = now - t->last_speed_time_ms;
-            if (dt >= 500) {
+            if (dt >= 1000) {
                 uint64_t db = bytes_recv - t->last_bytes_recv;
                 // dt is in milliseconds; convert to KB/s.
-                float inst = (float)((double)db * 1000.0 / 1024.0 / (double)dt);
-                if (inst < 0.0f) inst = 0.0f;
-                // ~10 s EWMA: pieces arrive in bursts (several 8 MB pieces can
-                // verify in the same second, then nothing for a while), so a
-                // per-second sample bounces between line rate and idle and the
-                // UI showed 8+ MB/s while the real sustained rate was ~1.5.
-                if (t->download_kbps <= 0.0f) {
-                    t->download_kbps = inst;
-                } else {
-                    float alpha = (float)dt / 10000.0f;
-                    if (alpha > 0.35f) alpha = 0.35f;
-                    t->download_kbps += (inst - t->download_kbps) * alpha;
-                }
+                t->download_kbps = (float)((double)db * 1000.0 / 1024.0 / (double)dt);
                 t->last_speed_time_ms = now;
                 t->last_bytes_recv = bytes_recv;
             }
@@ -552,7 +540,6 @@ bool tsnx_engine_get_diag(tsnx_engine *eng, const char *hash, tsnx_engine_diag *
     torrentfs_fail_kinds(t->fs, &out->sock_fail, &out->timeouts);
     out->calm = torrentfs_calm(t->fs);
     out->bytes_recv = torrentfs_bytes_recv(t->fs);
-    out->dup_bytes  = torrentfs_dup_bytes(t->fs);
 
     int64_t done = 0, total = 0, ph = 0;
     torrentfs_stats(t->fs, &done, &total, &ph);

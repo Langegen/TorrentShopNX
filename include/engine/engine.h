@@ -191,7 +191,6 @@ typedef struct {
     int dht_good;           // DHT good nodes seen during last lookup
     int dht_dubious;        // DHT dubious nodes seen during last lookup
     int64_t bytes_recv;     // cumulative bytes received
-    int64_t dup_bytes;      // received payloads for blocks already held
     float download_kbps;    // smoothed download speed
     int64_t playhead_piece; // current playhead piece index
     int64_t pieces_done;    // pieces currently resident

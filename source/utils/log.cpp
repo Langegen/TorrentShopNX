@@ -1,27 +1,14 @@
-﻿#include "log.h"
+#include "log.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <fstream>
 #include <mutex>
-#include <string>
 #include <sys/stat.h>
+#include <cstdio>
 
 namespace util {
 
 static const char* kLogPath = "sdmc:/switch/TorrentShopNX/log.txt";
 static std::mutex g_log_mutex;
-
-// PC tests set TSNX_LOG_PATH so the same log lines the app writes to the SD
-// card land in a local file; on the console getenv() just returns NULL.
-static const char* logPath() {
-    static std::string override_path;
-    if (override_path.empty()) {
-        const char* env = getenv("TSNX_LOG_PATH");
-        override_path = (env && env[0]) ? env : kLogPath;
-    }
-    return override_path.c_str();
-}
 
 static bool pathExists(const std::string& path) {
     struct stat st;
@@ -57,7 +44,7 @@ static void ensureDirRecursive(const std::string& path) {
 void logInit() {
     ensureDirRecursive("sdmc:/switch/TorrentShopNX");
     std::lock_guard<std::mutex> lock(g_log_mutex);
-    std::ofstream file(logPath(), std::ios::trunc);
+    std::ofstream file(kLogPath, std::ios::trunc);
     if (file.is_open()) {
         file << "TorrentShopNX log start\n";
         file.close();
@@ -66,7 +53,7 @@ void logInit() {
 
 void logLine(const std::string& line) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
-    std::ofstream file(logPath(), std::ios::app);
+    std::ofstream file(kLogPath, std::ios::app);
     if (file.is_open()) {
         file << line << "\n";
         file.close();

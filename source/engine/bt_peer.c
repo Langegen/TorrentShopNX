@@ -645,22 +645,6 @@ int peer_fetch_metadata(peer_addr addr, const uint8_t info_hash[20],
 // Non-blocking peer transport (TCP only). See the block comment in peer.h.
 // ---------------------------------------------------------------------------
 
-// TCP throughput knobs applied to every download socket. Nagle off (17-byte
-// requests must not wait for a delayed ACK), and the kernel receive buffer
-// grown: the libnx bsd service default is far too small to fill the pipe on
-// a 100 Mbit wifi link with any RTT (pipensx pattern). The bsd service
-// caps per-socket memory, so a smaller fallback keeps a constrained session
-// usable instead of failing the setsockopt outright.
-static void tcp_speed_opts(int sock) {
-    int one = 1;
-    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-    int rbuf = 256 * 1024;
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-        rbuf = 128 * 1024;
-        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
-    }
-}
-
 // Slide any fully-consumed prefix out of the rx buffer. Doing this lazily (only
 // when we need room or run out of whole messages) is what lets peer_nb_next
 // hand back a pointer straight into rx instead of copying every payload.
@@ -693,7 +677,8 @@ int peer_nb_init(peer_nb *p, int sock, int64_t piece_count) {
 
     int flags = fcntl(sock, F_GETFL, 0);
     if (flags >= 0) fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-    tcp_speed_opts(sock);
+    int one = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
     return 0;
 }
 

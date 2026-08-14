@@ -57,10 +57,6 @@ void torrentfs_stats(const torrentfs *tfs, int64_t *pieces_done,
 // Number of peers found by the tracker announce.
 int torrentfs_peer_count(const torrentfs *tfs);
 
-// Live handshaked sessions whose bitfield covers the whole streamed file
-// (true seeds for this download, as opposed to the session count).
-int torrentfs_seed_count(const torrentfs *tfs);
-
 // Information about one live/handshaking session.
 typedef struct {
     uint32_t ip;          // network byte order
@@ -82,7 +78,6 @@ int torrentfs_get_peers(const torrentfs *tfs, torrentfs_peer_info *out, int max)
 // `out` must have room for 10 ints.
 void torrentfs_debug_counts(const torrentfs *tfs, int out[10]);
 int64_t torrentfs_bytes_recv(const torrentfs *tfs);
-int64_t torrentfs_dup_bytes(const torrentfs *tfs);
 int torrentfs_incoming_count(const torrentfs *tfs);
 
 // Peer sessions currently connected+handshaked, and the high-water mark. This

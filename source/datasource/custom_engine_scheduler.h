@@ -5,7 +5,6 @@
 #include <engine/engine.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -89,7 +88,6 @@ private:
     int file_last_piece_ = 0;
     int last_current_piece_ = -1;
     int stall_level_ = 0;
-    std::chrono::steady_clock::time_point last_apply_at_;
 
     struct PeerEwma {
         uint32_t key_ip;
