@@ -11,6 +11,7 @@
 #include "engine_log.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/select.h>
@@ -276,7 +277,14 @@ static void dht_bg_main(void *arg) {
     struct sockaddr_in me = {0};
     me.sin_family = AF_INET;
     me.sin_addr.s_addr = INADDR_ANY;
+#ifdef __SWITCH__
     me.sin_port = htons(51413);
+#else
+    // PC: many firewalls/ISPs silently drop inbound UDP on the well-known
+    // DHT port 51413 (bind succeeds, responses never arrive). Outbound-
+    // initiated lookups work just as well from an ephemeral port.
+    me.sin_port = 0;
+#endif
     if (bind(s_bg_sock, (struct sockaddr *)&me, sizeof(me)) != 0) {
         // The canonical port is taken (another DHT client on the console?);
         // an ephemeral port still works for outbound lookups.
@@ -310,6 +318,16 @@ static void dht_bg_main(void *arg) {
         return;
     }
     memcpy(s_bg_node_id, node_id, 20);
+
+#ifndef __SWITCH__
+    // jech's dht_init marks the socket non-blocking; this loop relies on a
+    // BLOCKING recvfrom with SO_RCVTIMEO (the Switch pattern above). Restore
+    // blocking or every empty recv returns EAGAIN and the loop busy-spins.
+    {
+        int fl = fcntl(s_bg_sock, F_GETFL, 0);
+        if (fl >= 0) fcntl(s_bg_sock, F_SETFL, fl & ~O_NONBLOCK);
+    }
+#endif
 
     for (int i = 0; i < cached_count; i++) {
         struct sockaddr_in addr;

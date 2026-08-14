@@ -125,6 +125,9 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
     if (file_size_ == 0) {
         file_offset_in_torrent_ = tsnx_engine_file_offset(engine_, info_hash_str_.c_str());
     }
+    // The status snapshot feeds BackendDataSource::totalSize(); leave it 0 and
+    // XCI-installers and the UI see an unknown size.
+    status_.total_size = static_cast<uint64_t>(file_size_);
     piece_size_ = tsnx_engine_piece_size(engine_, info_hash_str_.c_str());
     if (piece_size_ > 0 && file_size_ > 0) {
         file_first_piece_ = static_cast<int>(file_offset_in_torrent_ / piece_size_);

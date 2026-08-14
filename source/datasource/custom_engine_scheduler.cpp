@@ -126,6 +126,19 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offs
     if (!engine_) return {};
 
     int current_piece = offset_to_piece(offset);
+
+    // The engine now streams partial pieces, so reads come back at block
+    // granularity (as little as 16 KB) instead of one 4 MB chunk per piece.
+    // Rebuilding and re-applying the zones -- and logging -- on every one of
+    // those is pure noise; the zones are piece-granular anyway, so they only
+    // change when the piece moves on. Rebuild at most once per second.
+    const auto now = std::chrono::steady_clock::now();
+    if (last_current_piece_ == current_piece &&
+        last_apply_at_.time_since_epoch().count() != 0 &&
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last_apply_at_).count() < 1000) {
+        return last_snapshot_;
+    }
+    last_apply_at_ = now;
     last_current_piece_ = current_piece;
 
     CustomSchedulerSnapshot snap = rebuild(current_piece);
@@ -235,6 +248,7 @@ void CustomEngineScheduler::reset() {
     }
     last_current_piece_ = -1;
     stall_level_ = 0;
+    last_apply_at_ = {};
     peer_ewma_.clear();
     last_snapshot_ = {};
 }
