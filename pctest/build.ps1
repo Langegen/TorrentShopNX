@@ -61,6 +61,42 @@ function Build-CppObjects {
     }
 }
 
+# Builds the full app-stack test (real CustomEngineBackend/Scheduler/Health/
+# Client + RingBuffer + engine) the same way the app links them.
+function Build-AppTest {
+    $OBJDIR = "pctest\obj"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
+
+    $cobj = @()
+    foreach ($src in $COMMON_SOURCES) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        & $GCC @CFLAGS -c $src -o $o
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $cobj += $o
+    }
+
+    $APP_CPP = @(
+        "pctest\apptest.cpp",
+        "source\datasource\custom_engine_backend.cpp",
+        "source\datasource\custom_engine_client.cpp",
+        "source\datasource\custom_engine_scheduler.cpp",
+        "source\datasource\custom_engine_health.cpp",
+        "source\utils\log.cpp",
+        "source\buffer\ring_buffer.cpp"
+    )
+    $appcpp = @()
+    foreach ($src in $APP_CPP) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        & $GPP @CXXFLAGS -std=c++17 -pthread -DTSNX_USE_CUSTOM_ENGINE=1 -Isource -Iinclude -Isource\datasource -Isource\utils -Isource\buffer -c $src -o $o
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $appcpp += $o
+    }
+
+    & $GPP @CXXFLAGS -std=c++17 $cobj $appcpp $CPP_OBJ -o "pctest\apptest" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\apptest"
+}
+
 function Build-Test($name) {
     $src = @("pctest\$name.c") + $COMMON_SOURCES + $CPP_OBJ
     & $GCC @CFLAGS @src -o "pctest\$name" @LIBS
@@ -77,3 +113,4 @@ Build-Test "test_engine"
 Build-Test "streamtest"
 Build-Test "diagtest"
 Build-Test "dhttest"
+Build-AppTest
