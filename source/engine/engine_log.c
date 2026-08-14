@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 
 #include <switch.h>
 
@@ -14,6 +13,22 @@ static FILE *g_log_f = NULL;
 static int g_log_level = ENGINE_LOG_INFO;
 static int g_log_init = 0;
 static int g_log_first_open = 1;
+
+// The engine's hot paths (netloop dials, piece arrivals) must not pay for
+// time()/localtime(): on Switch time() is an IPC to the time:u service and
+// strftime/fflush hit the fs service, so a dial storm used to serialize those
+// on the netloop thread. Timestamps come from the system tick instead: the
+// epoch is captured once at init, the wall clock is derived from tick deltas,
+// and the formatted date string is cached until the second changes.
+static time_t g_epoch_secs;
+static u64 g_epoch_tick;
+static int g_cached_second = -1;
+static char g_cached_ts[32];
+
+static time_t wall_seconds(void) {
+    return g_epoch_secs +
+           (time_t)((armGetSystemTick() - g_epoch_tick) / armGetSystemTickFreq());
+}
 
 void engine_log_init(const char *path) {
     if (g_log_init) return;
@@ -35,6 +50,9 @@ void engine_log_init(const char *path) {
     } else {
         g_log_f = stderr;
     }
+    g_epoch_secs = time(NULL);          // one IPC, once
+    g_epoch_tick = armGetSystemTick();
+    g_cached_second = -1;
     g_log_init = 1;
 }
 
@@ -57,20 +75,25 @@ void engine_log(int level, const char *fmt, ...) {
     if (!g_log_init || level > g_log_level || !g_log_f) return;
 
     mutexLock(&g_log_mtx);
-    time_t now = time(NULL);
-    struct tm *tm = localtime(&now);
-    char ts[32];
-    strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", tm);
+    time_t now = wall_seconds();
+    if (now != g_cached_second) {
+        g_cached_second = (int)now;
+        struct tm *tm = localtime(&now);
+        strftime(g_cached_ts, sizeof(g_cached_ts), "%Y-%m-%d %H:%M:%S", tm);
+    }
     const char *lvl = (level == ENGINE_LOG_ERROR) ? "ERR" :
                       (level == ENGINE_LOG_WARN)  ? "WRN" :
                       (level == ENGINE_LOG_INFO)  ? "INF" : "DBG";
 
-    fprintf(g_log_f, "[%s %s] ", ts, lvl);
+    fprintf(g_log_f, "[%s %s] ", g_cached_ts, lvl);
     va_list ap;
     va_start(ap, fmt);
     vfprintf(g_log_f, fmt, ap);
     va_end(ap);
     fprintf(g_log_f, "\n");
-    fflush(g_log_f);
+    // fflush per line is an fs IPC on every call; only errors need to be
+    // visible right away. Buffered lines are still written out on close (or
+    // when the 4 KB stdio buffer fills).
+    if (level <= ENGINE_LOG_WARN) fflush(g_log_f);
     mutexUnlock(&g_log_mtx);
 }

@@ -93,15 +93,6 @@ void encryptNcaHeader(const NcaHeader& header, const uint8_t header_key[0x20], u
     }
 }
 
-void incrementCtrCounter(unsigned char nonce_counter[16]) {
-    for (int i = 15; i >= 8; --i) {
-        ++nonce_counter[i];
-        if (nonce_counter[i] != 0) {
-            break;
-        }
-    }
-}
-
 } // namespace
 
 NczDecompressor::NczDecompressor(FetchCallback fetch_cb)
@@ -292,9 +283,7 @@ bool NczDecompressor::init() {
     return true;
 }
 
-void NczDecompressor::seekAesCtr(uint64_t offset, const NczSection& sec, mbedtls_aes_context& aes, unsigned char nonce_counter[16], size_t& nc_off) {
-    mbedtls_aes_setkey_enc(&aes, sec.crypto_key, 128);
-    
+void NczDecompressor::seekAesCtr(uint64_t offset, const NczSection& sec, unsigned char nonce_counter[16], size_t& nc_off) {
     // Construct counter from nonce & offset
     std::memcpy(nonce_counter, sec.crypto_counter, 8);
     uint64_t off_val = offset >> 4;
@@ -335,26 +324,27 @@ void NczDecompressor::applyAesCtrIfNeed(void* buf, size_t size, uint64_t global_
         }
         if (active_sec) {
             if (active_sec->crypto_type == 3 || active_sec->crypto_type == 4) {
-                mbedtls_aes_context aes;
-                mbedtls_aes_init(&aes);
-                
+                // ARMv8 CE hardware AES-CTR (libnx crypto): the software
+                // mbedTLS path burned one CPU core for the whole NSZ body.
                 unsigned char nonce_counter[16] = {0};
-                unsigned char stream_block[16] = {0};
                 size_t nc_off = 0;
-                
-                seekAesCtr(current_off, *active_sec, aes, nonce_counter, nc_off);
-                
-                // If nc_off > 0, we must prep the stream_block by encrypting the nonce_counter once
+
+                seekAesCtr(current_off, *active_sec, nonce_counter, nc_off);
+
+                Aes128CtrContext ctr;
+                aes128CtrContextCreate(&ctr, active_sec->crypto_key, nonce_counter);
+
+                // If nc_off > 0 we resume inside the current 16-byte stream
+                // block: encrypt one full block so enc_ctr_buffer holds
+                // AES(counter) (the old mbedtls stream_block), then jump the
+                // context's block offset to nc_off.
                 if (nc_off > 0) {
-                    unsigned char tmp_nonce[16];
-                    std::memcpy(tmp_nonce, nonce_counter, 16);
-                    mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, tmp_nonce, stream_block);
-                    incrementCtrCounter(nonce_counter);
+                    uint8_t scratch[16] = {0};
+                    aes128CtrCrypt(&ctr, scratch, scratch, 16);
+                    ctr.buffer_offset = nc_off;
                 }
-                
-                mbedtls_aes_crypt_ctr(&aes, chunk_size, &nc_off, nonce_counter, stream_block, ptr, ptr);
-                
-                mbedtls_aes_free(&aes);
+
+                aes128CtrCrypt(&ctr, ptr, ptr, chunk_size);
             }
         }
         ptr += chunk_size;

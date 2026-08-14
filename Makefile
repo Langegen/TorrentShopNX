@@ -33,8 +33,10 @@ ROMFS       :=  resources
 #---------------------------------------------------------------------------------
 ARCH    :=  -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-# Base CFLAGS
-CFLAGS  :=  -g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS \
+# Base CFLAGS. -flto + -DNDEBUG: the whole-file optimizer wins back the
+# abstraction overhead in the engine hot paths (pipensx does the same), and
+# NDEBUG keeps vendored libutp asserts from aborting homebrew.
+CFLAGS  :=  -g -Wall -O2 -ffunction-sections -fdata-sections -flto -DNDEBUG $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS \
             -include $(TOPDIR)/include/switch_posix_compat.h
 
 #---------------------------------------------------------------------------------
@@ -74,7 +76,7 @@ BOREALIS_LIBS := $(BOREALIS_BUILD_DIR)/libborealis.a \
 CFLAGS      +=  $(INCLUDE) -D__SWITCH__
 CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions -Wno-deprecated
 ASFLAGS     :=  -g $(ARCH)
-LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -flto -Wl,-Map,$(notdir $*.map)
 LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lzstd -lnx -lm
 
 #---------------------------------------------------------------------------------

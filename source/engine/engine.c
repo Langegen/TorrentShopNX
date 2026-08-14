@@ -312,15 +312,21 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
         int good = 0, dubious = 0;
         dhtclient_get_nodes(&good, &dubious);
         it->dht_nodes = good + dubious;
+        // Useful payload = received bytes minus duplicate re-deliveries
+        // (late answers to expired/re-requested blocks). The UI shows the
+        // real download rate, not wasted traffic.
         now = now_ms();
         if (t->last_speed_time_ms == 0) {
             t->last_speed_time_ms = now;
-            t->last_bytes_recv = bytes_recv;
+            t->last_bytes_recv =
+                bytes_recv - (t->fs ? (uint64_t)torrentfs_dup_bytes(t->fs) : 0);
             t->download_kbps = 0.0f;
         } else {
             uint64_t dt = now - t->last_speed_time_ms;
             if (dt >= 500) {
-                uint64_t db = bytes_recv - t->last_bytes_recv;
+                uint64_t useful =
+                    bytes_recv - (t->fs ? (uint64_t)torrentfs_dup_bytes(t->fs) : 0);
+                uint64_t db = useful - t->last_bytes_recv;
                 // dt is in milliseconds; convert to KB/s.
                 float inst = (float)((double)db * 1000.0 / 1024.0 / (double)dt);
                 if (inst < 0.0f) inst = 0.0f;
@@ -336,7 +342,7 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
                     t->download_kbps += (inst - t->download_kbps) * alpha;
                 }
                 t->last_speed_time_ms = now;
-                t->last_bytes_recv = bytes_recv;
+                t->last_bytes_recv = useful;
             }
         }
         it->download_kbps = t->download_kbps;

@@ -385,19 +385,22 @@ int main(int argc, char** argv) {
         const uint64_t down = st.downloaded.load();
         // Фактическая скорость: скачанные байты / время (как и просили), и
         // отдельно — принятый сетевой трафик движка за то же время.
+        const uint64_t net = bytes_recv_end - bytes_recv_start;
+        const uint64_t useful = net > dup_end ? net - dup_end : 0;
         std::printf("AppTest: SUMMARY elapsed=%.0fs\n"
                     "  read_bytes=%lluMB  FACT_avg=%.1fKB/s (read/elapsed)\n"
                     "  net_recv=%lluMB     NET_avg=%.1fKB/s (engine bytes_recv/elapsed)\n"
+                    "  useful=%lluMB       USEFUL_avg=%.1fKB/s (net minus dups)\n"
                     "  dup_bytes=%lluMB (%.0f%%)  ewma_mean=%.1fKB/s ewma_peak=%.1fKB/s rb_avg=%.1fMB starv=%llu retries=%llu\n",
                     elapsed,
                     (unsigned long long)(down / (1024 * 1024)),
                     elapsed > 0 ? (double)down / 1024.0 / elapsed : 0.0,
-                    (unsigned long long)((bytes_recv_end - bytes_recv_start) / (1024 * 1024)),
-                    elapsed > 0 ? (double)(bytes_recv_end - bytes_recv_start) / 1024.0 / elapsed : 0.0,
+                    (unsigned long long)(net / (1024 * 1024)),
+                    elapsed > 0 ? (double)net / 1024.0 / elapsed : 0.0,
+                    (unsigned long long)(useful / (1024 * 1024)),
+                    elapsed > 0 ? (double)useful / 1024.0 / elapsed : 0.0,
                     (unsigned long long)(dup_end / (1024 * 1024)),
-                    (bytes_recv_end - bytes_recv_start) > 0
-                        ? 100.0 * (double)dup_end / (double)(bytes_recv_end - bytes_recv_start)
-                        : 0.0,
+                    net > 0 ? 100.0 * (double)dup_end / (double)net : 0.0,
                     dl_samples > 0 ? dl_sum / dl_samples : 0.0, dl_peak,
                     rb_samples > 0 ? rb_sum / rb_samples / (1024 * 1024) : 0.0,
                     (unsigned long long)st.starvation.load(),

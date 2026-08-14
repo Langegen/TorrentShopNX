@@ -8,7 +8,9 @@
 
 #ifdef __SWITCH__
 #include <zstd.h>
-#include <mbedtls/aes.h>
+extern "C" {
+#include <switch/crypto/aes_ctr.h>
+}
 #endif
 
 #include <functional>
@@ -76,7 +78,7 @@ private:
     
     // Текущая секция для AES-CTR
     void applyAesCtrIfNeed(void* buf, size_t size, uint64_t global_offset);
-    void seekAesCtr(uint64_t offset, const NczSection& sec, mbedtls_aes_context& aes, unsigned char nonce_counter[16], size_t& nc_off);
+    void seekAesCtr(uint64_t offset, const NczSection& sec, unsigned char nonce_counter[16], size_t& nc_off);
 
 #endif // __SWITCH__
 };

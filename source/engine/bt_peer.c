@@ -838,7 +838,13 @@ int peer_nb_flush(peer_nb *p) {
         return 0;
     }
     while (p->tx_head < p->tx_len) {
-        ssize_t n = send(p->sock, p->tx + p->tx_head, p->tx_len - p->tx_head, 0);
+        // Cap each send at 32 KiB: libnx marshals one bsd IPC per call and
+        // oversized buffers stall/fail under the socket transfer-memory limit
+        // (pipensx pattern). Request traffic is tiny; the cap only matters
+        // for the rare deep pipeline flush.
+        size_t chunk = p->tx_len - p->tx_head;
+        if (chunk > 32 * 1024) chunk = 32 * 1024;
+        ssize_t n = send(p->sock, p->tx + p->tx_head, chunk, 0);
         if (n > 0) {
             p->tx_head += (size_t)n;
             continue;

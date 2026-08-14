@@ -50,7 +50,11 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#ifdef __SWITCH__
+#include <switch/crypto/sha1.h>
+#else
 #include <mbedtls/sha1.h>
+#endif
 
 #include "torrent_meta.h"
 #include "bt_peer.h"      // MSG_* ids, BLOCK_LEN, bf_has_piece, peer_nb
@@ -92,8 +96,13 @@
 #define SLOW_FACTOR_CRIT  4          // take over only if this much faster than the owner
 
 #define REQ_RING         256    // per-session outstanding-request capacity
-#define REQ_EXPIRE_SECS  15     // re-request a block after this long undelivered
+#define REQ_EXPIRE_SECS  30     // re-request a block after this long undelivered
 #define REQ_FIRST_EXPIRE_SECS 4 // zero-delivery peers: free their blocks fast
+// Duplicate (hedge) requests a piece may issue over its whole lifetime: each
+// hedge is a deliberate duplicate whose delivery is guaranteed waste unless
+// the original requester died first. 16 blocks = 256 KiB of hedge traffic
+// per piece, the pipensx "<=16 dup blocks" bound.
+#define HEDGE_BUDGET     16
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once. The
 // budget is in BYTES: the floor is only there to keep a tiny bit of pipelining,
@@ -186,7 +195,7 @@ typedef struct {
     int nblocks;
     int have_cnt;
     int next_req;       // scan cursor for the next block to request
-    int dup_delivered;  // re-deliveries already wasted on this piece (budgeted)
+    int hedge_budget;   // duplicate requests this piece may still ISSUE
 } aq_entry;
 
 typedef struct {
@@ -313,6 +322,9 @@ struct torrentfs {
     int64_t st_cache_written;
     int64_t st_bytes_recv;
     int64_t st_dup_bytes;      // MSG_PIECE payloads for blocks we already had
+    int64_t st_dup_noring;     //   of which: no matching outstanding request
+    int64_t st_dup_have;       //   of which: ring matched but block already held
+    int64_t st_dup_gone;       //   of which: assembly slot gone (piece finished)
     int64_t st_blocks_have;    // blocks resident in RAM partials
     int64_t st_win_ph, st_win_lo, st_win_hi;
     char st_last_err[128];
@@ -552,7 +564,7 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         c->workers  = 0;
         c->have_cnt = 0;
         c->next_req = 0;
-        c->dup_delivered = 0;
+        c->hedge_budget = HEDGE_BUDGET;
         c->nblocks  =
             (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
         memset(c->have, 0, (size_t)t->blocks_per_piece);
@@ -720,7 +732,13 @@ static void writer_main(void *arg) {
 
         int nb = (int)((j.plen + BLOCK_LEN - 1) / BLOCK_LEN);
         uint8_t hash[20];
+#ifdef __SWITCH__
+        // ARMv8 CE hardware SHA-1 (libnx crypto): ~10x faster than the
+        // software mbedTLS path for the same bytes, at zero engine CPU.
+        sha1CalculateHash(hash, j.buf, (size_t)j.plen);
+#else
         mbedtls_sha1(j.buf, (size_t)j.plen, hash);
+#endif
         bool ok = memcmp(hash, t->meta.piece_hashes + j.idx * 20, 20) == 0;
 
         if (ok && t->ram_mode) {
@@ -992,6 +1010,28 @@ static int missing_count(const aq_entry *a) {
     return a->nblocks - a->have_cnt;
 }
 
+// Cancel a session's outstanding block requests on the wire. The stragglers
+// of a released/detached claim are pure waste: every block they deliver has
+// already been delivered by someone else and lands as duplicate traffic
+// (measured: the single biggest dup source, ~1/3 of all received bytes).
+// MSG_CANCEL stops the peer from sending them in the first place.
+static void cancel_outstanding(torrentfs *t, sess *s) {
+    if (s->req_n <= 0 || !s->nb.handshaked || s->connecting) return;
+    for (int i = 0; i < s->req_n; i++) {
+        int ep = s->req_piece[i];
+        int eb = s->req_block[i];
+        if (ep < 0 || ep >= t->meta.piece_count) continue;
+        uint8_t pl[12];
+        uint32_t v;
+        v = htonl((uint32_t)ep);        memcpy(pl, &v, 4);
+        v = htonl((uint32_t)eb * BLOCK_LEN); memcpy(pl + 4, &v, 4);
+        v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
+        memcpy(pl + 8, &v, 4);
+        peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
+    }
+    peer_nb_flush(&s->nb);
+}
+
 // Release one session's claim on a piece. Its outstanding request counts are
 // freed so other peers can re-request those blocks (only genuinely abandoned
 // requests are re-requested -- the per-session ring + counts are what stops
@@ -1000,6 +1040,7 @@ static int missing_count(const aq_entry *a) {
 static void release_claim(torrentfs *t, sess *s) {
     if (s->claim < 0) return;
     aq_entry *a = aq_find(t, s->claim);
+    cancel_outstanding(t, s);   // stop the stragglers at the source
     // Free every outstanding request's per-piece count (looked up by the
     // piece each entry belongs to), then detach.
     for (int i = 0; i < s->req_n; i++) {
@@ -1012,7 +1053,14 @@ static void release_claim(torrentfs *t, sess *s) {
     if (a) {
         if (a->owner == s - t->S) a->owner = -1;
         if (a->workers > 0) a->workers--;
-        if (a->workers == 0) aq_park(t, a);
+        if (a->workers == 0) {
+            aq_park(t, a);
+        } else if (a->owner < 0) {
+            // Re-home the piece on a remaining worker so its pipeline stays
+            // the deep owner one instead of everyone degrading to helper caps.
+            for (int i = 0; i < MAX_SESS; i++)
+                if (t->S[i].claim == a->idx) { a->owner = i; break; }
+        }
     }
     s->req_n = 0;
     s->claim = -1;
@@ -1138,11 +1186,13 @@ static void claim_piece(torrentfs *t, sess *s, int sid) {
 
 // Find the next block this session can order. Uses the shared cursor first,
 // then scans for holes, and finally allows a duplicate during true endgame
-// (<= 4 missing blocks) -- or, on the piece the reader is blocked on, a small
-// BUDGET of duplicate requests. Unbudgeted duplicates were how a slow piece
-// flooded itself: every worker re-requested the same in-flight blocks each
-// tick and the piece drowned in re-deliveries (measured: 84-93% of all
-// received bytes were duplicates of this kind).
+// (<= 4 missing blocks, or the piece the reader is blocked on), BUDGETED:
+// the <=4-missing endgame used to let every worker re-request the same last
+// blocks without limit -- a fast worker's whole pipeline churned those four
+// blocks until the piece closed, and every delivery past the first was a
+// duplicate (measured: over half of all dup traffic was this). Two bounds
+// now: at most 2 outstanding requests per block (the original plus one
+// hedge), and at most HEDGE_BUDGET hedges ISSUED per piece.
 static int next_block_to_request(torrentfs *t, aq_entry *a) {
     while (a->next_req < a->nblocks) {
         int b = a->next_req;
@@ -1152,11 +1202,17 @@ static int next_block_to_request(torrentfs *t, aq_entry *a) {
     for (int b = 0; b < a->nblocks; b++)
         if (!a->req[b] && !a->have[b]) return b;
     // Endgame: duplicate one missing block so a slow peer does not stall us.
-    if (missing_count(a) > 0 &&
-        (missing_count(a) <= 4 ||
-         (a->idx == t->read_blocked_piece && a->dup_delivered < 16))) {
+    // Budgeted on ISSUED hedges, not delivered ones: gating on delivered dups
+    // let every worker hedge a whole pipeline before the counter caught up
+    // (up to 96 duplicate blocks in flight per read-blocked piece -- the
+    // dominant dup source). Each issued hedge costs one from the budget.
+    if (missing_count(a) > 0 && a->hedge_budget > 0 &&
+        (missing_count(a) <= 4 || a->idx == t->read_blocked_piece)) {
         for (int b = 0; b < a->nblocks; b++)
-            if (!a->have[b]) return b;
+            if (!a->have[b] && a->req[b] < 2) {
+                a->hedge_budget--;
+                return b;
+            }
     }
     return -1;
 }
@@ -1164,16 +1220,29 @@ static int next_block_to_request(torrentfs *t, aq_entry *a) {
 // Dynamic, per-session pipeline (the pipensx model): keep roughly two seconds
 // of this peer's measured delivery rate in flight, so a fast peer on a
 // high-latency wifi link carries hundreds of blocks while a trickle peer
-// carries few. Until a session is metered, assume 512 KB/s (~64 blocks); with
-// very few live peers we probe deeper since each peer must carry more.
+// carries few. Until a session is metered, assume 256 KB/s (~32 blocks):
+// the old 512 KB/s guess sized a slow peer's first pipeline at 64 blocks,
+// which took longer to drain than the 15 s request expiry -- every one of
+// those requests was re-requested by another worker and the slow peer's
+// deliveries arrived as pure duplicates. With very few live peers we probe
+// deeper since each peer must carry more, but bounded so the same expiry
+// mismatch cannot recur.
+#define PROBE_DEPTH_FEW_PEERS 64
 static int pipeline_depth(torrentfs *t, sess *s) {
-    if (t->st_live <= 3 && s->rate <= 0) return 128;
-    double r = s->rate > 0 ? s->rate : 512.0 * 1024.0;
+    if (t->st_live <= 3 && s->rate <= 0) return PROBE_DEPTH_FEW_PEERS;
+    double r = s->rate > 0 ? s->rate : 256.0 * 1024.0;
     int d = (int)(r * 2.0 / BLOCK_LEN);
     if (d < 16) d = 16;
     if (d > REQ_RING) d = REQ_RING;
     return d;
 }
+
+// Cap for sessions that join an already-owned piece: the owner runs its full
+// adaptive pipeline, helpers stay at 16 blocks (256 KiB) -- enough to cover
+// the bandwidth-delay product of any realistic peer while bounding the
+// stragglers that turn into duplicate traffic when the piece completes
+// (measured: 39% of all received bytes were those stragglers).
+#define HELPER_PIPELINE_CAP 16
 
 // Keep the pipeline full for the session's claimed piece. Every request is
 // recorded in the session's ring and bumps the piece's per-block count, so
@@ -1184,6 +1253,9 @@ static void fill_pipeline(torrentfs *t, sess *s, u64 now) {
     if (!a) { s->claim = -1; return; }
     int64_t plen = torrent_piece_len(&t->meta, s->claim);
     int depth = pipeline_depth(t, s);
+    if (a->workers > 1 && a->owner != s - t->S) {
+        if (depth > HELPER_PIPELINE_CAP) depth = HELPER_PIPELINE_CAP;
+    }
     while (s->req_n < depth && s->req_n < REQ_RING) {
         int b = next_block_to_request(t, a);
         if (b < 0) break;
@@ -1216,9 +1288,13 @@ static void piece_full(torrentfs *t, aq_entry *a) {
     a->workers = 0;
     mutexUnlock(&t->lock);
     // Every block landed, so every outstanding request was matched and its
-    // per-piece count already decremented; just detach the sessions.
+    // per-piece count already decremented; just detach the sessions. Their
+    // in-flight requests are now guaranteed duplicates: cancel them on the
+    // wire so the peers stop wasting bandwidth on deliveries we no longer
+    // need.
     for (int i = 0; i < MAX_SESS; i++) {
         if (t->S[i].claim == idx) {
+            cancel_outstanding(t, &t->S[i]);
             t->S[i].claim = -1;
             t->S[i].req_n = 0;
         }
@@ -1303,7 +1379,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                     break;
                 }
             }
-            if (r < 0) { t->st_dup_bytes += dlen; break; }
+            if (r < 0) { t->st_dup_bytes += dlen; t->st_dup_noring += dlen; break; }
             s->req_piece[r] = s->req_piece[s->req_n - 1];
             s->req_block[r] = s->req_block[s->req_n - 1];
             s->req_time[r]  = s->req_time[s->req_n - 1];
@@ -1315,8 +1391,8 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             if (!a || b >= a->nblocks || a->have[b]) {
                 if (a && b < a->nblocks) {
                     if (a->req[b] > 0) a->req[b]--;
-                    if (a->have[b]) a->dup_delivered++;
                 }
+                if (!a) t->st_dup_gone += dlen; else t->st_dup_have += dlen;
                 t->st_dup_bytes += dlen;   // delivered twice: wasted traffic
                 break;
             }
@@ -1534,8 +1610,12 @@ static void netloop_main(void *arg) {
         hb_beat(t, HB_NET);
         u64 now = armGetSystemTick();
 
-        // Upkeep every ~500 ms: dial, reap, keep-alives, rate EWMA, calm.
-        if (now - last_upkeep > t->freq / 2) {
+        // Upkeep every ~250 ms: dial, reap, keep-alives, rate EWMA, calm.
+        // 500 ms turned the 24-slot dial wave into 2/s, dragging out the
+        // swarm ramp (a fresh magnet needs a few dozen dials); 250 ms doubles
+        // the dial rate and halves stall/expiry reaction without any
+        // meaningful per-tick cost (the scans are all O(MAX_SESS)).
+        if (now - last_upkeep > t->freq / 4) {
             last_upkeep = now;
 
             // Download-rate EWMA (governor input).
@@ -1549,6 +1629,20 @@ static void netloop_main(void *arg) {
             t->rate_last_bytes = t->st_bytes_recv;
             t->rate_last_tick  = now;
             t->calm_now        = calm_budget(t);
+
+            // Duplicate-traffic provenance, every ~10 s (PC diagnostics).
+            {
+                static u64 last_dup_dbg;
+                if (now - last_dup_dbg > (u64)10 * t->freq) {
+                    last_dup_dbg = now;
+                    engine_log(ENGINE_LOG_DEBUG,
+                               "[dupdbg] total=%lld noring=%lld have=%lld gone=%lld",
+                               (long long)t->st_dup_bytes,
+                               (long long)t->st_dup_noring,
+                               (long long)t->st_dup_have,
+                               (long long)t->st_dup_gone);
+                }
+            }
 
             // When peers are scarce, fail outbound connects faster so dead
             // addresses do not monopolise the connecting budget.
@@ -1789,7 +1883,7 @@ static void netloop_main(void *arg) {
         }
 
         u64 lt0 = armGetSystemTick();
-        int pr = poll(pfd, (nfds_t)n, 200);
+        int pr = poll(pfd, (nfds_t)n, 100);
         lat_add(t, LAT_POLL, lt0);
 
         now = armGetSystemTick();

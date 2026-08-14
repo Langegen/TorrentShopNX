@@ -3,12 +3,57 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+#include <atomic>
 #include <mutex>
 #include "../utils/log.h"
 extern std::recursive_mutex g_switch_service_mutex;
 #endif
 
 namespace util {
+
+#ifdef __SWITCH__
+namespace {
+std::atomic<int> g_cpu_boost_count{0};
+
+bool boostAllowed() {
+    AppletType type = appletGetAppletType();
+    if (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet)
+        return false;   // no apm privileges / no point in applet mode
+    return hosversionAtLeast(7, 0, 0);   // ApmCpuBoostMode needs 7.0.0+
+}
+} // namespace
+
+void cpuBoostBegin() {
+    if (!boostAllowed()) return;
+    int c = g_cpu_boost_count.fetch_add(1);
+    if (c > 0) return;   // already boosted by another active transfer
+    Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
+    if (R_SUCCEEDED(rc) && hosversionAtLeast(5, 0, 0)) {
+        appletSetAutoSleepDisabled(true);
+        util::logLine("switch_utils: CPU boost enabled (1785 MHz), auto-sleep disabled");
+    } else {
+        g_cpu_boost_count.fetch_sub(1);   // failed: never raised the refcount
+        util::logLine("switch_utils: CPU boost failed rc=" + std::to_string(rc));
+    }
+}
+
+void cpuBoostEnd() {
+    if (!boostAllowed()) return;
+    int c = g_cpu_boost_count.fetch_sub(1);
+    if (c < 1) {
+        g_cpu_boost_count.store(0);
+        return;
+    }
+    if (c == 1) {
+        appletSetAutoSleepDisabled(false);
+        appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+        util::logLine("switch_utils: CPU boost released");
+    }
+}
+#else
+void cpuBoostBegin() {}
+void cpuBoostEnd() {}
+#endif
 
 bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
 #ifdef __SWITCH__
