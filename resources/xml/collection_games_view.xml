@@ -1,0 +1,31 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="20"
+    paddingBottom="20"
+    paddingLeft="20">
+
+    <!-- Topbar -->
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+        <brls:Label id="headerTitle" text="Подборка" fontSize="28" />
+        <brls:Label id="statsHint" text="" fontSize="16" textColor="#AAAAAA" />
+    </brls:Box>
+
+    <!-- Loading / error state -->
+    <brls:Label id="loadingLabel" text="Загрузка..." fontSize="18" textColor="#AAAAAA" marginTop="40" />
+
+    <!-- Games list -->
+    <brls:RecyclerFrame
+        id="recycler"
+        width="auto"
+        height="auto"
+        paddingTop="10"
+        paddingBottom="20"
+        paddingRight="30"
+        grow="1.0" />
+
+</brls:Box>
+</brls:AppletFrame>

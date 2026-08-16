@@ -915,12 +915,65 @@ static int announce_http(const char *tracker, const char *hash_enc,
    in a blocking socket call, and the Switch OS allows 16 concurrent blocking
    BSD sessions per process. The rest of the trackers are announced inline
    after the parallel wave. */
-#define ANNOUNCE_MAX_THREADS 8
+#define ANNOUNCE_MAX_THREADS 4
 
 /* Zero-initialised is a valid Mutex in libnx; the PC compat shim initialises
    lazily. Serialises metadata-fetch announces with torrentfs discovery
    announces so they never burn the 16 blocking BSD sessions together. */
 static Mutex s_announce_mtx;
+
+#define TRACKER_COOLDOWN_MAX 64
+#define TRACKER_MAX_FAILS 3
+#define TRACKER_COOLDOWN_SECS 600
+
+typedef struct {
+    char url[128];
+    int fails;
+    u64 cooldown_until;
+} tracker_cooldown_entry;
+
+static tracker_cooldown_entry s_tc[TRACKER_COOLDOWN_MAX];
+static int s_tc_count = 0;
+
+static int tracker_get_cooldown_slot(const char *url) {
+    for (int i = 0; i < s_tc_count; i++) {
+        if (strncmp(s_tc[i].url, url, sizeof(s_tc[i].url)) == 0) return i;
+    }
+    if (s_tc_count < TRACKER_COOLDOWN_MAX) {
+        int idx = s_tc_count++;
+        snprintf(s_tc[idx].url, sizeof(s_tc[idx].url), "%s", url);
+        s_tc[idx].fails = 0;
+        s_tc[idx].cooldown_until = 0;
+        return idx;
+    }
+    return -1;
+}
+
+static bool tracker_is_on_cooldown(const char *url, u64 now) {
+    for (int i = 0; i < s_tc_count; i++) {
+        if (strncmp(s_tc[i].url, url, sizeof(s_tc[i].url)) == 0) {
+            if (s_tc[i].fails >= TRACKER_MAX_FAILS && now < s_tc[i].cooldown_until) {
+                return true;
+            }
+            break;
+        }
+    }
+    return false;
+}
+
+static void tracker_record_result(const char *url, bool success, u64 freq) {
+    int idx = tracker_get_cooldown_slot(url);
+    if (idx < 0) return;
+    if (success) {
+        s_tc[idx].fails = 0;
+        s_tc[idx].cooldown_until = 0;
+    } else {
+        s_tc[idx].fails++;
+        if (s_tc[idx].fails >= TRACKER_MAX_FAILS) {
+            s_tc[idx].cooldown_until = armGetSystemTick() + (u64)TRACKER_COOLDOWN_SECS * freq;
+        }
+    }
+}
 
 typedef struct {
     const char *tracker;
@@ -959,6 +1012,8 @@ static void announce_thread(void *arg) {
 
     j->secs = (double)(armGetSystemTick() - t0) / freq;
 
+    tracker_record_result(j->tracker, j->count > 0, freq);
+
     // Hand the peers over immediately so callers don't wait for slow trackers.
     if (j->count > 0 && j->cb) j->cb(j->cb_ctx, j->peers, j->count);
 }
@@ -992,6 +1047,7 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
     int n_threaded = t->tracker_count;
     if (n_threaded > ANNOUNCE_MAX_THREADS) n_threaded = ANNOUNCE_MAX_THREADS;
 
+    u64 now = armGetSystemTick();
     for (int i = 0; i < t->tracker_count; i++) {
         ajob *j = &jobs[i];
         j->tracker = t->trackers[i];
@@ -1003,6 +1059,12 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         j->cb = cb;
         j->cb_ctx = ctx;
         j->cancel = cancel;
+
+        if (tracker_is_on_cooldown(j->tracker, now)) {
+            j->count = -1;
+            snprintf(j->terr, sizeof(j->terr), "cooldown");
+            continue;
+        }
 
         if (i < n_threaded) {
             if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
@@ -1018,13 +1080,13 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         if (j->has_thread) {
             threadWaitForExit(&j->thread);
             threadClose(&j->thread);
-        } else if (i >= n_threaded) {
+        } else if (i >= n_threaded && strcmp(j->terr, "cooldown") != 0) {
             announce_thread(j);  // inline wave: bounded by the same timeouts
         }
         if (j->count > 0) {
             answered++;
             tlog("tracker %.1fs (%d) %.60s", j->secs, j->count, j->tracker);
-        } else {
+        } else if (strcmp(j->terr, "cooldown") != 0) {
             tlog("tracker %.1fs (failed: %s) %.60s", j->secs,
                  j->terr[0] ? j->terr : "timeout", j->tracker);
         }

@@ -1,4 +1,5 @@
 #include "bt_peer.h"
+#include "engine_log.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -182,6 +183,8 @@ static int peer_handshake(peer_conn *p, const uint8_t info_hash[20],
     hs[0] = 19;
     memcpy(hs + 1, "BitTorrent protocol", 19);
     memset(hs + 20, 0, 8);
+    hs[25] |= 0x10; // BEP 10 Extension Protocol
+    hs[27] |= 0x05; // BEP 5 DHT (0x01) + BEP 6 Fast Extension (0x04)
     memcpy(hs + 28, info_hash, 20);
     memcpy(hs + 48, peer_id, 20);
 
@@ -719,6 +722,7 @@ int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count) {
 }
 
 void peer_nb_free(peer_nb *p) {
+    mse_free(&p->mse);
     if (p->utp) { utp_nb_close((utp_nb_sess *)p->utp); p->utp = NULL; }
     if (p->sock >= 0) close(p->sock);
     free(p->rx);
@@ -727,6 +731,8 @@ void peer_nb_free(peer_nb *p) {
     memset(p, 0, sizeof(*p));
     p->sock = -1;
 }
+
+static int nb_tx_append(peer_nb *p, const void *buf, size_t len);
 
 ssize_t peer_nb_pump_rx(peer_nb *p) {
     ssize_t total = 0;
@@ -741,7 +747,7 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
             n = utp_nb_read((utp_nb_sess *)p->utp,
                             p->rx + p->rx_len, (int)(PEER_RX_CAP - p->rx_len));
             if (n < 0) return -1;
-            if (n == 0) return total;
+            if (n == 0) break;
         } else {
             n = recv(p->sock, p->rx + p->rx_len, PEER_RX_CAP - p->rx_len, 0);
             if (n > 0) {
@@ -751,14 +757,51 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
             } else if (errno == EINTR) {
                 continue;
             } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return total;
+                break;
             } else {
                 return -1;
             }
         }
+
+        // If MSE stream cipher is active, decrypt newly received bytes immediately
+        if (p->mse.enabled && p->mse.phase == MSE_STATE_ESTABLISHED) {
+            mse_decrypt(&p->mse, p->rx + p->rx_len, (size_t)n);
+        }
+
         p->rx_len += (size_t)n;
         total += n;
+
+        // If MSE handshake is in progress, advance the DH / MSE state machine
+        if (p->mse.enabled && p->mse.phase != MSE_STATE_ESTABLISHED && p->mse.phase != MSE_STATE_PLAINTEXT) {
+            engine_log(ENGINE_LOG_INFO, "[mse] pump rx got=%zd total_buffered=%zu phase=%d",
+                       n, p->rx_len - p->rx_off, p->mse.phase);
+            uint8_t tx_buf[512];
+            size_t tx_len = 0;
+            bool is_fallback = false;
+            int r = mse_process_rx(&p->mse, p->rx, &p->rx_len, &p->rx_off, tx_buf, &tx_len, &is_fallback);
+            engine_log(ENGINE_LOG_INFO, "[mse] process_rx result=%d new_phase=%d tx_len=%zu fallback=%d",
+                       r, p->mse.phase, tx_len, is_fallback);
+            if (r < 0) return -1;
+            if (tx_len > 0) {
+                nb_tx_append(p, tx_buf, tx_len);
+                peer_nb_flush(p);
+            }
+            if (is_fallback) {
+                // Peer sent standard plaintext BitTorrent handshake -> reply in plaintext
+                uint8_t hs[HANDSHAKE_LEN];
+                hs[0] = 19;
+                memcpy(hs + 1, "BitTorrent protocol", 19);
+                memset(hs + 20, 0, 8);
+                hs[25] |= 0x10;
+                hs[27] |= 0x05;
+                memcpy(hs + 28, p->mse.info_hash, 20);
+                memcpy(hs + 48, p->mse.peer_id, 20);
+                nb_tx_append(p, hs, HANDSHAKE_LEN);
+                peer_nb_flush(p);
+            }
+        }
     }
+    return total;
 }
 
 int peer_nb_next(peer_nb *p, uint8_t *id, uint8_t **payload, uint32_t *plen) {
@@ -820,8 +863,18 @@ int peer_nb_queue(peer_nb *p, uint8_t id, const void *payload, uint32_t plen) {
     uint32_t len = htonl(1 + plen);
     memcpy(hdr, &len, 4);
     hdr[4] = id;
-    if (nb_tx_append(p, hdr, 5) != 0) return -1;
-    if (plen && nb_tx_append(p, payload, plen) != 0) return -1;
+    if (p->mse.enabled && p->mse.phase == MSE_STATE_ESTABLISHED) {
+        mse_encrypt(&p->mse, hdr, 5);
+        if (nb_tx_append(p, hdr, 5) != 0) return -1;
+        if (plen) {
+            size_t old_len = p->tx_len;
+            if (nb_tx_append(p, payload, plen) != 0) return -1;
+            mse_encrypt(&p->mse, p->tx + old_len, plen);
+        }
+    } else {
+        if (nb_tx_append(p, hdr, 5) != 0) return -1;
+        if (plen && nb_tx_append(p, payload, plen) != 0) return -1;
+    }
     return 0;
 }
 
@@ -863,16 +916,32 @@ bool peer_nb_tx_pending(const peer_nb *p) {
 
 int peer_nb_send_handshake(peer_nb *p, const uint8_t info_hash[20],
                            const uint8_t peer_id[20]) {
+    mse_init(&p->mse, info_hash, peer_id);
+    uint8_t ya[96];
+    int n = mse_create_ya(&p->mse, ya, sizeof(ya));
+    if (n < 0) return -1;
+    return nb_tx_append(p, ya, 96);
+}
+
+int peer_nb_send_plaintext_handshake(peer_nb *p, const uint8_t info_hash[20],
+                                     const uint8_t peer_id[20]) {
+    p->mse.enabled = false;
+    p->mse.phase = MSE_STATE_PLAINTEXT;
     uint8_t hs[HANDSHAKE_LEN];
     hs[0] = 19;
     memcpy(hs + 1, "BitTorrent protocol", 19);
-    memset(hs + 20, 0, 8);  // no extensions advertised
+    memset(hs + 20, 0, 8);
+    hs[25] |= 0x10; // BEP 10 Extension Protocol
+    hs[27] |= 0x05; // BEP 5 DHT (0x01) + BEP 6 Fast Extension (0x04)
     memcpy(hs + 28, info_hash, 20);
     memcpy(hs + 48, peer_id, 20);
     return nb_tx_append(p, hs, HANDSHAKE_LEN);
 }
 
 int peer_nb_recv_handshake(peer_nb *p, const uint8_t info_hash[20]) {
+    if (p->mse.enabled && p->mse.phase != MSE_STATE_ESTABLISHED && p->mse.phase != MSE_STATE_PLAINTEXT) {
+        return 0;  // still in Diffie-Hellman MSE handshake
+    }
     if (p->rx_len - p->rx_off < HANDSHAKE_LEN) {
         nb_compact(p);
         return 0;  // not all 68 bytes yet

@@ -33,6 +33,7 @@ $COMMON_SOURCES = @(
     "source\engine\dhtclient.c",
     "source\engine\engine.c",
     "source\engine\engine_log.c",
+    "source\engine\mse.c",
     "pctest\utpstub.c"
 )
 

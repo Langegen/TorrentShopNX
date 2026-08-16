@@ -47,6 +47,7 @@ public:
 
     bool isEmpty() const;
     bool isFull() const;
+    bool isEof() const;
 
     /// Сигнализировать о завершении записи (EOF).
     /// После этого read() вернёт 0 когда буфер опустеет.

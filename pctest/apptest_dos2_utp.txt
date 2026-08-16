@@ -1,0 +1,347 @@
+AppTest: duration=180s magnet=magnet:?xt=urn:btih:9B71DA1883526009A2BEDEAA1A85C1007D313BD1...
+[2026-08-15 21:46:54 INF] engine start port=6882
+[2026-08-15 21:46:54 INF] [meta] metadata loaded from cache (14776 bytes)
+AppTest: probe ok, 2 files
+AppTest: selected file index=0 size=11216199743 path=Divinity Original Sin 2 Definitive Edition [010027400CDC6000][v0].nsp
+AppTest: hash=9b71da1883526009a2bedeaa1a85c1007d313bd1
+[2026-08-15 21:46:54 INF] [meta] metadata loaded from cache (14776 bytes)
+[2026-08-15 21:46:54 INF] [torrentfs] open name=Divinity Original Sin 2 Definitive Edition [NSP] file=0 size=11216199743 pieces=669 ram=1
+[2026-08-15 21:46:54 INF] [dht] background udp port=63431
+[2026-08-15 21:46:54 INF] [discovery] tracker announce start
+[2026-08-15 21:46:54 INF] [netloop] start
+AppTest: backend open ok, total=11216199743 piece=16777216
+[2026-08-15 21:46:54 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=0AppTest: reading NSP header probe (4096 bytes)...
+
+[2026-08-15 21:46:54 INF] [sess] live=0 conn=0 peak=0 pool=0 rate=0KB/s closes c=0 hs=0 idle=0 stall=0 net=0 sockfail=0
+[2026-08-15 21:46:54 INF] [torrentfs] added 30 peers (total 30)
+[2026-08-15 21:46:54 INF] [meta] tracker 0.8s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:46:54 INF] [meta] tracker 0.9s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:46:54 INF] [meta] tracker 0.8s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:46:55 INF] [sess] handshake ok live=1/64 tcp
+[2026-08-15 21:46:55 INF] [dht] background bootstrap: 6 routers
+[2026-08-15 21:46:55 INF] [dht] background nodes=0/0 peers_found=0 rx=0/0
+[2026-08-15 21:46:58 INF] [dht] background nodes=10/6 peers_found=0 rx=17/3086
+[2026-08-15 21:46:59 INF] [meta] tracker 5.1s (failed: no connect reply) udp://tracker.opentrackr.org:1337/announce
+[2026-08-15 21:47:00 INF] [dht] background nodes=10/6 peers_found=0 rx=19/3465
+[2026-08-15 21:47:02 INF] [dht] background nodes=10/6 peers_found=0 rx=28/5744
+[2026-08-15 21:47:04 INF] [meta] tracker 5.0s (failed: no connect reply) udp://open.stealth.si:80/announce
+[2026-08-15 21:47:04 INF] [meta] tracker 0.3s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:47:05 INF] [meta] tracker 0.7s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:47:05 INF] [dht] background nodes=10/6 peers_found=0 rx=39/8527
+[2026-08-15 21:47:05 INF] [meta] tracker 0.8s (failed: tracker UDP OK mais 0 peer) udp://open.demonii.com:1337/announce
+[2026-08-15 21:47:07 INF] [dht] background nodes=11/5 peers_found=0 rx=47/10419
+[2026-08-15 21:47:09 WRN] [torrentfs] starvation recovery round=2: reset 1 peers, condemned 29, live=0
+[2026-08-15 21:47:09 INF] [sess] live=0 conn=0 peak=1 pool=30 rate=0KB/s closes c=58 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:47:09 INF] [sess] handshake ok live=1/64 tcp
+[2026-08-15 21:47:10 INF] [dht] background nodes=9/7 peers_found=0 rx=80/17626
+[2026-08-15 21:47:10 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:47:11 INF] [meta] tracker 0.8s (failed: tracker UDP OK mais 0 peer) udp://explodie.org:6969/announce
+[2026-08-15 21:47:12 INF] [discovery] tracker announce start
+[2026-08-15 21:47:12 INF] [dht] background nodes=9/7 peers_found=0 rx=80/17626
+[2026-08-15 21:47:13 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:47:13 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:47:13 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:47:14 INF] [dht] background nodes=9/7 peers_found=0 rx=107/24794
+[2026-08-15 21:47:16 INF] [torrentfs] added 1 peers (total 31)
+[2026-08-15 21:47:16 INF] [dht] background nodes=9/7 peers_found=1 rx=115/26835
+[2026-08-15 21:47:17 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.opentrackr.org:1337/announce
+[2026-08-15 21:47:18 INF] [dht] background nodes=9/7 peers_found=1 rx=136/32020
+[2026-08-15 21:47:21 INF] [dht] background nodes=9/7 peers_found=1 rx=150/34629
+[2026-08-15 21:47:22 INF] [meta] tracker 5.0s (failed: no connect reply) udp://open.stealth.si:80/announce
+[2026-08-15 21:47:23 INF] [meta] tracker 0.4s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:47:24 INF] [sess] live=1 conn=1 peak=1 pool=31 rate=0KB/s closes c=59 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:47:24 INF] [dht] background nodes=9/7 peers_found=1 rx=163/37138
+[2026-08-15 21:47:25 INF] [dht] background re-bootstrap: 6 routers
+[2026-08-15 21:47:26 INF] [dht] background nodes=7/9 peers_found=1 rx=165/37254
+[2026-08-15 21:47:28 INF] [meta] tracker 5.6s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:47:28 INF] [dht] background nodes=6/10 peers_found=1 rx=172/38846
+[2026-08-15 21:47:29 INF] [meta] tracker 0.7s (failed: tracker UDP OK mais 0 peer) udp://open.demonii.com:1337/announce
+[2026-08-15 21:47:31 INF] [dht] background nodes=6/10 peers_found=1 rx=188/52532
+[2026-08-15 21:47:33 INF] [dht] background nodes=7/9 peers_found=1 rx=194/53860
+[2026-08-15 21:47:34 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:47:35 INF] [meta] tracker 0.7s (failed: tracker UDP OK mais 0 peer) udp://explodie.org:6969/announce
+[2026-08-15 21:47:35 INF] [dht] background nodes=7/9 peers_found=1 rx=199/54903
+[2026-08-15 21:47:38 INF] [dht] background nodes=7/9 peers_found=1 rx=211/57734
+[2026-08-15 21:47:39 WRN] [torrentfs] starvation recovery round=3: reset 0 peers, condemned 1, live=1
+[2026-08-15 21:47:39 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=104KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:47:39 INF] [discovery] tracker announce start
+[2026-08-15 21:47:39 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:47:39 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:47:39 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:47:40 INF] [dht] background nodes=7/9 peers_found=1 rx=225/59070
+[2026-08-15 21:47:43 INF] [dht] background nodes=7/9 peers_found=1 rx=229/59360
+[2026-08-15 21:47:44 INF] [meta] tracker cooldown 600s: udp://tracker.opentrackr.org:1337/announce
+[2026-08-15 21:47:44 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.opentrackr.org:1337/announce
+[2026-08-15 21:47:45 INF] [dht] background nodes=7/9 peers_found=1 rx=239/61977
+[2026-08-15 21:47:48 INF] [dht] background nodes=7/9 peers_found=1 rx=242/62247
+[2026-08-15 21:47:49 INF] [meta] tracker cooldown 600s: udp://open.stealth.si:80/announce
+[2026-08-15 21:47:49 INF] [meta] tracker 5.0s (failed: no connect reply) udp://open.stealth.si:80/announce
+[2026-08-15 21:47:51 INF] [dht] background nodes=7/9 peers_found=1 rx=254/64852
+[2026-08-15 21:47:51 ERR] [dht] background recvfrom error errno=126
+[2026-08-15 21:47:52 INF] [meta] tracker 2.8s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:47:53 INF] [torrentfs] starvation recovered (round 3)
+[2026-08-15 21:47:54 INF] [dht] background nodes=7/9 peers_found=1 rx=256/64996
+[2026-08-15 21:47:54 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=311KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:47:55 INF] [meta] tracker 3.2s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:47:55 INF] [dht] background re-bootstrap: 6 routers
+[2026-08-15 21:47:55 INF] [meta] tracker cooldown 600s: udp://open.demonii.com:1337/announce
+[2026-08-15 21:47:55 INF] [meta] tracker 0.7s (failed: tracker UDP OK mais 0 peer) udp://open.demonii.com:1337/announce
+[2026-08-15 21:47:56 INF] [dht] background nodes=8/8 peers_found=1 rx=266/67156
+[2026-08-15 21:47:57 ERR] [dht] background recvfrom error errno=126
+[2026-08-15 21:47:58 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:47:59 INF] [dht] background nodes=8/8 peers_found=1 rx=274/68417
+[2026-08-15 21:48:01 INF] [meta] tracker cooldown 600s: udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:48:01 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:48:01 INF] [dht] background nodes=8/8 peers_found=1 rx=300/75247
+[2026-08-15 21:48:01 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:03 INF] [dht] background nodes=8/8 peers_found=1 rx=301/75566
+[2026-08-15 21:48:04 ERR] [dht] background recvfrom error errno=126
+[2026-08-15 21:48:04 INF] [meta] tracker cooldown 600s: udp://explodie.org:6969/announce
+[2026-08-15 21:48:04 INF] [meta] tracker 3.1s (failed: tracker UDP OK mais 0 peer) udp://explodie.org:6969/announce
+[2026-08-15 21:48:06 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:06 INF] [dht] background nodes=8/8 peers_found=1 rx=305/75872
+[2026-08-15 21:48:09 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:09 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=16KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:48:09 INF] [dht] background nodes=8/8 peers_found=1 rx=309/76641
+[2026-08-15 21:48:12 INF] [dht] background nodes=8/8 peers_found=1 rx=320/78816
+[2026-08-15 21:48:14 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:15 INF] [dht] background nodes=8/8 peers_found=1 rx=325/79205
+[2026-08-15 21:48:17 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:18 INF] [dht] background nodes=11/7 peers_found=1 rx=350/85220
+[2026-08-15 21:48:19 INF] [discovery] tracker announce start
+[2026-08-15 21:48:19 INF] [meta] tracker 0.8s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:48:19 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:48:19 INF] [meta] tracker 0.8s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:48:20 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:48:20 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:48:21 INF] [dht] background nodes=13/7 peers_found=1 rx=355/85827
+[2026-08-15 21:48:22 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:23 INF] [dht] background nodes=13/7 peers_found=1 rx=360/86909
+[2026-08-15 21:48:24 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=0KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:48:25 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:26 INF] [dht] background re-bootstrap: 6 routers
+[2026-08-15 21:48:26 INF] [dht] background nodes=13/7 peers_found=1 rx=363/87102
+[2026-08-15 21:48:29 INF] [dht] background nodes=13/11 peers_found=1 rx=369/87679
+[2026-08-15 21:48:30 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:32 INF] [dht] background nodes=13/11 peers_found=1 rx=371/87777
+[2026-08-15 21:48:32 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:35 INF] [dht] background nodes=13/11 peers_found=1 rx=371/87777
+[2026-08-15 21:48:35 INF] [discovery] tracker announce start
+[2026-08-15 21:48:36 INF] [meta] tracker 0.8s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:48:36 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:48:36 INF] [meta] tracker 0.8s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:48:36 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:48:37 INF] [meta] tracker 0.6s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:48:37 INF] [dht] background nodes=15/9 peers_found=1 rx=378/88461
+[2026-08-15 21:48:38 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:39 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=0KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:48:40 INF] [dht] background nodes=15/9 peers_found=1 rx=379/88510
+[2026-08-15 21:48:40 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:42 INF] [dht] background nodes=15/9 peers_found=1 rx=401/92837
+[2026-08-15 21:48:44 INF] [dht] background nodes=15/9 peers_found=1 rx=412/96017
+[2026-08-15 21:48:46 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:47 INF] [dht] background nodes=15/9 peers_found=1 rx=425/99380
+[2026-08-15 21:48:49 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:50 INF] [dht] background nodes=15/9 peers_found=1 rx=461/107216
+[2026-08-15 21:48:52 INF] [dht] background nodes=15/9 peers_found=1 rx=476/110816
+[2026-08-15 21:48:52 INF] [discovery] tracker announce start
+[2026-08-15 21:48:53 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:48:53 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:48:53 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:48:53 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:48:54 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:48:54 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=2KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:48:54 INF] [dht] background nodes=15/9 peers_found=1 rx=486/113126
+[2026-08-15 21:48:56 INF] [meta] tracker 3.1s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:48:57 INF] [dht] background re-bootstrap: 6 routers
+[2026-08-15 21:48:57 INF] [dht] background nodes=15/9 peers_found=1 rx=500/115136
+[2026-08-15 21:48:57 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:48:59 INF] [dht] background nodes=15/9 peers_found=1 rx=522/120766
+[2026-08-15 21:49:02 INF] [dht] background nodes=15/9 peers_found=1 rx=532/121558
+[2026-08-15 21:49:02 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:04 INF] [dht] background nodes=15/9 peers_found=1 rx=551/126088
+[2026-08-15 21:49:05 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:49:06 INF] [dht] background nodes=15/9 peers_found=1 rx=554/126324
+[2026-08-15 21:49:08 INF] [dht] background nodes=15/9 peers_found=1 rx=560/127871
+[2026-08-15 21:49:09 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=6KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:49:10 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:10 INF] [dht] background nodes=16/8 peers_found=1 rx=575/130839
+[2026-08-15 21:49:11 INF] [discovery] tracker announce start
+[2026-08-15 21:49:12 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:49:12 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:49:12 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:49:12 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:49:13 INF] [meta] tracker 0.6s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:49:13 INF] [dht] background nodes=16/8 peers_found=1 rx=578/131076
+[2026-08-15 21:49:13 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:49:15 INF] [dht] background nodes=16/8 peers_found=1 rx=597/134038
+[2026-08-15 21:49:18 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:18 INF] [dht] background nodes=16/8 peers_found=1 rx=598/134350
+[2026-08-15 21:49:20 INF] [dht] background nodes=16/8 peers_found=1 rx=606/135217
+[2026-08-15 21:49:21 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:49:23 INF] [dht] background nodes=16/8 peers_found=1 rx=610/135532
+[2026-08-15 21:49:24 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=6KB/s closes c=61 hs=0 idle=0 stall=1 net=0 sockfail=0
+[2026-08-15 21:49:26 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:26 INF] [dht] background nodes=14/10 peers_found=1 rx=622/137581
+[2026-08-15 21:49:28 INF] [dht] background re-bootstrap: 6 routers
+[2026-08-15 21:49:28 INF] [discovery] tracker announce start
+[2026-08-15 21:49:28 INF] [meta] tracker 0.8s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:49:28 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:49:29 INF] [meta] tracker 0.9s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:49:29 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:49:29 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:49:29 INF] [dht] background nodes=14/10 peers_found=1 rx=625/137805
+[2026-08-15 21:49:29 INF] [meta] tracker 0.6s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:49:32 INF] [dht] background nodes=14/10 peers_found=1 rx=642/142338
+[2026-08-15 21:49:34 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:34 INF] [dht] background nodes=13/11 peers_found=1 rx=653/144289
+[2026-08-15 21:49:37 INF] [dht] background nodes=13/11 peers_found=1 rx=670/148207
+[2026-08-15 21:49:39 INF] [dht] background nodes=13/11 peers_found=1 rx=672/148577
+[2026-08-15 21:49:40 INF] [sess] live=0 conn=0 peak=1 pool=31 rate=0KB/s closes c=61 hs=0 idle=0 stall=2 net=0 sockfail=0
+[2026-08-15 21:49:42 INF] [dht] background nodes=13/11 peers_found=1 rx=684/152291
+[2026-08-15 21:49:42 INF] [sess] handshake ok live=1/64 tcp
+[2026-08-15 21:49:43 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:49:45 INF] [discovery] tracker announce start
+[2026-08-15 21:49:45 INF] [dht] background nodes=15/11 peers_found=1 rx=694/153739
+[2026-08-15 21:49:45 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:49:45 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:49:45 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:49:45 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:49:47 INF] [dht] background nodes=15/11 peers_found=1 rx=697/154149
+[2026-08-15 21:49:48 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:49 INF] [meta] tracker 3.1s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:49:49 INF] [dht] background nodes=15/11 peers_found=1 rx=707/155348
+[2026-08-15 21:49:51 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:49:51 INF] [dht] background nodes=15/11 peers_found=1 rx=721/159730
+[2026-08-15 21:49:53 INF] [dht] background nodes=15/11 peers_found=1 rx=740/164777
+[2026-08-15 21:49:55 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=8KB/s closes c=61 hs=0 idle=0 stall=2 net=0 sockfail=0
+[2026-08-15 21:49:56 INF] [dht] background nodes=19/7 peers_found=1 rx=746/165403
+[2026-08-15 21:49:56 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:49:58 INF] [dht] background nodes=22/10 peers_found=1 rx=777/172332
+[2026-08-15 21:49:59 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:00 INF] [dht] background nodes=23/9 peers_found=1 rx=780/172563
+[2026-08-15 21:50:03 INF] [dht] background nodes=23/9 peers_found=1 rx=789/174106
+[2026-08-15 21:50:04 INF] [discovery] tracker announce start
+[2026-08-15 21:50:04 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:04 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:50:04 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:50:04 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:50:05 INF] [dht] background nodes=23/9 peers_found=1 rx=789/174106
+[2026-08-15 21:50:07 INF] [meta] tracker 2.8s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:50:08 INF] [meta] tracker 0.7s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:50:08 INF] [dht] background nodes=23/9 peers_found=1 rx=790/174155
+[2026-08-15 21:50:10 INF] [sess] live=0 conn=0 peak=1 pool=31 rate=0KB/s closes c=61 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:50:11 INF] [dht] background nodes=23/9 peers_found=1 rx=799/174854
+[2026-08-15 21:50:13 INF] [sess] handshake ok live=1/64 tcp
+[2026-08-15 21:50:13 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:14 INF] [dht] background nodes=22/10 peers_found=1 rx=800/175153
+[2026-08-15 21:50:17 INF] [dht] background nodes=21/11 peers_found=1 rx=808/176014
+[2026-08-15 21:50:18 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:20 INF] [dht] background nodes=21/11 peers_found=1 rx=810/176414
+[2026-08-15 21:50:20 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:23 INF] [discovery] tracker announce start
+[2026-08-15 21:50:23 INF] [dht] background nodes=21/11 peers_found=1 rx=812/176574
+[2026-08-15 21:50:24 INF] [meta] tracker 0.8s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:50:24 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:50:24 INF] [meta] tracker 0.8s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:50:24 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:50:25 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=5KB/s closes c=61 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:50:25 INF] [dht] background nodes=21/12 peers_found=1 rx=834/181662
+[2026-08-15 21:50:26 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:27 INF] [meta] tracker 3.1s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:50:28 INF] [dht] background nodes=21/12 peers_found=1 rx=846/184252
+[2026-08-15 21:50:28 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:30 INF] [dht] background nodes=21/12 peers_found=1 rx=848/184610
+[2026-08-15 21:50:32 INF] [dht] background nodes=21/13 peers_found=1 rx=856/185837
+[2026-08-15 21:50:33 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:35 INF] [dht] background nodes=21/16 peers_found=1 rx=860/186288
+[2026-08-15 21:50:36 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:37 INF] [dht] background nodes=23/14 peers_found=1 rx=866/187819
+[2026-08-15 21:50:39 INF] [dht] background nodes=24/13 peers_found=1 rx=885/191582
+[2026-08-15 21:50:40 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=3KB/s closes c=61 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:50:41 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:42 INF] [dht] background nodes=24/13 peers_found=1 rx=891/193235
+[2026-08-15 21:50:42 INF] [discovery] tracker announce start
+[2026-08-15 21:50:43 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:50:43 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:50:43 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:50:43 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:50:43 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:44 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:50:45 INF] [dht] background nodes=25/12 peers_found=1 rx=897/194615
+[2026-08-15 21:50:47 INF] [dht] background nodes=25/12 peers_found=1 rx=900/194866
+[2026-08-15 21:50:48 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:50 INF] [dht] background nodes=25/12 peers_found=1 rx=905/195267
+[2026-08-15 21:50:51 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:53 INF] [dht] background nodes=25/12 peers_found=1 rx=906/195371
+[2026-08-15 21:50:55 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=9KB/s closes c=61 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:50:55 INF] [dht] background nodes=25/12 peers_found=1 rx=909/195625
+[2026-08-15 21:50:57 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:50:58 INF] [dht] background nodes=25/12 peers_found=1 rx=912/195865
+[2026-08-15 21:50:59 INF] [discovery] tracker announce start
+[2026-08-15 21:50:59 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:50:59 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:50:59 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:50:59 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:51:00 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:51:00 INF] [dht] background nodes=28/12 peers_found=1 rx=936/201279
+[2026-08-15 21:51:03 INF] [meta] tracker 3.1s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:51:03 INF] [dht] background nodes=28/12 peers_found=1 rx=936/201279
+[2026-08-15 21:51:04 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:51:05 INF] [dht] background nodes=28/12 peers_found=1 rx=938/201431
+[2026-08-15 21:51:07 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:51:08 INF] [dht] background nodes=28/12 peers_found=1 rx=951/203516
+[2026-08-15 21:51:10 INF] [sess] live=1 conn=0 peak=1 pool=31 rate=7KB/s closes c=61 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:51:10 INF] [dht] background nodes=28/12 peers_found=1 rx=951/203516
+[2026-08-15 21:51:12 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:51:13 INF] [dht] background nodes=28/4 peers_found=1 rx=955/204082
+[2026-08-15 21:51:14 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:51:15 INF] [dht] background nodes=28/5 peers_found=1 rx=956/204176
+[2026-08-15 21:51:17 INF] [dht] background nodes=29/11 peers_found=1 rx=965/206063
+[2026-08-15 21:51:18 INF] [discovery] tracker announce start
+[2026-08-15 21:51:18 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:51:18 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:51:18 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:51:19 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:51:20 INF] [dht] background nodes=33/7 peers_found=1 rx=1003/214666
+[2026-08-15 21:51:20 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:51:20 INF] [torrentfs] added 1 peers (total 32)
+[2026-08-15 21:51:20 INF] [torrentfs] added 1 peers (total 33)
+[2026-08-15 21:51:20 INF] [torrentfs] added 2 peers (total 35)
+[2026-08-15 21:51:20 INF] [torrentfs] added 1 peers (total 36)
+[2026-08-15 21:51:22 INF] [meta] tracker 3.0s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:51:22 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:51:23 INF] [dht] background nodes=34/6 peers_found=8 rx=1019/218970
+[2026-08-15 21:51:25 INF] [dht] background nodes=36/9 peers_found=8 rx=1039/224437
+[2026-08-15 21:51:25 INF] [sess] live=1 conn=0 peak=1 pool=36 rate=25KB/s closes c=66 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:51:27 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:51:28 INF] [dht] background nodes=36/9 peers_found=8 rx=1068/244437
+[2026-08-15 21:51:30 INF] [dht] background nodes=36/9 peers_found=8 rx=1068/244437
+[2026-08-15 21:51:30 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:51:33 INF] [dht] background nodes=36/9 peers_found=8 rx=1088/250108
+[2026-08-15 21:51:35 INF] [dht] background nodes=36/9 peers_found=8 rx=1088/250108
+[2026-08-15 21:51:36 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:51:37 INF] [discovery] tracker announce start
+[2026-08-15 21:51:37 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:51:37 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:51:37 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:51:38 INF] [dht] background nodes=36/9 peers_found=8 rx=1100/253872
+[2026-08-15 21:51:38 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:51:38 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:51:38 INF] [meta] tracker 0.7s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:51:40 INF] [dht] background nodes=36/10 peers_found=8 rx=1129/262770
+[2026-08-15 21:51:40 INF] [sess] live=1 conn=0 peak=1 pool=36 rate=60KB/s closes c=76 hs=0 idle=0 stall=3 net=0 sockfail=0
+[2026-08-15 21:51:42 INF] [dht] background nodes=36/10 peers_found=8 rx=1142/265711
+[2026-08-15 21:51:43 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:51:45 INF] [dht] background nodes=35/11 peers_found=8 rx=1142/265711
+[2026-08-15 21:51:46 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:51:48 INF] [dht] background nodes=35/11 peers_found=8 rx=1161/271022
+[2026-08-15 21:51:50 INF] [dht] background nodes=35/11 peers_found=8 rx=1161/271022
+[2026-08-15 21:51:51 INF] [torrentfs] added 1 peers (total 37)
+[2026-08-15 21:51:51 INF] [torrentfs] added 1 peers (total 38)
+[2026-08-15 21:51:51 INF] [torrentfs] added 1 peers (total 39)
+[2026-08-15 21:51:51 INF] [torrentfs] added 3 peers (total 42)
+[2026-08-15 21:51:51 INF] [torrentfs] added 1 peers (total 43)
+[2026-08-15 21:51:51 INF] [torrentfs] added 7 peers (total 50)
+[2026-08-15 21:51:51 INF] [sess] handshake ok live=2/64 tcp
+[2026-08-15 21:51:52 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2

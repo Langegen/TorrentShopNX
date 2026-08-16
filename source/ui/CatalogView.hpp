@@ -71,7 +71,13 @@ public:
 private:
     std::string searchQuery_;
     std::string selectedGenre_;
+    int sortMode_ = 0;   // 0=порядок каталога, 1=по названию, 2=по размеру
+    bool rusOnly_ = false;
     std::vector<Game> filteredGames_;
+
+    void openGenreDialog();
+    std::string sortModeLabel() const;
+    static std::vector<std::pair<std::string, int>> collectGenres();
 
     // Inner DataSource class
     class CatalogDataSource : public brls::RecyclerDataSource {

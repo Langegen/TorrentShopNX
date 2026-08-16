@@ -2,8 +2,10 @@
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
 #include "../utils/log.h"
+#include <algorithm>
 #include <sstream>
 #include <set>
+#include <unordered_map>
 #include "../config/config.h"
 
 #ifdef __SWITCH__
@@ -125,10 +127,58 @@ void CatalogView::onContentAvailable() {
         return true;
     });
 
+    this->registerAction("Меню фильтров", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
+        brls::Dialog* dialog = new brls::Dialog("Фильтры и сортировка");
+
+        std::string sortLabel = "Сортировка: " + sortModeLabel();
+        dialog->addButton(sortLabel, [this, dialog]() {
+            sortMode_ = (sortMode_ + 1) % 3;
+            dialog->close();
+            filterCatalog();
+            brls::Application::notify("Сортировка: " + sortModeLabel());
+        });
+
+        std::string genreLabel = selectedGenre_.empty() ? "Жанр: Все" : "Жанр: " + selectedGenre_;
+        dialog->addButton(genreLabel, [this, dialog]() {
+            dialog->close();
+            openGenreDialog();
+        });
+
+        dialog->addButton(rusOnly_ ? "Только русский: Вкл" : "Только русский: Выкл", [this, dialog]() {
+            rusOnly_ = !rusOnly_;
+            dialog->close();
+            filterCatalog();
+        });
+
+        dialog->addButton("Сбросить фильтры", [this, dialog]() {
+            searchQuery_.clear();
+            selectedGenre_.clear();
+            rusOnly_ = false;
+            sortMode_ = 0;
+            dialog->close();
+            filterCatalog();
+            brls::Application::notify("Фильтры сброшены");
+        });
+
+        dialog->addButton("Закрыть", [dialog]() { dialog->close(); });
+        dialog->open();
+        return true;
+    });
+
     this->registerAction("Сбросить фильтры", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
         searchQuery_.clear();
         selectedGenre_.clear();
+        rusOnly_ = false;
+        sortMode_ = 0;
         filterCatalog();
+        brls::Application::notify("Фильтры сброшены");
+        return true;
+    });
+
+    this->registerAction("Только русский", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+        rusOnly_ = !rusOnly_;
+        filterCatalog();
+        brls::Application::notify(rusOnly_ ? "Только русский: вкл" : "Только русский: выкл");
         return true;
     });
 
@@ -151,6 +201,54 @@ void CatalogView::onContentAvailable() {
     if (!searchQuery_.empty()) {
         filterCatalog();
     }
+}
+
+std::string CatalogView::sortModeLabel() const {
+    switch (sortMode_) {
+        case 1: return "по названию";
+        case 2: return "по размеру";
+        default: return "по умолчанию";
+    }
+}
+
+std::vector<std::pair<std::string, int>> CatalogView::collectGenres() {
+    std::unordered_map<std::string, int> freq;
+    for (const auto& game : g_games) {
+        std::stringstream ss(game.genre);
+        std::string tag;
+        while (std::getline(ss, tag, ',')) {
+            while (!tag.empty() && std::isspace(static_cast<unsigned char>(tag.front()))) tag.erase(tag.begin());
+            while (!tag.empty() && std::isspace(static_cast<unsigned char>(tag.back()))) tag.pop_back();
+            if (!tag.empty()) freq[tag]++;
+        }
+    }
+    std::vector<std::pair<std::string, int>> genres(freq.begin(), freq.end());
+    std::sort(genres.begin(), genres.end(), [](const auto& a, const auto& b) {
+        return a.second > b.second;
+    });
+    if (genres.size() > 25) genres.resize(25);
+    return genres;
+}
+
+void CatalogView::openGenreDialog() {
+    auto genres = collectGenres();
+    brls::Dialog* dialog = new brls::Dialog("Выбор жанра");
+    dialog->addButton("Все жанры", [this, dialog]() {
+        selectedGenre_.clear();
+        dialog->close();
+        filterCatalog();
+    });
+    for (const auto& [name, count] : genres) {
+        std::string label = name + " (" + std::to_string(count) + ")";
+        dialog->addButton(label, [this, dialog, name]() {
+            selectedGenre_ = name;
+            dialog->close();
+            filterCatalog();
+            brls::Application::notify("Жанр: " + name);
+        });
+    }
+    dialog->addButton("Закрыть", [dialog]() { dialog->close(); });
+    dialog->open();
 }
 
 
@@ -182,14 +280,36 @@ void CatalogView::filterCatalog() {
                 continue;
             }
         }
+
+        // Filter by Russian language
+        if (rusOnly_) {
+            if (toLowerLocal(game.interface_lang).find("rus") == std::string::npos) {
+                continue;
+            }
+        }
         
         filteredGames_.push_back(game);
+    }
+
+    if (sortMode_ == 1) {
+        std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [](const Game& a, const Game& b) {
+            return toLowerLocal(cleanTitle(a.title)) < toLowerLocal(cleanTitle(b.title));
+        });
+    } else if (sortMode_ == 2) {
+        std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [](const Game& a, const Game& b) {
+            return parseSizeToBytes(a.size) > parseSizeToBytes(b.size);
+        });
     }
     
     if (statsHint) {
         std::string updateDate = config::ConfigManager::instance().getLastCatalogUpdateDate();
         if (updateDate.empty()) updateDate = "Никогда";
-        statsHint->setText("Игр: " + std::to_string(g_games.size()) + " | Обновлено: " + updateDate);
+        statsHint->setText("Показано: " + std::to_string(filteredGames_.size()) +
+                           " из " + std::to_string(g_games.size()) +
+                           " | Сортировка: " + sortModeLabel() +
+                           (rusOnly_ ? " | RUS" : "") +
+                           (selectedGenre_.empty() ? "" : " | " + selectedGenre_) +
+                           " | Обновлено: " + updateDate);
     }
 
     GameRowCell::s_lastFocusedColumn = 0;

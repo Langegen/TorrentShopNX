@@ -17,6 +17,7 @@
 
 struct Game {
     std::string title;
+    std::string title_id;
     std::string size;
     std::string magnet;
     std::string topic_id;
@@ -46,6 +47,7 @@ inline std::string safeGetStr(const nlohmann::json& j, const std::string& key) {
 // nlohmann::json deserialization
 inline void from_json(const nlohmann::json& j, Game& g) {
     g.title = safeGetStr(j, "title");
+    g.title_id = safeGetStr(j, "title_id");
     g.size = safeGetStr(j, "size");
     g.magnet = safeGetStr(j, "magnet");
     g.topic_id = safeGetStr(j, "topic_id");
@@ -75,6 +77,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
 inline void to_json(nlohmann::json& j, const Game& g) {
     j = nlohmann::json{
         {"title", g.title},
+        {"title_id", g.title_id},
         {"size", g.size},
         {"magnet", g.magnet},
         {"topic_id", g.topic_id},
@@ -297,6 +300,30 @@ inline void clearCaches() {
             util::logLine("GameData: removed duplicated TorrentShopNX folder synchronously (rename failed)");
         }
     }
+}
+
+// Parse a size string like "10.66 GB", "722.3 MB", "56 MB" into bytes.
+// Returns 0 for empty/unparseable values (used to sort unknown sizes last).
+#include <sstream>
+
+inline long long parseSizeToBytes(const std::string& s) {
+    if (s.empty()) return 0;
+    try {
+        std::stringstream ss(s);
+        double value = 0.0;
+        std::string unit;
+        ss >> value >> unit;
+        if (unit.empty()) return 0;
+        char u = static_cast<char>(std::tolower(static_cast<unsigned char>(unit[0])));
+        double mult = 1.0;
+        if (u == 'k') mult = 1024.0;
+        else if (u == 'm') mult = 1024.0 * 1024.0;
+        else if (u == 'g') mult = 1024.0 * 1024.0 * 1024.0;
+        else if (u == 't') mult = 1024.0 * 1024.0 * 1024.0 * 1024.0;
+        else if (u != 'b') return 0;
+        return static_cast<long long>(value * mult);
+    } catch (...) {}
+    return 0;
 }
 
 // Helper to normalize image URLs (e.g. FastPic migrated fastpic.ru to fastpic.org and storage servers fail on HTTPS)

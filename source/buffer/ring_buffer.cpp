@@ -160,6 +160,18 @@ bool RingBuffer::isFull() const {
     return freeSpace() == 0;
 }
 
+bool RingBuffer::isEof() const {
+#ifdef __SWITCH__
+    mutexLock(&mutex_);
+    const bool value = eof_;
+    mutexUnlock(&mutex_);
+    return value;
+#else
+    std::lock_guard<std::mutex> lk(mutex_);
+    return eof_;
+#endif
+}
+
 void RingBuffer::setEof() {
     RB_LOCK();
     eof_ = true;

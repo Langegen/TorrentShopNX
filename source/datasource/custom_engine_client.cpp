@@ -21,7 +21,7 @@ CustomEngineClient::~CustomEngineClient() {
 
 bool CustomEngineClient::ensureEngine() {
     if (engine_) return true;
-    engine_ = tsnx_engine_start(6882);
+    engine_ = tsnx_engine_start(6881);
     if (!engine_) {
         last_error_ = "failed to start custom engine";
         return false;

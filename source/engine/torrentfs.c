@@ -1,4 +1,4 @@
-﻿// torrentfs3.c вЂ” v3 of the streaming torrent engine (same public API as v1/v2).
+// torrentfs3.c вЂ” v3 of the streaming torrent engine (same public API as v1/v2).
 //
 // A deliberate simplification of v2. What v2 bought with its complexity
 // (global block scheduler, adaptive pipelines, upload serving, incoming
@@ -81,11 +81,11 @@
 #define MAX_CONNECTING   32
 #define DIAL_STOP_LIVE   48
 #endif
-#define CONNECT_SECS     2      // outbound SYN patience
+#define CONNECT_SECS     6      // outbound SYN patience
 #define PREHS_SECS       10     // connected but no handshake yet
 #define IDLE_SECS        130    // handshaked, nothing received (see header)
 #define KEEPALIVE_SECS   60
-#define STALL_SECS       6      // requested blocks but nothing came: drop peer
+#define STALL_SECS       10     // requested blocks but nothing came: drop peer
 // A peer can dodge STALL_SECS forever by dribbling one block every few seconds:
 // last_block keeps resetting while the piece it holds never lands. Rather than
 // ban it, we meter every session's receive rate (per session, so it is piece-
@@ -286,9 +286,16 @@ struct torrentfs {
     peer_addr peers[TFS_MAX_PEERS];
     uint8_t peer_fails[TFS_MAX_PEERS];
     uint8_t peer_busy[TFS_MAX_PEERS];
+    uint8_t peer_ok[TFS_MAX_PEERS];   // 1 if peer ever delivered a MSG_PIECE block
+    uint8_t peer_plaintext[TFS_MAX_PEERS]; // 1 if we should dial with plaintext instead of MSE
     u64 peer_next_try[TFS_MAX_PEERS];
     int peer_count;
     int next_peer;
+
+    u64 last_starve;
+    int starve_round;
+    int st_starve_rounds;
+    int st_peer_evicted;
 
     uint8_t peer_id[20];
 
@@ -610,9 +617,11 @@ static void add_peers_cb(void *ctx, const peer_addr *peers, int n) {
             }
         }
         if (slot < 0) continue;
-        t->peers[slot]         = peers[i];
-        t->peer_fails[slot]    = 0;
-        t->peer_next_try[slot] = 0;
+        t->peers[slot]          = peers[i];
+        t->peer_fails[slot]     = 0;
+        t->peer_next_try[slot]  = 0;
+        t->peer_ok[slot]        = 0;
+        t->peer_plaintext[slot] = 0;
         added++;
     }
     if (added > 0)
@@ -643,8 +652,9 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn) {
     if (pidx < 0) return;
     mutexLock(&t->lock);
     t->peer_busy[pidx] = 0;
-    if (failed) {
-        int f = ++t->peer_fails[pidx];
+    if (failed || !t->peer_ok[pidx]) {
+        if (t->peer_fails[pidx] < 0xFE) t->peer_fails[pidx]++;
+        int f = t->peer_fails[pidx];
         int secs = had_conn ? BACKOFF_DROP_SECS : BACKOFF_CONN_SECS * (1 << (f > 5 ? 5 : f - 1));
         if (secs > BACKOFF_MAX_SECS) secs = BACKOFF_MAX_SECS;
         t->peer_next_try[pidx] = armGetSystemTick() + (u64)secs * t->freq;
@@ -813,8 +823,13 @@ static void writer_main(void *arg) {
 
 static void sess_close(torrentfs *t, sess *s, bool failed) {
     if (!s->active) return;
+    int sid = (int)(s - t->S);
     if (s->claim >= 0) release_claim(t, s);
     bool had_conn = s->nb.handshaked;
+    engine_log(ENGINE_LOG_INFO, "[sess %d] close %u.%u.%u.%u:%d connecting=%d handshaked=%d failed=%d",
+               sid, s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
+               (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff, s->addr.port,
+               s->connecting, had_conn, failed);
     if (s->connecting) {
         // still a raw socket; peer_nb was never attached
         if (s->nb.sock >= 0) close(s->nb.sock);
@@ -823,6 +838,11 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     } else {
         if (s->nb.handshaked) t->st_live--;
         peer_nb_free(&s->nb);
+    }
+    if (failed && !had_conn && s->pidx >= 0) {
+        if (!t->peer_plaintext[s->pidx]) {
+            t->peer_plaintext[s->pidx] = 1; // retry next with plaintext
+        }
     }
     release_peer(t, s->pidx, failed, had_conn);
     s->active = false;
@@ -856,28 +876,27 @@ static bool sess_dial(torrentfs *t, u64 now) {
     sa.sin_family = AF_INET;
     sa.sin_addr.s_addr = pa.ip;
     sa.sin_port = htons(pa.port);
-    engine_log(ENGINE_LOG_DEBUG, "[sess %d] dial tcp %u.%u.%u.%u:%d",
+    engine_log(ENGINE_LOG_INFO, "[sess %d] dial tcp %u.%u.%u.%u:%d",
                sid, pa.ip & 0xff, (pa.ip >> 8) & 0xff,
                (pa.ip >> 16) & 0xff, (pa.ip >> 24) & 0xff, pa.port);
     if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) != 0 &&
         errno != EINPROGRESS) {
-        t->st_sock_fail++;
-        t->st_conn_fail++;
-        engine_log(ENGINE_LOG_DEBUG, "[sess %d] tcp connect failed errno=%d", sid, errno);
         close(sock);
+        t->st_conn_fail++;
+        set_err(t, "connect(): errno %lld", (long long)errno);
         release_peer(t, pidx, true, false);
-        return true;   // slot still free; try another peer next tick
+        return false;
     }
 
     sess *s = &t->S[sid];
     memset(s, 0, sizeof(*s));
     s->active     = true;
     s->connecting = true;
-    s->nb.sock    = sock;   // raw until the connect completes
-    s->addr       = pa;
+    s->nb.sock    = sock;
     s->pidx       = pidx;
+    s->addr       = pa;
     s->claim      = -1;
-    s->started    = now;
+    s->last_rx    = s->last_ka = now;
     t->st_connecting++;
     return true;
 }
@@ -929,13 +948,14 @@ static bool sess_dial_utp(torrentfs *t, u64 now) {
 
 // Pending connect finished (POLLOUT): attach the peer_nb layer and handshake.
 static void sess_connected(torrentfs *t, sess *s, u64 now) {
+    int sid = (int)(s - t->S);
     int soerr = 0;
     socklen_t sl = sizeof(soerr);
     getsockopt(s->nb.sock, SOL_SOCKET, SO_ERROR, &soerr, &sl);
     if (soerr != 0) {
         t->st_conn_fail++;
         t->st_conn_timeout++;   // most refusals here are dead/NAT'd peers
-        engine_log(ENGINE_LOG_DEBUG, "[sess] connect soerr=%d", soerr);
+        engine_log(ENGINE_LOG_INFO, "[sess %d] connect soerr=%d", sid, soerr);
         sess_close(t, s, true);
         return;
     }
@@ -951,7 +971,13 @@ static void sess_connected(torrentfs *t, sess *s, u64 now) {
     t->st_connecting--;
     t->st_conn_ok++;
     s->last_rx = s->last_ka = now;
-    peer_nb_send_handshake(&s->nb, t->meta.info_hash, t->peer_id);
+    if (s->pidx >= 0 && t->peer_plaintext[s->pidx]) {
+        engine_log(ENGINE_LOG_INFO, "[sess %d] tcp connected ok -> sending plaintext handshake", sid);
+        peer_nb_send_plaintext_handshake(&s->nb, t->meta.info_hash, t->peer_id);
+    } else {
+        engine_log(ENGINE_LOG_INFO, "[sess %d] tcp connected ok -> sending MSE handshake", sid);
+        peer_nb_send_handshake(&s->nb, t->meta.info_hash, t->peer_id);
+    }
     peer_nb_flush(&s->nb);
 }
 
@@ -1367,6 +1393,15 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             t->st_bytes_recv += dlen;
             s->last_block = now;
             s->rx_total += dlen;
+            if (s->pidx >= 0 && s->pidx < TFS_MAX_PEERS) {
+                t->peer_ok[s->pidx] = 1;
+            }
+            if (t->starve_round > 0) {
+                engine_log(ENGINE_LOG_INFO,
+                           "[torrentfs] starvation recovered (delivered block after %d rounds)",
+                           t->starve_round);
+                t->starve_round = 0;
+            }
 
             // Exact-match against this session's outstanding requests: a
             // delivery for an expired/abandoned request (or a duplicate from
@@ -1416,17 +1451,17 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
 
 static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
     ssize_t got = peer_nb_pump_rx(&s->nb);
-    if (got < 0) { t->st_fetch_fail++; engine_log(ENGINE_LOG_DEBUG, "[sess] rx error"); sess_close(t, s, true); return; }
+    if (got < 0) { t->st_fetch_fail++; engine_log(ENGINE_LOG_INFO, "[sess %d] rx error got=%zd", sid, got); sess_close(t, s, true); return; }
     if (got > 0) s->last_rx = now;
 
     if (!s->nb.handshaked) {
         int hs = peer_nb_recv_handshake(&s->nb, t->meta.info_hash);
-        if (hs < 0) { sess_close(t, s, true); return; }
+        if (hs < 0) { engine_log(ENGINE_LOG_INFO, "[sess %d] handshake invalid/mismatch", sid); sess_close(t, s, true); return; }
         if (hs == 0) return;
         t->st_live++;
         if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
-        engine_log(ENGINE_LOG_INFO, "[sess] handshake ok live=%d/%d",
-                   t->st_live, MAX_SESS);
+        engine_log(ENGINE_LOG_INFO, "[sess %d] handshake ok live=%d/%d",
+                   sid, t->st_live, MAX_SESS);
         peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
     }
 
@@ -1648,7 +1683,7 @@ static void netloop_main(void *arg) {
             // addresses do not monopolise the connecting budget.
             bool few_peers = t->st_live < STARVED_LIVE ||
                              (now - t->last_progress_tick > (u64)10 * t->freq);
-            int conn_secs = few_peers ? 1 : CONNECT_SECS;
+            int conn_secs = few_peers ? 4 : CONNECT_SECS;
 
             for (int i = 0; i < MAX_SESS; i++) {
                 sess *s = &t->S[i];
@@ -1744,28 +1779,55 @@ static void netloop_main(void *arg) {
             }
             t->st_bf_empty = bf_empty;
             // Starvation recovery: if we have almost no live peers, stop wasting
-            // connection slots on ВµTP and retry peers that failed earlier. DHT
-            // swarms are often full of dead/NAT'd addresses; without this the pool
-            // can exhaust its backoff budget and stall the stream.
+            // connection slots on µTP and evict/retry peers that failed earlier.
             if (few_peers) {
-                static u64 last_starve;
-                if (now - last_starve > (u64)5 * t->freq) {
-                    last_starve = now;
+                u64 pause_ticks = (t->starve_round <= 1) ? (u64)5 * t->freq :
+                                  (t->starve_round == 2)  ? (u64)15 * t->freq :
+                                  (t->starve_round == 3)  ? (u64)30 * t->freq :
+                                                            (u64)60 * t->freq;
+                if (now - t->last_starve > pause_ticks) {
+                    t->last_starve = now;
+                    t->starve_round++;
+                    t->st_starve_rounds++;
                     int reset = 0;
+                    int condemned = 0;
                     mutexLock(&t->lock);
-                    for (int i = 0; i < t->peer_count && reset < 64; i++) {
-                        if (t->peer_busy[i]) continue;
-                        if (t->peer_fails[i] > 0) {
-                            t->peer_fails[i] = 0;
-                            t->peer_next_try[i] = 0;
-                            reset++;
+                    if (t->starve_round == 1) {
+                        // Round 1 (soft): reset backoff only for proven peers (peer_ok) with few failures
+                        for (int i = 0; i < t->peer_count && reset < 64; i++) {
+                            if (t->peer_busy[i]) continue;
+                            if (t->peer_ok[i] && t->peer_fails[i] > 0 && t->peer_fails[i] <= 3) {
+                                t->peer_fails[i] = 0;
+                                t->peer_next_try[i] = 0;
+                                reset++;
+                            }
+                        }
+                    } else {
+                        // Round 2+ (hard): condemn unproven peers that failed >= 2 times.
+                        // Setting peer_fails to 0xFF allows add_peers_cb to replace them with fresh DHT/tracker peers,
+                        // while long next_try prevents redialing dead addresses.
+                        for (int i = 0; i < t->peer_count && condemned < 64; i++) {
+                            if (t->peer_busy[i]) continue;
+                            if (!t->peer_ok[i] && t->peer_fails[i] >= 2 && t->peer_fails[i] < 0xFF) {
+                                t->peer_fails[i] = 0xFF;
+                                t->peer_next_try[i] = now + (u64)600 * t->freq;
+                                condemned++;
+                                t->st_peer_evicted++;
+                            }
                         }
                     }
                     mutexUnlock(&t->lock);
                     engine_log(ENGINE_LOG_WARN,
-                               "[torrentfs] starvation recovery: reset %d peers, live=%d",
-                               reset, t->st_live);
-                    t->announce_now = true;
+                               "[torrentfs] starvation recovery (round %d): reset=%d, condemned=%d, evicted_total=%d, live=%d",
+                               t->starve_round, reset, condemned, t->st_peer_evicted, t->st_live);
+
+                    // Re-announce to trackers only after actual peer evacuation and at most once per 60s
+                    static u64 last_starve_announce;
+                    if ((condemned > 0 || t->starve_round >= 2) &&
+                        now - last_starve_announce > (u64)60 * t->freq) {
+                        last_starve_announce = now;
+                        t->announce_now = true;
+                    }
                 }
             }
 

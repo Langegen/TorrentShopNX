@@ -1,0 +1,605 @@
+AppTest: duration=180s magnet=magnet:?xt=urn:btih:9B71DA1883526009A2BEDEAA1A85C1007D313BD1...
+[2026-08-15 21:39:28 INF] engine start port=6882
+[2026-08-15 21:39:28 INF] [meta] tracker 0.9s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:39:28 INF] [meta] tracker 0.9s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:39:28 INF] [meta] tracker 0.9s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:39:33 INF] [meta] tracker 5.1s (failed: no connect reply) udp://tracker.opentrackr.org:1337/announce
+[2026-08-15 21:39:38 INF] [meta] tracker 5.0s (failed: no connect reply) udp://open.stealth.si:80/announce
+[2026-08-15 21:39:38 INF] [meta] tracker 0.6s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:39:41 INF] [meta] tracker 3.2s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:39:42 INF] [meta] tracker 0.9s (failed: tracker UDP OK mais 0 peer) udp://open.demonii.com:1337/announce
+[2026-08-15 21:39:47 INF] [meta] tracker 5.1s (failed: no connect reply) udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:39:48 INF] [meta] tracker 0.6s (failed: tracker UDP OK mais 0 peer) udp://explodie.org:6969/announce
+[2026-08-15 21:39:48 INF] [meta] fetching metadata from 30 tracker peers
+[2026-08-15 21:39:57 INF] [meta] metadata cached (14776 bytes)
+AppTest: probe ok, 2 files
+AppTest: selected file index=0 size=11216199743 path=Divinity Original Sin 2 Definitive Edition [010027400CDC6000][v0].nsp
+AppTest: hash=9b71da1883526009a2bedeaa1a85c1007d313bd1
+[2026-08-15 21:39:57 INF] [meta] metadata loaded from cache (14776 bytes)
+[2026-08-15 21:39:57 INF] [torrentfs] open name=Divinity Original Sin 2 Definitive Edition [NSP] file=0 size=11216199743 pieces=669 ram=1
+[2026-08-15 21:39:57 INF] [dht] background udp port=54368
+[2026-08-15 21:39:57 INF] [discovery] tracker announce start
+[2026-08-15 21:39:57 INF] [netloop] start
+AppTest: backend open ok, total=11216199743 piece=16777216
+AppTest: reading NSP header probe (4096 bytes)...
+[2026-08-15 21:39:57 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=0
+[2026-08-15 21:39:57 INF] [sess] live=0 conn=0 peak=0 pool=0 rate=0KB/s closes c=0 hs=0 idle=0 stall=0 net=0 sockfail=0
+[2026-08-15 21:39:58 INF] [torrentfs] added 30 peers (total 30)
+[2026-08-15 21:39:58 INF] [meta] tracker 0.8s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:39:58 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:39:58 INF] [meta] tracker 0.8s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:39:58 INF] [sess] handshake ok live=1/64
+[2026-08-15 21:39:59 INF] [dht] background bootstrap: 6 routers
+[2026-08-15 21:39:59 INF] [dht] background nodes=0/0 peers_found=0 rx=0/0
+[2026-08-15 21:39:59 INF] [torrentfs] starvation recovered (round 1)
+AppTest: header read got=4096 waited_ms=1756
+AppTest: prebuffer notified
+installer: waiting local prebuffer target=33554432
+[   0.8s] st=StreamingOrInstalling  dl=507.4KB/s seeds=1 peers=1 known=30 dht=16 progress= 0.00% down=  0.0MB inst=  0.0MB rb=  0MB starv=0 retries=0 | Healthy peers=1 kbps=139 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:00 INF] [dht] background nodes=16/6 peers_found=0 rx=22/3456
+[   1.6s] st=StreamingOrInstalling  dl=774.4KB/s seeds=1 peers=1 known=30 dht=22 progress= 0.00% down=  4.0MB inst=  0.0MB rb=  4MB starv=0 retries=0 | Healthy peers=1 kbps=507 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[   2.4s] st=StreamingOrInstalling  dl=869.3KB/s seeds=1 peers=1 known=30 dht=22 progress= 0.00% down=  8.0MB inst=  0.0MB rb=  8MB starv=0 retries=0 | Healthy peers=1 kbps=869 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:01 INF] [torrentfs] added 1 peers (total 31)
+[2026-08-15 21:40:02 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.opentrackr.org:1337/announce
+[   3.2s] st=StreamingOrInstalling  dl=892.1KB/s seeds=1 peers=1 known=31 dht=22 progress= 0.00% down=  8.0MB inst=  0.0MB rb=  8MB starv=0 retries=0 | Healthy peers=1 kbps=869 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[   4.1s] st=StreamingOrInstalling  dl=876.0KB/s seeds=1 peers=1 known=31 dht=22 progress= 0.00% down=  8.0MB inst=  0.0MB rb=  8MB starv=0 retries=0 | Healthy peers=1 kbps=876 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:03 INF] [dht] background nodes=18/4 peers_found=1 rx=36/5856
+[   4.9s] st=StreamingOrInstalling  dl=886.0KB/s seeds=1 peers=1 known=31 dht=23 progress= 0.00% down=  8.0MB inst=  0.0MB rb=  8MB starv=0 retries=0 | Healthy peers=1 kbps=876 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:04 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:40:04 INF] [torrentfs] starvation recovered (round 1)
+[   5.7s] st=StreamingOrInstalling  dl=921.1KB/s seeds=1 peers=1 known=31 dht=23 progress= 0.00% down=  8.0MB inst=  0.0MB rb=  8MB starv=0 retries=0 | Healthy peers=1 kbps=885 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:05 INF] [torrentfs] added 1 peers (total 32)
+collector: stats downloaded=12582912 speed=2090KB/s rb_avail=12582912 rb_free=121634816 rb_cap=134217728
+[2026-08-15 21:40:05 INF] [dht] background nodes=18/7 peers_found=2 rx=57/11227
+[   6.5s] st=StreamingOrInstalling  dl=960.4KB/s seeds=1 peers=1 known=32 dht=25 progress= 0.00% down= 12.0MB inst=  0.0MB rb= 12MB starv=0 retries=0 | Healthy peers=1 kbps=960 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:06 INF] [torrentfs] added 1 peers (total 33)
+[2026-08-15 21:40:06 INF] [torrentfs] added 2 peers (total 35)
+[2026-08-15 21:40:06 INF] [torrentfs] added 1 peers (total 36)
+[   7.3s] st=StreamingOrInstalling  dl=1009.2KB/s seeds=1 peers=1 known=36 dht=25 progress= 0.00% down= 12.0MB inst=  0.0MB rb= 12MB starv=0 retries=0 | Healthy peers=1 kbps=960 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:06 INF] [torrentfs] added 3 peers (total 39)
+[   8.1s] st=StreamingOrInstalling  dl=1038.9KB/s seeds=1 peers=1 known=39 dht=25 progress= 0.00% down= 12.0MB inst=  0.0MB rb= 12MB starv=0 retries=0 | Healthy peers=1 kbps=1009 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:07 INF] [meta] tracker 5.0s (failed: no connect reply) udp://open.stealth.si:80/announce
+[2026-08-15 21:40:08 INF] [dht] background nodes=18/7 peers_found=10 rx=67/14118
+[   8.9s] st=StreamingOrInstalling  dl=997.5KB/s seeds=1 peers=1 known=39 dht=25 progress= 0.00% down= 12.0MB inst=  0.0MB rb= 12MB starv=0 retries=0 | Healthy peers=1 kbps=1009 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[   9.7s] st=StreamingOrInstalling  dl=962.5KB/s seeds=1 peers=1 known=39 dht=25 progress= 0.00% down= 12.0MB inst=  0.0MB rb= 12MB starv=0 retries=0 | Healthy peers=1 kbps=962 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=0
+[2026-08-15 21:40:09 INF] [writer] piece 0 verified (RAM)
+[2026-08-15 21:40:09 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:40:09 INF] [torrentfs] starvation recovered (round 1)
+[  10.6s] st=StreamingOrInstalling  dl=895.5KB/s seeds=1 peers=1 known=39 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=962 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:10 INF] [meta] tracker 2.7s (1) udp://tracker.torrent.eu.org:451/announce
+[  11.4s] st=StreamingOrInstalling  dl=862.4KB/s seeds=1 peers=1 known=39 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:10 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:40:11 INF] [dht] background nodes=17/9 peers_found=10 rx=77/16732
+[2026-08-15 21:40:11 INF] [torrentfs] added 1 peers (total 40)
+[  12.2s] st=StreamingOrInstalling  dl=861.2KB/s seeds=1 peers=1 known=40 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:11 INF] [torrentfs] added 1 peers (total 41)
+[2026-08-15 21:40:11 INF] [torrentfs] added 2 peers (total 43)
+[2026-08-15 21:40:12 INF] [torrentfs] added 6 peers (total 49)
+[2026-08-15 21:40:12 INF] [torrentfs] added 2 peers (total 51)
+[  13.0s] st=StreamingOrInstalling  dl=878.7KB/s seeds=1 peers=1 known=51 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:12 INF] [sess] live=1 conn=12 peak=1 pool=51 rate=1146KB/s closes c=70 hs=0 idle=0 stall=0 net=0 sockfail=0
+[2026-08-15 21:40:13 INF] [dht] background nodes=17/9 peers_found=25 rx=128/29728
+[  13.8s] st=StreamingOrInstalling  dl=922.4KB/s seeds=1 peers=1 known=51 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:13 INF] [meta] tracker 3.2s (failed: tracker UDP OK mais 0 peer) udp://open.demonii.com:1337/announce
+[  14.6s] st=StreamingOrInstalling  dl=1002.6KB/s seeds=1 peers=1 known=51 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:14 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:40:14 INF] [torrentfs] starvation recovered (round 1)
+[  15.4s] st=StreamingOrInstalling  dl=1070.1KB/s seeds=1 peers=1 known=51 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:15 INF] [dht] background nodes=17/9 peers_found=25 rx=130/30108
+[  16.2s] st=StreamingOrInstalling  dl=1117.5KB/s seeds=1 peers=1 known=51 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  17.1s] st=StreamingOrInstalling  dl=1143.5KB/s seeds=1 peers=1 known=51 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:17 INF] [torrentfs] added 2 peers (total 53)
+[  17.9s] st=StreamingOrInstalling  dl=1079.2KB/s seeds=1 peers=1 known=53 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:17 INF] [torrentfs] added 1 peers (total 54)
+[2026-08-15 21:40:17 INF] [dht] background nodes=17/9 peers_found=29 rx=165/39623
+[2026-08-15 21:40:17 INF] [torrentfs] added 19 peers (total 73)
+[2026-08-15 21:40:17 INF] [torrentfs] added 1 peers (total 74)
+[2026-08-15 21:40:17 INF] [torrentfs] added 14 peers (total 88)
+[  18.7s] st=StreamingOrInstalling  dl=1024.0KB/s seeds=1 peers=1 known=88 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:18 INF] [torrentfs] added 29 peers (total 117)
+[  19.5s] st=StreamingOrInstalling  dl=980.7KB/s seeds=1 peers=1 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:18 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:40:19 INF] [dht] background nodes=17/9 peers_found=129 rx=183/43403
+[2026-08-15 21:40:19 INF] [meta] tracker 0.5s (failed: tracker UDP OK mais 0 peer) udp://explodie.org:6969/announce
+[2026-08-15 21:40:19 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=1
+[2026-08-15 21:40:19 INF] [torrentfs] starvation recovered (round 1)
+[  20.3s] st=StreamingOrInstalling  dl=964.8KB/s seeds=1 peers=1 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  21.1s] st=StreamingOrInstalling  dl=975.8KB/s seeds=1 peers=1 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  21.9s] st=StreamingOrInstalling  dl=901.2KB/s seeds=0 peers=0 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=0 idle=0 empty_bf=0 calm=64 done=1
+[  22.7s] st=StreamingOrInstalling  dl=828.0KB/s seeds=0 peers=0 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=0 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:22 INF] [dht] background nodes=17/9 peers_found=129 rx=206/49512
+[  23.5s] st=StreamingOrInstalling  dl=761.8KB/s seeds=0 peers=0 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=0 idle=0 empty_bf=0 calm=64 done=1
+[  24.3s] st=StreamingOrInstalling  dl=700.7KB/s seeds=0 peers=0 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=0 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:23 INF] [sess] handshake ok live=1/64
+[  25.1s] st=StreamingOrInstalling  dl=684.6KB/s seeds=1 peers=1 known=117 dht=26 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=895 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:24 WRN] [torrentfs] starvation recovery round=1: reset 1 peers, condemned 0, live=1
+[2026-08-15 21:40:24 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:40:25 WRN] [read] waited 14.9s for piece 1
+[2026-08-15 21:40:25 INF] [dht] background nodes=17/9 peers_found=129 rx=211/51005
+[2026-08-15 21:40:25 INF] [torrentfs] added 4 peers (total 121)
+[  26.0s] st=StreamingOrInstalling  dl=800.1KB/s seeds=1 peers=1 known=121 dht=32 progress= 0.15% down= 16.0MB inst=  0.0MB rb= 16MB starv=0 retries=0 | Healthy peers=1 kbps=800 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:25 INF] [sess] handshake ok live=2/64
+collector: stats downloaded=20971520 speed=403KB/s rb_avail=20971520 rb_free=113246208 rb_cap=134217728
+[  26.8s] st=StreamingOrInstalling  dl=853.9KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=1 kbps=800 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=1
+[  27.6s] st=StreamingOrInstalling  dl=819.6KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=853 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=1
+[  28.4s] st=StreamingOrInstalling  dl=819.4KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:27 INF] [dht] background nodes=17/15 peers_found=139 rx=214/51558
+[2026-08-15 21:40:27 INF] [sess] live=2 conn=0 peak=2 pool=121 rate=909KB/s closes c=273 hs=0 idle=0 stall=0 net=1 sockfail=0
+[  29.2s] st=StreamingOrInstalling  dl=806.3KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  30.0s] st=StreamingOrInstalling  dl=791.3KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:30 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2
+[2026-08-15 21:40:30 INF] [torrentfs] starvation recovered (round 1)
+[  30.8s] st=StreamingOrInstalling  dl=781.4KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:30 INF] [dht] background nodes=17/15 peers_found=139 rx=240/58455
+[  31.6s] st=StreamingOrInstalling  dl=783.4KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  32.4s] st=StreamingOrInstalling  dl=798.5KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  33.3s] st=StreamingOrInstalling  dl=818.4KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  34.1s] st=StreamingOrInstalling  dl=849.5KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:33 INF] [dht] background nodes=17/15 peers_found=149 rx=247/60107
+[  34.9s] st=StreamingOrInstalling  dl=889.4KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:34 INF] [discovery] tracker announce start
+[  35.7s] st=StreamingOrInstalling  dl=935.4KB/s seeds=2 peers=2 known=121 dht=32 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:35 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2
+[2026-08-15 21:40:35 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:40:35 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:40:35 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:40:35 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[  36.5s] st=StreamingOrInstalling  dl=988.9KB/s seeds=2 peers=2 known=121 dht=36 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:36 INF] [dht] background nodes=17/19 peers_found=149 rx=253/61515
+[  37.3s] st=StreamingOrInstalling  dl=1048.2KB/s seeds=2 peers=2 known=121 dht=36 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  38.1s] st=StreamingOrInstalling  dl=1139.1KB/s seeds=2 peers=2 known=121 dht=36 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:37 INF] [torrentfs] added 1 peers (total 122)
+[  38.9s] st=StreamingOrInstalling  dl=1196.5KB/s seeds=2 peers=2 known=122 dht=40 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[  39.7s] st=StreamingOrInstalling  dl=1187.1KB/s seeds=2 peers=2 known=122 dht=40 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:39 INF] [dht] background nodes=19/21 peers_found=150 rx=269/64471
+[2026-08-15 21:40:39 INF] [meta] tracker cooldown 600s: udp://tracker.opentrackr.org:1337/announce
+[2026-08-15 21:40:39 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.opentrackr.org:1337/announce
+[  40.5s] st=StreamingOrInstalling  dl=1171.9KB/s seeds=2 peers=2 known=122 dht=40 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:40 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2
+[2026-08-15 21:40:40 INF] [torrentfs] starvation recovered (round 1)
+[  41.4s] st=StreamingOrInstalling  dl=1164.8KB/s seeds=2 peers=2 known=122 dht=47 progress= 0.15% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=819 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=1
+[2026-08-15 21:40:40 INF] [writer] piece 668 verified (RAM)
+[2026-08-15 21:40:40 WRN] [read] waited 12.9s for piece 1
+[2026-08-15 21:40:41 INF] [dht] background nodes=23/26 peers_found=150 rx=279/67565
+[  42.2s] st=StreamingOrInstalling  dl=1157.9KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.30% down= 28.0MB inst=  0.0MB rb= 28MB starv=0 retries=0 | Healthy peers=2 kbps=1164 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=2
+[2026-08-15 21:40:41 INF] [writer] piece 1 verified (RAM)
+collector: stats downloaded=33554432 speed=748KB/s rb_avail=33554432 rb_free=100663296 rb_cap=134217728
+installer: local prebuffer ready available=33554432
+[  43.0s] st=StreamingOrInstalling  dl=1142.5KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.45% down= 32.0MB inst= 32.0MB rb=  0MB starv=0 retries=0 | Healthy peers=2 kbps=1157 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[2026-08-15 21:40:43 INF] [sess] live=2 conn=4 peak=2 pool=122 rate=1191KB/s closes c=385 hs=0 idle=0 stall=0 net=1 sockfail=0
+[  43.8s] st=StreamingOrInstalling  dl=1146.2KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.45% down= 32.0MB inst= 32.0MB rb=  0MB starv=0 retries=0 | Healthy peers=2 kbps=1157 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[  44.6s] st=StreamingOrInstalling  dl=1161.6KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.45% down= 32.0MB inst= 32.0MB rb=  0MB starv=0 retries=0 | Healthy peers=2 kbps=1146 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[2026-08-15 21:40:44 INF] [dht] background nodes=23/26 peers_found=150 rx=285/68591
+[2026-08-15 21:40:44 INF] [meta] tracker cooldown 600s: udp://open.stealth.si:80/announce
+[2026-08-15 21:40:44 INF] [meta] tracker 5.0s (failed: no connect reply) udp://open.stealth.si:80/announce
+[  45.4s] st=StreamingOrInstalling  dl=1185.8KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.45% down= 32.0MB inst= 32.0MB rb=  0MB starv=0 retries=0 | Healthy peers=2 kbps=1161 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+installer: buffer wait wait_ms=3081 got=4194304 rb_avail=0 downloaded=37748736 installed=33554432 starvation_total=1
+[2026-08-15 21:40:45 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2
+[2026-08-15 21:40:45 INF] [torrentfs] starvation recovered (round 1)
+[  46.2s] st=StreamingOrInstalling  dl=1198.6KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.45% down= 36.0MB inst= 36.0MB rb=  0MB starv=1 retries=0 | Healthy peers=2 kbps=1198 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[  47.0s] st=StreamingOrInstalling  dl=1246.5KB/s seeds=2 peers=2 known=122 dht=49 progress= 0.45% down= 36.0MB inst= 36.0MB rb=  0MB starv=1 retries=0 | Healthy peers=2 kbps=1246 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[2026-08-15 21:40:46 INF] [dht] background nodes=24/25 peers_found=150 rx=289/69495
+[2026-08-15 21:40:47 INF] [torrentfs] added 1 peers (total 123)
+[2026-08-15 21:40:47 INF] [torrentfs] added 2 peers (total 125)
+[  47.8s] st=StreamingOrInstalling  dl=1290.7KB/s seeds=2 peers=2 known=125 dht=51 progress= 0.45% down= 36.0MB inst= 36.0MB rb=  0MB starv=1 retries=0 | Healthy peers=2 kbps=1246 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[2026-08-15 21:40:47 INF] [torrentfs] added 1 peers (total 126)
+[2026-08-15 21:40:47 INF] [sess] handshake ok live=3/64
+installer: buffer wait wait_ms=2436 got=4194304 rb_avail=0 downloaded=41943040 installed=37748736 starvation_total=2
+collector: stats downloaded=41943040 speed=1458KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=41943040 install_speed=7415KB/s downloaded=41943040 source_speed=7415KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[  48.6s] st=StreamingOrInstalling  dl=1336.3KB/s seeds=2 peers=3 known=126 dht=51 progress= 0.45% down= 40.0MB inst= 40.0MB rb=  0MB starv=2 retries=0 | Healthy peers=3 kbps=1290 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=3
+[  49.4s] st=StreamingOrInstalling  dl=1325.3KB/s seeds=1 peers=2 known=126 dht=51 progress= 0.45% down= 40.0MB inst= 40.0MB rb=  0MB starv=2 retries=0 | Healthy peers=2 kbps=1336 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=3
+[2026-08-15 21:40:49 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.torrent.eu.org:451/announce
+[  50.3s] st=StreamingOrInstalling  dl=1311.1KB/s seeds=1 peers=2 known=126 dht=51 progress= 0.45% down= 40.0MB inst= 40.0MB rb=  0MB starv=2 retries=0 | Healthy peers=2 kbps=1311 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=3
+[2026-08-15 21:40:49 INF] [dht] background nodes=26/25 peers_found=216 rx=307/74544
+[2026-08-15 21:40:50 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[  51.1s] st=StreamingOrInstalling  dl=1295.4KB/s seeds=1 peers=2 known=126 dht=51 progress= 0.45% down= 40.0MB inst= 40.0MB rb=  0MB starv=2 retries=0 | Healthy peers=2 kbps=1311 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=3
+[2026-08-15 21:40:50 WRN] [torrentfs] starvation recovery round=1: reset 1 peers, condemned 0, live=2
+[2026-08-15 21:40:50 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:40:50 INF] [sess] handshake ok live=3/64
+installer: buffer wait wait_ms=3222 got=4194304 rb_avail=0 downloaded=46137344 installed=41943040 starvation_total=3
+[2026-08-15 21:40:50 INF] [meta] tracker cooldown 600s: udp://open.demonii.com:1337/announce
+[2026-08-15 21:40:50 INF] [meta] tracker 0.7s (failed: tracker UDP OK mais 0 peer) udp://open.demonii.com:1337/announce
+[  51.9s] st=StreamingOrInstalling  dl=1292.6KB/s seeds=2 peers=3 known=126 dht=52 progress= 0.45% down= 44.0MB inst= 44.0MB rb=  0MB starv=3 retries=0 | Healthy peers=2 kbps=1295 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=3
+[2026-08-15 21:40:51 INF] [dht] background nodes=27/26 peers_found=216 rx=311/75248
+[  52.7s] st=StreamingOrInstalling  dl=1294.5KB/s seeds=2 peers=2 known=126 dht=54 progress= 0.45% down= 44.0MB inst= 44.0MB rb=  0MB starv=3 retries=0 | Healthy peers=3 kbps=1292 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[  53.5s] st=StreamingOrInstalling  dl=1301.1KB/s seeds=2 peers=2 known=126 dht=54 progress= 0.45% down= 44.0MB inst= 44.0MB rb=  0MB starv=3 retries=0 | Healthy peers=2 kbps=1294 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=3
+[2026-08-15 21:40:53 INF] [torrentfs] added 1 peers (total 127)
+[  54.3s] st=StreamingOrInstalling  dl=1310.0KB/s seeds=2 peers=2 known=127 dht=65 progress= 0.45% down= 44.0MB inst= 44.0MB rb=  0MB starv=3 retries=0 | Healthy peers=2 kbps=1310 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=3
+[2026-08-15 21:40:53 INF] [writer] piece 2 verified (RAM)
+[2026-08-15 21:40:53 INF] [dht] background nodes=34/37 peers_found=218 rx=331/78115
+collector: stats downloaded=50331648 speed=1302KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=3067 got=4194304 rb_avail=0 downloaded=50331648 installed=46137344 starvation_total=4
+installer: stats installed=50331648 install_speed=1302KB/s downloaded=50331648 source_speed=1302KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[  55.1s] st=StreamingOrInstalling  dl=1337.0KB/s seeds=2 peers=2 known=127 dht=73 progress= 0.60% down= 48.0MB inst= 48.0MB rb=  0MB starv=4 retries=0 | Healthy peers=2 kbps=1310 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=4
+[  55.9s] st=StreamingOrInstalling  dl=1462.7KB/s seeds=2 peers=2 known=127 dht=73 progress= 0.60% down= 48.0MB inst= 48.0MB rb=  0MB starv=4 retries=0 | Healthy peers=2 kbps=1336 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=4
+[2026-08-15 21:40:55 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2
+[2026-08-15 21:40:55 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:40:55 INF] [meta] tracker cooldown 600s: udp://tracker.openbittorrent.com:6969/announce
+[2026-08-15 21:40:55 INF] [meta] tracker 5.0s (failed: no connect reply) udp://tracker.openbittorrent.com:6969/announce
+installer: buffer wait wait_ms=2242 got=4194304 rb_avail=0 downloaded=54525952 installed=50331648 starvation_total=5
+[  56.8s] st=StreamingOrInstalling  dl=1566.2KB/s seeds=2 peers=2 known=127 dht=73 progress= 0.60% down= 52.0MB inst= 52.0MB rb=  0MB starv=5 retries=0 | Healthy peers=2 kbps=1462 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=4
+[2026-08-15 21:40:56 INF] [meta] tracker cooldown 600s: udp://explodie.org:6969/announce
+[2026-08-15 21:40:56 INF] [meta] tracker 0.5s (failed: tracker UDP OK mais 0 peer) udp://explodie.org:6969/announce
+[2026-08-15 21:40:56 INF] [sess] handshake ok live=3/64
+[2026-08-15 21:40:56 INF] [dht] background nodes=40/33 peers_found=227 rx=343/80403
+[  57.6s] st=StreamingOrInstalling  dl=1571.1KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 52.0MB inst= 52.0MB rb=  0MB starv=5 retries=0 | Healthy peers=3 kbps=1571 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=4
+[  58.4s] st=StreamingOrInstalling  dl=1564.7KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 52.0MB inst= 52.0MB rb=  0MB starv=5 retries=0 | Healthy peers=3 kbps=1571 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=4
+[2026-08-15 21:40:58 INF] [sess] live=3 conn=13 peak=3 pool=127 rate=1445KB/s closes c=439 hs=0 idle=1 stall=0 net=2 sockfail=0
+[  59.2s] st=StreamingOrInstalling  dl=1543.3KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 52.0MB inst= 52.0MB rb=  0MB starv=5 retries=0 | Healthy peers=3 kbps=1564 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=4
+collector: stats downloaded=58720256 speed=1500KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=3217 got=4194304 rb_avail=0 downloaded=58720256 installed=54525952 starvation_total=6
+installer: stats installed=58720256 install_speed=1500KB/s downloaded=58720256 source_speed=1500KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[2026-08-15 21:40:59 INF] [dht] background nodes=40/33 peers_found=227 rx=344/80471
+[  60.0s] st=StreamingOrInstalling  dl=1536.9KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 56.0MB inst= 56.0MB rb=  0MB starv=6 retries=0 | Healthy peers=3 kbps=1536 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=4
+[  60.8s] st=StreamingOrInstalling  dl=1511.7KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 56.0MB inst= 56.0MB rb=  0MB starv=6 retries=0 | Healthy peers=3 kbps=1511 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=4
+[  61.6s] st=StreamingOrInstalling  dl=1475.0KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 56.0MB inst= 56.0MB rb=  0MB starv=6 retries=0 | Healthy peers=3 kbps=1511 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=4
+installer: buffer wait wait_ms=1776 got=4194304 rb_avail=0 downloaded=62914560 installed=58720256 starvation_total=7
+[2026-08-15 21:41:01 INF] [dht] background nodes=40/33 peers_found=281 rx=360/83310
+[  62.4s] st=StreamingOrInstalling  dl=1470.5KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 60.0MB inst= 60.0MB rb=  0MB starv=7 retries=0 | Healthy peers=3 kbps=1475 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=4
+[  63.2s] st=StreamingOrInstalling  dl=1470.5KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 60.0MB inst= 60.0MB rb=  0MB starv=7 retries=0 | Healthy peers=3 kbps=1470 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=4
+[  64.0s] st=StreamingOrInstalling  dl=1449.4KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.60% down= 60.0MB inst= 60.0MB rb=  0MB starv=7 retries=0 | Healthy peers=3 kbps=1470 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=4
+[2026-08-15 21:41:04 INF] [writer] piece 3 verified (RAM)
+installer: buffer wait wait_ms=2970 got=4194304 rb_avail=0 downloaded=67108864 installed=62914560 starvation_total=8
+[  64.8s] st=StreamingOrInstalling  dl=1405.3KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.75% down= 64.0MB inst= 64.0MB rb=  0MB starv=8 retries=0 | Healthy peers=3 kbps=1449 bad_ticks=0 stage=0 | claim=0 idle=1 empty_bf=1 calm=64 done=5
+[2026-08-15 21:41:04 INF] [dht] background nodes=40/33 peers_found=281 rx=368/85789
+[  65.7s] st=StreamingOrInstalling  dl=1382.5KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.75% down= 64.0MB inst= 64.0MB rb=  0MB starv=8 retries=0 | Healthy peers=3 kbps=1382 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=5
+[  66.5s] st=StreamingOrInstalling  dl=1400.5KB/s seeds=2 peers=3 known=127 dht=73 progress= 0.75% down= 64.0MB inst= 64.0MB rb=  0MB starv=8 retries=0 | Healthy peers=3 kbps=1382 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=5
+[2026-08-15 21:41:05 INF] [torrentfs] added 1 peers (total 128)
+[2026-08-15 21:41:05 INF] [torrentfs] added 1 peers (total 129)
+[2026-08-15 21:41:06 INF] [dht] background nodes=40/33 peers_found=284 rx=390/89051
+[  67.3s] st=StreamingOrInstalling  dl=1432.1KB/s seeds=2 peers=3 known=129 dht=73 progress= 0.75% down= 64.0MB inst= 64.0MB rb=  0MB starv=8 retries=0 | Healthy peers=3 kbps=1400 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=5
+collector: stats downloaded=71303168 speed=1625KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=2810 got=4194304 rb_avail=0 downloaded=71303168 installed=67108864 starvation_total=9
+installer: stats installed=71303168 install_speed=1625KB/s downloaded=71303168 source_speed=1625KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[  68.1s] st=StreamingOrInstalling  dl=1481.6KB/s seeds=2 peers=3 known=129 dht=77 progress= 0.75% down= 68.0MB inst= 68.0MB rb=  0MB starv=9 retries=0 | Healthy peers=3 kbps=1432 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=5
+[2026-08-15 21:41:07 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 0, live=2
+[2026-08-15 21:41:07 INF] [torrentfs] starvation recovered (round 1)
+[  68.9s] st=StreamingOrInstalling  dl=1519.5KB/s seeds=2 peers=2 known=129 dht=77 progress= 0.75% down= 68.0MB inst= 68.0MB rb=  0MB starv=9 retries=0 | Healthy peers=3 kbps=1432 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=5
+[2026-08-15 21:41:08 INF] [dht] background nodes=42/35 peers_found=292 rx=401/92045
+[  69.7s] st=StreamingOrInstalling  dl=1450.1KB/s seeds=1 peers=1 known=129 dht=77 progress= 0.75% down= 68.0MB inst= 68.0MB rb=  0MB starv=9 retries=0 | Healthy peers=1 kbps=1519 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=5
+[  70.5s] st=StreamingOrInstalling  dl=1388.5KB/s seeds=1 peers=1 known=129 dht=77 progress= 0.75% down= 68.0MB inst= 68.0MB rb=  0MB starv=9 retries=0 | Healthy peers=1 kbps=1519 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=5
+installer: buffer wait wait_ms=3275 got=4194304 rb_avail=0 downloaded=75497472 installed=71303168 starvation_total=10
+[2026-08-15 21:41:10 INF] [dht] background nodes=41/36 peers_found=292 rx=419/94947
+[  71.3s] st=StreamingOrInstalling  dl=1340.2KB/s seeds=1 peers=1 known=129 dht=77 progress= 0.75% down= 72.0MB inst= 72.0MB rb=  0MB starv=10 retries=0 | Healthy peers=1 kbps=1388 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=5
+[2026-08-15 21:41:11 INF] [discovery] tracker announce start
+[  72.1s] st=StreamingOrInstalling  dl=1296.7KB/s seeds=1 peers=1 known=129 dht=77 progress= 0.75% down= 72.0MB inst= 72.0MB rb=  0MB starv=10 retries=0 | Healthy peers=1 kbps=1340 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=5
+[2026-08-15 21:41:12 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:41:12 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:41:12 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[  72.9s] st=StreamingOrInstalling  dl=1267.0KB/s seeds=1 peers=1 known=129 dht=77 progress= 0.75% down= 72.0MB inst= 72.0MB rb=  0MB starv=10 retries=0 | Healthy peers=1 kbps=1340 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=5
+[2026-08-15 21:41:12 INF] [meta] tracker 0.3s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:41:12 INF] [torrentfs] added 1 peers (total 130)
+[2026-08-15 21:41:12 INF] [sess] handshake ok live=2/64
+[2026-08-15 21:41:12 WRN] [torrentfs] starvation recovery round=1: reset 1 peers, condemned 0, live=2
+[2026-08-15 21:41:12 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:41:12 INF] [torrentfs] added 7 peers (total 137)
+[2026-08-15 21:41:12 INF] [dht] background nodes=41/36 peers_found=393 rx=426/96984
+[2026-08-15 21:41:12 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:41:12 INF] [sess] handshake ok live=3/64
+[  73.8s] st=StreamingOrInstalling  dl=1246.0KB/s seeds=2 peers=3 known=137 dht=77 progress= 0.75% down= 72.0MB inst= 72.0MB rb=  0MB starv=10 retries=0 | Healthy peers=1 kbps=1266 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=5
+[2026-08-15 21:41:13 INF] [sess] live=3 conn=10 peak=3 pool=137 rate=1122KB/s closes c=494 hs=0 idle=1 stall=0 net=4 sockfail=0
+[  74.6s] st=StreamingOrInstalling  dl=1277.0KB/s seeds=2 peers=3 known=137 dht=77 progress= 0.75% down= 72.0MB inst= 72.0MB rb=  0MB starv=10 retries=0 | Healthy peers=3 kbps=1277 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=5
+collector: stats downloaded=79691776 speed=1089KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=4241 got=4194304 rb_avail=0 downloaded=79691776 installed=75497472 starvation_total=11
+installer: stats installed=79691776 install_speed=1089KB/s downloaded=79691776 source_speed=1089KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[  75.4s] st=StreamingOrInstalling  dl=1345.4KB/s seeds=2 peers=3 known=137 dht=77 progress= 0.75% down= 76.0MB inst= 76.0MB rb=  0MB starv=11 retries=0 | Healthy peers=3 kbps=1277 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=5
+[2026-08-15 21:41:15 INF] [dht] background nodes=41/36 peers_found=393 rx=426/96984
+[  76.2s] st=StreamingOrInstalling  dl=1375.1KB/s seeds=2 peers=3 known=137 dht=77 progress= 0.75% down= 76.0MB inst= 76.0MB rb=  0MB starv=11 retries=0 | Healthy peers=3 kbps=1345 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=5
+[  77.0s] st=StreamingOrInstalling  dl=1373.7KB/s seeds=2 peers=3 known=137 dht=79 progress= 0.75% down= 76.0MB inst= 76.0MB rb=  0MB starv=11 retries=0 | Healthy peers=3 kbps=1375 bad_ticks=0 stage=0 | claim=0 idle=1 empty_bf=1 calm=64 done=5
+[2026-08-15 21:41:16 INF] [writer] piece 4 verified (RAM)
+installer: buffer wait wait_ms=1999 got=4194304 rb_avail=0 downloaded=83886080 installed=79691776 starvation_total=12
+[  77.8s] st=StreamingOrInstalling  dl=1328.1KB/s seeds=2 peers=3 known=137 dht=84 progress= 0.90% down= 80.0MB inst= 80.0MB rb=  0MB starv=12 retries=0 | Healthy peers=3 kbps=1328 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[2026-08-15 21:41:17 INF] [dht] background nodes=42/43 peers_found=393 rx=442/100202
+[  78.6s] st=StreamingOrInstalling  dl=1304.8KB/s seeds=2 peers=3 known=137 dht=85 progress= 0.90% down= 80.0MB inst= 80.0MB rb=  0MB starv=12 retries=0 | Healthy peers=3 kbps=1328 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[  79.4s] st=StreamingOrInstalling  dl=1274.0KB/s seeds=2 peers=3 known=137 dht=85 progress= 0.90% down= 80.0MB inst= 80.0MB rb=  0MB starv=12 retries=0 | Healthy peers=3 kbps=1304 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[  80.2s] st=StreamingOrInstalling  dl=1255.2KB/s seeds=2 peers=3 known=137 dht=85 progress= 0.90% down= 80.0MB inst= 80.0MB rb=  0MB starv=12 retries=0 | Healthy peers=3 kbps=1273 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[2026-08-15 21:41:19 INF] [dht] background nodes=43/42 peers_found=393 rx=444/100577
+[  81.1s] st=StreamingOrInstalling  dl=1245.1KB/s seeds=2 peers=3 known=137 dht=85 progress= 0.90% down= 80.0MB inst= 80.0MB rb=  0MB starv=12 retries=0 | Healthy peers=3 kbps=1245 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+collector: stats downloaded=88080384 speed=1343KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=4100 got=4194304 rb_avail=0 downloaded=88080384 installed=83886080 starvation_total=13
+installer: stats installed=88080384 install_speed=1343KB/s downloaded=88080384 source_speed=1343KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[  81.9s] st=StreamingOrInstalling  dl=1237.7KB/s seeds=2 peers=3 known=137 dht=85 progress= 0.90% down= 84.0MB inst= 84.0MB rb=  0MB starv=13 retries=0 | Healthy peers=3 kbps=1245 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[  82.7s] st=StreamingOrInstalling  dl=1235.2KB/s seeds=2 peers=3 known=137 dht=85 progress= 0.90% down= 84.0MB inst= 84.0MB rb=  0MB starv=13 retries=0 | Healthy peers=3 kbps=1237 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[2026-08-15 21:41:22 INF] [dht] background nodes=43/42 peers_found=403 rx=448/101904
+[  83.5s] st=StreamingOrInstalling  dl=1238.5KB/s seeds=2 peers=3 known=137 dht=86 progress= 0.90% down= 84.0MB inst= 84.0MB rb=  0MB starv=13 retries=0 | Healthy peers=3 kbps=1235 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[  84.3s] st=StreamingOrInstalling  dl=1248.5KB/s seeds=2 peers=3 known=137 dht=86 progress= 0.90% down= 84.0MB inst= 84.0MB rb=  0MB starv=13 retries=0 | Healthy peers=3 kbps=1248 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+installer: buffer wait wait_ms=3221 got=4194304 rb_avail=0 downloaded=92274688 installed=88080384 starvation_total=14
+[2026-08-15 21:41:24 INF] [dht] background nodes=42/44 peers_found=403 rx=459/104551
+[  85.1s] st=StreamingOrInstalling  dl=1269.7KB/s seeds=2 peers=3 known=137 dht=86 progress= 0.90% down= 88.0MB inst= 88.0MB rb=  0MB starv=14 retries=0 | Healthy peers=3 kbps=1248 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[  85.9s] st=StreamingOrInstalling  dl=1301.3KB/s seeds=2 peers=3 known=137 dht=86 progress= 0.90% down= 88.0MB inst= 88.0MB rb=  0MB starv=14 retries=0 | Healthy peers=3 kbps=1269 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=6
+[2026-08-15 21:41:25 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 30, live=2
+[2026-08-15 21:41:25 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:41:25 INF] [discovery] tracker announce start
+[  86.7s] st=StreamingOrInstalling  dl=1323.6KB/s seeds=2 peers=2 known=137 dht=86 progress= 0.90% down= 88.0MB inst= 88.0MB rb=  0MB starv=14 retries=0 | Healthy peers=3 kbps=1301 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=6
+collector: stats downloaded=96468992 speed=1365KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=2779 got=4194304 rb_avail=0 downloaded=96468992 installed=92274688 starvation_total=15
+installer: stats installed=96468992 install_speed=1365KB/s downloaded=96468992 source_speed=1365KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[2026-08-15 21:41:26 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:41:26 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:41:26 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:41:26 INF] [dht] background nodes=44/42 peers_found=403 rx=462/104974
+[  87.5s] st=StreamingOrInstalling  dl=1308.6KB/s seeds=2 peers=2 known=137 dht=86 progress= 0.90% down= 92.0MB inst= 92.0MB rb=  0MB starv=15 retries=0 | Healthy peers=2 kbps=1308 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=6
+[2026-08-15 21:41:26 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[  88.3s] st=StreamingOrInstalling  dl=1271.1KB/s seeds=2 peers=2 known=137 dht=86 progress= 0.90% down= 92.0MB inst= 92.0MB rb=  0MB starv=15 retries=0 | Healthy peers=2 kbps=1308 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=6
+[  89.1s] st=StreamingOrInstalling  dl=1255.6KB/s seeds=2 peers=2 known=137 dht=86 progress= 0.90% down= 92.0MB inst= 92.0MB rb=  0MB starv=15 retries=0 | Healthy peers=2 kbps=1271 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=6
+[2026-08-15 21:41:28 INF] [sess] live=2 conn=0 peak=3 pool=137 rate=1038KB/s closes c=556 hs=0 idle=1 stall=0 net=5 sockfail=0
+[2026-08-15 21:41:29 INF] [dht] background nodes=44/42 peers_found=403 rx=462/104974
+[  90.0s] st=StreamingOrInstalling  dl=1246.6KB/s seeds=2 peers=2 known=137 dht=86 progress= 0.90% down= 92.0MB inst= 92.0MB rb=  0MB starv=15 retries=0 | Healthy peers=2 kbps=1255 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=6
+[2026-08-15 21:41:29 INF] [torrentfs] added 1 peers (total 138)
+[2026-08-15 21:41:29 INF] [meta] tracker 3.0s (1) udp://exodus.desync.com:6969/announce
+[  90.8s] st=StreamingOrInstalling  dl=1244.5KB/s seeds=2 peers=2 known=138 dht=87 progress= 0.90% down= 92.0MB inst= 92.0MB rb=  0MB starv=15 retries=0 | Healthy peers=2 kbps=1246 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=6
+[2026-08-15 21:41:30 INF] [writer] piece 5 verified (RAM)
+installer: buffer wait wait_ms=3790 got=4194304 rb_avail=0 downloaded=100663296 installed=96468992 starvation_total=16
+[2026-08-15 21:41:30 INF] [sess] handshake ok live=3/64
+[  91.6s] st=StreamingOrInstalling  dl=1220.1KB/s seeds=2 peers=3 known=138 dht=87 progress= 1.05% down= 96.0MB inst= 96.0MB rb=  0MB starv=16 retries=0 | Healthy peers=3 kbps=1220 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=7
+[  92.4s] st=StreamingOrInstalling  dl=1231.4KB/s seeds=2 peers=3 known=138 dht=87 progress= 1.05% down= 96.0MB inst= 96.0MB rb=  0MB starv=16 retries=0 | Healthy peers=3 kbps=1220 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:32 INF] [dht] background nodes=47/40 peers_found=414 rx=506/115233
+[  93.2s] st=StreamingOrInstalling  dl=1253.0KB/s seeds=2 peers=3 known=138 dht=87 progress= 1.05% down= 96.0MB inst= 96.0MB rb=  0MB starv=16 retries=0 | Healthy peers=3 kbps=1231 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+collector: stats downloaded=104857600 speed=1206KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=3001 got=4194304 rb_avail=0 downloaded=104857600 installed=100663296 starvation_total=17
+installer: stats installed=104857600 install_speed=1206KB/s downloaded=104857600 source_speed=1206KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[  94.0s] st=StreamingOrInstalling  dl=1276.2KB/s seeds=2 peers=3 known=138 dht=87 progress= 1.05% down=100.0MB inst=100.0MB rb=  0MB starv=17 retries=0 | Healthy peers=3 kbps=1252 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[  94.8s] st=StreamingOrInstalling  dl=1313.3KB/s seeds=2 peers=3 known=138 dht=87 progress= 1.05% down=100.0MB inst=100.0MB rb=  0MB starv=17 retries=0 | Healthy peers=3 kbps=1252 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:34 INF] [dht] background nodes=47/40 peers_found=414 rx=506/115233
+[2026-08-15 21:41:34 INF] [torrentfs] added 1 peers (total 139)
+[  95.6s] st=StreamingOrInstalling  dl=1355.1KB/s seeds=2 peers=3 known=139 dht=88 progress= 1.05% down=100.0MB inst=100.0MB rb=  0MB starv=17 retries=0 | Healthy peers=3 kbps=1313 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:35 INF] [torrentfs] added 1 peers (total 140)
+[2026-08-15 21:41:35 INF] [torrentfs] added 1 peers (total 141)
+[2026-08-15 21:41:35 INF] [torrentfs] added 5 peers (total 146)
+installer: buffer wait wait_ms=2258 got=4194304 rb_avail=0 downloaded=109051904 installed=104857600 starvation_total=18
+[  96.4s] st=StreamingOrInstalling  dl=1406.3KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.05% down=104.0MB inst=104.0MB rb=  0MB starv=18 retries=0 | Healthy peers=3 kbps=1355 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:36 WRN] [torrentfs] starvation recovery round=1: reset 1 peers, condemned 20, live=2
+[2026-08-15 21:41:36 INF] [torrentfs] starvation recovered (round 1)
+[  97.3s] st=StreamingOrInstalling  dl=1465.9KB/s seeds=1 peers=2 known=146 dht=92 progress= 1.05% down=104.0MB inst=104.0MB rb=  0MB starv=18 retries=0 | Healthy peers=2 kbps=1465 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:36 INF] [sess] handshake ok live=3/64
+[2026-08-15 21:41:36 INF] [discovery] tracker announce start
+installer: buffer wait wait_ms=1747 got=4194304 rb_avail=0 downloaded=113246208 installed=109051904 starvation_total=19
+[  98.1s] st=StreamingOrInstalling  dl=1538.9KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.05% down=108.0MB inst=108.0MB rb=  0MB starv=19 retries=0 | Healthy peers=2 kbps=1465 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:37 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:41:37 INF] [meta] tracker 0.9s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:41:37 INF] [dht] background nodes=55/37 peers_found=517 rx=535/121119
+[2026-08-15 21:41:38 INF] [meta] tracker 1.2s (30) http://bt2.t-ru.org/ann?magnet
+[  98.9s] st=StreamingOrInstalling  dl=1512.0KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.05% down=108.0MB inst=108.0MB rb=  0MB starv=19 retries=0 | Healthy peers=3 kbps=1511 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:38 INF] [meta] tracker 0.3s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:41:38 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[  99.7s] st=StreamingOrInstalling  dl=1497.2KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.05% down=108.0MB inst=108.0MB rb=  0MB starv=19 retries=0 | Healthy peers=3 kbps=1497 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[ 100.5s] st=StreamingOrInstalling  dl=1497.1KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.05% down=108.0MB inst=108.0MB rb=  0MB starv=19 retries=0 | Healthy peers=3 kbps=1497 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=7
+[2026-08-15 21:41:40 INF] [writer] piece 6 verified (RAM)
+collector: stats downloaded=117440512 speed=1731KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=3092 got=4194304 rb_avail=0 downloaded=117440512 installed=113246208 starvation_total=20
+installer: stats installed=117440512 install_speed=1731KB/s downloaded=117440512 source_speed=1731KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[2026-08-15 21:41:40 INF] [dht] background nodes=54/38 peers_found=517 rx=535/121119
+[ 101.3s] st=StreamingOrInstalling  dl=1478.2KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.20% down=112.0MB inst=112.0MB rb=  0MB starv=20 retries=0 | Healthy peers=3 kbps=1497 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=8
+[ 102.1s] st=StreamingOrInstalling  dl=1480.4KB/s seeds=2 peers=3 known=146 dht=92 progress= 1.20% down=112.0MB inst=112.0MB rb=  0MB starv=20 retries=0 | Healthy peers=3 kbps=1478 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=8
+[2026-08-15 21:41:42 INF] [torrentfs] added 1 peers (total 147)
+[ 102.9s] st=StreamingOrInstalling  dl=1450.1KB/s seeds=2 peers=3 known=147 dht=95 progress= 1.20% down=112.0MB inst=112.0MB rb=  0MB starv=20 retries=0 | Healthy peers=3 kbps=1478 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=1 calm=64 done=8
+[2026-08-15 21:41:42 INF] [dht] background nodes=59/36 peers_found=572 rx=554/124986
+[ 103.7s] st=StreamingOrInstalling  dl=1401.7KB/s seeds=2 peers=3 known=147 dht=95 progress= 1.20% down=112.0MB inst=112.0MB rb=  0MB starv=20 retries=0 | Healthy peers=3 kbps=1450 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=8
+[2026-08-15 21:41:43 INF] [sess] live=3 conn=9 peak=3 pool=147 rate=2642KB/s closes c=651 hs=0 idle=2 stall=0 net=5 sockfail=0
+[ 104.5s] st=StreamingOrInstalling  dl=1524.2KB/s seeds=2 peers=3 known=147 dht=95 progress= 1.20% down=112.0MB inst=112.0MB rb=  0MB starv=20 retries=0 | Healthy peers=3 kbps=1524 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=8
+[2026-08-15 21:41:44 INF] [dht] background nodes=60/35 peers_found=572 rx=572/129567
+[ 105.4s] st=StreamingOrInstalling  dl=1821.6KB/s seeds=2 peers=3 known=147 dht=95 progress= 1.20% down=116.0MB inst=112.0MB rb=  4MB starv=20 retries=0 | Healthy peers=3 kbps=1524 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=8
+installer: buffer wait wait_ms=4331 got=4194304 rb_avail=0 downloaded=121634816 installed=117440512 starvation_total=21
+[ 106.2s] st=StreamingOrInstalling  dl=1909.8KB/s seeds=2 peers=3 known=147 dht=95 progress= 1.20% down=116.0MB inst=116.0MB rb=  0MB starv=21 retries=0 | Healthy peers=3 kbps=1821 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=8
+[ 107.0s] st=StreamingOrInstalling  dl=1913.8KB/s seeds=2 peers=3 known=147 dht=99 progress= 1.20% down=116.0MB inst=116.0MB rb=  0MB starv=21 retries=0 | Healthy peers=3 kbps=1913 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=8
+collector: stats downloaded=125829120 speed=1270KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=2118 got=4194304 rb_avail=0 downloaded=125829120 installed=121634816 starvation_total=22
+installer: stats installed=125829120 install_speed=1270KB/s downloaded=125829120 source_speed=1270KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 107.8s] st=StreamingOrInstalling  dl=1888.4KB/s seeds=2 peers=3 known=147 dht=99 progress= 1.20% down=120.0MB inst=120.0MB rb=  0MB starv=22 retries=0 | Healthy peers=3 kbps=1888 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=8
+[2026-08-15 21:41:47 INF] [dht] background nodes=65/34 peers_found=572 rx=580/131012
+[2026-08-15 21:41:47 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 32, live=2
+[2026-08-15 21:41:47 INF] [torrentfs] starvation recovered (round 1)
+installer: buffer wait wait_ms=718 got=4194304 rb_avail=0 downloaded=130023424 installed=125829120 starvation_total=23
+[ 108.6s] st=StreamingOrInstalling  dl=1812.0KB/s seeds=2 peers=2 known=147 dht=99 progress= 1.20% down=124.0MB inst=124.0MB rb=  0MB starv=23 retries=0 | Healthy peers=3 kbps=1888 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=8
+[2026-08-15 21:41:47 INF] [discovery] tracker announce start
+[2026-08-15 21:41:48 INF] [torrentfs] added 5 peers (total 152)
+[2026-08-15 21:41:48 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:41:48 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:41:48 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[ 109.4s] st=StreamingOrInstalling  dl=1730.8KB/s seeds=2 peers=2 known=152 dht=99 progress= 1.20% down=124.0MB inst=124.0MB rb=  0MB starv=23 retries=0 | Healthy peers=2 kbps=1811 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=8
+[2026-08-15 21:41:48 INF] [writer] piece 7 verified (RAM)
+installer: buffer wait wait_ms=1444 got=4194304 rb_avail=0 downloaded=134217728 installed=130023424 starvation_total=24
+[2026-08-15 21:41:48 INF] [sess] handshake ok live=3/64
+[ 110.2s] st=StreamingOrInstalling  dl=1618.6KB/s seeds=3 peers=3 known=152 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=2 kbps=1811 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[ 111.0s] st=StreamingOrInstalling  dl=1565.2KB/s seeds=3 peers=3 known=152 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1618 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:41:50 INF] [dht] background nodes=65/34 peers_found=572 rx=590/134078
+[2026-08-15 21:41:50 INF] [torrentfs] added 1 peers (total 153)
+[2026-08-15 21:41:50 INF] [torrentfs] added 1 peers (total 154)
+[ 111.8s] st=StreamingOrInstalling  dl=1529.3KB/s seeds=3 peers=3 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:41:51 INF] [meta] tracker 2.7s (1) udp://tracker.torrent.eu.org:451/announce
+[2026-08-15 21:41:51 INF] [meta] tracker 0.5s (1) udp://exodus.desync.com:6969/announce
+[ 112.7s] st=StreamingOrInstalling  dl=1507.9KB/s seeds=3 peers=3 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:41:52 INF] [sess] handshake ok live=4/64
+[ 113.5s] st=StreamingOrInstalling  dl=1499.8KB/s seeds=3 peers=4 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=9
+[2026-08-15 21:41:53 INF] [dht] background nodes=65/34 peers_found=626 rx=619/140855
+[ 114.3s] st=StreamingOrInstalling  dl=1501.0KB/s seeds=3 peers=4 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=9
+[ 115.1s] st=StreamingOrInstalling  dl=1492.5KB/s seeds=3 peers=4 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=9
+[ 115.9s] st=StreamingOrInstalling  dl=1481.7KB/s seeds=3 peers=4 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=9
+[2026-08-15 21:41:55 INF] [dht] background nodes=65/34 peers_found=626 rx=623/141794
+[ 116.7s] st=StreamingOrInstalling  dl=1482.7KB/s seeds=3 peers=4 known=154 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=9
+[2026-08-15 21:41:56 INF] [torrentfs] added 1 peers (total 155)
+[ 117.5s] st=StreamingOrInstalling  dl=1495.5KB/s seeds=3 peers=4 known=155 dht=99 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=1 calm=64 done=9
+[ 118.3s] st=StreamingOrInstalling  dl=1505.8KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:41:58 INF] [dht] background nodes=65/35 peers_found=691 rx=632/143727
+[ 119.1s] st=StreamingOrInstalling  dl=1524.3KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:41:58 INF] [sess] live=3 conn=3 peak=4 pool=155 rate=1808KB/s closes c=695 hs=0 idle=2 stall=0 net=7 sockfail=0
+[ 119.9s] st=StreamingOrInstalling  dl=1543.1KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[ 120.8s] st=StreamingOrInstalling  dl=1559.9KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=128.0MB inst=128.0MB rb=  0MB starv=24 retries=0 | Healthy peers=3 kbps=1565 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:00 WRN] [read] waited 9.6s for piece 8
+collector: stats downloaded=138412032 speed=908KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=11369 got=4194304 rb_avail=0 downloaded=138412032 installed=134217728 starvation_total=25
+installer: stats installed=138412032 install_speed=908KB/s downloaded=138412032 source_speed=908KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 121.6s] st=StreamingOrInstalling  dl=1478.3KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:01 INF] [dht] background nodes=65/35 peers_found=691 rx=634/144106
+[ 122.4s] st=StreamingOrInstalling  dl=1359.9KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[ 123.2s] st=StreamingOrInstalling  dl=1249.2KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:03 INF] [dht] background nodes=67/33 peers_found=701 rx=641/145656
+[ 124.0s] st=StreamingOrInstalling  dl=1148.9KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[ 124.8s] st=StreamingOrInstalling  dl=1056.8KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[ 125.6s] st=StreamingOrInstalling  dl=972.1KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:05 INF] [dht] background nodes=67/33 peers_found=701 rx=641/145656
+[ 126.4s] st=StreamingOrInstalling  dl=893.0KB/s seeds=3 peers=3 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:06 WRN] [torrentfs] starvation recovery round=1: reset 0 peers, condemned 32, live=2
+[ 127.2s] st=StreamingOrInstalling  dl=820.1KB/s seeds=2 peers=2 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:07 INF] [discovery] tracker announce start
+[ 128.0s] st=StreamingOrInstalling  dl=754.3KB/s seeds=2 peers=2 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:08 INF] [meta] tracker 1.0s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:42:08 INF] [meta] tracker 0.8s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:42:08 INF] [meta] tracker 0.8s (30) http://bt2.t-ru.org/ann?magnet
+[ 128.8s] st=StreamingOrInstalling  dl=693.8KB/s seeds=2 peers=2 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:08 INF] [dht] background nodes=67/33 peers_found=701 rx=641/145656
+[2026-08-15 21:42:08 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[ 129.6s] st=StreamingOrInstalling  dl=638.2KB/s seeds=2 peers=2 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[ 130.4s] st=StreamingOrInstalling  dl=587.0KB/s seeds=1 peers=1 known=155 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:09 INF] [torrentfs] added 1 peers (total 156)
+[2026-08-15 21:42:09 INF] [torrentfs] added 1 peers (total 157)
+[2026-08-15 21:42:09 INF] [torrentfs] added 1 peers (total 158)
+[2026-08-15 21:42:10 INF] [dht] background nodes=70/30 peers_found=704 rx=669/152035
+[ 131.2s] st=StreamingOrInstalling  dl=539.3KB/s seeds=1 peers=1 known=158 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[ 132.1s] st=StreamingOrInstalling  dl=495.4KB/s seeds=1 peers=1 known=158 dht=100 progress= 1.35% down=140.0MB inst=140.0MB rb=  0MB starv=25 retries=0 | Healthy peers=3 kbps=1559 bad_ticks=0 stage=0 | claim=1 idle=0 empty_bf=0 calm=64 done=9
+[2026-08-15 21:42:11 INF] [sess] handshake ok live=2/64
+[2026-08-15 21:42:11 INF] [torrentfs] starvation recovered (round 1)
+[2026-08-15 21:42:11 WRN] [read] waited 11.4s for piece 8
+[2026-08-15 21:42:12 INF] [writer] piece 8 verified (RAM)
+collector: stats downloaded=150994944 speed=1052KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=11673 got=4194304 rb_avail=0 downloaded=150994944 installed=146800640 starvation_total=26
+installer: stats installed=150994944 install_speed=1052KB/s downloaded=150994944 source_speed=1052KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 132.9s] st=StreamingOrInstalling  dl=497.1KB/s seeds=2 peers=2 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=495 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=10
+[2026-08-15 21:42:12 INF] [dht] background nodes=70/30 peers_found=761 rx=684/156997
+[ 133.7s] st=StreamingOrInstalling  dl=562.7KB/s seeds=2 peers=2 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=562 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=10
+[2026-08-15 21:42:13 INF] [meta] tracker 5.5s (1) udp://exodus.desync.com:6969/announce
+[ 134.5s] st=StreamingOrInstalling  dl=698.3KB/s seeds=2 peers=2 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=698 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=10
+[2026-08-15 21:42:13 INF] [sess] live=2 conn=0 peak=4 pool=158 rate=1769KB/s closes c=713 hs=0 idle=3 stall=1 net=8 sockfail=0
+[2026-08-15 21:42:14 INF] [sess] handshake ok live=3/64
+[ 135.3s] st=StreamingOrInstalling  dl=823.4KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=698 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=10
+[2026-08-15 21:42:15 INF] [dht] background nodes=73/27 peers_found=761 rx=690/158124
+[ 136.1s] st=StreamingOrInstalling  dl=945.3KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=698 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=10
+[ 136.9s] st=StreamingOrInstalling  dl=1089.3KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=698 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=10
+[ 137.7s] st=StreamingOrInstalling  dl=1201.1KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=698 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=10
+[2026-08-15 21:42:17 INF] [dht] background nodes=73/27 peers_found=825 rx=712/163962
+[ 138.5s] st=StreamingOrInstalling  dl=1308.5KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=2 kbps=698 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=10
+[ 139.4s] st=StreamingOrInstalling  dl=1394.2KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=3 kbps=1308 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=10
+[ 140.2s] st=StreamingOrInstalling  dl=1536.8KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.49% down=144.0MB inst=144.0MB rb=  0MB starv=26 retries=0 | Healthy peers=3 kbps=1308 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=10
+[2026-08-15 21:42:20 INF] [writer] piece 9 verified (RAM)
+collector: stats downloaded=155189248 speed=509KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=8034 got=4194304 rb_avail=0 downloaded=155189248 installed=150994944 starvation_total=27
+installer: stats installed=155189248 install_speed=509KB/s downloaded=155189248 source_speed=509KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 141.0s] st=StreamingOrInstalling  dl=1567.1KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.64% down=160.0MB inst=160.0MB rb=  0MB starv=27 retries=0 | Healthy peers=3 kbps=1536 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[2026-08-15 21:42:20 INF] [dht] background nodes=73/27 peers_found=825 rx=715/164606
+[ 141.8s] st=StreamingOrInstalling  dl=1596.6KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.64% down=160.0MB inst=160.0MB rb=  0MB starv=27 retries=0 | Healthy peers=3 kbps=1536 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[ 142.6s] st=StreamingOrInstalling  dl=1665.8KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.64% down=160.0MB inst=160.0MB rb=  0MB starv=27 retries=0 | Healthy peers=3 kbps=1596 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+installer: buffer wait wait_ms=1963 got=4194304 rb_avail=0 downloaded=171966464 installed=167772160 starvation_total=28
+[ 143.4s] st=StreamingOrInstalling  dl=1727.6KB/s seeds=3 peers=3 known=158 dht=100 progress= 1.64% down=164.0MB inst=164.0MB rb=  0MB starv=28 retries=0 | Healthy peers=3 kbps=1727 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[2026-08-15 21:42:23 INF] [dht] background nodes=72/28 peers_found=835 rx=717/165073
+[ 144.2s] st=StreamingOrInstalling  dl=1904.8KB/s seeds=3 peers=3 known=158 dht=102 progress= 1.64% down=164.0MB inst=164.0MB rb=  0MB starv=28 retries=0 | Healthy peers=3 kbps=1727 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[ 145.0s] st=StreamingOrInstalling  dl=2011.8KB/s seeds=3 peers=3 known=158 dht=102 progress= 1.64% down=164.0MB inst=164.0MB rb=  0MB starv=28 retries=0 | Healthy peers=3 kbps=1904 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[ 145.8s] st=StreamingOrInstalling  dl=2138.3KB/s seeds=3 peers=3 known=158 dht=102 progress= 1.64% down=164.0MB inst=164.0MB rb=  0MB starv=28 retries=0 | Healthy peers=3 kbps=1904 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[ 146.6s] st=StreamingOrInstalling  dl=2121.7KB/s seeds=3 peers=3 known=158 dht=102 progress= 1.64% down=164.0MB inst=164.0MB rb=  0MB starv=28 retries=0 | Healthy peers=3 kbps=1904 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=11
+[2026-08-15 21:42:26 INF] [dht] background nodes=73/29 peers_found=835 rx=791/190379
+[2026-08-15 21:42:26 INF] [writer] piece 10 verified (RAM)
+collector: stats downloaded=176160768 speed=3282KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=4269 got=4194304 rb_avail=0 downloaded=176160768 installed=171966464 starvation_total=29
+installer: stats installed=176160768 install_speed=3282KB/s downloaded=176160768 source_speed=3282KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 147.5s] st=StreamingOrInstalling  dl=2048.6KB/s seeds=3 peers=3 known=158 dht=102 progress= 1.79% down=176.0MB inst=176.0MB rb=  0MB starv=29 retries=0 | Healthy peers=3 kbps=2121 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[ 148.3s] st=StreamingOrInstalling  dl=2017.6KB/s seeds=3 peers=3 known=158 dht=102 progress= 1.79% down=176.0MB inst=176.0MB rb=  0MB starv=29 retries=0 | Healthy peers=3 kbps=2048 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[2026-08-15 21:42:28 INF] [dht] background nodes=73/29 peers_found=835 rx=792/190473
+[2026-08-15 21:42:28 INF] [torrentfs] added 1 peers (total 159)
+[2026-08-15 21:42:28 INF] [torrentfs] added 1 peers (total 160)
+[2026-08-15 21:42:28 INF] [torrentfs] added 1 peers (total 161)
+installer: buffer wait wait_ms=2057 got=4194304 rb_avail=0 downloaded=188743680 installed=184549376 starvation_total=30
+[ 149.1s] st=StreamingOrInstalling  dl=1989.0KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1988 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[2026-08-15 21:42:29 INF] [sess] live=3 conn=8 peak=4 pool=161 rate=1768KB/s closes c=727 hs=0 idle=3 stall=1 net=8 sockfail=0
+[ 149.9s] st=StreamingOrInstalling  dl=1965.7KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1988 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[ 150.7s] st=StreamingOrInstalling  dl=1967.5KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1988 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[2026-08-15 21:42:30 INF] [dht] background nodes=72/30 peers_found=849 rx=812/195426
+[ 151.5s] st=StreamingOrInstalling  dl=1998.3KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1988 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[ 152.3s] st=StreamingOrInstalling  dl=1977.5KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1988 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[ 153.1s] st=StreamingOrInstalling  dl=1959.5KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1988 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[2026-08-15 21:42:33 INF] [dht] background nodes=72/30 peers_found=849 rx=819/196149
+[ 153.9s] st=StreamingOrInstalling  dl=1943.4KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1959 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[ 154.7s] st=StreamingOrInstalling  dl=1984.0KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.79% down=180.0MB inst=180.0MB rb=  0MB starv=30 retries=0 | Healthy peers=3 kbps=1959 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=12
+[2026-08-15 21:42:34 INF] [writer] piece 11 verified (RAM)
+collector: stats downloaded=192937984 speed=2003KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=6116 got=4194304 rb_avail=0 downloaded=192937984 installed=188743680 starvation_total=31
+installer: stats installed=192937984 install_speed=2003KB/s downloaded=192937984 source_speed=2003KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 155.6s] st=StreamingOrInstalling  dl=1979.9KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1983 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=13
+[ 156.4s] st=StreamingOrInstalling  dl=1985.9KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1985 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=13
+[2026-08-15 21:42:36 INF] [dht] background nodes=73/29 peers_found=852 rx=824/197117
+[ 157.2s] st=StreamingOrInstalling  dl=1982.4KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1985 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=13
+[ 158.0s] st=StreamingOrInstalling  dl=1954.0KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=13
+[ 158.8s] st=StreamingOrInstalling  dl=1966.2KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=13
+[ 159.6s] st=StreamingOrInstalling  dl=1997.5KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=3 idle=0 empty_bf=0 calm=64 done=13
+[2026-08-15 21:42:39 INF] [dht] background nodes=73/29 peers_found=916 rx=835/199675
+[ 160.4s] st=StreamingOrInstalling  dl=1963.7KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=13
+[ 161.2s] st=StreamingOrInstalling  dl=1918.2KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=13
+[ 162.0s] st=StreamingOrInstalling  dl=1880.9KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=13
+[2026-08-15 21:42:41 INF] [dht] background nodes=73/29 peers_found=916 rx=835/199675
+[ 162.9s] st=StreamingOrInstalling  dl=1848.3KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1982 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=13
+[2026-08-15 21:42:42 WRN] [read] waited 5.7s for piece 12
+[ 163.7s] st=StreamingOrInstalling  dl=1848.2KB/s seeds=3 peers=3 known=161 dht=102 progress= 1.94% down=192.0MB inst=192.0MB rb=  0MB starv=31 retries=0 | Healthy peers=3 kbps=1848 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=13
+[2026-08-15 21:42:43 INF] [writer] piece 12 verified (RAM)
+[2026-08-15 21:42:43 INF] [torrentfs] added 1 peers (total 162)
+[2026-08-15 21:42:43 INF] [torrentfs] added 1 peers (total 163)
+collector: stats downloaded=205520896 speed=1435KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=8556 got=4194304 rb_avail=0 downloaded=205520896 installed=201326592 starvation_total=32
+installer: stats installed=205520896 install_speed=1435KB/s downloaded=205520896 source_speed=1435KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[2026-08-15 21:42:43 INF] [torrentfs] added 1 peers (total 164)
+[2026-08-15 21:42:43 INF] [dht] background nodes=71/31 peers_found=929 rx=864/206196
+[ 164.5s] st=StreamingOrInstalling  dl=1810.7KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1848 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:44 INF] [sess] live=3 conn=3 peak=4 pool=164 rate=1531KB/s closes c=753 hs=0 idle=3 stall=1 net=8 sockfail=0
+[ 165.3s] st=StreamingOrInstalling  dl=1768.1KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1810 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 166.1s] st=StreamingOrInstalling  dl=1712.9KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:46 INF] [dht] background nodes=71/31 peers_found=955 rx=884/210902
+[ 166.9s] st=StreamingOrInstalling  dl=1642.9KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 167.7s] st=StreamingOrInstalling  dl=1593.0KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 168.5s] st=StreamingOrInstalling  dl=1556.3KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:48 INF] [dht] background nodes=71/31 peers_found=955 rx=884/210902
+[ 169.3s] st=StreamingOrInstalling  dl=1524.7KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 170.2s] st=StreamingOrInstalling  dl=1505.8KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 171.0s] st=StreamingOrInstalling  dl=1495.4KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:50 INF] [dht] background nodes=73/29 peers_found=1009 rx=894/213265
+[ 171.8s] st=StreamingOrInstalling  dl=1495.7KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=208.0MB inst=208.0MB rb=  0MB starv=32 retries=0 | Healthy peers=3 kbps=1712 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:51 WRN] [read] waited 6.1s for piece 13
+collector: stats downloaded=222298112 speed=1974KB/s rb_avail=4194304 rb_free=130023424 rb_cap=134217728
+installer: buffer wait wait_ms=8290 got=4194304 rb_avail=0 downloaded=222298112 installed=218103808 starvation_total=33
+installer: stats installed=222298112 install_speed=1974KB/s downloaded=222298112 source_speed=1974KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+[ 172.6s] st=StreamingOrInstalling  dl=1532.3KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=216.0MB inst=216.0MB rb=  0MB starv=33 retries=0 | Healthy peers=3 kbps=1495 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+installer: buffer wait wait_ms=997 got=4194304 rb_avail=0 downloaded=230686720 installed=226492416 starvation_total=34
+[2026-08-15 21:42:52 INF] [dht] background nodes=73/29 peers_found=1009 rx=900/213712
+[ 173.4s] st=StreamingOrInstalling  dl=1551.9KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1532 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 174.2s] st=StreamingOrInstalling  dl=1585.9KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1532 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 175.0s] st=StreamingOrInstalling  dl=1610.4KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1532 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 175.8s] st=StreamingOrInstalling  dl=1480.9KB/s seeds=3 peers=3 known=164 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:55 INF] [dht] background nodes=72/30 peers_found=1009 rx=904/214627
+[2026-08-15 21:42:55 INF] [torrentfs] added 1 peers (total 165)
+[2026-08-15 21:42:55 INF] [torrentfs] added 1 peers (total 166)
+[ 176.7s] st=StreamingOrInstalling  dl=1360.4KB/s seeds=3 peers=3 known=166 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 177.5s] st=StreamingOrInstalling  dl=1249.4KB/s seeds=3 peers=3 known=166 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[ 178.3s] st=StreamingOrInstalling  dl=1147.4KB/s seeds=3 peers=3 known=166 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:58 INF] [dht] background nodes=72/30 peers_found=1134 rx=933/222698
+[ 179.1s] st=StreamingOrInstalling  dl=1054.0KB/s seeds=3 peers=3 known=166 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:59 INF] [discovery] tracker announce start
+[ 179.9s] st=StreamingOrInstalling  dl=969.7KB/s seeds=2 peers=2 known=166 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=2 idle=0 empty_bf=0 calm=64 done=14
+[2026-08-15 21:42:59 WRN] [torrentfs] starvation recovery round=1: reset 2 peers, condemned 22, live=1
+[2026-08-15 21:42:59 INF] [sess] live=1 conn=8 peak=4 pool=166 rate=8KB/s closes c=768 hs=0 idle=4 stall=2 net=8 sockfail=0
+[2026-08-15 21:42:59 INF] [sess] handshake ok live=2/64
+[2026-08-15 21:42:59 INF] [meta] tracker 0.7s (30) http://bt3.t-ru.org/ann?magnet
+[2026-08-15 21:42:59 INF] [meta] tracker 0.7s (30) http://bt.t-ru.org/ann?magnet
+[2026-08-15 21:42:59 INF] [meta] tracker 0.7s (30) http://bt2.t-ru.org/ann?magnet
+[2026-08-15 21:42:59 INF] [sess] handshake ok live=3/64
+[2026-08-15 21:43:00 INF] [meta] tracker 0.2s (1) udp://tracker.torrent.eu.org:451/announce
+[ 180.7s] st=StreamingOrInstalling  dl=890.7KB/s seeds=3 peers=3 known=166 dht=102 progress= 2.09% down=220.0MB inst=220.0MB rb=  0MB starv=34 retries=0 | Healthy peers=3 kbps=1610 bad_ticks=0 stage=0 | claim=1 idle=2 empty_bf=0 calm=64 done=14
+AppTest: stopping...
+[2026-08-15 21:43:00 INF] [netloop] stop
+[2026-08-15 21:43:00 INF] [meta] tracker 0.3s (failed: no announce reply) udp://exodus.desync.com:6969/announce
+[2026-08-15 21:43:00 INF] [discovery] exiting
+collector: finished, downloaded 230686720 bytes
+AppTest: done. down=220MB inst=220MB starv=34
+AppTest: SUMMARY elapsed=181s
+  read_bytes=220MB  FACT_avg=1244.2KB/s (read/elapsed)
+  net_recv=245MB     NET_avg=1385.6KB/s (engine bytes_recv/elapsed)
+  useful=239MB       USEFUL_avg=1354.6KB/s (net minus dups)
+  dup_bytes=5MB (2%)  ewma_mean=1318.3KB/s ewma_peak=2138.3KB/s rb_avg=4.4MB starv=34 retries=0
+[2026-08-15 21:43:00 INF] engine stop
+[2026-08-15 21:43:00 INF] [dht] background nodes=72/30 peers_found=1134 rx=933/222698

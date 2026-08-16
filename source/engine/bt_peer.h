@@ -7,6 +7,7 @@
 #include <sys/types.h>  // ssize_t
 
 #include "torrent_meta.h"
+#include "mse.h"
 
 // BitTorrent peer wire protocol message IDs
 enum {
@@ -78,6 +79,8 @@ typedef struct {
 
     uint8_t *bitfield;  // which pieces the peer has
     size_t bitfield_len;
+
+    mse_state mse;      // Message Stream Encryption state
 } peer_nb;
 
 // Set `sock` non-blocking and attach buffers. Takes ownership of sock.
@@ -107,9 +110,11 @@ int peer_nb_flush(peer_nb *p);
 // True while there are bytes still waiting to go out (poll for POLLOUT).
 bool peer_nb_tx_pending(const peer_nb *p);
 
-// Queue our 68-byte handshake. Call once, right after connect() completes.
+// Queue our handshake (MSE DH key Ya, or plaintext fallback). Call once, right after connect() completes.
 int peer_nb_send_handshake(peer_nb *p, const uint8_t info_hash[20],
                            const uint8_t peer_id[20]);
+int peer_nb_send_plaintext_handshake(peer_nb *p, const uint8_t info_hash[20],
+                                     const uint8_t peer_id[20]);
 
 // Consume the peer's handshake from rx once it has fully arrived.
 // 1 = handshaked ok, 0 = still waiting, -1 = wrong protocol/info_hash.

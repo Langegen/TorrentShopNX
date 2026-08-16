@@ -174,6 +174,7 @@ void ImageDownloader::workerLoop() {
         }
 
         if (task.token && !*task.token) {
+            util::logLine("ImageDownloader: task skipped (token invalidated) url=" + task.url);
             continue; // Skip invalidated task (card scrolled offscreen)
         }
 
@@ -193,8 +194,12 @@ void ImageDownloader::processTask(const ImageTask& task) {
 
     if (res.status_code == 200 && !res.body.empty()) {
         util::logLine("ImageDownloader: HTTP 200 OK for url=" + task.url + " (size=" + std::to_string(res.body.size()) + ")");
-        brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(res.body), token = task.token, bypassCache = task.bypassCache, url = task.url]() {
-            if (token && !*token) return;
+        brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(res.body), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
+            if (token && !*token) {
+                util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
+                              " col=" + std::to_string(col) + " url=" + url);
+                return;
+            }
             if (g_appExiting.load()) return;
 
             if (bypassCache) {
