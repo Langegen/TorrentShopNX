@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "torrent_meta.h"   // peer_addr
+
 // Streaming torrent backend: downloads pieces on demand, prioritizing the ones
 // just ahead of the current read position, and exposes a blocking byte-range
 // read that waits until the requested data has arrived. Verified pieces are
@@ -57,6 +59,11 @@ void torrentfs_stats(const torrentfs *tfs, int64_t *pieces_done,
 // Number of peers found by the tracker announce.
 int torrentfs_peer_count(const torrentfs *tfs);
 
+// Inject peers directly into the pool (diagnostics/manual rescue: e.g. seed
+// addresses taken from another client while the tracker is unreachable).
+// Duplicates are ignored; the entries are dialed like any tracker peer.
+void torrentfs_add_peers(torrentfs *tfs, const peer_addr *peers, int n);
+
 // Live handshaked sessions whose bitfield covers the whole streamed file
 // (true seeds for this download, as opposed to the session count).
 int torrentfs_seed_count(const torrentfs *tfs);
@@ -95,6 +102,11 @@ void torrentfs_live_peers(const torrentfs *tfs, int *live, int *peak,
 // outright (we ran out of a local resource, e.g. the BSD socket buffer pool);
 // timeouts = SYN sent but the peer never answered (a genuinely dead/NAT'd peer).
 void torrentfs_fail_kinds(const torrentfs *tfs, int *sock_fail, int *timeouts);
+
+// TCP connects whose handshake was rejected/never completed (the peer closed
+// on our plaintext hello, or spoke a different protocol/info_hash). High here
+// while connects succeed means encryption-required peers are refusing us.
+int torrentfs_hs_fail(const torrentfs *tfs);
 
 // claiming = live sessions actually downloading a piece; idle = sessions that
 // are unchoked but have nothing claimed, i.e. starved by the read-ahead window.

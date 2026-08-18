@@ -24,6 +24,7 @@ bool parseConfigBody(const std::string& body,
                      std::string& catalog_source_url,
                      std::string& data_mode,
                      bool& keep_awake_during_downloads,
+                     int& listen_port,
                      std::string& last_catalog_update_date,
                      std::string& install_location,
                      std::string& app_update_url,
@@ -62,6 +63,10 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "keep_awake_during_downloads") {
                     keep_awake_during_downloads = parseBool(val, keep_awake_during_downloads);
+                    parsed_known_keys = true;
+                } else if (key == "listen_port") {
+                    int p = std::atoi(val.c_str());
+                    if (p > 0 && p < 65536) listen_port = p;
                     parsed_known_keys = true;
                 } else if (key == "last_catalog_update_date") {
                     last_catalog_update_date = val;
@@ -113,10 +118,16 @@ ConfigManager& ConfigManager::instance() {
 ConfigManager::ConfigManager() {
     config_path_ = "sdmc:/switch/TorrentShopNX/config.ini";
     legacy_config_path_ = "sdmc:/switch/TorrentShopNX/config.txt";
+    // PC tests override the path with an env var (the sdmc: path is unusable
+    // outside the console).
+    if (const char* p = std::getenv("TSNX_CONFIG_PATH")) {
+        if (p[0]) config_path_ = p;
+    }
     torrserver_url_ = "http://192.168.1.100:8090";
     catalog_source_url_.clear();
     data_mode_ = "local_client";
     keep_awake_during_downloads_ = true;
+    listen_port_ = 6882;
     last_catalog_update_date_.clear();
     install_location_ = "auto";
     app_update_url_ = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
@@ -129,7 +140,8 @@ void ConfigManager::load() {
     std::string body;
     if (readWholeFile(config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_,
+                        keep_awake_during_downloads_, listen_port_,
+                        last_catalog_update_date_, install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
@@ -140,7 +152,8 @@ void ConfigManager::load() {
     // Backward compatibility: migrate old config.txt on first run.
     if (readWholeFile(legacy_config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, last_catalog_update_date_, install_location_, app_update_url_,
+                        keep_awake_during_downloads_, listen_port_,
+                        last_catalog_update_date_, install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
@@ -154,9 +167,13 @@ void ConfigManager::load() {
 }
 
 void ConfigManager::save() {
-    std::filesystem::path dir = "sdmc:/switch/TorrentShopNX";
-    if (!std::filesystem::exists(dir)) {
-        std::filesystem::create_directories(dir);
+    try {
+        std::filesystem::path dir = "sdmc:/switch/TorrentShopNX";
+        if (config_path_.rfind("sdmc:/", 0) == 0 && !std::filesystem::exists(dir)) {
+            std::filesystem::create_directories(dir);
+        }
+    } catch (...) {
+        // PC builds have no sdmc: drive; nothing to create, saving is best-effort.
     }
 
     std::ofstream file(config_path_);
@@ -170,6 +187,7 @@ void ConfigManager::save() {
     file << "catalog_source_url=" << catalog_source_url_ << "\n";
     file << "data_mode=" << data_mode_ << "\n";
     file << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
+    file << "listen_port=" << listen_port_ << "\n";
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
     file << "install_location=" << install_location_ << "\n";
     file << "app_update_url=" << app_update_url_ << "\n";
@@ -225,6 +243,16 @@ bool ConfigManager::getKeepAwakeDuringDownloads() const {
 
 void ConfigManager::setKeepAwakeDuringDownloads(bool enabled) {
     keep_awake_during_downloads_ = enabled;
+    save();
+}
+
+int ConfigManager::getListenPort() const {
+    return listen_port_;
+}
+
+void ConfigManager::setListenPort(int port) {
+    if (port <= 0 || port >= 65536) return;
+    listen_port_ = port;
     save();
 }
 

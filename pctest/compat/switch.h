@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -26,9 +27,22 @@ typedef u32 Result;
 //-----------------------------------------------------------------------------
 typedef struct { pthread_mutex_t m; int init; } Mutex;
 
+// Double-checked lazy init would race: two threads locking a zero-initialised
+// Mutex at the same time both see init==0, both call pthread_mutex_init on the
+// same mutex, and re-initialising a mutex another thread is about to use is
+// UB (on cygwin this produced delayed deadlocks -- the corrupted mutex looked
+// fine until a lock/unlock pair went missing seconds later). Every lazy init
+// goes through one global init lock, so the first user wins and the rest just
+// lock the freshly-made mutex.
+static pthread_mutex_t g_compat_init_mtx = PTHREAD_MUTEX_INITIALIZER;
+
 static inline void mutexInit(Mutex *mtx) {
-    pthread_mutex_init(&mtx->m, NULL);
-    mtx->init = 1;
+    pthread_mutex_lock(&g_compat_init_mtx);
+    if (!mtx->init) {
+        pthread_mutex_init(&mtx->m, NULL);
+        mtx->init = 1;
+    }
+    pthread_mutex_unlock(&g_compat_init_mtx);
 }
 static inline void mutexLock(Mutex *mtx) {
     if (!mtx->init) mutexInit(mtx);   // libnx allows a zero-initialised Mutex

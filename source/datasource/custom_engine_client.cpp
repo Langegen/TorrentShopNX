@@ -1,6 +1,7 @@
 #include "custom_engine_client.h"
 
 #include "../utils/log.h"
+#include "../config/config.h"
 
 #include <engine/engine.h>
 #include "../engine/torrent_meta.h"
@@ -21,7 +22,9 @@ CustomEngineClient::~CustomEngineClient() {
 
 bool CustomEngineClient::ensureEngine() {
     if (engine_) return true;
-    engine_ = tsnx_engine_start(6882);
+    // The configured listen port: forward it (TCP) on the router to the
+    // console so firewalled seeders can dial in.
+    engine_ = tsnx_engine_start(config::ConfigManager::instance().getListenPort());
     if (!engine_) {
         last_error_ = "failed to start custom engine";
         return false;

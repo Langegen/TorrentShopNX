@@ -33,6 +33,9 @@ $COMMON_SOURCES = @(
     "source\engine\dhtclient.c",
     "source\engine\engine.c",
     "source\engine\engine_log.c",
+    "source\engine\mse_peer.c",
+    "source\engine\listen.c",
+    "source\engine\upnp.c",
     "pctest\utpstub.c"
 )
 
@@ -77,6 +80,7 @@ function Build-AppTest {
 
     $APP_CPP = @(
         "pctest\apptest.cpp",
+        "source\config\config.cpp",
         "source\datasource\custom_engine_backend.cpp",
         "source\datasource\custom_engine_client.cpp",
         "source\datasource\custom_engine_scheduler.cpp",
@@ -87,7 +91,7 @@ function Build-AppTest {
     $appcpp = @()
     foreach ($src in $APP_CPP) {
         $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
-        & $GPP @CXXFLAGS -std=c++17 -pthread -DTSNX_USE_CUSTOM_ENGINE=1 -Isource -Iinclude -Isource\datasource -Isource\utils -Isource\buffer -c $src -o $o
+        & $GPP @CXXFLAGS -std=c++17 -pthread -DTSNX_USE_CUSTOM_ENGINE=1 -Isource -Iinclude -Isource\datasource -Isource\utils -Isource\buffer -Isource\config -c $src -o $o
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $appcpp += $o
     }

@@ -7,6 +7,7 @@
 #include <sys/types.h>  // ssize_t
 
 #include "torrent_meta.h"
+#include "mse_peer.h"
 
 // BitTorrent peer wire protocol message IDs
 enum {
@@ -19,6 +20,7 @@ enum {
     MSG_REQUEST = 6,
     MSG_PIECE = 7,
     MSG_CANCEL = 8,
+    MSG_EXTENDED = 20,   // BEP 10: payload = <ext_id><bencoded dict>
 };
 
 // Blocks are the unit of transfer within a piece (16 KiB is the de-facto standard).
@@ -75,9 +77,21 @@ typedef struct {
     bool handshaked;    // peer's 68-byte handshake received and validated
     bool choked;        // peer is choking us -> we cannot request
     bool we_unchoked;   // we have unchoked the peer
+    bool ext_ok;        // peer advertised BEP 10 extensions in its handshake
+    uint8_t pex_id;     // peer's ut_pex extended message id (0 = not offered)
 
     uint8_t *bitfield;  // which pieces the peer has
     size_t bitfield_len;
+
+    // MSE/PE (Message Stream Encryption). mse_want: dial with the encrypted
+    // handshake first; mse_active: the stream is crypto-live (all framed
+    // traffic is RC4 when rc4_selected); mse_failed: the handshake concluded
+    // the peer does not speak MSE, so the caller should retry plaintext.
+    bool mse_want;
+    bool mse_active;
+    bool mse_failed;
+    bool mse_ia_sent;   // our 68-byte handshake queued on the stream after MSE
+    mse_peer mse;
 } peer_nb;
 
 // Set `sock` non-blocking and attach buffers. Takes ownership of sock.
@@ -113,7 +127,16 @@ int peer_nb_send_handshake(peer_nb *p, const uint8_t info_hash[20],
 
 // Consume the peer's handshake from rx once it has fully arrived.
 // 1 = handshaked ok, 0 = still waiting, -1 = wrong protocol/info_hash.
+// On success p->ext_ok records whether the peer advertises BEP 10 extensions.
 int peer_nb_recv_handshake(peer_nb *p, const uint8_t info_hash[20]);
+
+// Queue an extended-protocol message (BEP 10): <len><20><ext_id><payload>.
+int peer_nb_queue_ext(peer_nb *p, uint8_t ext_id, const void *payload,
+                      uint32_t plen);
+
+// Queue OUR extended handshake (ext_id 0) advertising ut_pex with id 1.
+// Only meaningful if the peer's handshake showed the extension bit.
+int peer_nb_queue_ext_handshake(peer_nb *p);
 
 // Connect over TCP + handshake + read bitfield. Returns 0 on success.
 int peer_connect(peer_conn *p, peer_addr addr, const uint8_t info_hash[20],

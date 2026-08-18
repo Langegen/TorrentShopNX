@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -13,6 +14,8 @@
 #include "torrent_meta.h"
 #include "dhtclient.h"
 #include "utp_nb.h"
+#include "listen.h"
+#include "upnp.h"
 #include "engine_log.h"
 
 #define MAX_TORRENTS 8
@@ -73,18 +76,96 @@ static void bin_to_hex(const uint8_t *bin, char *hex, size_t hex_len) {
     hex[i * 2] = '\0';
 }
 
+// Routes an incoming connection's info_hash to the matching open torrentfs.
+// Called from the shared listener thread; returns NULL when the torrent is not
+// open (the listener drops the socket).
+static torrentfs *engine_find_fs_by_hash(const uint8_t info_hash[20]) {
+    char hex[41];
+    bin_to_hex(info_hash, hex, 40);
+    for (int i = 0; i < MAX_TORRENTS; i++) {
+        tsnx_torrent *t = &g_engine->torrents[i];
+        if (t->used && t->fs && strcmp(t->hash, hex) == 0) return t->fs;
+    }
+    return NULL;
+}
+
+//-----------------------------------------------------------------------------
+// Watchdog (PC builds only): samples every engine thread's heartbeat and
+// writes the ages to watchdog.log, so a hung process can be diagnosed without
+// a debugger. Lock-free, standalone file -- immune to the log mutex and to a
+// blocked stdio pipe.
+//-----------------------------------------------------------------------------
+#ifndef __SWITCH__
+static volatile bool g_wd_stop = false;
+static Thread g_wd_thread;
+
+static void watchdog_main(void *arg) {
+    (void)arg;
+    FILE *f = fopen("watchdog.log", "w");
+    if (!f) return;
+    static const char *names[8] = {
+        "dht", "disc", "listen", "upnp", "net", "writer", "reader", "wd"
+    };
+    u64 freq = armGetSystemTickFreq();
+    while (!g_wd_stop) {
+        svcSleepThread(5000000000ULL);  // 5 s
+        tsnx_engine_wd_tick(7);
+        u64 now = armGetSystemTick();
+        fprintf(f, "t=%llu", (unsigned long long)(now / freq));
+        for (int i = 0; i < 8; i++) {
+            u64 tick = tsnx_engine_wd_last(i);
+            fprintf(f, " %s=%llu", names[i],
+                    tick ? (unsigned long long)((now - tick) / freq)
+                         : 99999ULL);
+        }
+        fprintf(f, "\n");
+        fflush(f);
+    }
+    fclose(f);
+}
+#endif
+
 tsnx_engine *tsnx_engine_start(int listen_port) {
     tsnx_engine *eng = calloc(1, sizeof(tsnx_engine));
     if (!eng) return NULL;
+
+    // Never die on a write to a socket a peer just closed. POSIX send() raises
+    // SIGPIPE before returning the error and the default action kills the
+    // process; the bsd service on Switch does not deliver it, but any PC build
+    // of the engine would be taken down by the first reset peer.
+    signal(SIGPIPE, SIG_IGN);
+
     eng->port = listen_port;
     eng->running = true;
     engine_log_init("sdmc:/switch/TorrentShopNX/engine.log");
     engine_log(ENGINE_LOG_INFO, "engine start port=%d", listen_port);
     dht_set_log(dht_log_cb);
     torrent_set_log(torrent_log_cb);
+    // Make the lazily-initialised engine mutexes ready single-threaded, before
+    // the first announce/DHT thread can touch them (PC compat shim lazy-init
+    // would otherwise race on first use).
+    torrent_announce_mutex_init();
+    dht_bg_init_early();
     torrentfs_set_ram_stream(1);
     utp_nb_init();
     g_engine = eng;
+
+    // Incoming connections: bind the port and advertise it (trackers/DHT).
+    // UPnP then tries to make the port reachable from the internet; its
+    // success overrides the advertised port with the mapped external one.
+    if (torrent_listener_start(listen_port, engine_find_fs_by_hash) == 0) {
+        torrent_set_announce_port(torrent_listener_port());
+        upnp_start(torrent_listener_port());
+    } else {
+        engine_log(ENGINE_LOG_WARN,
+                   "[engine] listener failed: incoming connections disabled");
+    }
+#ifndef __SWITCH__
+    g_wd_stop = false;
+    if (threadCreate(&g_wd_thread, watchdog_main, NULL, NULL, 0x20000, 0x2C,
+                     -2) == 0)
+        threadStart(&g_wd_thread);
+#endif
     return eng;
 }
 
@@ -103,6 +184,13 @@ void tsnx_engine_stop(tsnx_engine *eng) {
     eng->running = false;
     if (g_engine == eng) g_engine = NULL;
     engine_log(ENGINE_LOG_INFO, "engine stop");
+#ifndef __SWITCH__
+    g_wd_stop = true;
+    threadWaitForExit(&g_wd_thread);
+    threadClose(&g_wd_thread);
+#endif
+    upnp_stop();               // no more mapping announcements
+    torrent_listener_stop();   // stop accepting (after the torrents are gone)
     dht_stop();  // persistent DHT: save the routing table for the next start
     utp_nb_exit();
     engine_log_close();
@@ -315,18 +403,25 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
         // Useful payload = received bytes minus duplicate re-deliveries
         // (late answers to expired/re-requested blocks). The UI shows the
         // real download rate, not wasted traffic.
+        //
+        // bytes_recv and dup_bytes are separate monotonic counters read a few
+        // instructions apart, so a block landing between the reads can make
+        // dup momentarily exceed bytes_recv. Done in uint64 that underflows
+        // into ~2^64 and the EWMA reports gigabytes per second while the real
+        // rate is a few KB/s. Signed arithmetic + clamp keeps that benign.
         now = now_ms();
+        int64_t useful_now = (int64_t)bytes_recv -
+                             (t->fs ? (int64_t)torrentfs_dup_bytes(t->fs) : 0);
+        if (useful_now < 0) useful_now = 0;
         if (t->last_speed_time_ms == 0) {
             t->last_speed_time_ms = now;
-            t->last_bytes_recv =
-                bytes_recv - (t->fs ? (uint64_t)torrentfs_dup_bytes(t->fs) : 0);
+            t->last_bytes_recv = (uint64_t)useful_now;
             t->download_kbps = 0.0f;
         } else {
             uint64_t dt = now - t->last_speed_time_ms;
             if (dt >= 500) {
-                uint64_t useful =
-                    bytes_recv - (t->fs ? (uint64_t)torrentfs_dup_bytes(t->fs) : 0);
-                uint64_t db = useful - t->last_bytes_recv;
+                int64_t db = useful_now - (int64_t)t->last_bytes_recv;
+                if (db < 0) db = 0;
                 // dt is in milliseconds; convert to KB/s.
                 float inst = (float)((double)db * 1000.0 / 1024.0 / (double)dt);
                 if (inst < 0.0f) inst = 0.0f;
@@ -342,7 +437,7 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
                     t->download_kbps += (inst - t->download_kbps) * alpha;
                 }
                 t->last_speed_time_ms = now;
-                t->last_bytes_recv = useful;
+                t->last_bytes_recv = (uint64_t)useful_now;
             }
         }
         it->download_kbps = t->download_kbps;
@@ -519,6 +614,23 @@ bool tsnx_engine_announce_now(tsnx_engine *eng, const char *hash) {
     return true;
 }
 
+bool tsnx_engine_add_peers(tsnx_engine *eng, const char *hash,
+                           const uint32_t *ips, const uint16_t *ports, int n) {
+    tsnx_torrent *t;
+    if (!ips || !ports || n <= 0 || n > 256) return false;
+    eng = active_engine(eng);
+    if (!eng || !hash) return false;
+    t = find_by_hash(eng, hash);
+    if (!t || !t->fs) return false;
+    peer_addr pa[256];
+    for (int i = 0; i < n; i++) {
+        pa[i].ip   = ips[i];
+        pa[i].port = ports[i];
+    }
+    torrentfs_add_peers(t->fs, pa, n);
+    return true;
+}
+
 bool tsnx_engine_get_diag(tsnx_engine *eng, const char *hash, tsnx_engine_diag *out) {
     tsnx_torrent *t;
     eng = active_engine(eng);
@@ -556,6 +668,7 @@ bool tsnx_engine_get_diag(tsnx_engine *eng, const char *hash, tsnx_engine_diag *
     out->bad_bitfield = bad;
 
     torrentfs_fail_kinds(t->fs, &out->sock_fail, &out->timeouts);
+    out->hs_fail = torrentfs_hs_fail(t->fs);
     out->calm = torrentfs_calm(t->fs);
     out->bytes_recv = torrentfs_bytes_recv(t->fs);
     out->dup_bytes  = torrentfs_dup_bytes(t->fs);

@@ -97,3 +97,20 @@ void engine_log(int level, const char *fmt, ...) {
     if (level <= ENGINE_LOG_WARN) fflush(g_log_f);
     mutexUnlock(&g_log_mtx);
 }
+
+//-----------------------------------------------------------------------------
+// Watchdog ticks (see engine_log.h)
+//-----------------------------------------------------------------------------
+static volatile u64 g_wd_tick[8];
+
+void tsnx_engine_wd_tick(int idx) {
+    if (idx >= 0 && idx < 8)
+        g_wd_tick[idx] = armGetSystemTick();
+}
+
+// Last tick value of thread `idx`, for the PC watchdog sampler (or 0 if the
+// thread never ticked).
+u64 tsnx_engine_wd_last(int idx) {
+    if (idx < 0 || idx >= 8) return 0;
+    return (u64)g_wd_tick[idx];
+}

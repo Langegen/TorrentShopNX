@@ -173,6 +173,12 @@ void tsnx_engine_set_ram_stream(tsnx_engine *eng, int on);
 // Force an immediate tracker re-announce for this torrent.
 bool tsnx_engine_announce_now(tsnx_engine *eng, const char *hash);
 
+// Inject peers into a torrent's pool (manual rescue / diagnostics: addresses
+// taken from another client). ips are network byte order, ports host order.
+// Duplicates are ignored; entries are dialed like any tracker-discovered peer.
+bool tsnx_engine_add_peers(tsnx_engine *eng, const char *hash,
+                           const uint32_t *ips, const uint16_t *ports, int n);
+
 // Detailed runtime diagnostics for the streaming engine.
 typedef struct {
     int peers;              // peers discovered (tracker + DHT)
@@ -186,6 +192,7 @@ typedef struct {
     int bad_bitfield;       // bitfield messages with wrong length
     int sock_fail;          // socket()/connect() refused immediately
     int timeouts;           // SYN sent but no answer
+    int hs_fail;            // TCP ok, but handshake rejected/invalid
     int calm;               // current calm-mode session budget
     int dht_peers;          // peers found by the last completed DHT lookup
     int dht_good;           // DHT good nodes seen during last lookup

@@ -20,9 +20,9 @@
 #include "bencode.h"
 #include "utpbridge.h"
 #include "utp_nb.h"
+#include "engine_log.h"
 
 #define HANDSHAKE_LEN 68
-#define MSG_EXTENDED 20
 #define META_PIECE_LEN 16384
 #define MAX_META_SIZE (8 * 1024 * 1024)
 
@@ -728,6 +728,10 @@ void peer_nb_free(peer_nb *p) {
     p->sock = -1;
 }
 
+// Append raw bytes to the tx queue, growing it if needed. (Defined further
+// below; pump_rx drives the MSE handshake which queues its produced bytes.)
+static int nb_tx_append(peer_nb *p, const void *buf, size_t len);
+
 ssize_t peer_nb_pump_rx(peer_nb *p) {
     ssize_t total = 0;
     for (;;) {
@@ -737,27 +741,84 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
                 return total;  // a whole message is buffered; caller must drain it
         }
         ssize_t n;
+        size_t old_len = p->rx_len;
         if (p->utp) {
             n = utp_nb_read((utp_nb_sess *)p->utp,
                             p->rx + p->rx_len, (int)(PEER_RX_CAP - p->rx_len));
-            if (n < 0) return -1;
+            if (n < 0) {
+                if (p->mse_want && !p->mse_active) p->mse_failed = true;
+                return -1;
+            }
             if (n == 0) return total;
         } else {
             n = recv(p->sock, p->rx + p->rx_len, PEER_RX_CAP - p->rx_len, 0);
             if (n > 0) {
                 // fall through
             } else if (n == 0) {
+                if (p->mse_want && !p->mse_active) p->mse_failed = true;
                 return -1;  // peer closed
             } else if (errno == EINTR) {
                 continue;
             } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return total;
             } else {
+                if (p->mse_want && !p->mse_active) p->mse_failed = true;
                 return -1;
             }
         }
         p->rx_len += (size_t)n;
         total += n;
+
+        if (p->mse_active && p->mse.rc4_selected) {
+            // Stream is crypto-live: decrypt only what arrived just now.
+            mse_peer_decrypt(&p->mse, p->rx + old_len, (size_t)n);
+        } else if (p->mse_want) {
+            // Drive the MSE handshake over whatever has accumulated.
+            if (n > 0)
+                engine_log(ENGINE_LOG_DEBUG,
+                           "[mse] rx %d bytes: %02x %02x %02x %02x %02x %02x %02x %02x",
+                           (int)n, p->rx[old_len], p->rx[old_len + 1],
+                           p->rx[old_len + 2], p->rx[old_len + 3],
+                           p->rx[old_len + 4], p->rx[old_len + 5],
+                           p->rx[old_len + 6], p->rx[old_len + 7]);
+            for (;;) {
+                size_t avail = p->rx_len - p->rx_off;
+                if (avail == 0) break;
+                uint8_t out[256];
+                size_t consumed = 0, produced = 0;
+                int r = mse_peer_feed(&p->mse, p->rx + p->rx_off, avail,
+                                      &consumed, out, sizeof(out), &produced);
+                p->rx_off += consumed;
+                if (produced && nb_tx_append(p, out, produced) != 0)
+                    return -1;
+                engine_log(ENGINE_LOG_DEBUG,
+                           "[mse] feed r=%d consumed=%zu produced=%zu",
+                           r, consumed, produced);
+                if (r == MSE_FAIL || r == MSE_PLAIN) {
+                    p->mse_failed = true;
+                    return -2;  // caller: close, retry this peer plaintext
+                }
+                if (r == MSE_DONE) {
+                    p->mse_active = true;
+                    engine_log(ENGINE_LOG_DEBUG,
+                               "[mse] done rc4=%d", p->mse.rc4_selected ? 1 : 0);
+                    // Bytes past the handshake are encrypted BT data: decrypt
+                    // the buffered remainder in place.
+                    size_t rem = p->rx_len - p->rx_off;
+                    if (rem && p->mse.rc4_selected)
+                        mse_peer_decrypt(&p->mse, p->rx + p->rx_off, rem);
+                    // The BT handshake already rode inside the encrypted
+                    // request as the initial payload (IA). Re-queuing it on
+                    // the stream would send it a SECOND time, which
+                    // spec-compliant peers (qBittorrent/libtorrent) read as
+                    // garbage and close us over (measured: every completed
+                    // MSE session died right after the duplicate arrived).
+                    break;
+                }
+                if (consumed == 0) break;  // need more input
+            }
+            nb_compact(p);
+        }
     }
 }
 
@@ -811,6 +872,14 @@ static int nb_tx_append(peer_nb *p, const void *buf, size_t len) {
         }
     }
     memcpy(p->tx + p->tx_len, buf, len);
+    // Once the MSE handshake completes every byte we queue is RC4-encrypted
+    // (encrypt-at-queue is identical to encrypt-at-send: both consume the
+    // keystream in the same order, and a partially flushed tx buffer is
+    // never re-encrypted). Handshake bytes were queued while mse_active was
+    // false and go out raw -- the encrypted request is already ciphertext.
+    if (p->mse_active && p->mse.rc4_selected)
+        mse_rc4_crypt(&p->mse.send_rc4, p->tx + p->tx_len,
+                      p->tx + p->tx_len, len);
     p->tx_len += len;
     return 0;
 }
@@ -863,10 +932,28 @@ bool peer_nb_tx_pending(const peer_nb *p) {
 
 int peer_nb_send_handshake(peer_nb *p, const uint8_t info_hash[20],
                            const uint8_t peer_id[20]) {
+    if (p->mse_want) {
+        // MSE first: emit pubA and ride the 68-byte BT handshake inside the
+        // encrypted request once the responder's pubB arrives. Plaintext is
+        // only retried after the handshake proves the peer is not MSE.
+        uint8_t ia[HANDSHAKE_LEN];
+        ia[0] = 19;
+        memcpy(ia + 1, "BitTorrent protocol", 19);
+        memset(ia + 20, 0, 8);
+        ia[25] = 0x10;   // BEP 10 extension bit (we speak ut_pex)
+        memcpy(ia + 28, info_hash, 20);
+        memcpy(ia + 48, peer_id, 20);
+
+        uint8_t out[MSE_DH_LEN];
+        size_t out_len = 0;
+        mse_peer_start(&p->mse, info_hash, ia, HANDSHAKE_LEN, out, &out_len);
+        return nb_tx_append(p, out, out_len);
+    }
     uint8_t hs[HANDSHAKE_LEN];
     hs[0] = 19;
     memcpy(hs + 1, "BitTorrent protocol", 19);
-    memset(hs + 20, 0, 8);  // no extensions advertised
+    memset(hs + 20, 0, 8);
+    hs[25] = 0x10;   // BEP 10 extension bit (we speak ut_pex)
     memcpy(hs + 28, info_hash, 20);
     memcpy(hs + 48, peer_id, 20);
     return nb_tx_append(p, hs, HANDSHAKE_LEN);
@@ -882,6 +969,25 @@ int peer_nb_recv_handshake(peer_nb *p, const uint8_t info_hash[20]) {
     if (memcmp(hs + 28, info_hash, 20) != 0) return -1;  // different torrent
     p->rx_off += HANDSHAKE_LEN;
     p->handshaked = true;
+    p->ext_ok = (hs[25] & 0x10) != 0;
     nb_compact(p);
     return 1;
+}
+
+int peer_nb_queue_ext(peer_nb *p, uint8_t ext_id, const void *payload,
+                      uint32_t plen) {
+    uint8_t hdr[6];
+    uint32_t len = htonl(2 + plen);
+    memcpy(hdr, &len, 4);
+    hdr[4] = MSG_EXTENDED;
+    hdr[5] = ext_id;
+    if (nb_tx_append(p, hdr, 6) != 0) return -1;
+    if (plen && nb_tx_append(p, payload, plen) != 0) return -1;
+    return 0;
+}
+
+int peer_nb_queue_ext_handshake(peer_nb *p) {
+    // d1:md6:ut_pexi1eee -- advertise "m": { "ut_pex": 1 }
+    static const char ehs[] = "d1:md6:ut_pexi1eee";
+    return peer_nb_queue_ext(p, 0, ehs, sizeof(ehs) - 1);
 }

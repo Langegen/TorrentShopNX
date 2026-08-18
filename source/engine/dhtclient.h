@@ -40,8 +40,18 @@ void dhtclient_get_last_lookup(int *peers_found, int *good_nodes, int *dubious_n
 void dht_background_add(const uint8_t info_hash[20], dht_peer_cb cb, void *ctx);
 void dht_background_remove(const uint8_t info_hash[20]);
 
+// Initialise the shared background DHT's serialisation mutex. Call once at
+// engine start (single-threaded), before any lookup can touch it; on libnx a
+// zeroed Mutex is valid on its own, so this only matters for the PC shim.
+void dht_bg_init_early(void);
+
 // Stop the persistent background DHT (engine shutdown). Saves the node cache
 // for the next session's warm start.
 void dht_stop(void);
+
+// Starvation signal for the background DHT: while set, active targets are
+// searched every ~5 s instead of ~15 s, and the transition to hungry fires an
+// immediate search. torrentfs calls this from its netloop with (live < 6).
+void dht_bg_set_hungry(int v);
 
 #endif

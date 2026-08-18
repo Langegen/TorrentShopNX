@@ -22,6 +22,9 @@
 #include <algorithm>
 
 #include <engine/engine.h>
+
+extern "C" void engine_log_set_level(int level);
+enum { ENGINE_LOG_DEBUG = 3 };
 #include "../source/datasource/custom_engine_client.h"
 #include "../source/datasource/custom_engine_backend.h"
 #include "../source/buffer/ring_buffer.h"
@@ -214,6 +217,7 @@ int main(int argc, char** argv) {
 
     util::logInit();
     setvbuf(stdout, NULL, _IONBF, 0);
+    engine_log_set_level(ENGINE_LOG_DEBUG);
     std::printf("AppTest: duration=%ds magnet=%.60s...\n", duration_sec, magnet);
     fflush(stdout);
 

@@ -2173,7 +2173,7 @@ dht_periodic(const void *buf, size_t buflen,
                            203, "Announce_peer with wrong token");
                 break;
             }
-            if(port == 0) {
+            if(port <= 1) {
                 debugf("Announce_peer with forbidden port %d.\n", port);
                 send_error(from, fromlen, tid, tid_len,
                            203, "Announce_peer with forbidden port number");

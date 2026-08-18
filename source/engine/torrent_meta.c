@@ -20,6 +20,34 @@ static void set_err(char *err, size_t errlen, const char *msg) {
     if (err && errlen) snprintf(err, errlen, "%s", msg);
 }
 
+// Process-wide peer id, generated on first use. The lazy init races benignly
+// (both threads produce a valid id, one wins) and it never changes afterwards,
+// so every announce/DHT/torrentfs user presents the same identity to trackers.
+static uint8_t s_peer_id[20];
+static volatile int s_peer_id_ready = 0;
+
+void torrent_peer_id(uint8_t out[20]) {
+    if (!s_peer_id_ready) {
+        memcpy(s_peer_id, "-SW0004-", 8);
+        srand((unsigned)time(NULL));
+        for (int i = 8; i < 20; i++) s_peer_id[i] = (uint8_t)(rand() % 256);
+        s_peer_id_ready = 1;
+    }
+    memcpy(out, s_peer_id, 20);
+}
+
+// The port we tell trackers/DHT about. 6881 until a listener binds (and UPnP
+// possibly maps) a real one.
+static int s_announce_port = 6881;
+
+void torrent_set_announce_port(int port) {
+    if (port > 0 && port < 65536) s_announce_port = port;
+}
+
+int torrent_announce_port(void) {
+    return s_announce_port;
+}
+
 static void (*s_log_fn)(const char *) = NULL;
 
 void torrent_set_log(void (*fn)(const char *)) { s_log_fn = fn; }
@@ -44,17 +72,36 @@ static void tlog(const char *fmt, ...) {
     s_log_fn(buf);
 }
 
-// Well-known public UDP trackers, appended to every torrent so we discover far
-// more peers than the torrent's own (often stale) tracker list provides. UDP
-// only: HTTP(S) trackers need a CA bundle we don't ship. add_tracker dedups.
+// Well-known public trackers, appended to every torrent so we discover far
+// more peers than the torrent's own (often stale) tracker list provides.
+// Mixed HTTP(S) and UDP: HTTP trackers are reached via curl, UDP via BEP 15.
+// add_tracker dedups.
 static const char *DEFAULT_TRACKERS[] = {
     "udp://tracker.opentrackr.org:1337/announce",
+    "http://tracker.opentrackr.org:1337/announce",
+    "https://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",
+    "http://open.acgnxtracker.com:80/announce",
     "udp://tracker.torrent.eu.org:451/announce",
     "udp://exodus.desync.com:6969/announce",
     "udp://open.demonii.com:1337/announce",
     "udp://tracker.openbittorrent.com:6969/announce",
+    "http://tracker.openbittorrent.com:80/announce",
     "udp://explodie.org:6969/announce",
+    "https://tracker.tamersunion.org:443/announce",
+    "udp://tracker.tamersunion.org:443/announce",
+    "udp://tracker.moeking.me:6969/announce",
+    "udp://tracker.pomf.se:80/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "http://tracker.gbitt.info:80/announce",
+    "https://tracker.gbitt.info:443/announce",
+    "http://bt.endpot.com:80/announce",
+    "udp://bt1.archive.org:6969/announce",
+    "udp://bt2.archive.org:6969/announce",
+    "http://tracker.files.fm:6969/announce",
+    "udp://tracker.filemail.com:6969/announce",
+    "udp://tracker.altrosky.nl:6969/announce",
+    "http://tracker.altrosky.nl:6969/announce",
 };
 
 static void add_tracker(torrent_meta *t, const char *url, size_t len);
@@ -537,9 +584,7 @@ int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
     add_default_trackers(&stub);
 
     uint8_t peer_id[20];
-    memcpy(peer_id, "-SW0001-", 8);
-    srand((unsigned)time(NULL));
-    for (int i = 8; i < 20; i++) peer_id[i] = (uint8_t)(rand() % 256);
+    torrent_peer_id(peer_id);
 
     meta_fetch fetch;
     uint8_t *metadata = NULL;
@@ -839,14 +884,16 @@ static int curl_cancel_cb(void *clientp, curl_off_t dltotal, curl_off_t dlnow,
 
 static int announce_http(const char *tracker, const char *hash_enc,
                          const char *peer_id_enc, int64_t left,
+                         bool first, int port,
                          peer_addr *out, int max,
                          const volatile bool *cancel, char *err, size_t errlen) {
     char url[1024];
     snprintf(url, sizeof(url),
-             "%s%cinfo_hash=%s&peer_id=%s&port=6881&uploaded=0&downloaded=0"
-             "&left=%lld&compact=1&event=started&numwant=%d",
+             "%s%cinfo_hash=%s&peer_id=%s&port=%d&uploaded=0&downloaded=0"
+             "&left=%lld&compact=1&event=%s&numwant=%d",
              tracker, strchr(tracker, '?') ? '&' : '?',
-             hash_enc, peer_id_enc, (long long)left, max);
+             hash_enc, peer_id_enc, port, (long long)left,
+             first ? "started" : "", max);
 
     membuf resp = {0};
     CURL *curl = curl_easy_init();
@@ -909,18 +956,77 @@ static int announce_http(const char *tracker, const char *hash_enc,
 // which would burn 16 sessions alone -- plus the DHT's permanent recvfrom and
 // the netloop's reads. A global announce lock serialises the two, keeping the
 // worst case at ~12 sessions.
-#define AJOB_PEERS 128
+#define AJOB_PEERS 512
 
 /* At most this many tracker announces run in parallel: every one of them sits
    in a blocking socket call, and the Switch OS allows 16 concurrent blocking
    BSD sessions per process. The rest of the trackers are announced inline
-   after the parallel wave. */
+   after the parallel wave. 8 threads + the DHT recv stays under the budget;
+   more threads keep the announce round short now that the default tracker
+   list is larger. */
 #define ANNOUNCE_MAX_THREADS 8
 
 /* Zero-initialised is a valid Mutex in libnx; the PC compat shim initialises
    lazily. Serialises metadata-fetch announces with torrentfs discovery
    announces so they never burn the 16 blocking BSD sessions together. */
 static Mutex s_announce_mtx;
+
+void torrent_announce_mutex_init(void) {
+    mutexInit(&s_announce_mtx);
+}
+
+#define TRACKER_COOLDOWN_MAX 64
+#define TRACKER_MAX_FAILS 3
+#define TRACKER_COOLDOWN_SECS 600
+
+typedef struct {
+    char url[128];
+    int fails;
+    u64 cooldown_until;
+} tracker_cooldown_entry;
+
+static tracker_cooldown_entry s_tc[TRACKER_COOLDOWN_MAX];
+static int s_tc_count = 0;
+
+static int tracker_get_cooldown_slot(const char *url) {
+    for (int i = 0; i < s_tc_count; i++) {
+        if (strncmp(s_tc[i].url, url, sizeof(s_tc[i].url)) == 0) return i;
+    }
+    if (s_tc_count < TRACKER_COOLDOWN_MAX) {
+        int idx = s_tc_count++;
+        snprintf(s_tc[idx].url, sizeof(s_tc[idx].url), "%s", url);
+        s_tc[idx].fails = 0;
+        s_tc[idx].cooldown_until = 0;
+        return idx;
+    }
+    return -1;
+}
+
+static bool tracker_is_on_cooldown(const char *url, u64 now) {
+    for (int i = 0; i < s_tc_count; i++) {
+        if (strncmp(s_tc[i].url, url, sizeof(s_tc[i].url)) == 0) {
+            if (s_tc[i].fails >= TRACKER_MAX_FAILS && now < s_tc[i].cooldown_until) {
+                return true;
+            }
+            break;
+        }
+    }
+    return false;
+}
+
+static void tracker_record_result(const char *url, bool success, u64 freq) {
+    int idx = tracker_get_cooldown_slot(url);
+    if (idx < 0) return;
+    if (success) {
+        s_tc[idx].fails = 0;
+        s_tc[idx].cooldown_until = 0;
+    } else {
+        s_tc[idx].fails++;
+        if (s_tc[idx].fails >= TRACKER_MAX_FAILS) {
+            s_tc[idx].cooldown_until = armGetSystemTick() + (u64)TRACKER_COOLDOWN_SECS * freq;
+        }
+    }
+}
 
 typedef struct {
     const char *tracker;
@@ -929,6 +1035,8 @@ typedef struct {
     char hash_enc[61];
     char peer_id_enc[61];
     int64_t left;
+    bool first;          // first announce round of this torrent: event=started
+    int port;            // listen/UPnP port to advertise
 
     peer_addr peers[AJOB_PEERS];
     int count;
@@ -950,14 +1058,18 @@ static void announce_thread(void *arg) {
 
     if (strncmp(j->tracker, "udp://", 6) == 0)
         j->count = udp_announce(j->tracker, j->info_hash, j->peer_id, j->left,
+                                j->first, j->port,
                                 j->peers, AJOB_PEERS, j->cancel, j->terr,
                                 sizeof(j->terr));
     else
-        j->count = announce_http(j->tracker, j->hash_enc, j->peer_id_enc, j->left,
+        j->count = announce_http(j->tracker, j->hash_enc, j->peer_id_enc,
+                                 j->left, j->first, j->port,
                                  j->peers, AJOB_PEERS, j->cancel, j->terr,
                                  sizeof(j->terr));
 
     j->secs = (double)(armGetSystemTick() - t0) / freq;
+
+    tracker_record_result(j->tracker, j->count > 0, freq);
 
     // Hand the peers over immediately so callers don't wait for slow trackers.
     if (j->count > 0 && j->cb) j->cb(j->cb_ctx, j->peers, j->count);
@@ -968,9 +1080,7 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
     char hash_enc[61], peer_id_enc[61];
     uint8_t peer_id[20];
 
-    memcpy(peer_id, "-SW0001-", 8);
-    srand((unsigned)time(NULL));
-    for (int i = 8; i < 20; i++) peer_id[i] = (uint8_t)(rand() % 256);
+    torrent_peer_id(peer_id);
 
     urlencode_bytes(t->info_hash, 20, hash_enc);
     urlencode_bytes(peer_id, 20, peer_id_enc);
@@ -979,6 +1089,12 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
     // discovery) so the parallel tracker threads never exhaust the Switch's
     // 16 blocking BSD sessions together with the rest of the engine.
     mutexLock(&s_announce_mtx);
+
+    // Only the very first announce round of a torrent carries event=started;
+    // later rounds omit it. Trackers (t-ru.org observed) treat a stream of
+    // started-events as client abuse and cut the peer list to a single
+    // address; a plain re-announce stays within the protocol.
+    bool first = ((torrent_meta *)t)->announce_seq++ == 0;
 
     // Announce to every tracker in PARALLEL, delivering peers via the callback
     // the moment each tracker answers (so the fastest one unblocks downloading).
@@ -992,6 +1108,7 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
     int n_threaded = t->tracker_count;
     if (n_threaded > ANNOUNCE_MAX_THREADS) n_threaded = ANNOUNCE_MAX_THREADS;
 
+    u64 now = armGetSystemTick();
     for (int i = 0; i < t->tracker_count; i++) {
         ajob *j = &jobs[i];
         j->tracker = t->trackers[i];
@@ -1000,9 +1117,17 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         memcpy(j->hash_enc, hash_enc, sizeof(hash_enc));
         memcpy(j->peer_id_enc, peer_id_enc, sizeof(peer_id_enc));
         j->left = t->total_len;
+        j->first = first;
+        j->port = s_announce_port;
         j->cb = cb;
         j->cb_ctx = ctx;
         j->cancel = cancel;
+
+        if (tracker_is_on_cooldown(j->tracker, now)) {
+            j->count = -1;
+            snprintf(j->terr, sizeof(j->terr), "cooldown");
+            continue;
+        }
 
         if (i < n_threaded) {
             if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
@@ -1018,13 +1143,13 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         if (j->has_thread) {
             threadWaitForExit(&j->thread);
             threadClose(&j->thread);
-        } else if (i >= n_threaded) {
+        } else if (i >= n_threaded && strcmp(j->terr, "cooldown") != 0) {
             announce_thread(j);  // inline wave: bounded by the same timeouts
         }
         if (j->count > 0) {
             answered++;
             tlog("tracker %.1fs (%d) %.60s", j->secs, j->count, j->tracker);
-        } else {
+        } else if (strcmp(j->terr, "cooldown") != 0) {
             tlog("tracker %.1fs (failed: %s) %.60s", j->secs,
                  j->terr[0] ? j->terr : "timeout", j->tracker);
         }

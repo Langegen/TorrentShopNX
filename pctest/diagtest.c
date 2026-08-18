@@ -8,6 +8,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <winsock2.h>
 #else
 #include <unistd.h>
 #endif
@@ -15,6 +16,7 @@
 #include "engine.h"
 #include "torrent_meta.h"
 #include "dhtclient.h"
+#include "engine_log.h"
 
 static volatile bool g_stop = false;
 
@@ -58,7 +60,7 @@ static int choose_largest_file(tsnx_engine *eng, const char *hash) {
     return best;
 }
 
-static void engine_log(const char *msg) {
+static void meta_log_cb(const char *msg) {
     fprintf(stderr, "[engine] %s\n", msg);
     fflush(stderr);
 }
@@ -125,9 +127,11 @@ int main(int argc, char **argv) {
 #ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
 #endif
+    setvbuf(stdout, NULL, _IONBF, 0);   // unbuffered: redirects show progress live
 
-    torrent_set_log(engine_log);
-    dht_set_log(engine_log);
+    torrent_set_log(meta_log_cb);
+    dht_set_log(meta_log_cb);
+    if (argc > 5 && argv[5][0] == 'd') engine_log_set_level(ENGINE_LOG_DEBUG);
 
     printf("DiagTest: starting engine\n");
     tsnx_engine *eng = tsnx_engine_start(6881);
@@ -175,6 +179,41 @@ int main(int argc, char **argv) {
     int piece_size = tsnx_engine_piece_size(eng, hash);
     printf("DiagTest: piece_size=%d file_size=%lld\n",
            piece_size, (long long)file_size);
+
+    // Optional 4th arg: comma-separated "ip:port" peers injected straight into
+    // the pool (manual rescue: seed addresses from another client while the
+    // tracker is cut off).
+    if (argc > 4 && argv[4] && argv[4][0]) {
+        uint32_t ips[64];
+        uint16_t ports[64];
+        int np = 0;
+        char list[1024];
+        snprintf(list, sizeof(list), "%s", argv[4]);
+        char *tok = strtok(list, ",");
+        while (tok && np < 64) {
+            char *colon = strchr(tok, ':');
+            if (colon) {
+                *colon = '\0';
+                unsigned a, b, c, d;
+                int prt = 0;
+                if (sscanf(tok, "%u.%u.%u.%u", &a, &b, &c, &d) == 4 &&
+                    sscanf(colon + 1, "%d", &prt) == 1 && prt > 0 && prt < 65536) {
+                    uint32_t ip = ((uint32_t)a << 24) | ((uint32_t)b << 16) |
+                              ((uint32_t)c << 8) | (uint32_t)d;
+/* engine stores peer IPs in network byte order (sockaddr_in.s_addr) */
+ips[np] = ((ip & 0xFF) << 24) | ((ip & 0xFF00) << 8) |
+          ((ip >> 8) & 0xFF00) | (ip >> 24);
+                    ports[np] = (uint16_t)prt;
+                    np++;
+                }
+            }
+            tok = strtok(NULL, ",");
+        }
+        if (np > 0) {
+            tsnx_engine_add_peers(eng, hash, ips, ports, np);
+            printf("DiagTest: injected %d manual peers\n", np);
+        }
+    }
 
     int64_t file_first_piece = 0, file_last_piece = 0;
     if (piece_size > 0 && file_size > 0) {
@@ -232,7 +271,7 @@ int main(int argc, char **argv) {
             double mb = total_read / (1024.0 * 1024.0);
             printf("[%.1fs] peers=%d live=%d peak=%d conn=%d claiming=%d idle=%d "
                    "speed=%.1fKB/s progress=%.2f%% read=%.2fMB offset=%lld "
-                   "calm=%d empty_bf=%d sock_fail=%d timeouts=%d "
+                   "calm=%d empty_bf=%d sock_fail=%d timeouts=%d hs_fail=%d "
                    "dht_peers=%d dht_nodes=%d/%d piece=%ld %d/%d/%d\n",
                    elapsed,
                    have_diag ? d.peers : 0,
@@ -251,6 +290,7 @@ int main(int argc, char **argv) {
                    have_diag ? d.empty_bitfield : 0,
                    have_diag ? d.sock_fail : 0,
                    have_diag ? d.timeouts : 0,
+                   have_diag ? d.hs_fail : 0,
                    have_diag ? d.dht_peers : 0,
                    have_diag ? d.dht_good : 0,
                    have_diag ? d.dht_dubious : 0,

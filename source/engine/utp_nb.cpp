@@ -120,6 +120,10 @@ static void cb_on_state(void *u, int state) {
     if (!c) return;
     if (state == UTP_STATE_CONNECT || state == UTP_STATE_WRITABLE) {
         c->state = ST_CONNECTED;
+        // Anything queued before the connect completed (our handshake) must
+        // be handed to libutp now -- UTP_Write is a no-op on a connecting
+        // socket, so the peer would otherwise wait on us forever.
+        if (c->sock && c->wcount > 0) UTP_Write(c->sock, c->wcount);
     } else if (state == UTP_STATE_EOF) {
         c->state = ST_EOF;
     } else if (state == UTP_STATE_DESTROYING) {
@@ -213,6 +217,12 @@ void utp_nb_service(void) {
             break;
         }
         if (n == 0) break;
+        if (getenv("UTP_DBG")) {
+            fprintf(stderr, "[utp_nb] rx %u bytes from %u.%u.%u.%u:%u\n", (unsigned)n,
+                    from.sin_addr.s_addr & 0xff, (from.sin_addr.s_addr >> 8) & 0xff,
+                    (from.sin_addr.s_addr >> 16) & 0xff, (from.sin_addr.s_addr >> 24) & 0xff,
+                    ntohs(from.sin_port));
+        }
         UTP_IsIncomingUTP(cb_on_incoming, cb_send_to, NULL,
                           buf, (size_t)n, (struct sockaddr *)&from, fromlen);
     }
@@ -220,13 +230,23 @@ void utp_nb_service(void) {
 }
 
 utp_nb_sess *utp_nb_connect(uint32_t ip_net, uint16_t port_host) {
-    if (!g_inited) return NULL;
+    if (!g_inited) { fprintf(stderr, "[utp_nb] connect: not inited\n"); return NULL; }
     utp_nb_sess *c = find_free_sess();
-    if (!c) return NULL;
+    if (!c) {
+        int inuse = 0, zombies = 0;
+        for (int i = 0; i < SESS_MAX; i++) {
+            if (g_sess[i].in_use) inuse++;
+            else if (g_sess[i].refs > 0) zombies++;
+        }
+        fprintf(stderr, "[utp_nb] connect: no free sess (in_use=%d zombies=%d)\n",
+                inuse, zombies);
+        return NULL;
+    }
 
     c->rbuf = (uint8_t *)malloc(RBUF_SIZE);
     c->wbuf = (uint8_t *)malloc(WBUF_SIZE);
     if (!c->rbuf || !c->wbuf) {
+        fprintf(stderr, "[utp_nb] connect: malloc failed\n");
         free(c->rbuf); free(c->wbuf);
         c->rbuf = NULL; c->wbuf = NULL;
         return NULL;
@@ -240,6 +260,7 @@ utp_nb_sess *utp_nb_connect(uint32_t ip_net, uint16_t port_host) {
     UTPSocket *sock = UTP_Create(cb_send_to, NULL,
                                  (struct sockaddr *)&sa, sizeof(sa));
     if (!sock) {
+        fprintf(stderr, "[utp_nb] connect: UTP_Create failed\n");
         free(c->rbuf); free(c->wbuf);
         c->rbuf = NULL; c->wbuf = NULL;
         return NULL;
@@ -269,8 +290,14 @@ void utp_nb_close(utp_nb_sess *c) {
 
 int utp_nb_read(utp_nb_sess *c, void *buf, int len) {
     if (!c || !c->in_use) return -1;
-    if (c->state == ST_ERROR) return -1;
-    if (c->rcount == 0) return (c->state == ST_EOF) ? -1 : 0;
+    if (c->state == ST_ERROR) {
+        fprintf(stderr, "[utp_nb] read: ST_ERROR\n");
+        return -1;
+    }
+    if (c->rcount == 0) {
+        if (c->state == ST_EOF) { fprintf(stderr, "[utp_nb] read: ST_EOF\n"); return -1; }
+        return 0;
+    }
     return (int)rb_pop(c, (uint8_t *)buf, (size_t)len);
 }
 

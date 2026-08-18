@@ -53,12 +53,13 @@ static uint32_t get32(const uint8_t *p) {
 }
 
 // Sends one datagram and waits for a reply, retrying on timeout. UDP is lossy,
-// so BEP 15 mandates retransmission; we cap retries to stay responsive.
+// so BEP 15 mandates retransmission; we retry a few times to survive packet
+// loss on congested links, then give up to stay responsive.
 static int request_reply(int sock, const uint8_t *req, size_t reqlen,
                          uint8_t *resp, size_t respcap, ssize_t *resplen,
                          uint32_t expect_txid, uint8_t expect_action,
                          const volatile bool *cancel) {
-    for (int attempt = 0; attempt < 2; attempt++) {
+    for (int attempt = 0; attempt < 3; attempt++) {
         if (cancel && *cancel) return -1;  // teardown: don't wait out the recv
         if (send(sock, req, reqlen, 0) < 0) return -1;
 
@@ -79,10 +80,11 @@ static int request_reply(int sock, const uint8_t *req, size_t reqlen,
 
 int udp_announce(const char *url, const uint8_t info_hash[20],
                  const uint8_t peer_id[20], int64_t left,
+                 bool first, int port,
                  peer_addr *peers, int max_peers,
                  const volatile bool *cancel, char *err, size_t errlen) {
-    char host[256], port[16];
-    if (parse_udp_url(url, host, sizeof(host), port, sizeof(port)) != 0) {
+    char host[256], portstr[16];
+    if (parse_udp_url(url, host, sizeof(host), portstr, sizeof(portstr)) != 0) {
         set_err(err, errlen, "invalid udp URL");
         return -1;
     }
@@ -90,7 +92,7 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     struct addrinfo hints = {0}, *res = NULL;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
-    if (getaddrinfo(host, port, &hints, &res) != 0 || !res) {
+    if (getaddrinfo(host, portstr, &hints, &res) != 0 || !res) {
         set_err(err, errlen, "DNS resolution failed");
         return -1;
     }
@@ -101,7 +103,7 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
         set_err(err, errlen, "UDP socket failed");
         return -1;
     }
-    struct timeval tv = { .tv_sec = 2, .tv_usec = 0 };
+    struct timeval tv = { .tv_sec = 3, .tv_usec = 0 };
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
@@ -143,14 +145,15 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     put64(areq + 56, 0);                     // downloaded
     put64(areq + 64, (uint64_t)left);        // left
     put64(areq + 72, 0);                     // uploaded
-    put32(areq + 80, 2);                     // event = started
+    put32(areq + 80, first ? 2 : 0);         // event: started or none
     put32(areq + 84, 0);                     // IP (0 = use source)
     put32(areq + 88, (uint32_t)rand());      // key
     put32(areq + 92, (uint32_t)max_peers);   // num_want
-    areq[96] = 0x1A; areq[97] = 0xE1;        // port 6881
+    areq[96] = (uint8_t)(port >> 8);
+    areq[97] = (uint8_t)(port & 0xff);
 
-    // Response: 20-byte header + 6 bytes per peer.
-    uint8_t aresp[20 + 6 * 256];
+    // Response: 20-byte header + 6 bytes per peer (room for 512 peers).
+    uint8_t aresp[20 + 6 * 512];
     ssize_t alen;
     rc = request_reply(sock, areq, sizeof(areq), aresp, sizeof(aresp), &alen,
                        atxid, ACTION_ANNOUNCE, cancel);

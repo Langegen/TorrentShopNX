@@ -11,7 +11,7 @@ extern "C" {
 
 #include "bencode.h"
 
-#define MAX_TRACKERS 32
+#define MAX_TRACKERS 64
 #define MAX_FILES 256
 
 // One file within the torrent, with its byte offset in the concatenated piece
@@ -35,10 +35,28 @@ typedef struct {
     int tracker_count;
     torrent_file files[MAX_FILES];
     int file_count;
+    int announce_seq;   // announce rounds so far: seq 0 sends event=started
 } torrent_meta;
 
 // Index of the largest file (typically the video). -1 if none.
 int torrent_largest_file(const torrent_meta *t);
+
+// The process-wide peer id, generated once and shared by every announce round,
+// DHT search and torrentfs session. A stable id keeps trackers from treating
+// each re-announce as a brand-new client (t-ru.org throttles those to a single
+// peer address); a fresh one per process is expected and normal.
+void torrent_peer_id(uint8_t out[20]);
+
+// The port trackers/DHT should advertise for us: the real listen port, or the
+// UPnP-mapped external port when a router mapping succeeded. Default 6881.
+// Peers dial this port, so without a listener/forward it is cosmetic.
+void torrent_set_announce_port(int port);
+int  torrent_announce_port(void);
+
+// Explicitly initialise the announce serialisation mutex. Call once at engine
+// start, before any thread can announce. (On libnx a zeroed Mutex is valid on
+// its own; this keeps the PC compat shim's lazy path from ever racing.)
+void torrent_announce_mutex_init(void);
 
 // Length of a given piece (the last one is usually short).
 int64_t torrent_piece_len(const torrent_meta *t, int64_t index);

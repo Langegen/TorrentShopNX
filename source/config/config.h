@@ -26,6 +26,12 @@ public:
     bool getKeepAwakeDuringDownloads() const;
     void setKeepAwakeDuringDownloads(bool enabled);
 
+    // Listen port for incoming BitTorrent connections. Forward this port on
+    // the router (TCP) to the console so firewalled seeders can dial in --
+    // without it, only outbound-reachable peers are usable. Default 6882.
+    int getListenPort() const;
+    void setListenPort(int port);
+
     const std::string& getLastCatalogUpdateDate() const;
     void setLastCatalogUpdateDate(const std::string& date_yyyy_mm_dd);
     bool shouldUpdateCatalogToday() const;
@@ -55,6 +61,7 @@ private:
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;
+    int listen_port_;
     std::string last_catalog_update_date_;
     std::string install_location_;
     std::string app_update_url_;

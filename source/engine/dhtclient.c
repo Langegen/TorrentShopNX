@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "engine_log.h"
+#include "torrent_meta.h"   // torrent_announce_port(): our advertised listen port
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -206,6 +207,29 @@ static uint8_t s_bg_node_id[20];
 static dht_target s_targets[DHT_MAX_TARGETS];
 static u64 s_last_walk = 0;       // last random-id walk tick
 
+// Hunger signal from torrentfs (st_live < STARVED_LIVE): the torrent is
+// starving for peers, so searches run on a short interval instead of the
+// normal 15 s one, and the first hungry search fires immediately.
+static volatile int s_bg_hungry = 0;
+
+void dht_bg_set_hungry(int v) {
+    v = v ? 1 : 0;
+    if (v == s_bg_hungry) return;
+    if (v) {
+        // Hunger just started: don't wait out the next 15 s interval -- make
+        // the first search happen on the very next loop iteration.
+        mutexLock(&s_bg_mtx);
+        for (int i = 0; i < DHT_MAX_TARGETS; i++)
+            if (s_targets[i].active) s_targets[i].last_search = 0;
+        mutexUnlock(&s_bg_mtx);
+    }
+    s_bg_hungry = v;
+}
+
+int dht_bg_hungry(void) {
+    return s_bg_hungry;
+}
+
 static int bg_bootstrap(int s) {
     int booted = 0;
     for (size_t i = 0; i < sizeof(BOOTSTRAP) / sizeof(*BOOTSTRAP); i++) {
@@ -346,6 +370,7 @@ static void dht_bg_main(void *arg) {
     time_t tosleep = 0;
 
     while (!s_bg_stop) {
+        tsnx_engine_wd_tick(0);
         uint8_t buf[3072];
         struct sockaddr_in from;
         socklen_t fromlen = sizeof(from);
@@ -373,22 +398,27 @@ static void dht_bg_main(void *arg) {
                 engine_log(ENGINE_LOG_INFO,
                            "[dht] background bootstrap: %d routers", boot_count);
             }
-        } else if (good == 0 && now - last_bootstrap > (u64)30 * freq) {
+        } else if (good == 0 && now - last_bootstrap > (u64)15 * freq) {
             int boot_count = bg_bootstrap(s_bg_sock);
             last_bootstrap = now;
             engine_log(ENGINE_LOG_INFO,
                        "[dht] background re-bootstrap: %d routers", boot_count);
         }
 
-        if (s_bg_bootstrapped && (good + dubious) >= 2) {
-            // Search every active target every ~15 s.
+        if (s_bg_bootstrapped && (good + dubious) >= 1) {
+            // Search every active target every ~15 s (5 s while the torrent is
+            // starving for peers). The port is ours, so the nodes we query
+            // store OUR address as a peer of the infohash and other clients
+            // dial us back (needs the listener/UPnP forwarding).
+            int my_port = torrent_announce_port();
+            u64 search_iv = (u64)(s_bg_hungry ? 5 : 15) * freq;
             mutexLock(&s_bg_mtx);
             for (int i = 0; i < DHT_MAX_TARGETS; i++) {
                 dht_target *tg = &s_targets[i];
                 if (!tg->active) continue;
-                if (now - tg->last_search > (u64)15 * freq) {
+                if (now - tg->last_search > search_iv) {
                     tg->last_search = now;
-                    dht_search(tg->info_hash, 0, AF_INET, bg_on_event, tg);
+                    dht_search(tg->info_hash, my_port, AF_INET, bg_on_event, tg);
                 }
             }
             mutexUnlock(&s_bg_mtx);
@@ -461,6 +491,11 @@ static void dht_bg_ensure_init(void) {
     s_bg_init = 1;
 }
 
+// Engine-startup hook: makes the lazily-initialised background mutex ready
+// before any thread can reach it (see dhtclient.h).
+void dht_bg_init_early(void) {
+    dht_bg_ensure_init();
+}
 // Stop the persistent DHT thread (engine shutdown). Saves the node cache.
 void dht_stop(void) {
     if (!s_bg_init) return;
