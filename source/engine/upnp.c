@@ -307,7 +307,16 @@ static void upnp_main(void *arg) {
     engine_log(ENGINE_LOG_INFO, "[upnp] probing for IGD (port %d)...", port);
 
     char location[512] = {0};
-    if (s_stop || ssdp_discover(location, sizeof(location)) != 0) {
+    // Some routers answer M-SEARCH slowly or only after the network stack
+    // settles (console just woke up / Wi-Fi re-associated). Retry the
+    // discovery a few times with a 10 s backoff; the whole probe still
+    // terminates silently and non-fatally when there is no IGD at all.
+    int found = 0;
+    for (int attempt = 0; attempt < 3 && !s_stop; attempt++) {
+        if (ssdp_discover(location, sizeof(location)) == 0) { found = 1; break; }
+        if (attempt < 2) svcSleepThread(10000000000ULL);
+    }
+    if (!found) {
         engine_log(ENGINE_LOG_INFO, "[upnp] no IGD found via SSDP");
         return;
     }

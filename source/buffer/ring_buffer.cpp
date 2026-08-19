@@ -156,6 +156,18 @@ bool RingBuffer::isEmpty() const {
     return available() == 0;
 }
 
+bool RingBuffer::isEof() const {
+#if defined(__SWITCH__)
+    mutexLock(&mutex_);
+    const bool value = eof_;
+    mutexUnlock(&mutex_);
+#else
+    std::lock_guard<std::mutex> lk(mutex_);
+    const bool value = eof_;
+#endif
+    return value;
+}
+
 bool RingBuffer::isFull() const {
     return freeSpace() == 0;
 }

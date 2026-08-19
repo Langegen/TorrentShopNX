@@ -1,4 +1,4 @@
-﻿// torrentfs3.c вЂ” v3 of the streaming torrent engine (same public API as v1/v2).
+// torrentfs3.c вЂ” v3 of the streaming torrent engine (same public API as v1/v2).
 //
 // A deliberate simplification of v2. What v2 bought with its complexity
 // (global block scheduler, adaptive pipelines, upload serving, incoming
@@ -547,8 +547,11 @@ static void cache_delete_all(torrentfs *t) {
 // starting at `within` (block-aligned). The caller holds cache_lock; takes
 // t->lock so the slot cannot be recycled (or its buffer handed to the writer)
 // under the copy. Returns bytes copied (may be 0); stops at the first missing
-// block or the piece end. Only used in RAM mode: the SD cache is append-only
-// per verified piece, so it has nothing partial to serve.
+// Copy up to len contiguous, already-arrived bytes of an ACTIVE assembly piece,
+// starting at `within` (supports arbitrary byte offset into the first block).
+// The caller holds cache_lock; takes t->lock so the slot cannot be recycled
+// under the copy. Returns bytes copied (may be 0); stops at the first missing
+// block or the piece end. Only used in RAM mode.
 static size_t aq_piece_read(torrentfs *t, int64_t idx, int64_t within,
                             uint8_t *dst, size_t len) {
     size_t total = 0;
@@ -560,13 +563,17 @@ static size_t aq_piece_read(torrentfs *t, int64_t idx, int64_t within,
     }
     int64_t plen = torrent_piece_len(&t->meta, idx);
     int b = (int)(within / BLOCK_LEN);
+    int64_t b_offset = within % BLOCK_LEN;
     while (b < a->nblocks && total < len && within + (int64_t)total < plen) {
         if (!__atomic_load_n(&a->have[b], __ATOMIC_ACQUIRE)) break;
         uint32_t bl = block_len_of(plen, b);
-        size_t take = bl;
+        if (b_offset >= bl) break;
+        size_t avail_in_block = bl - (size_t)b_offset;
+        size_t take = avail_in_block;
         if (take > len - total) take = len - total;
-        memcpy(dst + total, a->buf + (int64_t)b * BLOCK_LEN, take);
+        memcpy(dst + total, a->buf + (int64_t)b * BLOCK_LEN + b_offset, take);
         total += take;
+        b_offset = 0;
         b++;
     }
     mutexUnlock(&t->lock);
@@ -594,7 +601,7 @@ static size_t cache_read_upto(torrentfs *t, int64_t off, void *buf, size_t len) 
             p += n; off += (int64_t)n; len -= n;
             continue;
         }
-        if (!t->ram_mode || within % BLOCK_LEN != 0) break;
+        if (!t->ram_mode) break;
         size_t m = aq_piece_read(t, idx, within, p, n);
         if (m == 0) break;
         total += m;
@@ -1569,7 +1576,8 @@ static void fill_pipeline(torrentfs *t, sess *s, u64 now) {
         engine_log(ENGINE_LOG_DEBUG, "[sess %d] fill claim=%lld depth=%d",
                    (int)(s - t->S), (long long)s->claim, depth);
     if (a->workers > 1 && a->owner != s - t->S) {
-        if (depth > HELPER_PIPELINE_CAP) depth = HELPER_PIPELINE_CAP;
+        int helper_cap = (t->st_live <= 2) ? 48 : (t->st_live <= 4) ? 32 : HELPER_PIPELINE_CAP;
+        if (depth > helper_cap) depth = helper_cap;
     }
     while (s->req_n < depth && s->req_n < REQ_RING) {
         int b = next_block_to_request(t, a);
@@ -1970,43 +1978,56 @@ static void send_our_bitfield(torrentfs *t, sess *s) {
 }
 
 static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
-    ssize_t got = peer_nb_pump_rx(&s->nb);
-    if (got < 0) { t->st_fetch_fail++; engine_log(ENGINE_LOG_DEBUG, "[sess %d] rx error ip=%u.%u.%u.%u errno=%d rxlen=%zu", sid, s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff, (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff, errno, s->nb.rx_len); sess_close(t, s, true); return; }
-    if (got > 0) s->last_rx = now;
-
-    if (!s->nb.handshaked) {
-        int hs = peer_nb_recv_handshake(&s->nb, t->meta.info_hash);
-        if (hs < 0) {
-            // TCP connected, we sent a plaintext handshake, the peer either
-            // closed on us (encryption-required clients reject plaintext) or
-            // spoke a different protocol/info_hash.
-            t->st_hs_fail++;
+    for (int pump = 0; pump < 4; pump++) {
+        ssize_t got = peer_nb_pump_rx(&s->nb);
+        if (got < 0) {
+            t->st_fetch_fail++;
+            engine_log(ENGINE_LOG_DEBUG, "[sess %d] rx error ip=%u.%u.%u.%u errno=%d rxlen=%zu",
+                       sid, s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
+                       (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff, errno, s->nb.rx_len);
             sess_close(t, s, true);
             return;
         }
-        if (hs == 0) return;
-        t->st_live++;
-        if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
-        engine_log(ENGINE_LOG_INFO, "[sess %d] handshake ok live=%d/%d",
-                   sid, t->st_live, MAX_SESS);
-        peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
-        engine_log(ENGINE_LOG_DEBUG, "[sess %d] queued interested", sid);
-        // Tell the peer which pieces they may request from us (tit-for-tat).
-        send_our_bitfield(t, s);
-        // PEX: advertise ut_pex to extension-speaking peers so they start
-        // feeding us live addresses.
-        if (s->nb.ext_ok) peer_nb_queue_ext_handshake(&s->nb);
-    }
+        if (got > 0) s->last_rx = now;
 
-    for (;;) {
-        uint8_t id;
-        uint8_t *pl;
-        uint32_t plen;
-        int r = peer_nb_next(&s->nb, &id, &pl, &plen);
-        if (r < 0) { engine_log(ENGINE_LOG_DEBUG, "[sess] message decode error"); sess_close(t, s, true); return; }
-        if (r == 0) break;
-        sess_msg(t, s, sid, id, pl, plen, now);
-        if (!s->active) return;
+        if (!s->nb.handshaked) {
+            int hs = peer_nb_recv_handshake(&s->nb, t->meta.info_hash);
+            if (hs < 0) {
+                // TCP connected, we sent a plaintext handshake, the peer either
+                // closed on us (encryption-required clients reject plaintext) or
+                // spoke a different protocol/info_hash.
+                t->st_hs_fail++;
+                sess_close(t, s, true);
+                return;
+            }
+            if (hs == 0) return;
+            t->st_live++;
+            if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
+            engine_log(ENGINE_LOG_INFO, "[sess %d] handshake ok live=%d/%d",
+                       sid, t->st_live, MAX_SESS);
+            peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
+            engine_log(ENGINE_LOG_DEBUG, "[sess %d] queued interested", sid);
+            // Tell the peer which pieces they may request from us (tit-for-tat).
+            send_our_bitfield(t, s);
+            // PEX: advertise ut_pex to extension-speaking peers so they start
+            // feeding us live addresses.
+            if (s->nb.ext_ok) peer_nb_queue_ext_handshake(&s->nb);
+        }
+
+        int msgs = 0;
+        for (;;) {
+            uint8_t id;
+            uint8_t *pl;
+            uint32_t plen;
+            int r = peer_nb_next(&s->nb, &id, &pl, &plen);
+            if (r < 0) { engine_log(ENGINE_LOG_DEBUG, "[sess] message decode error"); sess_close(t, s, true); return; }
+            if (r == 0) break;
+            sess_msg(t, s, sid, id, pl, plen, now);
+            msgs++;
+            if (!s->active) return;
+        }
+
+        if (got == 0 || msgs == 0) break;
     }
 
     fill_pipeline(t, s, now);

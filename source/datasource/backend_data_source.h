@@ -33,6 +33,7 @@ public:
     size_t streamPieceSize() const override;
     uint64_t streamTorrentOffset() const override;
     int downloadSpeedKBps() const override;
+    int livePeers() const override;
     ReadFailureKind lastReadFailure() const override;
     bool shouldFallbackOnReadFailure() const override;
     SourceType type() const override;

@@ -35,6 +35,13 @@ void dht_set_log(void (*fn)(const char *)) { s_log_fn = fn; }
 static int s_last_good = 0;
 static int s_last_dubious = 0;
 static int s_last_peers_found = 0;
+// Last values actually written to the log (change-detection for the
+// 2s heartbeat): the periodic line is only printed when something changed,
+// otherwise at most once per 60s -- cuts the "[dht] background" spam.
+static int s_log_good = 0;
+static int s_log_dubious = 0;
+static int s_log_peers = 0;
+static u64 s_last_change_log = 0;
 
 void dhtclient_get_nodes(int *good, int *dubious) {
     if (good) *good = s_last_good;
@@ -435,9 +442,17 @@ static void dht_bg_main(void *arg) {
         }
 
         if (now - last_log > (u64)2 * freq) {
-            engine_log(ENGINE_LOG_INFO,
-                       "[dht] background nodes=%d/%d peers_found=%d",
-                       good, dubious, s_last_peers_found);
+            bool changed = (good != s_log_good || dubious != s_log_dubious ||
+                            s_last_peers_found != s_log_peers);
+            if (changed || now - s_last_change_log > (u64)60 * freq) {
+                engine_log(ENGINE_LOG_INFO,
+                           "[dht] background nodes=%d/%d peers_found=%d",
+                           good, dubious, s_last_peers_found);
+                s_log_good = good;
+                s_log_dubious = dubious;
+                s_log_peers = s_last_peers_found;
+                s_last_change_log = now;
+            }
             last_log = now;
         }
     }

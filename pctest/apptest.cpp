@@ -28,6 +28,7 @@ enum { ENGINE_LOG_DEBUG = 3 };
 #include "../source/datasource/custom_engine_client.h"
 #include "../source/datasource/custom_engine_backend.h"
 #include "../source/buffer/ring_buffer.h"
+#include "../source/installer/installer_flow.h"
 #include "../source/utils/log.h"
 
 // extern из utils/log.h
@@ -136,22 +137,39 @@ static void collectorThread(datasource::CustomEngineBackend* backend,
                 (unsigned long long)st->downloaded.load());
 }
 
-// Копия HybridNspInstaller::installerThreadFunc: ожидание local prebuffer
-// (32MB), затем чтение по CHUNK_SIZE; ожидание >= 500ms = starvation.
+// Точная копия HybridNspInstaller::installerThreadFunc (поток установки):
+// local prebuffer, затем installer_flow::InstallerFlow (тот же заголовок,
+// что и в железе) — watermark 8MB перед чтением + pacing ~92% от скорости
+// сети; ожидание >= 500ms = starvation; лог статистики каждые 5с в формате
+// log.txt. total_payload — сжатый объём файла (сумма entry-размеров).
 static void installerThread(buffer::RingBuffer* rb,
                             std::atomic<bool>* cancel,
-                            Stats* st) {
+                            Stats* st,
+                            datasource::CustomEngineBackend* backend,
+                            uint64_t total_payload) {
     std::vector<uint8_t> chunk_buf(CHUNK_SIZE);
     std::printf("installer: waiting local prebuffer target=%zu\n", PREBUFFER);
     while (!cancel->load() && rb->available() < PREBUFFER)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     std::printf("installer: local prebuffer ready available=%zu\n", rb->available());
 
+    installer_flow::InstallerFlow flow{installer_flow::FlowConfig()};
+    auto flow_eof   = [&]() { return rb->isEof(); };
+    auto flow_cancel = [&]() { return cancel->load(); };
+    auto flow_err   = [&]() { return false; };
+    auto flow_avail = [&]() { return rb->available(); };
+    auto flow_sleep = [&]() { std::this_thread::sleep_for(std::chrono::milliseconds(100)); };
+    auto flow_log   = [&](const std::string& m) { std::printf("installer: %s\n", m.c_str()); };
+
     auto last_stats_at = std::chrono::steady_clock::now();
     uint64_t last_installed = 0;
     uint64_t last_downloaded = 0;
+    uint64_t stream_pos = 0;
+    uint64_t consumed = 0;
 
     while (!cancel->load()) {
+        flow.waitForWatermark(stream_pos, total_payload, flow_eof, flow_cancel,
+                              flow_err, flow_avail, flow_sleep);
         const auto t0 = std::chrono::steady_clock::now();
         size_t read = rb->read(chunk_buf.data(), CHUNK_SIZE);
         const auto t1 = std::chrono::steady_clock::now();
@@ -166,7 +184,13 @@ static void installerThread(buffer::RingBuffer* rb,
                         (unsigned long long)st->starvation.load());
         }
         if (read == 0) break;
+        consumed += read;
+        stream_pos += read;
         st->installed += read;
+
+        flow.pace(backend != nullptr,
+                  backend ? backend->downloadSpeedKBps() : 0,
+                  consumed, flow_cancel, flow_err, flow_sleep, flow_log);
 
         const auto now = std::chrono::steady_clock::now();
         const double elapsed =
@@ -182,9 +206,10 @@ static void installerThread(buffer::RingBuffer* rb,
                 ? static_cast<double>(installed_delta) / 1024.0 / elapsed : 0.0;
             const double source_kbps = elapsed > 0.0
                 ? static_cast<double>(downloaded_delta) / 1024.0 / elapsed : 0.0;
-            std::printf("installer: stats installed=%llu install_speed=%dKB/s downloaded=%llu source_speed=%dKB/s rb_avail=%zu rb_free=%zu rb_cap=%zu\n",
+            std::printf("installer: stats installed=%llu install_speed=%dKB/s downloaded=%llu source_speed=%dKB/s consume_speed=%dKB/s rb_avail=%zu rb_free=%zu rb_cap=%zu\n",
                         (unsigned long long)installed, (int)install_kbps,
                         (unsigned long long)downloaded, (int)source_kbps,
+                        (int)install_kbps,
                         rb->available(), rb->freeSpace(), rb->capacity());
             last_stats_at = now;
             last_installed = installed;
@@ -296,7 +321,8 @@ int main(int argc, char** argv) {
     Stats st;
     std::thread collector(collectorThread, &backend, &ring_buffer, &cancel, &st,
                           static_cast<uint64_t>(files[file_index].size));
-    std::thread installer(installerThread, &ring_buffer, &cancel, &st);
+    std::thread installer(installerThread, &ring_buffer, &cancel, &st, &backend,
+                          static_cast<uint64_t>(files[file_index].size));
 
     // --- 6. Опрос как DownloadManager (800мс) + статус бэкенда -------------
     const auto start = std::chrono::steady_clock::now();

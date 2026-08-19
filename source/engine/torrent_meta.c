@@ -76,32 +76,17 @@ static void tlog(const char *fmt, ...) {
 // more peers than the torrent's own (often stale) tracker list provides.
 // Mixed HTTP(S) and UDP: HTTP trackers are reached via curl, UDP via BEP 15.
 // add_tracker dedups.
+//
+// Полевой прогон 2026-08-18 (Switch, t-ru swarm): из ~25 дефолтных трекеров
+// живых оказалось четыре — остальные стабильно давали DNS-fail / timeout /
+// no connect reply (0/10 в обоих прогонах) и только жгли сокеты и шумели в
+// лог. Список почищен до подтверждённо живых. t-ru.org добавляется из
+// магнита раздачи, в дефолт не входит.
 static const char *DEFAULT_TRACKERS[] = {
-    "udp://tracker.opentrackr.org:1337/announce",
-    "http://tracker.opentrackr.org:1337/announce",
-    "https://tracker.opentrackr.org:1337/announce",
-    "udp://open.stealth.si:80/announce",
-    "http://open.acgnxtracker.com:80/announce",
     "udp://tracker.torrent.eu.org:451/announce",
     "udp://exodus.desync.com:6969/announce",
-    "udp://open.demonii.com:1337/announce",
-    "udp://tracker.openbittorrent.com:6969/announce",
-    "http://tracker.openbittorrent.com:80/announce",
-    "udp://explodie.org:6969/announce",
-    "https://tracker.tamersunion.org:443/announce",
-    "udp://tracker.tamersunion.org:443/announce",
-    "udp://tracker.moeking.me:6969/announce",
-    "udp://tracker.pomf.se:80/announce",
     "udp://tracker.dler.org:6969/announce",
-    "http://tracker.gbitt.info:80/announce",
-    "https://tracker.gbitt.info:443/announce",
-    "http://bt.endpot.com:80/announce",
-    "udp://bt1.archive.org:6969/announce",
-    "udp://bt2.archive.org:6969/announce",
-    "http://tracker.files.fm:6969/announce",
     "udp://tracker.filemail.com:6969/announce",
-    "udp://tracker.altrosky.nl:6969/announce",
-    "http://tracker.altrosky.nl:6969/announce",
 };
 
 static void add_tracker(torrent_meta *t, const char *url, size_t len);
