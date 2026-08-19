@@ -22,7 +22,6 @@
 #include "ui/AppletWarningView.hpp"
 #include "ui/QrCodeView.hpp"
 #include "config/config.h"
-#include "torrent/torrent_engine.h"
 #include "utils/log.h"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
@@ -64,25 +63,31 @@ extern "C" {
             __nx_socket_tcp_rx_buf_size = 0x4000;      // 16KB default recv buffer
         } else {
             __nx_socket_mem_size = 0x02000000;        // 32MB socket pool for Title Mode
-            __nx_socket_tcp_tx_buf_size = 0x10000;     // 64KB default send buffer
-            __nx_socket_tcp_rx_buf_size = 0x10000;     // 64KB default recv buffer
+            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB initial send buffer
+            __nx_socket_tcp_rx_buf_size = 0x8000;      // 32KB initial recv buffer
         }
 
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
         if (is_applet) {
             cfg.num_bsd_sessions = 4;
             cfg.sb_efficiency = 2;
-            cfg.tcp_tx_buf_max_size = 16384;
-            cfg.tcp_rx_buf_max_size = 16384;
+            cfg.tcp_tx_buf_size = 0x4000;
+            cfg.tcp_rx_buf_size = 0x4000;
+            cfg.tcp_tx_buf_max_size = 0x8000;
+            cfg.tcp_rx_buf_max_size = 0x8000;
             cfg.udp_rx_buf_size = 8192;
             cfg.udp_tx_buf_size = 8192;
         } else {
-            cfg.num_bsd_sessions = 16;
-            cfg.sb_efficiency = 4;
-            cfg.tcp_tx_buf_max_size = 65536;
-            cfg.tcp_rx_buf_max_size = 65536;
-            cfg.udp_rx_buf_size = 16384;
-            cfg.udp_tx_buf_size = 16384;
+            // Switch BSD buffer pool is fixed; keep per-socket initial cost low
+            // so the engine can open many peer sockets without ENOBUFS.
+            cfg.num_bsd_sessions = 12;
+            cfg.sb_efficiency = 8;
+            cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
+            cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
+            cfg.tcp_tx_buf_max_size = 0x40000;  // 256 KB stock
+            cfg.tcp_rx_buf_max_size = 0x40000;  // 256 KB stock
+            cfg.udp_rx_buf_size = 0x8000;       // 32 KB
+            cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }
         g_socket_init_result = socketInitialize(&cfg);
         if (R_FAILED(g_socket_init_result)) {
@@ -127,7 +132,6 @@ extern "C" {
 }
 
 std::string g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
-static const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
 
 static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     std::ifstream in(src, std::ios::binary | std::ios::ate);
@@ -250,8 +254,7 @@ int main(int argc, char** argv) {
     if (!checkAppletMode()) {
         brls::Application::getWindowFocusChangedEvent()->subscribe([](bool focused) {
             if (!focused) {
-                util::logLine("main: focus lost (console going to sleep / minimized), stopping TorrentEngine to prevent crash...");
-                torrent::TorrentEngine::instance().stop();
+                util::logLine("main: focus lost (console going to sleep / minimized)");
             } else {
                 util::logLine("main: focus regained (console waking up)");
             }
@@ -266,14 +269,9 @@ int main(int argc, char** argv) {
         // Initialize managers and load configurations for Title Mode
         auto& cfg = config::ConfigManager::instance();
         cfg.load();
-        
+
         catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
         ui::DownloadManager::instance().init();
-        
-        // Force eager initialization of TorrentEngine in the main thread to prevent background thread crashes
-        util::logLine("main: initializing TorrentEngine eagerly");
-        auto& eng = torrent::TorrentEngine::instance();
-        util::logLine("main: TorrentEngine eagerly initialized, address=" + std::to_string((uintptr_t)&eng));
 
         // Initialize curl first, so background network threads can safely use it.
     #if __has_include(<curl/curl.h>)
@@ -335,16 +333,13 @@ int main(int argc, char** argv) {
         util::logLine("main: calling ImageDownloader::stop");
         net::ImageDownloader::instance().stop();
         
-        util::logLine("main: calling TorrentEngine::stop");
-        torrent::TorrentEngine::instance().stop();
-        
         util::logLine("main: all threads requested to stop");
     }
 
     // Do NOT call curl_global_cleanup() because it might crash if curl threads are alive
 
     // Use _exit(0) to exit cleanly:
-    //   - Skips C++ atexit handlers / global destructors (prevents libtorrent crash)
+    //   - Skips C++ atexit handlers / global destructors (prevents engine teardown crashes)
     //   - Calls __libnx_exit → __appExit → userAppExit (proper service teardown)
     //   - Calls envGetExitFuncPtr() to return to Homebrew Menu (not svcExitProcess!)
     //

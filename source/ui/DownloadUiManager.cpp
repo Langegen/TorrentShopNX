@@ -3,20 +3,22 @@
 #include <algorithm>
 #include <borealis/extern/nlohmann/json.hpp>
 #include "../utils/log.h"
-#include "../torrent/torrent_engine.h"
 #include "../config/config.h"
+
+#include <engine/engine.h>
 
 namespace ui {
 
 void DownloadManager::init() {
     auto& cfg = config::ConfigManager::instance();
     impl_.dataSourceManager().setRemoteUrl(cfg.getTorrServerUrl());
-    if (cfg.getDataMode() == "local_client") {
-        impl_.dataSourceManager().setMode(datasource::DataSourceMode::LocalClient);
+    const std::string mode = cfg.getDataMode();
+    if (mode == "local_client" || mode == "custom_engine") {
+        impl_.dataSourceManager().setMode(datasource::DataSourceMode::CustomEngine);
     } else {
         impl_.dataSourceManager().setMode(datasource::DataSourceMode::Remote);
     }
-    
+
     impl_.setProgressCallback([this]() {
         triggerCallback();
     });
@@ -31,19 +33,19 @@ void DownloadManager::shutdown() {
 
 void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name) {
     size_t idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name);
-    
+
     // Access the item directly to set custom metadata
     auto& queue = const_cast<std::vector<download::DownloadItem>&>(impl_.queue());
     auto& item = queue[idx];
     item.topic_id = game.topic_id;
     item.selected_files = selected_files;
     item.priorities_set = false;
-    
+
     // Start the download immediately if no transfers are active
     if (!impl_.hasActiveTransfers()) {
         impl_.startDownload(idx);
     }
-    
+
     util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue");
     saveDownloads();
 }
@@ -53,23 +55,23 @@ bool DownloadManager::pauseDownload(const std::string& topic_id) {
     for (size_t i = 0; i < queue.size(); ++i) {
         auto& item = queue[i];
         if (item.topic_id == topic_id) {
-            if (item.state == download::DownloadState::Downloading || 
-                item.state == download::DownloadState::StreamPreparing || 
+            if (item.state == download::DownloadState::Downloading ||
+                item.state == download::DownloadState::StreamPreparing ||
                 item.state == download::DownloadState::StreamInstalling) {
-                
-                if (item.torrent_id >= 0) {
-                    // For TorrServer
-                    impl_.dataSourceManager().getSource(); // Ensure torrent engine gets initialized
-                    // We can pause via API
-                    // In torrent_manager: pauseTorrent(id)
-                    if (item.torrent_id >= 0 && impl_.hasActiveTransfers()) {
-                        // Pause the torrent using our wrapper or engine
-                        torrent::TorrentEngine::instance().pauseTorrent(item.torrent_hash);
-                    }
-                } else if (!item.torrent_hash.empty()) {
-                    torrent::TorrentEngine::instance().pauseTorrent(item.torrent_hash);
+
+                // Abort an in-flight metadata fetch / stream open so the
+                // resume can restart it cleanly instead of hitting an
+                // already-opened backend.
+                if (item.cancel_flag) {
+                    item.cancel_flag->store(true);
                 }
-                
+
+                // Real pause: the engine stops dialing and claiming pieces
+                // (an installer blocked mid-read simply stalls).
+                if (!item.torrent_hash.empty()) {
+                    tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
+                }
+
                 item.state = download::DownloadState::Paused;
                 item.download_speed_kbps = 0.0f;
                 util::logLine("download_ui: paused topic_id=" + topic_id);
@@ -88,14 +90,20 @@ bool DownloadManager::resumeDownload(const std::string& topic_id) {
         auto& item = queue[i];
         if (item.topic_id == topic_id) {
             if (item.state == download::DownloadState::Paused || item.state == download::DownloadState::Installing) {
-                if (item.torrent_id >= 0) {
-                    // Resume TorrServer
-                    // TorrServer uses resume
-                    torrent::TorrentEngine::instance().resumeTorrent(item.torrent_hash);
-                } else if (!item.torrent_hash.empty()) {
-                    torrent::TorrentEngine::instance().resumeTorrent(item.torrent_hash);
+                if (item.cancel_flag) {
+                    item.cancel_flag->store(false);
                 }
-                item.state = download::DownloadState::Downloading;
+                if (!item.torrent_hash.empty()) {
+                    tsnx_engine_resume_torrent(nullptr, item.torrent_hash.c_str());
+                }
+                // Restore the pre-pause state: a paused hybrid install keeps
+                // installing where it stopped; anything earlier goes back to
+                // Downloading, which re-triggers the stream open.
+                if (item.hybrid_installer && item.auto_hybrid_started) {
+                    item.state = download::DownloadState::StreamInstalling;
+                } else {
+                    item.state = download::DownloadState::Downloading;
+                }
                 util::logLine("download_ui: resumed topic_id=" + topic_id);
                 saveDownloads();
                 triggerCallback();
@@ -139,8 +147,8 @@ bool DownloadManager::deleteDownload(const std::string& topic_id) {
 int DownloadManager::getActiveDownloadsCount() const {
     int count = 0;
     for (const auto& item : impl_.queue()) {
-        if (item.state == download::DownloadState::Downloading || 
-            item.state == download::DownloadState::StreamPreparing || 
+        if (item.state == download::DownloadState::Downloading ||
+            item.state == download::DownloadState::StreamPreparing ||
             item.state == download::DownloadState::StreamInstalling) {
             count++;
         }

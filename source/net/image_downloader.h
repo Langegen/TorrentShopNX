@@ -39,6 +39,12 @@ public:
     /// Остановка и очистка очереди
     void stop();
 
+    /// Приостановить приём новых задач (текущие докачиваются)
+    void pause();
+
+    /// Возобновить приём задач
+    void resume();
+
     /// Обновить текущую позицию фокуса для приоритизации очереди обложек
     void setFocusedPosition(int row, int col);
 
@@ -71,6 +77,7 @@ private:
     std::mutex queueMutex_;
     std::condition_variable cv_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> paused_{false};
     int currentFocusedRow_ = -1;
     int currentFocusedCol_ = -1;
 };

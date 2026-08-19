@@ -2,12 +2,10 @@
 #include "FileSelectView.hpp"
 #include "../GameData.hpp"
 #include "../utils/log.h"
+#include "../engine/torrent_meta.h"
 #include <switch.h>
 #include <arpa/inet.h>
-
-#if __has_include(<libtorrent/torrent_info.hpp>)
-#include <libtorrent/torrent_info.hpp>
-#endif
+#include <cstdio>
 
 namespace ui {
 
@@ -106,33 +104,33 @@ void RemoteAddView::startServer() {
     svr.Post("/torrent", [this](const httplib::Request& req, httplib::Response& res) {
         if (req.form.has_file("file")) {
             const auto& file = req.form.get_file("file");
-            
+
             // Save temporary torrent file
             std::string tempPath = "sdmc:/switch/TorrentShopNX/temp_upload.torrent";
             FILE* f = fopen(tempPath.c_str(), "wb");
             if (f) {
                 fwrite(file.content.data(), 1, file.content.size(), f);
                 fclose(f);
-                
-                // Parse magnet from it using libtorrent
-                #if __has_include(<libtorrent/torrent_info.hpp>)
-                lt::error_code ec;
-                lt::torrent_info ti(tempPath, ec);
-                if (!ec) {
+
+                // Parse info hash and name using the custom engine's metadata parser
+                torrent_meta t;
+                char err[256] = {0};
+                if (torrent_load(&t, tempPath.c_str(), err, sizeof(err)) == 0) {
                     char hex[41];
-                    auto hash = ti.info_hash().to_string();
-                    for (int i=0; i<20; ++i) {
-                        sprintf(hex + (i*2), "%02x", (unsigned char)hash[i]);
+                    static const char digits[] = "0123456789abcdef";
+                    for (int i = 0; i < 20; ++i) {
+                        hex[i * 2]     = digits[(t.info_hash[i] >> 4) & 0xF];
+                        hex[i * 2 + 1] = digits[t.info_hash[i] & 0xF];
                     }
-                    this->receivedMagnet = "magnet:?xt=urn:btih:" + std::string(hex) + "&dn=" + ti.name();
+                    hex[40] = '\0';
+                    std::string name = t.name[0] ? t.name : "uploaded";
+                    this->receivedMagnet = "magnet:?xt=urn:btih:" + std::string(hex) + "&dn=" + name;
                     this->fileReceived = true;
+                    torrent_unload(&t);
                     res.set_content("Торрент файл успешно обработан! Посмотрите на экран приставки.", "text/plain");
                 } else {
-                    res.set_content("Ошибка парсинга торрента: " + ec.message(), "text/plain");
+                    res.set_content(std::string("Ошибка парсинга торрента: ") + err, "text/plain");
                 }
-                #else
-                res.set_content("Ошибка: libtorrent не подключен в этой сборке", "text/plain");
-                #endif
             } else {
                 res.set_content("Ошибка сохранения файла", "text/plain");
             }

@@ -155,14 +155,14 @@ void GameDetailView::onContentAvailable() {
     });
     
     btnFavorite->registerClickAction([this](brls::View* view) {
-        catalog::FavoritesManager::instance().toggleFavorite(game_.topic_id);
+        catalog::FavoritesManager::instance().toggleFavorite(game_);
         updateFavoriteButton();
         return true;
     });
     
     // Gamepad quick-favorites shortcut
     this->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
-        catalog::FavoritesManager::instance().toggleFavorite(game_.topic_id);
+        catalog::FavoritesManager::instance().toggleFavorite(game_);
         updateFavoriteButton();
         return true;
     });
@@ -185,7 +185,7 @@ void GameDetailView::onContentAvailable() {
 }
 
 void GameDetailView::updateFavoriteButton() {
-    bool isFav = catalog::FavoritesManager::instance().isFavorite(game_.topic_id);
+    bool isFav = catalog::FavoritesManager::instance().isFavorite(game_);
     if (isFav) {
         btnFavorite->setText("Из избранного");
     } else {

@@ -9,8 +9,9 @@
 namespace datasource {
 
 enum class DataSourceMode {
-    Remote,      // External TorrServer
-    LocalClient  // Built-in local torrent client
+    Remote,       // External TorrServer
+    LocalClient,  // Built-in custom engine (legacy name kept for UI compatibility)
+    CustomEngine  // Built-in lightweight custom engine
 };
 
 class DataSourceManager {
@@ -37,13 +38,12 @@ public:
 private:
     DataSourceMode mode_ = DataSourceMode::LocalClient;
     std::string remote_url_ = "http://127.0.0.1:8090";
-    std::string local_proxy_url_ = "http://127.0.0.1:8080";
     int local_port_ = 8080;
 
     BackendConfig remote_cfg_{};
-    BackendConfig local_cfg_{};
+    BackendConfig custom_cfg_{};
     std::unique_ptr<BackendDataSource> remote_;
-    std::unique_ptr<IDataSource> local_client_;
+    std::unique_ptr<BackendDataSource> custom_engine_;
 };
 
 } // namespace datasource

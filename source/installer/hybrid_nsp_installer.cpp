@@ -3,6 +3,7 @@
 #include "ncz_parser.h"
 #include "../buffer/ring_buffer.h"
 #include "../utils/log.h"
+#include "../utils/switch_utils.h"
 
 #include <algorithm>
 #include <cctype>
@@ -14,8 +15,11 @@
 #ifdef __SWITCH__
 #include <switch.h>
 #include <mutex>
-// Для SHA-256 используем mbedtls (уже в зависимостях проекта)
-#include <mbedtls/sha256.h>
+// SHA-256 через аппаратный ARMv8 CE (libnx crypto) — mbedtls-путь был чисто
+// программным и жег целое ядро на верификацию каждого NCA.
+extern "C" {
+#include <switch/crypto/sha256.h>
+}
 extern std::recursive_mutex g_switch_service_mutex;
 #endif
 
@@ -55,6 +59,11 @@ static constexpr size_t NSP_HEADER_PROBE_SIZE = 4 * 1024;  // 4KB для быс�
 static constexpr size_t NSP_HEADER_MAX_SIZE  = 4 * 1024 * 1024; // защитный лимит для неадекватных header
 static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 4 * 1024 * 1024; // Increased from 128KB to 4MB to prevent starvation
 static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 32 * 1024 * 1024; // Increased from 8MB to 32MB for smoother play buffer
+// If the full prebuffer target never fills (slow/dead swarm), start installing
+// with whatever has arrived after this long -- provided at least one byte is
+// there. Without the timeout a 3-peer wifi swarm that trickles below the
+// target keeps the install stuck in the buffering phase forever.
+static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 60000;
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
 static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (saves RAM in Applet mode)
@@ -441,6 +450,9 @@ bool HybridNspInstaller::startStreamingPhase() {
     }
 
     threads_started_ = true;
+    // The transfer is now running: hold the console at 1785 MHz so SHA-1
+    // verification, zstd decompression and bsd IPCs all run ~75% faster.
+    util::cpuBoostBegin();
     util::logLine("hybrid: both threads started");
 #else
     // На хосте — однопоточная имитация
@@ -705,8 +717,22 @@ void HybridNspInstaller::installerThreadFunc() {
         }
         if (target > 0) {
             util::logLine("installer: waiting local prebuffer target=" + std::to_string(target));
+            const auto prebuffer_start = std::chrono::steady_clock::now();
             while (!cancel_requested_ && !hasError() && ring_buffer_.available() < target) {
                 sleepPrebufferPoll();
+                // Slow swarm: give up on the full target after a minute and
+                // install with what has arrived. Requires at least one byte --
+                // a completely dead swarm just keeps waiting (cancellable).
+                const auto waited_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - prebuffer_start).count();
+                if (ring_buffer_.available() > 0 &&
+                    waited_ms >= LOCAL_PREBUFFER_TIMEOUT_MS) {
+                    util::logLine("installer: prebuffer timeout after " +
+                                  std::to_string(waited_ms) + "ms, starting with available=" +
+                                  std::to_string(ring_buffer_.available()));
+                    break;
+                }
             }
             util::logLine("installer: local prebuffer ready available=" +
                           std::to_string(ring_buffer_.available()));
@@ -718,8 +744,7 @@ void HybridNspInstaller::installerThreadFunc() {
     uint64_t progress_pos = 0;
 
 #ifdef __SWITCH__
-    mbedtls_sha256_context sha_ctx;
-    mbedtls_sha256_init(&sha_ctx);
+    Sha256Context sha_ctx;
     bool hashing_active = false;
 #endif
 
@@ -865,7 +890,7 @@ void HybridNspInstaller::installerThreadFunc() {
                         bool ok = true;
                         
                         if (config_.verify_sha256) {
-                            mbedtls_sha256_starts(&sha_ctx, 0);
+                            sha256ContextCreate(&sha_ctx);
                             hashing_active = true;
                         }
                         
@@ -886,7 +911,7 @@ void HybridNspInstaller::installerThreadFunc() {
                             }
                             
                             if (config_.verify_sha256 && hashing_active) {
-                                mbedtls_sha256_update(&sha_ctx, out_buf.data(), got);
+                                sha256ContextUpdate(&sha_ctx, out_buf.data(), got);
                             }
 
                             if (current_entry->type == NspEntryType::CnmtNca) {
@@ -927,7 +952,7 @@ void HybridNspInstaller::installerThreadFunc() {
 
                     if (offset_in_file == 0) {
                         if (config_.verify_sha256) {
-                            mbedtls_sha256_starts(&sha_ctx, 0);
+                            sha256ContextCreate(&sha_ctx);
                             hashing_active = true;
                         }
                         if (current_entry->type == NspEntryType::CnmtNca) {
@@ -957,9 +982,9 @@ void HybridNspInstaller::installerThreadFunc() {
 
                     if (config_.verify_sha256 && hashing_active) {
                         util::logLine("installer: [SHA256] update start");
-                        mbedtls_sha256_update(&sha_ctx,
-                                               chunk_buf.data() + processed,
-                                               to_process);
+                        sha256ContextUpdate(&sha_ctx,
+                                            chunk_buf.data() + processed,
+                                            to_process);
                         util::logLine("installer: [SHA256] update success");
                     }
 
@@ -1011,7 +1036,6 @@ void HybridNspInstaller::installerThreadFunc() {
 
 #ifdef __SWITCH__
 cleanup_sha:
-    mbedtls_sha256_free(&sha_ctx);
 #endif
 
     if (!cancel_requested_ && !hasError()) {
@@ -1027,6 +1051,10 @@ cleanup_sha:
     if (source_) {
         source_->notifyStreamingComplete(!cancel_requested_ && !hasError());
     }
+
+    // Every installer-thread exit path converges here (completion, cancel,
+    // error), so this is the single place the transfer releases its boost.
+    util::cpuBoostEnd();
 
     util::logLine("installer: thread finished, installed " + std::to_string(bytes_installed_.load()) + " bytes");
 }
@@ -1383,6 +1411,7 @@ void HybridNspInstaller::cancel() {
     }
 
     ncm_.cleanup();
+    util::cpuBoostEnd();   // idempotent safety net for the early-cancel paths
 #endif
 
     state_ = InstallState::Cancelled;

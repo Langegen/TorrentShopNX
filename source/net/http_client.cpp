@@ -6,6 +6,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <errno.h>
 
 #include <cstring>
 #include <sstream>
@@ -35,6 +38,44 @@ HttpClient::~HttpClient() {
 // =============================================================================
 // URL-парсинг
 // =============================================================================
+// Non-blocking connect with timeout. Avoids blocking the caller for the OS
+// default TCP timeout when a host is unreachable (common for dead image hosts).
+static int connect_with_timeout(int sock, const struct sockaddr* addr,
+                                socklen_t addrlen, int timeout_sec) {
+    int flags = fcntl(sock, F_GETFL, 0);
+    if (flags < 0) return -1;
+    if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) return -1;
+
+    int rc = connect(sock, addr, addrlen);
+    if (rc == 0) {
+        fcntl(sock, F_SETFL, flags);
+        return 0;
+    }
+    if (errno != EINPROGRESS) {
+        fcntl(sock, F_SETFL, flags);
+        return -1;
+    }
+
+    struct pollfd pfd;
+    pfd.fd = sock;
+    pfd.events = POLLOUT;
+    rc = poll(&pfd, 1, timeout_sec * 1000);
+    if (rc <= 0) {
+        fcntl(sock, F_SETFL, flags);
+        return -1;
+    }
+
+    int soerr = 0;
+    socklen_t len = sizeof(soerr);
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &len) < 0 || soerr != 0) {
+        fcntl(sock, F_SETFL, flags);
+        return -1;
+    }
+
+    fcntl(sock, F_SETFL, flags);
+    return 0;
+}
+
 bool HttpClient::parseUrl(const std::string& url, std::string& host, std::string& path, int& port) {
     host.clear();
     path = "/";
@@ -107,14 +148,22 @@ static void initGlobalCurlShare() {
     });
 }
 
-static int curlXferInfoCb(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+struct CurlXferContext {
+    const std::atomic<bool>* cancel_flag = nullptr;
+    ProgressCallback progress_cb = nullptr;
+};
+
+static int curlXferInfoCb(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
     if (g_appExiting.load()) {
         return 1;
     }
     if (clientp) {
-        auto* cancel_flag = static_cast<const std::atomic<bool>*>(clientp);
-        if (cancel_flag && cancel_flag->load()) {
+        auto* ctx = static_cast<CurlXferContext*>(clientp);
+        if (ctx->cancel_flag && ctx->cancel_flag->load()) {
             return 1;
+        }
+        if (ctx->progress_cb) {
+            ctx->progress_cb(static_cast<int64_t>(dltotal), static_cast<int64_t>(dlnow));
         }
     }
     return 0;
@@ -192,6 +241,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
             headers = curl_slist_append(headers, h.c_str());
         }
 
+        CurlXferContext xfer_ctx{cancel_flag_, progress_cb_};
+
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteBody);
@@ -209,7 +260,7 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
-        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancel_flag_);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &xfer_ctx);
 
         if (keep_alive_) {
             curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -267,12 +318,18 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
     }
 
     int sock = -1;
+    int last_errno = 0;
     for (struct addrinfo* rp = result; rp != nullptr; rp = rp->ai_next) {
         sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sock == -1) continue;
-        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0) {
+        if (sock == -1) {
+            last_errno = errno;
+            continue;
+        }
+        if (connect_with_timeout(sock, rp->ai_addr, rp->ai_addrlen,
+                                 timeout_sec_ > 0 ? timeout_sec_ : 30) == 0) {
             break;
         }
+        last_errno = errno;
         close(sock);
         sock = -1;
     }
@@ -280,7 +337,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
 
     if (sock == -1) {
         resp.status_code = 0;
-        resp.body = "Connection failed";
+        resp.body = "Connection failed errno=" + std::to_string(last_errno);
+        util::logLine("HttpClient: connection failed errno=" + std::to_string(last_errno) + " url=" + url);
         return resp;
     }
 

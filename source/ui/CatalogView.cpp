@@ -143,6 +143,8 @@ void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: recycler layouted? creating DataSource...");
     auto* ds = new CatalogDataSource(this);
     brls::Logger::info("CatalogView: DataSource created, calling setDataSource");
+    GameRowCell::s_lastFocusedColumn = 0;
+    recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
     recycler->setDataSource(ds);
     brls::Logger::info("CatalogView: data source set, constructor done");
     // RecyclerFrame will call reloadData() on its first onLayout()
@@ -184,10 +186,19 @@ void CatalogView::filterCatalog() {
         filteredGames_.push_back(game);
     }
     
+    if (statsHint) {
+        std::string updateDate = config::ConfigManager::instance().getLastCatalogUpdateDate();
+        if (updateDate.empty()) updateDate = "Никогда";
+        statsHint->setText("Игр: " + std::to_string(g_games.size()) + " | Обновлено: " + updateDate);
+    }
+
+    GameRowCell::s_lastFocusedColumn = 0;
     // Safely shift focus to recycler before reloading cells
     if (recycler) {
-        brls::Application::giveFocus(this->recycler);
+        recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
+        recycler->resetScrollToTop();
         recycler->reloadData();
+        brls::Application::giveFocus(this->recycler);
     }
 }
 
@@ -285,10 +296,8 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
                 
                 cardBox->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
-                    if (!game.topic_id.empty()) {
-                        bool fav = catalog::FavoritesManager::instance().toggleFavorite(game.topic_id);
-                        brls::Application::notify(fav ? "Добавлено в избранное" : "Удалено из избранного");
-                    }
+                    bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
+                    brls::Application::notify(fav ? "Добавлено в избранное" : "Удалено из избранного");
                     return true;
                 });
 
@@ -306,6 +315,10 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 if (cards[i].card) {
                     cards[i].card->setVisibility(brls::Visibility::INVISIBLE);
                     cards[i].card->setFocusable(false);
+                    cards[i].card->getFocusEvent()->clear();
+                    cards[i].card->getFocusLostEvent()->clear();
+                    cards[i].card->registerClickAction([](brls::View*) { return false; });
+                    cards[i].card->registerAction("", brls::ControllerButton::BUTTON_Y, [](brls::View*) { return false; });
                 }
             } catch (...) {}
         }

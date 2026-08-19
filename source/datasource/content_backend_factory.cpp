@@ -1,10 +1,7 @@
 #include "i_content_backend.h"
 
 #include "external_torrserver_backend.h"
-
-#ifdef TSNX_USE_LIBTORRENT
-#include "local_libtorrent_backend.h"
-#endif
+#include "custom_engine_backend.h"
 
 namespace datasource {
 
@@ -30,11 +27,9 @@ std::unique_ptr<IContentBackend> create_backend(BackendType type, const BackendC
         case BackendType::ExternalTorrServer:
             return std::make_unique<ExternalTorrServerBackend>(cfg);
         case BackendType::LocalLibtorrent:
-#ifdef TSNX_USE_LIBTORRENT
-            return std::make_unique<LocalLibtorrentBackend>(cfg);
-#else
-            return nullptr;  // libtorrent не собран
-#endif
+            return nullptr;  // legacy backend removed
+        case BackendType::CustomEngine:
+            return std::make_unique<CustomEngineBackend>(cfg);
     }
     return nullptr;
 }

@@ -27,6 +27,7 @@ void ImageDownloader::stop() {
         std::lock_guard<std::mutex> lock(queueMutex_);
         if (!running_.load()) return;
         running_.store(false);
+        paused_.store(false);
         tasks_.clear();
     }
     cv_.notify_all();
@@ -38,6 +39,26 @@ void ImageDownloader::stop() {
     }
     workers_.clear();
     util::logLine("ImageDownloader: stopped");
+}
+
+void ImageDownloader::pause() {
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        if (!running_.load() || paused_.load()) return;
+        paused_.store(true);
+    }
+    cv_.notify_all();
+    util::logLine("ImageDownloader: paused");
+}
+
+void ImageDownloader::resume() {
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        if (!running_.load() || !paused_.load()) return;
+        paused_.store(false);
+    }
+    cv_.notify_all();
+    util::logLine("ImageDownloader: resumed");
 }
 
 int ImageDownloader::calculatePriority(const ImageTask& task) const {
@@ -138,14 +159,15 @@ void ImageDownloader::workerLoop() {
         {
             std::unique_lock<std::mutex> lock(queueMutex_);
             cv_.wait(lock, [this]() {
-                return !tasks_.empty() || !running_.load() || g_appExiting.load();
+                return !running_.load() || g_appExiting.load() ||
+                       (!paused_.load() && !tasks_.empty());
             });
 
             if (!running_.load() || g_appExiting.load()) {
                 break;
             }
 
-            if (tasks_.empty()) continue;
+            if (paused_.load() || tasks_.empty()) continue;
 
             task = tasks_.front();
             tasks_.pop_front();

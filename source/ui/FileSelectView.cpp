@@ -2,9 +2,10 @@
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
-#include "../datasource/internal_torrent_engine.h"
+#include "../datasource/custom_engine_client.h"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
+#include "../net/image_downloader.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
@@ -135,6 +136,9 @@ FileSelectView::FileSelectView(const Game& game)
     : game_(game),
       alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
     g_file_select_view_active = true;
+    // Background cover downloads compete for BSD sockets/sessions with the
+    // custom engine probe. Pause them while this view is open.
+    net::ImageDownloader::instance().pause();
 }
 
 FileSelectView::~FileSelectView() {
@@ -142,6 +146,11 @@ FileSelectView::~FileSelectView() {
     // They must NOT touch any member after this flag is false.
     alive_flag_->store(false);
     g_file_select_view_active = false;
+    net::ImageDownloader::instance().resume();
+    // Abort a still-running probe and drop its torrent (unless a download has
+    // adopted it) so the engine does not keep it around forever.
+    datasource::CustomEngineClient::instance().cancelProbe();
+    datasource::CustomEngineClient::instance().releaseProbeTorrent();
 }
 
 void FileSelectView::onContentAvailable() {
@@ -201,13 +210,21 @@ void FileSelectView::onContentAvailable() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             if (!status_running->load()) break;
             
-            auto status = datasource::InternalTorrentEngine::instance().probeStatus();
+            auto status = datasource::CustomEngineClient::instance().probeStatus();
             brls::sync([this, status, status_running, alive]() {
                 if (!alive->load() || !status_running->load()) return;
                 std::string text = "Получение списка файлов... ";
-                text += "(Сиды: " + std::to_string(status.seeds) + 
-                        ", Пиры: " + std::to_string(status.peers) + 
-                        ", DHT: " + std::to_string(status.dht_nodes) + ")";
+                if (status.active && status.meta_peers_total > 0) {
+                    text += "(метаданные: пиры " +
+                            std::to_string(status.meta_peers_tried) + "/" +
+                            std::to_string(status.meta_peers_total) + ")";
+                } else if (status.active) {
+                    text += "(поиск пиров: " + status.phase + ")";
+                } else {
+                    text += "(Сиды: " + std::to_string(status.seeds) +
+                            ", Пиры: " + std::to_string(status.peers) +
+                            ", DHT: " + std::to_string(status.dht_nodes) + ")";
+                }
                 subtitle->setText(text);
             });
         }

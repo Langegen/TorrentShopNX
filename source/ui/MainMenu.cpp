@@ -5,6 +5,8 @@
 #include "DownloadsView.hpp"
 #include "SettingsTab.hpp"
 #include "RemoteAddView.hpp"
+#include "CatalogProgressNotification.hpp"
+#include "FavoritesManager.hpp"
 #include "../GameData.hpp"
 #include "../config/config.h"
 #include "../utils/log.h"
@@ -66,18 +68,43 @@ void MainMenu::onContentAvailable() {
 
     if (should_update || was_empty) {
         g_catalogUpdateRunning = true;
-        brls::async([catalog_url, should_update, was_empty]() {
+        ui::CatalogProgressNotification* notif = new ui::CatalogProgressNotification();
+        if (brls::Application::getNotificationManager()) {
+            brls::Application::getNotificationManager()->addView(notif);
+        }
+
+        brls::async([catalog_url, should_update, was_empty, notif]() {
             bool updated = false;
             std::vector<Game> online_games;
 
             // 1. Fetch catalog online directly in memory
             util::logLine("catalog: background online update started from " + catalog_url);
             net::HttpClient http;
+
+            http.setProgressCallback([notif](int64_t dltotal, int64_t dlnow) {
+                if (dltotal > 0) {
+                    float percent = (static_cast<float>(dlnow) * 75.0f) / static_cast<float>(dltotal);
+                    float dlMB = static_cast<float>(dlnow) / (1024.0f * 1024.0f);
+                    float totMB = static_cast<float>(dltotal) / (1024.0f * 1024.0f);
+                    char buf[64];
+                    std::snprintf(buf, sizeof(buf), "Загрузка: %.1f MB / %.1f MB (%.0f%%)",
+                                  dlMB, totMB, (static_cast<float>(dlnow) * 100.0f) / static_cast<float>(dltotal));
+                    std::string status = buf;
+                    brls::sync([notif, percent, status]() {
+                        if (notif) notif->updateProgress(percent, status);
+                    });
+                }
+            });
+
             auto res = http.httpGet(catalog_url);
             if (res.status_code == 200 && !res.body.empty()) {
+                brls::sync([notif]() {
+                    if (notif) notif->updateProgress(85.0f, "Обработка списка игр...");
+                });
                 online_games = parseGamesFromJsonString(res.body);
                 if (!online_games.empty()) {
                     util::logLine("catalog: background online update parsed " + std::to_string(online_games.size()) + " games directly in memory");
+                    writeTextFile(kCatalogPath, res.body);
                     updated = true;
                 }
             } else {
@@ -105,24 +132,36 @@ void MainMenu::onContentAvailable() {
                     }
 
                     if (!online_games.empty()) {
+                        nlohmann::json jg = online_games;
+                        writeTextFile(kCatalogPath, jg.dump(2));
                         updated = true;
                     }
                 }
             }
 
             if (updated && !online_games.empty()) {
-                // Update games directly in memory on main thread without downloading to disk file
-                brls::sync([online_games]() {
+                brls::sync([online_games, notif]() {
                     g_games = online_games;
+                    catalog::FavoritesManager::instance().syncLegacyFavorites(g_games);
+
                     brls::Application::setCommonFooter("TorrentShopNX v2.2 | Игр в каталоге: " + std::to_string(g_games.size()));
                     
-                    // Write new update date in config on main thread
                     auto& main_cfg = config::ConfigManager::instance();
                     main_cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
                     main_cfg.save();
 
                     if (ui::g_activeCatalogView) {
                         ui::g_activeCatalogView->filterCatalog();
+                    }
+
+                    if (notif) {
+                        notif->setCompleted("Загружено игр: " + std::to_string(g_games.size()));
+                    }
+                });
+            } else {
+                brls::sync([notif]() {
+                    if (notif) {
+                        notif->setFailed("Не удалось обновить базу");
                     }
                 });
             }

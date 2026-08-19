@@ -1,0 +1,170 @@
+#ifndef TORRENT_META_H
+#define TORRENT_META_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "bencode.h"
+
+#define MAX_TRACKERS 64
+#define MAX_FILES 256
+
+// One file within the torrent, with its byte offset in the concatenated piece
+// layout (offset 0 for single-file torrents).
+typedef struct {
+    int64_t length;
+    int64_t offset;   // absolute start within the whole-torrent byte stream
+    char path[256];
+} torrent_file;
+
+typedef struct {
+    char *buf;          // raw .torrent file contents (nodes point into it)
+    be_node *root;
+    uint8_t info_hash[20];
+    char name[256];
+    int64_t total_len;
+    int64_t piece_len;
+    int64_t piece_count;
+    const uint8_t *piece_hashes;  // piece_count * 20 bytes, points into buf
+    char *trackers[MAX_TRACKERS];
+    int tracker_count;
+    torrent_file files[MAX_FILES];
+    int file_count;
+    int announce_seq;   // announce rounds so far: seq 0 sends event=started
+} torrent_meta;
+
+// Index of the largest file (typically the video). -1 if none.
+int torrent_largest_file(const torrent_meta *t);
+
+// The process-wide peer id, generated once and shared by every announce round,
+// DHT search and torrentfs session. A stable id keeps trackers from treating
+// each re-announce as a brand-new client (t-ru.org throttles those to a single
+// peer address); a fresh one per process is expected and normal.
+void torrent_peer_id(uint8_t out[20]);
+
+// The port trackers/DHT should advertise for us: the real listen port, or the
+// UPnP-mapped external port when a router mapping succeeded. Default 6881.
+// Peers dial this port, so without a listener/forward it is cosmetic.
+void torrent_set_announce_port(int port);
+int  torrent_announce_port(void);
+
+// Explicitly initialise the announce serialisation mutex. Call once at engine
+// start, before any thread can announce. (On libnx a zeroed Mutex is valid on
+// its own; this keeps the PC compat shim's lazy path from ever racing.)
+void torrent_announce_mutex_init(void);
+
+// Length of a given piece (the last one is usually short).
+int64_t torrent_piece_len(const torrent_meta *t, int64_t index);
+
+typedef struct {
+    uint32_t ip;    // network byte order
+    uint16_t port;  // host byte order
+} peer_addr;
+
+// Load and parse a .torrent file. Returns 0 on success.
+int torrent_load(torrent_meta *t, const char *path, char *err, size_t errlen);
+
+// Load from a magnet: URI — parses it, announces to its trackers to find peers,
+// fetches the metadata from a peer (BEP 9), then builds the meta. Returns 0.
+// Progress of a magnet's metadata fetch. It walks the swarm's peers serially
+// and most of them are unreachable, so this can run for a minute; poll these to
+// show it moving rather than looking hung.
+extern volatile int torrent_meta_peers_tried;
+extern volatile int torrent_meta_peers_total;
+
+// Persistent on-disk cache of fetched metadata, keyed by info-hash. Once a
+// magnet's info dict has been fetched it is stored here, so a later open of the
+// same magnet (e.g. probe now, download a moment later, or after a restart)
+// loads it from disk instead of re-fetching it from the swarm. This is what
+// keeps "prepare/install" from stalling on a second network metadata fetch.
+// The directory defaults to a platform-appropriate location; override for tests.
+void torrent_meta_cache_set_dir(const char *dir);
+
+// Coarse phase of the magnet metadata fetch, so the debug overlay can say which
+// step is stuck (the tracker announce in particular is otherwise invisible: it
+// runs before the peer count is even known). Written by the loader thread, read
+// racily by the UI, which stringifies it via torrent_meta_state_str().
+enum {
+    META_IDLE = 0,
+    META_PARSE,      // parsing the magnet URI
+    META_ANNOUNCE,   // asking the trackers for peers
+    META_FETCH,      // BEP 9 metadata fetch across the announced peers
+    META_BUILD,      // parsing the fetched info dict into a torrent_meta
+    META_DONE,
+    META_FAIL,
+};
+extern volatile int torrent_meta_state;
+extern volatile int torrent_meta_trackers;   // trackers listed in the magnet
+extern volatile int torrent_meta_connected;  // peers the fetch got a socket to
+// Last peer-level failure reason seen during the fetch (why a peer didn't yield
+// the metadata). Racy: copied under the fetch lock, read without one -- a torn
+// read only garbles one frame. Never write it from the UI.
+const char *torrent_meta_state_str(int state);
+extern char torrent_meta_last_err[128];
+
+int torrent_load_magnet(torrent_meta *t, const char *magnet_uri,
+                        char *err, size_t errlen);
+
+// Same as torrent_load_magnet, but polls `cancel` (may be NULL) between every
+// slow step (tracker announce, each peer attempt, DHT) so a teardown or a user
+// cancel aborts the fetch promptly instead of blocking for the full timeout.
+int torrent_load_magnet_cancel(torrent_meta *t, const char *magnet_uri,
+                               const volatile bool *cancel,
+                               char *err, size_t errlen);
+
+// Same, but also hands back the peers the tracker gave us for the metadata
+// fetch (up to `max`, count in `*out_n`). They are the same peers the download
+// needs a moment later: without this the caller announces to the very same
+// trackers again and starts with an empty peer list.
+int torrent_load_magnet_peers(torrent_meta *t, const char *magnet_uri,
+                              peer_addr *out, int max, int *out_n,
+                              char *err, size_t errlen);
+
+// Cancellable variant of torrent_load_magnet_peers.
+int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
+                                     peer_addr *out, int max, int *out_n,
+                                     const volatile bool *cancel,
+                                     char *err, size_t errlen);
+
+// Build a torrent_meta from raw metadata (the info dict fetched from peers for
+// a magnet), a known info hash, and a tracker list. Takes ownership of
+// `metadata` (freed by torrent_unload). Returns 0 on success.
+int torrent_load_from_metadata(torrent_meta *t, uint8_t *metadata, size_t len,
+                               const uint8_t info_hash[20],
+                               char *const *trackers, int tracker_count,
+                               char *err, size_t errlen);
+
+void torrent_unload(torrent_meta *t);
+
+// Optional debug logger; if set, torrent_announce reports each tracker's result
+// and timing through it. Pass NULL to disable.
+void torrent_set_log(void (*fn)(const char *msg));
+
+// Announce to all trackers in parallel, merging unique peers into `peers`.
+// Returns the peer count, or -1 on failure. Blocks until every tracker answers
+// or times out (used by magnet metadata fetch). `cancel` (may be NULL) is
+// polled so a teardown aborts instead of waiting out the slowest tracker.
+int torrent_announce(const torrent_meta *t, peer_addr *peers, int max_peers,
+                     const volatile bool *cancel, char *err, size_t errlen);
+
+// Same, but delivers peers incrementally through `cb` as each tracker responds
+// (the callback must be thread-safe: trackers run on their own threads). Blocks
+// until every tracker finished. Returns the number of trackers that answered,
+// or -1 on failure. Lets callers start using the fastest tracker's peers without
+// waiting for the slow ones.
+// `cancel` (may be NULL) is polled while waiting on the trackers so a teardown
+// aborts the announce instead of blocking for the full per-tracker timeout.
+typedef void (*torrent_peer_cb)(void *ctx, const peer_addr *peers, int n);
+int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
+                        const volatile bool *cancel, char *err, size_t errlen);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

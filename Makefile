@@ -7,6 +7,7 @@ $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/de
 endif
 
 TOPDIR ?= $(CURDIR)
+override TOPDIR := $(subst \,/,$(TOPDIR))
 include $(DEVKITPRO)/libnx/switch_rules
 
 #---------------------------------------------------------------------------------
@@ -24,7 +25,7 @@ APP_VERSION :=  2.2
 BUILD       :=  build
 SOURCES     :=  source source/ui source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
 DATA        :=
-INCLUDES    :=  include _external/borealis/library/include _external/borealis/library/include/borealis/extern _external/borealis/library/include/borealis/extern/nanovg _external/borealis/library/lib/extern/fmt/include _external/borealis/library/lib/extern/tweeny/include _external/borealis/library/lib/extern/yoga
+INCLUDES    :=  include include/engine _external/borealis/library/include _external/borealis/library/include/borealis/extern _external/borealis/library/include/borealis/extern/nanovg _external/borealis/library/lib/extern/fmt/include _external/borealis/library/lib/extern/tweeny/include _external/borealis/library/lib/extern/yoga
 ROMFS       :=  resources
 
 #---------------------------------------------------------------------------------
@@ -32,31 +33,20 @@ ROMFS       :=  resources
 #---------------------------------------------------------------------------------
 ARCH    :=  -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-# Base CFLAGS
-CFLAGS  :=  -g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS -DBOOST_ASIO_DISABLE_CONCEPTS
+# Base CFLAGS. -flto + -DNDEBUG: the whole-file optimizer wins back the
+# abstraction overhead in the engine hot paths (pipensx does the same), and
+# NDEBUG keeps vendored libutp asserts from aborting homebrew.
+CFLAGS  :=  -g -Wall -O2 -ffunction-sections -fdata-sections -flto -DNDEBUG $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS \
+            -include $(TOPDIR)/include/switch_posix_compat.h
 
 #---------------------------------------------------------------------------------
 # External libraries logic
 #---------------------------------------------------------------------------------
-USE_LIBTORRENT ?= 1
-LIBTORRENT_SRCDIR ?= $(TOPDIR)/_external/libtorrent-1.2.17
-BOOST_INCLUDEDIR ?= $(TOPDIR)/_external/boost_1_83_0
-EXTRA_LIBPATHS :=
+# libtorrent/boost support has been removed; only the custom engine remains.
+EXTRA_LIBPATHS      :=
 
-ifeq ($(USE_LIBTORRENT),1)
-	SOURCES += $(LIBTORRENT_SRCDIR)/src
-	SOURCES += $(LIBTORRENT_SRCDIR)/src/kademlia
-	SOURCES += $(LIBTORRENT_SRCDIR)/ed25519/src
-	CFLAGS += -DTSNX_USE_LIBTORRENT=1 -DTORRENT_BUILDING_LIBRARY=1 \
-	          -DBOOST_ERROR_CODE_HEADER_ONLY -DBOOST_SYSTEM_NO_DEPRECATED \
-	          -DBOOST_SYSTEM_NO_LIB -DBOOST_CHRONO_HEADER_ONLY \
-	          -DBOOST_DATE_TIME_NO_LIB -DBOOST_ALL_NO_LIB
-	LIBDIRS += $(LIBTORRENT_SRCDIR) $(BOOST_INCLUDEDIR)
-	# Extra flags for libtorrent
-	CFLAGS  += -DTSNX_USE_LIBTORRENT -DBOOST_ASIO_ENABLE_CANCELIO \
-	           -include $(TOPDIR)/include/switch_posix_compat.h \
-	           -I$(LIBTORRENT_SRCDIR)/include -I$(BOOST_INCLUDEDIR)
-endif
+SOURCES += source/engine
+CFLAGS += -DTSNX_USE_CUSTOM_ENGINE=1 -DPOSIX
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -69,6 +59,7 @@ LIBDIRS += $(PORTLIBS) $(LIBNX)
 #---------------------------------------------------------------------------------
 export INCLUDE  :=  $(foreach dir,$(INCLUDES),-I$(TOPDIR)/$(dir)) \
                     $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+                    $(EXTRA_INCLUDES) \
                     -I$(TOPDIR)/$(BUILD)
 
 export LIBPATHS :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib) $(EXTRA_LIBPATHS)
@@ -85,7 +76,7 @@ BOREALIS_LIBS := $(BOREALIS_BUILD_DIR)/libborealis.a \
 CFLAGS      +=  $(INCLUDE) -D__SWITCH__
 CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions -Wno-deprecated
 ASFLAGS     :=  -g $(ARCH)
-LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -flto -Wl,-Map,$(notdir $*.map)
 LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lzstd -lnx -lm
 
 #---------------------------------------------------------------------------------
@@ -105,6 +96,11 @@ CFILES      :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
 CPPFILES    :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES      :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES    :=
+
+ifneq ($(EXCLUDED_FILES),)
+    CFILES   := $(filter-out $(EXCLUDED_FILES),$(CFILES))
+    CPPFILES := $(filter-out $(EXCLUDED_FILES),$(CPPFILES))
+endif
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
@@ -133,6 +129,7 @@ $(BUILD):
 	@$(foreach dir,$(SOURCES),[ -d $(BUILD)/$(dir) ] || mkdir -p $(BUILD)/$(dir);)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile \
 		USE_LIBTORRENT=$(USE_LIBTORRENT) \
+		USE_CUSTOM_ENGINE=$(USE_CUSTOM_ENGINE) \
 		LIBTORRENT_SRCDIR=$(LIBTORRENT_SRCDIR) \
 		BOOST_INCLUDEDIR=$(BOOST_INCLUDEDIR) \
 		TOPDIR=$(TOPDIR)

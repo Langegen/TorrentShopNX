@@ -245,7 +245,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             statusColor = nvgRGB(76, 175, 80); // Green
             break;
         case download::DownloadState::StreamPreparing:
-            statusStr = "Ожидание метаданных";
+            statusStr = "Подготовка к установке";
             statusColor = nvgRGB(0, 188, 212); // Cyan
             break;
         case download::DownloadState::StreamInstalling:
@@ -300,7 +300,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         item.state == download::DownloadState::StreamPreparing) {
         
         char peersBuf[128];
-        std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d · DHT: %d", item.seeds, item.peers, item.dht);
+        if (item.known_peers > item.peers) {
+            std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d (%d изв.) · DHT: %d", item.seeds, item.peers, item.known_peers, item.dht);
+        } else {
+            std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d · DHT: %d", item.seeds, item.peers, item.dht);
+        }
         cell->peersText->setText(peersBuf);
         cell->peersText->setVisibility(brls::Visibility::VISIBLE);
     } else {

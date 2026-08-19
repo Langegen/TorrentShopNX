@@ -628,6 +628,8 @@ bool TorrentManager::parseAndCacheList(const std::string& body, std::vector<Torr
         info.torrent_size = static_cast<unsigned long long>((std::isfinite(total) && total > 0.0) ? total : 0.0);
         info.seeds = static_cast<int>(seeds_val);
         info.peers = static_cast<int>(peers_val);
+        double known_val = extractJsonNumber(obj, "known_peers");
+        info.known_peers = std::isfinite(known_val) && known_val >= 0.0 ? static_cast<int>(known_val) : 0;
         info.dht = static_cast<int>(dht_val);
         out_list.push_back(info);
     }

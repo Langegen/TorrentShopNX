@@ -17,6 +17,7 @@ struct HttpResponse {
 /// Callback для потокового приёма данных.
 /// Получает указатель на данные и размер, возвращает количество обработанных байт.
 using StreamCallback = std::function<size_t(const void* data, size_t size)>;
+using ProgressCallback = std::function<void(int64_t dltotal, int64_t dlnow)>;
 
 /// HTTP-клиент с поддержкой Range-запросов и Keep-Alive.
 /// Работает через сокеты (HTTP) или libcurl (HTTPS).
@@ -55,6 +56,9 @@ public:
     /// Установить флаг отмены для вызовов
     void setCancelFlag(const std::atomic<bool>* cancel_flag) { cancel_flag_ = cancel_flag; }
 
+    /// Установить колбэк прогресса загрузки (dltotal, dlnow)
+    void setProgressCallback(ProgressCallback cb) { progress_cb_ = cb; }
+
 private:
     HttpResponse request(const std::string& method, const std::string& url,
                          const std::string& body,
@@ -68,6 +72,7 @@ private:
     int  timeout_sec_ = 30;
     bool keep_alive_  = true;
     const std::atomic<bool>* cancel_flag_ = nullptr;
+    ProgressCallback progress_cb_ = nullptr;
     void* curl_handle_ = nullptr;
 };
 
