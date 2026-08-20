@@ -10,8 +10,8 @@
 
     <!-- Topbar -->
     <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
-        <brls:Label text="╨Я╨╛╨┤╨▒╨╛╤А╨║╨╕" fontSize="28" />
-        <brls:Label id="statsHint" text="╨Ц╨░╨╜╤А╨╛╨▓╤Л╨╡ ╨┐╨╛╨┤╨▒╨╛╤А╨║╨╕ ╨╕╨╖ switch-game-collection" fontSize="14" textColor="#AAAAAA" />
+        <brls:Label text="Подборки" fontSize="28" />
+        <brls:Label id="statsHint" text="Жанровые подборки из switch-game-collection" fontSize="14" textColor="#AAAAAA" />
     </brls:Box>
 
     <!-- Collection list -->

@@ -19,21 +19,21 @@ namespace catalog {
 namespace {
 
 const std::vector<CollectionInfo> kCollections = {
-    {"top_100",             "╨в╨╛╨┐-100",               "╨в╨╛╨┐-100 ╨╗╤Г╤З╤И╨╕╤Е ╨╕╨│╤А ╨▓╤Б╨╡╤Е ╨▓╤А╨╡╨╝╤С╨╜ ╨┐╨╛ ╨▓╨╡╤А╤Б╨╕╨╕ Metacritic"},
-    {"action_adventure",    "╨н╨║╤И╨╡╨╜╤Л ╨╕ ╨┐╤А╨╕╨║╨╗╤О╤З╨╡╨╜╨╕╤П",  "╨Я╤А╨╕╨║╨╗╤О╤З╨╡╨╜╤З╨╡╤Б╨║╨╕╨╡ ╤Н╨║╤И╨╡╨╜╤Л (Action & Adventure)"},
-    {"arcade",              "╨Р╤А╨║╨░╨┤╤Л",                "╨Ъ╨╗╨░╤Б╤Б╨╕╤З╨╡╤Б╨║╨╕╨╡ ╨╕ ╤Б╨╛╨▓╤А╨╡╨╝╨╡╨╜╨╜╤Л╨╡ ╨░╤А╨║╨░╨┤╤Л"},
-    {"horror",              "╨е╨╛╤А╤А╨╛╤А╤Л",               "╨б╤Г╤А╨▓╨░╨╣╨▓╨░╨╗ ╨╕ ╨┐╤Б╨╕╤Е╨╛╨╗╨╛╨│╨╕╤З╨╡╤Б╨║╨╕╨╡ ╤Е╨╛╤А╤А╨╛╤А╤Л"},
-    {"metroidvania",        "╨Ь╨╡╤В╤А╨╛╨╕╨┤╨▓╨░╨╜╨╕╨╕",          "╨Ь╨╡╤В╤А╨╛╨╕╨┤╨▓╨░╨╜╨╕╨╕ (Metroidvania)"},
-    {"party_multiplayer",   "╨Т╨╡╤З╨╡╤А╨╕╨╜╨║╨╕ ╨╕ ╨║╨╛╨╛╨┐",      "╨Ш╨│╤А╤Л ╨┤╨╗╤П ╨▓╨╡╤З╨╡╤А╨╕╨╜╨╛╨║ ╨╕ ╨╗╨╛╨║╨░╨╗╤М╨╜╤Л╨╣ ╨║╨╛╨╛╨┐╨╡╤А╨░╤В╨╕╨▓"},
-    {"platformers",         "╨Я╨╗╨░╤В╤Д╨╛╤А╨╝╨╡╤А╤Л",           "2D ╨╕ 3D ╨┐╨╗╨░╤В╤Д╨╛╤А╨╝╨╡╤А╤Л"},
-    {"puzzles",             "╨У╨╛╨╗╨╛╨▓╨╛╨╗╨╛╨╝╨║╨╕",           "╨У╨╛╨╗╨╛╨▓╨╛╨╗╨╛╨╝╨║╨╕ ╨╕ ╨╗╨╛╨│╨╕╤З╨╡╤Б╨║╨╕╨╡ ╨╕╨│╤А╤Л"},
-    {"roguelike_roguelite", "╨а╨╛╨│╨░╨╗╨╕╨║╨╕",              "╨а╨╛╨│╨░╨╗╨╕╨║╨╕, ╤А╨╛╨│╨╗╨░╨╣╤В╤Л ╨╕ ╨║╨╛╨╗╨╛╨┤╨╛╤Б╤В╤А╨╛╨╕╤В╨╡╨╗╤М╨╜╤Л╨╡ ╨╕╨│╤А╤Л"},
-    {"rpg_jrpg",            "RPG / JRPG",            "╨а╨╛╨╗╨╡╨▓╤Л╨╡ ╨╕╨│╤А╤Л ╨╕ JRPG"},
-    {"shooters",            "╨и╤Г╤В╨╡╤А╤Л",                "╨и╤Г╤В╨╡╤А╤Л ╨╛╤В 1-╨│╨╛/3-╨│╨╛ ╨╗╨╕╤Ж╨░ ╨╕ Shmup"},
-    {"simulation_cozy",     "╨б╨╕╨╝╤Г╨╗╤П╤В╨╛╤А╤Л ╨╕ ╤Г╤О╤В╨╜╤Л╨╡",   "╨б╨╕╨╝╤Г╨╗╤П╤В╨╛╤А╤Л ╨╕ ╤Г╤О╤В╨╜╤Л╨╡/╤Д╨╡╤А╨╝╨╡╤А╤Б╨║╨╕╨╡ ╨╕╨│╤А╤Л"},
-    {"strategy_tactics",    "╨б╤В╤А╨░╤В╨╡╨│╨╕╨╕ ╨╕ ╤В╨░╨║╤В╨╕╨║╨░",   "╨Я╨╛╤И╨░╨│╨╛╨▓╨░╤П ╤В╨░╨║╤В╨╕╨║╨░ ╨╕ ╤Б╤В╤А╨░╤В╨╡╨│╨╕╨╕"},
-    {"visual_novels",       "╨Т╨╕╨╖╤Г╨░╨╗╤М╨╜╤Л╨╡ ╨╜╨╛╨▓╨╡╨╗╨╗╤Л",    "╨Т╨╕╨╖╤Г╨░╨╗╤М╨╜╤Л╨╡ ╨╜╨╛╨▓╨╡╨╗╨╗╤Л ╨╕ ╤Б╤О╨╢╨╡╤В╨╜╤Л╨╡ ╨░╨┤╨▓╨╡╨╜╤З╤Г╤А╤Л"},
-    {"new_release",         "╨Э╨╛╨▓╤Л╨╡ ╤А╨╡╨╗╨╕╨╖╤Л",          "╨Р╨▓╤В╨╛╨╝╨░╤В╨╕╤З╨╡╤Б╨║╨╕ ╨╛╨▒╨╜╨╛╨▓╨╗╤П╨╡╨╝╤Л╨╡ ╤Б╨▓╨╡╨╢╨╕╨╡ ╤А╨╡╨╗╨╕╨╖╤Л"},
+    {"new_release",         "Новые релизы",          "Автоматически обновляемые свежие релизы"},
+    {"top_100",             "Топ-100",               "Топ-100 лучших игр всех времён по версии Metacritic"},
+    {"action_adventure",    "Экшены и приключения",  "Приключенческие экшены (Action & Adventure)"},
+    {"arcade",              "Аркады",                "Классические и современные аркады"},
+    {"horror",              "Хорроры",               "Сурвайвал и психологические хорроры"},
+    {"metroidvania",        "Метроидвании",          "Метроидвании (Metroidvania)"},
+    {"party_multiplayer",   "Вечеринки и кооп",      "Игры для вечеринок и локальный кооператив"},
+    {"platformers",         "Платформеры",           "2D и 3D платформеры"},
+    {"puzzles",             "Головоломки",           "Головоломки и логические игры"},
+    {"roguelike_roguelite", "Рогалики",              "Рогалики, роглайты и колодостроительные игры"},
+    {"rpg_jrpg",            "RPG / JRPG",            "Ролевые игры и JRPG"},
+    {"shooters",            "Шутеры",                "Шутеры от 1-го/3-го лица и Shmup"},
+    {"simulation_cozy",     "Симуляторы и уютные",   "Симуляторы и уютные/фермерские игры"},
+    {"strategy_tactics",    "Стратегии и тактика",   "Пошаговая тактика и стратегии"},
+    {"visual_novels",       "Визуальные новеллы",    "Визуальные новеллы и сюжетные адвенчуры"},
 };
 
 bool readWholeFileLocal(const std::string& path, std::string& out) {
@@ -155,7 +155,7 @@ bool CollectionsManager::loadCollection(const CollectionInfo& info,
 }
 
 const Game* matchCollectionEntry(const std::vector<Game>& games, const CollectionEntry& entry) {
-    if (games.empty()) return nullptr;    // 1. ╨в╨╛╤З╨╜╨╛╨╡ ╤Б╨╛╨▓╨┐╨░╨┤╨╡╨╜╨╕╨╡ ╨┐╨╛ title_id (16-╨╖╨╜╨░╤З╨╜╤Л╨╣ hex)
+    if (games.empty()) return nullptr;    // 1. Точное совпадение по title_id (16-значный hex)
     std::string tid = entry.title_id;
     std::transform(tid.begin(), tid.end(), tid.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -191,7 +191,7 @@ const Game* matchCollectionEntry(const std::vector<Game>& games, const Collectio
         }
     }
 
-    // 2. ╨Я╨╛ ╨╜╨╛╤А╨╝╨░╨╗╨╕╨╖╨╛╨▓╨░╨╜╨╜╨╛╨╝╤Г ╨╜╨░╨╖╨▓╨░╨╜╨╕╤О
+    // 2. По нормализованному названию
     std::string nt = normalizeForMatch(entry.title);
     if (nt.empty()) return nullptr;
 
@@ -280,7 +280,7 @@ CollectionMatchIndex buildMatchIndex(const std::vector<Game>& games) {
 }
 
 const Game* matchWithIndex(const CollectionMatchIndex& index, const CollectionEntry& entry) {
-    // 1. ╨в╨╛╤З╨╜╨╛╨╡ ╤Б╨╛╨▓╨┐╨░╨┤╨╡╨╜╨╕╨╡ ╨┐╨╛ title_id
+    // 1. Точное совпадение по title_id
     std::string tid = entry.title_id;
     std::transform(tid.begin(), tid.end(), tid.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -295,7 +295,7 @@ const Game* matchWithIndex(const CollectionMatchIndex& index, const CollectionEn
         } catch (...) {}
     }
 
-    // 2. ╨Я╨╛ ╨╜╨╛╤А╨╝╨░╨╗╨╕╨╖╨╛╨▓╨░╨╜╨╜╨╛╨╝╤Г ╨╜╨░╨╖╨▓╨░╨╜╨╕╤О
+    // 2. По нормализованному названию
     std::string nt = normalizeForMatch(entry.title);
     if (nt.empty()) return nullptr;
 

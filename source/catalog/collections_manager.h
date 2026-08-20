@@ -17,22 +17,22 @@ struct CollectionEntry {
 };
 
 struct CollectionInfo {
-    std::string id;          // ╨╕╨╝╤П ╤Д╨░╨╣╨╗╨░ ╨▒╨╡╨╖ ╤А╨░╤Б╤И╨╕╤А╨╡╨╜╨╕╤П .json
-    std::string name;        // ╤А╤Г╤Б╤Б╨║╨╛╨╡ ╨╜╨░╨╖╨▓╨░╨╜╨╕╨╡ ╨┐╨╛╨┤╨▒╨╛╤А╨║╨╕
-    std::string description; // ╤А╤Г╤Б╤Б╨║╨╛╨╡ ╨╛╨┐╨╕╤Б╨░╨╜╨╕╨╡
+    std::string id;          // имя файла без расширения .json
+    std::string name;        // русское название подборки
+    std::string description; // русское описание
 };
 
-// ╨Я╤А╨╡╨┤╤Б╨╛╨▒╤А╨░╨╜╨╜╤Л╨╣ ╨╕╨╜╨┤╨╡╨║╤Б ╨┐╨╛ ╨║╨░╤В╨░╨╗╨╛╨│╤Г ╨┤╨╗╤П ╨▒╤Л╤Б╤В╤А╨╛╨│╨╛ ╨╝╨░╤В╤З╨╕╨╜╨│╨░ ╨▒╨╡╨╖ ╨┐╨╛╨╗╨╜╤Л╤Е ╨┐╤А╨╛╤Е╨╛╨┤╨╛╨▓.
+// Предсобранный индекс по каталогу для быстрого матчинга без полных проходов.
 struct CollectionMatchIndex {
     std::unordered_map<uint64_t, const Game*> by_title_id;
     std::vector<std::pair<std::string, const Game*>> norm_titles;
 };
 
-// ╨Я╨╛╤Б╤В╤А╨╛╨╕╤В╤М ╨╕╨╜╨┤╨╡╨║╤Б ╨╛╨┤╨╕╨╜ ╤А╨░╨╖ (╤В╤П╨╢╤С╨╗╨░╤П ╨╛╨┐╨╡╤А╨░╤Ж╨╕╤П, ╨▓╤Л╨╖╤Л╨▓╨░╤В╤М ╨╜╨░ ╨│╨╗╨░╨▓╨╜╨╛╨╝ ╨┐╨╛╤В╨╛╨║╨╡).
+// Построить индекс один раз (тяжёлая операция, вызывать на главном потоке).
 CollectionMatchIndex buildMatchIndex(const std::vector<Game>& games);
 
-// ╨С╤Л╤Б╤В╤А╤Л╨╣ ╨╝╨░╤В╤З╨╕╨╜╨│ ╤З╨╡╤А╨╡╨╖ ╨╕╨╜╨┤╨╡╨║╤Б: title_id -> ╨╜╨╛╤А╨╝╨░╨╗╨╕╨╖╨╛╨▓╨░╨╜╨╜╨╛╨╡ ╨╜╨░╨╖╨▓╨░╨╜╨╕╨╡.
-// ╨Т╨╛╨╖╨▓╤А╨░╤Й╨░╨╡╤В nullptr, ╨╡╤Б╨╗╨╕ ╨╜╨╡ ╨╜╨░╨╣╨┤╨╡╨╜╨╛.
+// Быстрый матчинг через индекс: title_id -> нормализованное название.
+// Возвращает nullptr, если не найдено.
 const Game* matchWithIndex(const CollectionMatchIndex& index, const CollectionEntry& entry);
 
 class CollectionsManager {
@@ -41,8 +41,8 @@ public:
 
     const std::vector<CollectionInfo>& collections() const { return collections_; }
 
-    // ╨С╨╗╨╛╨║╨╕╤А╤Г╤О╤Й╨░╤П ╨╖╨░╨│╤А╤Г╨╖╨║╨░ ╨┐╨╛╨┤╨▒╨╛╤А╨║╨╕: ╤Б╨╜╨░╤З╨░╨╗╨░ ╨║╤Н╤И ╨╜╨░ SD, ╨╖╨░╤В╨╡╨╝ ╤Б╨╡╤В╤М,
-    // ╨╡╤Б╨╗╨╕ ╨║╤Н╤И╨░ ╨╜╨╡╤В ╨╕╨╗╨╕ ╨╛╨╜ ╤Б╤В╨░╤А╤И╨╡ ╤Б╤Г╤В╨╛╨║. ╨Т╨╛╨╖╨▓╤А╨░╤Й╨░╨╡╤В false ╨┐╤А╨╕ ╨┐╨╛╨╗╨╜╨╛╨╣ ╨╜╨╡╤Г╨┤╨░╤З╨╡.
+    // Блокирующая загрузка подборки: сначала кэш на SD, затем сеть,
+    // если кэша нет или он старше суток. Возвращает false при полной неудаче.
     bool loadCollection(const CollectionInfo& info, std::vector<CollectionEntry>& out_entries,
                         bool& from_cache);
 
@@ -57,8 +57,8 @@ private:
 constexpr const char* kCollectionsBaseUrl =
     "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/";
 
-// ╨Я╨╛╨╕╤Б╨║ ╤А╨░╨╖╨┤╨░╤З╨╕ ╨▓ ╨║╨░╤В╨░╨╗╨╛╨│╨╡: ╤Б╨╜╨░╤З╨░╨╗╨░ ╨┐╨╛ title_id, ╨╖╨░╤В╨╡╨╝ ╨┐╨╛ ╨╜╨╛╤А╨╝╨░╨╗╨╕╨╖╨╛╨▓╨░╨╜╨╜╨╛╨╝╤Г ╨╜╨░╨╖╨▓╨░╨╜╨╕╤О.
-// ╨Т╨╛╨╖╨▓╤А╨░╤Й╨░╨╡╤В nullptr, ╨╡╤Б╨╗╨╕ ╨╜╨╡ ╨╜╨░╨╣╨┤╨╡╨╜╨╛.
+// Поиск раздачи в каталоге: сначала по title_id, затем по нормализованному названию.
+// Возвращает nullptr, если не найдено.
 const Game* matchCollectionEntry(const std::vector<Game>& games, const CollectionEntry& entry);
 
 } // namespace catalog

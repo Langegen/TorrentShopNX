@@ -35,6 +35,9 @@
                     id="autoAppUpdateCell" />
 
                 <brls:BooleanCell
+                    id="cacheThumbnailsCell" />
+
+                <brls:BooleanCell
                     id="keepAwakeCell" />
                     
                 <brls:SelectorCell

@@ -50,6 +50,9 @@ public:
     bool getAutoAppUpdate() const;
     void setAutoAppUpdate(bool enabled);
 
+    bool getCacheCoverThumbnails() const;
+    void setCacheCoverThumbnails(bool enabled);
+
     const std::string& getLastAppUpdateCheckDate() const;
     void setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd);
     bool shouldCheckAppUpdateToday() const;
@@ -62,6 +65,7 @@ private:
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;
+    bool cache_cover_thumbnails_;
     int listen_port_;
     std::string last_catalog_update_date_;
     std::string install_location_;

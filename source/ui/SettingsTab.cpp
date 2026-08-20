@@ -387,6 +387,12 @@ void SettingsTab::onContentAvailable() {
         cfg.save();
     });
 
+    // 0.4 Cache Cover Thumbnails
+    cacheThumbnailsCell->init("Кешировать миниатюры обложек", cfg.getCacheCoverThumbnails(), [&cfg](bool value) {
+        cfg.setCacheCoverThumbnails(value);
+        cfg.save();
+    });
+
     // 1. Prevent sleep
     keepAwakeCell->init("Предотвращать сон при скачивании", cfg.getKeepAwakeDuringDownloads(), [&cfg](bool value) {
         cfg.setKeepAwakeDuringDownloads(value);

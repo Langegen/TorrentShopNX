@@ -24,6 +24,7 @@ bool parseConfigBody(const std::string& body,
                      std::string& catalog_source_url,
                      std::string& data_mode,
                      bool& keep_awake_during_downloads,
+                     bool& cache_cover_thumbnails,
                      int& listen_port,
                      std::string& last_catalog_update_date,
                      std::string& install_location,
@@ -63,6 +64,9 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "keep_awake_during_downloads") {
                     keep_awake_during_downloads = parseBool(val, keep_awake_during_downloads);
+                    parsed_known_keys = true;
+                } else if (key == "cache_cover_thumbnails") {
+                    cache_cover_thumbnails = parseBool(val, cache_cover_thumbnails);
                     parsed_known_keys = true;
                 } else if (key == "listen_port") {
                     int p = std::atoi(val.c_str());
@@ -127,6 +131,7 @@ ConfigManager::ConfigManager() {
     catalog_source_url_.clear();
     data_mode_ = "local_client";
     keep_awake_during_downloads_ = true;
+    cache_cover_thumbnails_ = false;
     listen_port_ = 6882;
     last_catalog_update_date_.clear();
     install_location_ = "auto";
@@ -140,7 +145,7 @@ void ConfigManager::load() {
     std::string body;
     if (readWholeFile(config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, listen_port_,
+                        keep_awake_during_downloads_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
@@ -152,7 +157,7 @@ void ConfigManager::load() {
     // Backward compatibility: migrate old config.txt on first run.
     if (readWholeFile(legacy_config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, listen_port_,
+                        keep_awake_during_downloads_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
@@ -187,6 +192,7 @@ void ConfigManager::save() {
     file << "catalog_source_url=" << catalog_source_url_ << "\n";
     file << "data_mode=" << data_mode_ << "\n";
     file << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
+    file << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
     file << "listen_port=" << listen_port_ << "\n";
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
     file << "install_location=" << install_location_ << "\n";
@@ -323,6 +329,15 @@ bool ConfigManager::getAutoAppUpdate() const {
 
 void ConfigManager::setAutoAppUpdate(bool enabled) {
     auto_app_update_ = enabled;
+    save();
+}
+
+bool ConfigManager::getCacheCoverThumbnails() const {
+    return cache_cover_thumbnails_;
+}
+
+void ConfigManager::setCacheCoverThumbnails(bool enabled) {
+    cache_cover_thumbnails_ = enabled;
     save();
 }
 

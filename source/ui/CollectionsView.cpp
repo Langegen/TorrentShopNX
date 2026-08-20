@@ -51,7 +51,7 @@ void CollectionsView::onContentAvailable() {
             size_t count = entries.size();
             brls::sync([flag, label, count]() {
                 if (flag->load() && label) {
-                    label->setText("╨Ш╨│╤А: " + std::to_string(count));
+                    label->setText("Игр: " + std::to_string(count));
                 }
             });
         });
@@ -80,13 +80,13 @@ void CollectionsView::rebuildList() {
 
         auto* title = new brls::Label();
         title->setFontSize(20);
-        title->setText("╨Т╨╡╤Б╤М ╨║╨░╤В╨░╨╗╨╛╨│");
+        title->setText("Весь каталог");
         col->addView(title);
 
         auto* desc = new brls::Label();
         desc->setFontSize(13);
         desc->setTextColor(nvgRGB(158, 158, 158));
-        desc->setText("╨Я╨╛╨╗╨╜╤Л╨╣ ╨║╨░╤В╨░╨╗╨╛╨│ ╤А╨░╨╖╨┤╨░╤З RU_catalog.json");
+        desc->setText("Полный каталог раздач RU_catalog.json");
         col->addView(desc);
 
         row->addView(col);
@@ -94,7 +94,7 @@ void CollectionsView::rebuildList() {
         auto* count = new brls::Label();
         count->setFontSize(14);
         count->setTextColor(nvgRGB(170, 170, 170));
-        count->setText("╨Ш╨│╤А: " + std::to_string(g_games.size()));
+        count->setText("Игр: " + std::to_string(g_games.size()));
         row->addView(count);
 
         row->registerClickAction([](brls::View*) {
@@ -139,7 +139,7 @@ void CollectionsView::rebuildList() {
         count->setFontSize(14);
         count->setTextColor(nvgRGB(170, 170, 170));
         int cached = cachedCount(info);
-        count->setText(cached >= 0 ? "╨Ш╨│╤А: " + std::to_string(cached) : "тАФ");
+        count->setText(cached >= 0 ? "Игр: " + std::to_string(cached) : "—");
         row->addView(count);
         countLabels_.push_back(count);
 
