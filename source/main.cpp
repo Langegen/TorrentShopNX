@@ -277,7 +277,7 @@ int main(int argc, char** argv) {
     #if __has_include(<curl/curl.h>)
         curl_global_init(CURL_GLOBAL_ALL);
     #endif
-        net::ImageDownloader::instance().init(2);
+        net::ImageDownloader::instance().init(4);
 
         // Load database games instantly on the main thread (takes <50ms)
         g_games = loadGamesFromFile(kCatalogPath);

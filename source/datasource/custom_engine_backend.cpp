@@ -159,48 +159,38 @@ std::int64_t CustomEngineBackend::read(std::int64_t offset, void* buffer, std::i
 
     scheduler_.on_read_request(offset, size);
 
-    std::int64_t total = 0;
-    char* out = static_cast<char*>(buffer);
-    int empty_loops = 0;
-
-    while (total < size) {
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_scheduler_tick_).count() >= 1) {
-            last_scheduler_tick_ = now;
-            scheduler_.on_tick();
-            float kbps = static_cast<float>(downloadSpeedKBps());
-            tsnx_torrent_item items[8];
-            int peers = 0;
-            int n = tsnx_engine_get_torrents(engine_, items, 8);
-            for (int i = 0; i < n; i++) {
-                if (info_hash_str_ == items[i].hash) { peers = items[i].peers; break; }
-            }
-            health_.on_tick(peers, kbps, starving_.load());
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - last_scheduler_tick_).count() >= 1) {
+        last_scheduler_tick_ = now;
+        scheduler_.on_tick();
+        float kbps = static_cast<float>(downloadSpeedKBps());
+        tsnx_torrent_item items[8];
+        int peers = 0;
+        int n = tsnx_engine_get_torrents(engine_, items, 8);
+        for (int i = 0; i < n; i++) {
+            if (info_hash_str_ == items[i].hash) { peers = items[i].peers; break; }
         }
-
-        std::int64_t got = tsnx_engine_read(engine_, info_hash_str_.c_str(),
-                                            offset + total, out + total, size - total);
-        if (got < 0) {
-            set_state(StreamState::Error, "read error");
-            return -1;
-        }
-        if (got == 0) {
-            empty_loops++;
-            starving_ = empty_loops > 10;
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-        empty_loops = 0;
-        starving_ = false;
-        total += got;
-        set_state(StreamState::StreamingOrInstalling);
-
-        /* Keep the RAM window following the installer. */
-        tsnx_engine_set_min_keep_offset(engine_, info_hash_str_.c_str(),
-                                        file_offset_in_torrent_ + offset + total);
+        health_.on_tick(peers, kbps, starving_.load());
     }
 
-    return total;
+    std::int64_t got = tsnx_engine_read(engine_, info_hash_str_.c_str(),
+                                        offset, buffer, size);
+    if (got < 0) {
+        set_state(StreamState::Error, "read error");
+        return -1;
+    }
+    if (got == 0) {
+        starving_ = true;
+        return 0;
+    }
+
+    starving_ = false;
+    set_state(StreamState::StreamingOrInstalling);
+
+    /* Keep the RAM window following the installer. */
+    tsnx_engine_set_min_keep_offset(engine_, info_hash_str_.c_str(),
+                                    file_offset_in_torrent_ + offset + got);
+    return got;
 }
 
 BackendStatus CustomEngineBackend::status() const {

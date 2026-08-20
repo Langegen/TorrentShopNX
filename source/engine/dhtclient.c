@@ -141,7 +141,8 @@ static int dht_cache_read(const char *path, uint8_t node_id[20],
 
 static int dht_cache_write(const char *path, const uint8_t node_id[20],
                            const uint8_t (*nodes)[6], int count) {
-    if (count <= 0 || count > DHT_CACHE_MAX_NODES) return 0;
+    if (count <= 0) return 0;
+    if (count > DHT_CACHE_MAX_NODES) count = DHT_CACHE_MAX_NODES;
     char tmp[512];
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
     FILE *f = fopen(tmp, "wb");
@@ -430,10 +431,11 @@ static void dht_bg_main(void *arg) {
             }
             mutexUnlock(&s_bg_mtx);
 
-            // Random-id walk every ~20 s: fills buckets across the whole id
-            // space so the routing table grows instead of stalling around the
-            // few targets we search for.
-            if (now - s_last_walk > (u64)20 * freq) {
+            // Random-id walk: fills buckets across the whole id space.
+            // When bootstrapping (< 120 nodes) walk every ~20 s; once warm (>= 120 nodes),
+            // walk every ~60 s for low-overhead maintenance.
+            u64 walk_iv = (u64)(good < 120 ? 20 : 60) * freq;
+            if (now - s_last_walk > walk_iv) {
                 uint8_t rid[20];
                 randomGet(rid, sizeof(rid));
                 dht_search(rid, 0, AF_INET, NULL, NULL);

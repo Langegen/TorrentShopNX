@@ -289,11 +289,6 @@ static int parse_message(const unsigned char *buf, int buflen,
                          int *want_return);
 
 static const unsigned char zeroes[20] = {0};
-static const unsigned char ones[20] = {
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF
-};
 static const unsigned char v4prefix[16] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0, 0, 0, 0
 };
@@ -828,7 +823,6 @@ new_node(const unsigned char *id, const struct sockaddr *sa, int salen,
 
     if(b->count >= 8) {
         /* Bucket full.  Ping a dubious node */
-        int dubious = 0;
         n = b->nodes;
         while(n) {
             /* Pick the first dubious node that we haven't pinged in the
@@ -836,7 +830,6 @@ new_node(const unsigned char *id, const struct sockaddr *sa, int salen,
                tends to concentrate on the same nodes, so that we get rid
                of bad nodes fast. */
             if(!node_good(n)) {
-                dubious = 1;
                 if(n->pinged_time < now.tv_sec - 15) {
                     unsigned char tid[4];
                     debugf("Sending ping to dubious node.\n");
@@ -852,18 +845,13 @@ new_node(const unsigned char *id, const struct sockaddr *sa, int salen,
         }
 
         split = 0;
-        /* Split any full bucket of confirmed-good nodes, not just the one
-           holding our id: upstream jech refuses to split foreign buckets,
-           capping the routing table at 8 nodes per leaf. Splitting every
-           full leaf lets the table grow to hundreds of nodes as searches
-           keep delivering fresh ones. */
-        if(!dubious)
+        if(mybucket)
             split = 1;
         /* If there's only one bucket, split eagerly.  This is
            incorrect unless there's more than 8 nodes in the DHT. */
-        else if(b->af == AF_INET && buckets->next == NULL && mybucket)
+        else if(b->af == AF_INET && buckets->next == NULL)
             split = 1;
-        else if(b->af == AF_INET6 && buckets6->next == NULL && mybucket)
+        else if(b->af == AF_INET6 && buckets6->next == NULL)
             split = 1;
 
         if(split) {

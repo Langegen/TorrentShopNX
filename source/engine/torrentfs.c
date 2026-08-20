@@ -114,9 +114,9 @@
 #define REQ_FIRST_EXPIRE_SECS 4 // zero-delivery peers: free their blocks fast
 // Duplicate (hedge) requests a piece may issue over its whole lifetime: each
 // hedge is a deliberate duplicate whose delivery is guaranteed waste unless
-// the original requester died first. 16 blocks = 256 KiB of hedge traffic
-// per piece, the pipensx "<=16 dup blocks" bound.
-#define HEDGE_BUDGET     16
+// the original requester died first. 32 blocks = 512 KiB of hedge traffic
+// per piece.
+#define HEDGE_BUDGET     32
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once. The
 // budget is in BYTES: the floor is only there to keep a tiny bit of pipelining,
@@ -684,10 +684,12 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         c->owner    = -1;
         c->workers  = 0;
         c->have_cnt = 0;
-        c->next_req = 0;
-        c->hedge_budget = HEDGE_BUDGET;
         c->nblocks  =
             (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
+        int hb = c->nblocks / 16;
+        if (hb < HEDGE_BUDGET) hb = HEDGE_BUDGET;
+        if (hb > 64) hb = 64;
+        c->hedge_budget = hb;
         memset(c->have, 0, (size_t)t->blocks_per_piece);
         memset(c->req, 0, (size_t)t->blocks_per_piece);
         a = c;
@@ -1278,15 +1280,8 @@ static void calc_window(torrentfs *t, int64_t *ph, int64_t *lo, int64_t *hi) {
     // other half stays available for seek-back behind the playhead.
     if (t->ram_mode) {
         int64_t cap = (t->ram_budget / 2) / t->meta.piece_len;
-        if (cap < 1) cap = 1;
+        if (cap < STREAM_MIN_PIECES) cap = STREAM_MIN_PIECES;
         if (win > cap) win = cap;
-    }
-    // With very few live peers a wide window just spreads them thin. Narrow it
-    // so the scarce peers focus on the immediate next pieces.
-    if (t->st_live < 4) {
-        int64_t live_cap = t->st_live > 0 ? t->st_live + 1 : STREAM_MIN_PIECES;
-        if (live_cap < STREAM_MIN_PIECES) live_cap = STREAM_MIN_PIECES;
-        if (win > live_cap) win = live_cap;
     }
     int64_t h = p + win;
     if (h > fhi + 1) h = fhi + 1;
@@ -1393,9 +1388,12 @@ static bool try_claim(torrentfs *t, sess *s, int sid, int64_t idx, bool endgame)
         if (!a) return false;
         // Join if there are still blocks nobody has requested. Once only missing
         // blocks remain we stay cooperative: duplicates waste bandwidth, so a
-        // second peer joins only when endgame is close (<= 4 missing blocks)
+        // second peer joins only when endgame is close (missing blocks <= threshold)
         // or when the reader is blocked on this very piece.
-        if (!endgame && unreq_count(a) == 0 && missing_count(a) > 4) return false;
+        int eg_thresh = a->nblocks / 16;
+        if (eg_thresh < 6) eg_thresh = 6;
+        if (eg_thresh > 32) eg_thresh = 32;
+        if (!endgame && unreq_count(a) == 0 && missing_count(a) > eg_thresh) return false;
     } else {
         a = aq_alloc(t, idx);
         if (!a) {
@@ -1429,7 +1427,10 @@ static bool try_claim_blind(torrentfs *t, sess *s, int sid, int64_t idx) {
     if (st == PIECE_ACTIVE) {
         a = aq_find(t, idx);
         if (!a) return false;
-        if (unreq_count(a) == 0 && missing_count(a) > 4) return false;
+        int eg_thresh = a->nblocks / 16;
+        if (eg_thresh < 6) eg_thresh = 6;
+        if (eg_thresh > 32) eg_thresh = 32;
+        if (unreq_count(a) == 0 && missing_count(a) > eg_thresh) return false;
     } else {
         a = aq_alloc(t, idx);
         if (!a) return false;
@@ -1520,8 +1521,11 @@ static int next_block_to_request(torrentfs *t, aq_entry *a) {
     // let every worker hedge a whole pipeline before the counter caught up
     // (up to 96 duplicate blocks in flight per read-blocked piece -- the
     // dominant dup source). Each issued hedge costs one from the budget.
+    int eg_thresh = a->nblocks / 16;
+    if (eg_thresh < 6) eg_thresh = 6;
+    if (eg_thresh > 32) eg_thresh = 32;
     if (missing_count(a) > 0 && a->hedge_budget > 0 &&
-        (missing_count(a) <= 4 || a->idx == t->read_blocked_piece)) {
+        (missing_count(a) <= eg_thresh || a->idx == t->read_blocked_piece)) {
         for (int b = 0; b < a->nblocks; b++)
             if (!a->have[b] && a->req[b] < 2) {
                 a->hedge_budget--;
@@ -1534,17 +1538,11 @@ static int next_block_to_request(torrentfs *t, aq_entry *a) {
 // Dynamic, per-session pipeline (the pipensx model): keep roughly two seconds
 // of this peer's measured delivery rate in flight, so a fast peer on a
 // high-latency wifi link carries hundreds of blocks while a trickle peer
-// carries few. Until a session is metered, assume 256 KB/s (~32 blocks):
-// the old 512 KB/s guess sized a slow peer's first pipeline at 64 blocks,
-// which took longer to drain than the 15 s request expiry -- every one of
-// those requests was re-requested by another worker and the slow peer's
-// deliveries arrived as pure duplicates. With very few live peers we probe
-// deeper since each peer must carry more, but bounded so the same expiry
-// mismatch cannot recur.
+// carries few.
 #define PROBE_DEPTH_FEW_PEERS 64
 static int pipeline_depth(torrentfs *t, sess *s) {
     if (t->st_live <= 3 && s->rate <= 0) return PROBE_DEPTH_FEW_PEERS;
-    double r = s->rate > 0 ? s->rate : 256.0 * 1024.0;
+    double r = s->rate > 0 ? s->rate : (t->st_live <= 4 ? 512.0 * 1024.0 : 384.0 * 1024.0);
     // During bootstrap, an unchoked peer has just let us in through its
     // optimistic slot; with no rate history yet, assume it is fast so we fill
     // the whole unchoke window with requests instead of trickling 32 blocks.
@@ -1556,12 +1554,8 @@ static int pipeline_depth(torrentfs *t, sess *s) {
     return d;
 }
 
-// Cap for sessions that join an already-owned piece: the owner runs its full
-// adaptive pipeline, helpers stay at 16 blocks (256 KiB) -- enough to cover
-// the bandwidth-delay product of any realistic peer while bounding the
-// stragglers that turn into duplicate traffic when the piece completes
-// (measured: 39% of all received bytes were those stragglers).
-#define HELPER_PIPELINE_CAP 16
+// Cap for sessions that join an already-owned piece.
+#define HELPER_PIPELINE_CAP 48
 
 // Keep the pipeline full for the session's claimed piece. Every request is
 // recorded in the session's ring and bumps the piece's per-block count, so
@@ -1576,7 +1570,7 @@ static void fill_pipeline(torrentfs *t, sess *s, u64 now) {
         engine_log(ENGINE_LOG_DEBUG, "[sess %d] fill claim=%lld depth=%d",
                    (int)(s - t->S), (long long)s->claim, depth);
     if (a->workers > 1 && a->owner != s - t->S) {
-        int helper_cap = (t->st_live <= 2) ? 48 : (t->st_live <= 4) ? 32 : HELPER_PIPELINE_CAP;
+        int helper_cap = (t->st_live <= 2) ? 64 : (t->st_live <= 4) ? 48 : HELPER_PIPELINE_CAP;
         if (depth > helper_cap) depth = helper_cap;
     }
     while (s->req_n < depth && s->req_n < REQ_RING) {
@@ -1749,17 +1743,19 @@ static void send_pex(torrentfs *t, sess *s, u64 now) {
         }
         mutexUnlock(&t->lock);
     }
-    if (na == 0) return;
+    if (na <= 0 || na > PEX_MAX_PEERS) return;
 
-    uint8_t msg[512];
+    uint8_t msg[1024];
     int off = 0;
     memcpy(msg + off, "d5:added", 8); off += 8;
     off += put_dec((char *)msg + off, na * 6);
+    msg[off++] = ':';
     memcpy(msg + off, added, (size_t)na * 6); off += na * 6;
     memcpy(msg + off, "7:added.f", 9); off += 9;
     off += put_dec((char *)msg + off, na);
+    msg[off++] = ':';
     memset(msg + off, 0, (size_t)na); off += na;
-    memcpy(msg + off, "7:dropped0:e", 11); off += 11;
+    memcpy(msg + off, "7:dropped0:e", 12); off += 12;
 
     if (peer_nb_queue_ext(&s->nb, s->nb.pex_id, msg, (uint32_t)off) == 0) {
         s->last_pex = now;
@@ -1864,6 +1860,27 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                            (int)(s - t->S), empty ? 1 : 0, full ? 1 : 0,
                            s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
                            (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff);
+
+                bool has_needed = false;
+                if (!empty) {
+                    for (int64_t p = t->file_first_piece; p <= t->file_last_piece; p++) {
+                        if (bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p)) {
+                            has_needed = true;
+                            break;
+                        }
+                    }
+                }
+                if (!has_needed) {
+                    engine_log(ENGINE_LOG_INFO,
+                               "[sess %d] close: peer has 0 needed pieces (empty=%d)",
+                               (int)(s - t->S), empty ? 1 : 0);
+                    if (s->pidx >= 0 && s->pidx < TFS_MAX_PEERS) {
+                        t->peer_next_try[s->pidx] = now + (u64)600 * t->freq;
+                    }
+                    s->fail_kind = PEER_FAIL_CHOKE_ROTATE;
+                    sess_close(t, s, true);
+                    break;
+                }
             } else {
                 t->st_bf_bad++;
                 engine_log(ENGINE_LOG_DEBUG, "[sess] bitfield bad len=%u expected=%zu", plen, s->nb.bitfield_len);

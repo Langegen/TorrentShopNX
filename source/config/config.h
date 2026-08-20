@@ -14,7 +14,8 @@ public:
     const std::string& getTorrServerUrl() const;
     void setTorrServerUrl(const std::string& url);
 
-    static constexpr const char* DEFAULT_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
+    static constexpr const char* DEFAULT_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
+    static constexpr const char* LEGACY_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
 
     const std::string& getCatalogSourceUrl() const;
     std::string getEffectiveCatalogSourceUrl() const;

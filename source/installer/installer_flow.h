@@ -27,6 +27,7 @@ namespace installer_flow {
 struct FlowConfig {
     size_t   low_watermark        = 8 * 1024 * 1024;
     int64_t  watermark_timeout_ms = 15000;
+    bool     enable_pacing        = false; // Disabled: let 128MB RingBuffer naturally buffer without artificial sleep
     double   pace_ratio           = 0.92;
     int      pace_min_src_kbps    = 200;   // при неизвестной/нулевой скорости не пасуем
     int      pace_max_sleep_ms    = 3000;  // потолок на одно торможение
@@ -74,6 +75,7 @@ public:
         const std::function<bool()>& has_error,
         const std::function<void()>& sleep_step,
         const std::function<void(const std::string&)>& log_line) {
+        if (!cfg_.enable_pacing || cfg_.pace_ratio <= 0.0) return;
         if (!has_source || cancel() || has_error()) return;
         if (src_kbps <= cfg_.pace_min_src_kbps) return;
         const auto now = std::chrono::steady_clock::now();

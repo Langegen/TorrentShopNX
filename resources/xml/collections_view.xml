@@ -1,0 +1,28 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="20"
+    paddingBottom="20"
+    paddingLeft="20">
+
+    <!-- Topbar -->
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+        <brls:Label text="╨Я╨╛╨┤╨▒╨╛╤А╨║╨╕" fontSize="28" />
+        <brls:Label id="statsHint" text="╨Ц╨░╨╜╤А╨╛╨▓╤Л╨╡ ╨┐╨╛╨┤╨▒╨╛╤А╨║╨╕ ╨╕╨╖ switch-game-collection" fontSize="14" textColor="#AAAAAA" />
+    </brls:Box>
+
+    <!-- Collection list -->
+    <brls:ScrollingFrame
+        id="scroll"
+        width="auto"
+        height="auto"
+        grow="1.0"
+        marginBottom="20">
+        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingRight="30" />
+    </brls:ScrollingFrame>
+
+</brls:Box>
+</brls:AppletFrame>

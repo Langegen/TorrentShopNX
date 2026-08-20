@@ -213,6 +213,10 @@ std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
     if (catalog_source_url_.empty()) {
         return DEFAULT_CATALOG_URL;
     }
+    if (catalog_source_url_ == LEGACY_CATALOG_URL) {
+        util::logLine("config: saved catalog URL is legacy switch_games.json, using new default RU_catalog.json");
+        return DEFAULT_CATALOG_URL;
+    }
     return catalog_source_url_;
 }
 
