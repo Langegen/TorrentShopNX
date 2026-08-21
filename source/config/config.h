@@ -14,7 +14,8 @@ public:
     const std::string& getTorrServerUrl() const;
     void setTorrServerUrl(const std::string& url);
 
-    static constexpr const char* DEFAULT_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
+    static constexpr const char* DEFAULT_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
+    static constexpr const char* LEGACY_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
 
     const std::string& getCatalogSourceUrl() const;
     std::string getEffectiveCatalogSourceUrl() const;
@@ -49,6 +50,9 @@ public:
     bool getAutoAppUpdate() const;
     void setAutoAppUpdate(bool enabled);
 
+    bool getCacheCoverThumbnails() const;
+    void setCacheCoverThumbnails(bool enabled);
+
     const std::string& getLastAppUpdateCheckDate() const;
     void setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd);
     bool shouldCheckAppUpdateToday() const;
@@ -61,6 +65,7 @@ private:
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;
+    bool cache_cover_thumbnails_;
     int listen_port_;
     std::string last_catalog_update_date_;
     std::string install_location_;

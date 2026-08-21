@@ -188,6 +188,7 @@ private:
     std::atomic<uint64_t>     bytes_downloaded_{0};
     std::atomic<uint64_t>     download_total_bytes_{0};
     std::atomic<uint64_t>     bytes_installed_{0};
+    std::atomic<uint64_t>     payload_consumed_{0}; ///< Сжатых байт, вычитанных из ring buffer (база pacing, для NSZ не равна bytes_installed_)
     std::atomic<uint64_t>     total_bytes_{0};
     std::atomic<uint32_t>     starvation_count_{0}; ///< Число событий голодания буфера (rb_avail=0, wait>=500ms)
 

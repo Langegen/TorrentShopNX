@@ -17,6 +17,7 @@
 
 struct Game {
     std::string title;
+    std::string title_id;
     std::string size;
     std::string magnet;
     std::string topic_id;
@@ -46,6 +47,7 @@ inline std::string safeGetStr(const nlohmann::json& j, const std::string& key) {
 // nlohmann::json deserialization
 inline void from_json(const nlohmann::json& j, Game& g) {
     g.title = safeGetStr(j, "title");
+    g.title_id = safeGetStr(j, "title_id");
     g.size = safeGetStr(j, "size");
     g.magnet = safeGetStr(j, "magnet");
     g.topic_id = safeGetStr(j, "topic_id");
@@ -75,6 +77,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
 inline void to_json(nlohmann::json& j, const Game& g) {
     j = nlohmann::json{
         {"title", g.title},
+        {"title_id", g.title_id},
         {"size", g.size},
         {"magnet", g.magnet},
         {"topic_id", g.topic_id},

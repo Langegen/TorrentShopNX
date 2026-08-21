@@ -1,11 +1,116 @@
 #include "image_downloader.h"
 #include "http_client.h"
+#include "../config/config.h"
 #include "../utils/log.h"
 #include <borealis/core/cache_helper.hpp>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <filesystem>
+
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#include <borealis/extern/nanovg/stb_image.h>
+
+#define STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 namespace net {
+
+namespace {
+
+std::string getThumbnailCachePath(const std::string& url) {
+    uint64_t hash = 14695981039346656037ULL;
+    for (unsigned char c : url) {
+        hash ^= static_cast<uint64_t>(c);
+        hash *= 1099511628211ULL;
+    }
+    char hex[17];
+    std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(hash));
+
+#ifndef __SWITCH__
+    return "./cache/thumbnails/" + std::string(hex) + ".jpg";
+#else
+    return "sdmc:/switch/TorrentShopNX/cache/thumbnails/" + std::string(hex) + ".jpg";
+#endif
+}
+
+bool readWholeFileLocal(const std::string& path, std::string& out) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) return false;
+    out.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return true;
+}
+
+void ensureParentDirectory(const std::string& filePath) {
+    std::filesystem::path p(filePath);
+    if (p.has_parent_path()) {
+        std::error_code ec;
+        std::filesystem::create_directories(p.parent_path(), ec);
+    }
+}
+
+std::vector<uint8_t> resizeImageAreaAverage(const uint8_t* src, int srcW, int srcH, int channels, int dstW, int dstH) {
+    std::vector<uint8_t> dst(dstW * dstH * channels);
+    float xRatio = static_cast<float>(srcW) / static_cast<float>(dstW);
+    float yRatio = static_cast<float>(srcH) / static_cast<float>(dstH);
+
+    for (int y = 0; y < dstH; ++y) {
+        float srcYStart = y * yRatio;
+        float srcYEnd = (y + 1) * yRatio;
+        int y0 = static_cast<int>(srcYStart);
+        int y1 = std::min(srcH, static_cast<int>(srcYEnd + 0.9999f));
+
+        for (int x = 0; x < dstW; ++x) {
+            float srcXStart = x * xRatio;
+            float srcXEnd = (x + 1) * xRatio;
+            int x0 = static_cast<int>(srcXStart);
+            int x1 = std::min(srcW, static_cast<int>(srcXEnd + 0.9999f));
+
+            float totalWeight = 0.0f;
+            float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+            for (int sy = y0; sy < y1; ++sy) {
+                float yWeight = 1.0f;
+                if (sy < srcYStart) yWeight -= (srcYStart - sy);
+                if (sy + 1 > srcYEnd) yWeight -= (sy + 1 - srcYEnd);
+                if (yWeight < 0.0f) yWeight = 0.0f;
+
+                for (int sx = x0; sx < x1; ++sx) {
+                    float xWeight = 1.0f;
+                    if (sx < srcXStart) xWeight -= (srcXStart - sx);
+                    if (sx + 1 > srcXEnd) xWeight -= (sx + 1 - srcXEnd);
+                    if (xWeight < 0.0f) xWeight = 0.0f;
+
+                    float w = xWeight * yWeight;
+                    totalWeight += w;
+                    const uint8_t* p = src + (sy * srcW + sx) * channels;
+                    for (int c = 0; c < channels; ++c) {
+                        acc[c] += p[c] * w;
+                    }
+                }
+            }
+
+            uint8_t* out = dst.data() + (y * dstW + x) * channels;
+            if (totalWeight > 0.0001f) {
+                for (int c = 0; c < channels; ++c) {
+                    float v = acc[c] / totalWeight;
+                    out[c] = static_cast<uint8_t>(std::clamp(v + 0.5f, 0.0f, 255.0f));
+                }
+            }
+        }
+    }
+    return dst;
+}
+
+void stbiWriteToVector(void* context, void* data, int size) {
+    auto* vec = static_cast<std::vector<uint8_t>*>(context);
+    const auto* bytes = static_cast<const uint8_t*>(data);
+    vec->insert(vec->end(), bytes, bytes + size);
+}
+
+} // namespace
 
 ImageDownloader::~ImageDownloader() {
     stop();
@@ -174,6 +279,7 @@ void ImageDownloader::workerLoop() {
         }
 
         if (task.token && !*task.token) {
+            util::logLine("ImageDownloader: task skipped (token invalidated) url=" + task.url);
             continue; // Skip invalidated task (card scrolled offscreen)
         }
 
@@ -185,6 +291,39 @@ void ImageDownloader::processTask(const ImageTask& task) {
     if (g_appExiting.load()) return;
     if (task.token && !*task.token) return;
 
+    bool cacheEnabled = config::ConfigManager::instance().getCacheCoverThumbnails() && !task.bypassCache;
+    std::string thumbPath;
+    if (cacheEnabled && !task.url.empty()) {
+        thumbPath = getThumbnailCachePath(task.url);
+        std::string cachedBody;
+        if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
+            util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
+            brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(cachedBody), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
+                if ((token && !*token) || g_appExiting.load()) return;
+
+                int tex = brls::TextureCache::instance().getCache(cacheKey);
+                if (tex == 0) {
+                    tex = nvgCreateImageMem(
+                        brls::Application::getNVGContext(),
+                        NVG_IMAGE_GENERATE_MIPMAPS,
+                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
+                        body.size()
+                    );
+                    if (tex > 0) {
+                        brls::TextureCache::instance().addCache(cacheKey, tex);
+                    } else {
+                        util::logLine("ImageDownloader: nvgCreateImageMem failed for disk cached " + url);
+                    }
+                }
+                if (token && !*token) return;
+                if (tex > 0) {
+                    img->innerSetImage(tex);
+                }
+            });
+            return;
+        }
+    }
+
     net::HttpClient http;
     http.setTimeout(5);
     auto res = http.httpGet(task.url);
@@ -193,8 +332,59 @@ void ImageDownloader::processTask(const ImageTask& task) {
 
     if (res.status_code == 200 && !res.body.empty()) {
         util::logLine("ImageDownloader: HTTP 200 OK for url=" + task.url + " (size=" + std::to_string(res.body.size()) + ")");
-        brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(res.body), token = task.token, bypassCache = task.bypassCache, url = task.url]() {
-            if (token && !*token) return;
+        
+        std::string bodyToDisplay = std::move(res.body);
+
+        if (cacheEnabled && !thumbPath.empty()) {
+            int srcW = 0, srcH = 0, comp = 0;
+            stbi_uc* decoded = stbi_load_from_memory(
+                reinterpret_cast<const stbi_uc*>(bodyToDisplay.data()),
+                static_cast<int>(bodyToDisplay.size()),
+                &srcW, &srcH, &comp, 3
+            );
+            if (decoded) {
+                const int maxW = 160;
+                const int maxH = 245;
+                float scale = std::min(static_cast<float>(maxW) / static_cast<float>(srcW),
+                                       static_cast<float>(maxH) / static_cast<float>(srcH));
+                int dstW = (scale < 1.0f) ? std::max(1, static_cast<int>(srcW * scale + 0.5f)) : srcW;
+                int dstH = (scale < 1.0f) ? std::max(1, static_cast<int>(srcH * scale + 0.5f)) : srcH;
+
+                std::vector<uint8_t> resizedData;
+                const uint8_t* pixelData = nullptr;
+
+                if (dstW < srcW || dstH < srcH) {
+                    resizedData = resizeImageAreaAverage(decoded, srcW, srcH, 3, dstW, dstH);
+                    pixelData = resizedData.data();
+                } else {
+                    pixelData = decoded;
+                }
+
+                std::vector<uint8_t> thumbJpeg;
+                stbi_write_jpg_to_func(stbiWriteToVector, &thumbJpeg, dstW, dstH, 3, pixelData, 80);
+                stbi_image_free(decoded);
+
+                if (!thumbJpeg.empty()) {
+                    ensureParentDirectory(thumbPath);
+                    std::ofstream out(thumbPath, std::ios::binary);
+                    if (out.is_open()) {
+                        out.write(reinterpret_cast<const char*>(thumbJpeg.data()), thumbJpeg.size());
+                        out.close();
+                        util::logLine("ImageDownloader: saved thumbnail to " + thumbPath + " (" +
+                                      std::to_string(thumbJpeg.size()) + " bytes, " +
+                                      std::to_string(dstW) + "x" + std::to_string(dstH) + ")");
+                    }
+                    bodyToDisplay.assign(reinterpret_cast<const char*>(thumbJpeg.data()), thumbJpeg.size());
+                }
+            }
+        }
+
+        brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(bodyToDisplay), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
+            if (token && !*token) {
+                util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
+                              " col=" + std::to_string(col) + " url=" + url);
+                return;
+            }
             if (g_appExiting.load()) return;
 
             if (bypassCache) {

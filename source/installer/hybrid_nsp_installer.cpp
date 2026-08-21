@@ -1,4 +1,5 @@
 #include "hybrid_nsp_installer.h"
+#include "installer_flow.h"
 #include "ncm_installer.h"
 #include "ncz_parser.h"
 #include "../buffer/ring_buffer.h"
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <thread>
@@ -183,6 +185,7 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     bytes_downloaded_ = 0;
     download_total_bytes_.store(0);
     bytes_installed_  = 0;
+    payload_consumed_ = 0;
     total_bytes_.store(0);
     current_nca_index_  = 0;
     current_nca_offset_ = 0;
@@ -675,6 +678,48 @@ void HybridNspInstaller::installerThreadFunc() {
     auto last_installer_stats_at = std::chrono::steady_clock::now();
     uint64_t last_installer_stats_installed = bytes_installed_.load();
     uint64_t last_installer_stats_downloaded = bytes_downloaded_.load();
+    uint64_t last_installer_stats_consumed  = payload_consumed_.load();
+    std::vector<int64_t> wait_ms_samples;   // waits >= 500 ms (совпадает с starvation_count_)
+    int64_t stall_total_ms = 0;
+    double install_speed_sum = 0.0, install_speed_max = 0.0;
+    double source_speed_sum  = 0.0, source_speed_max  = 0.0;
+    double consume_speed_sum = 0.0, consume_speed_max = 0.0;
+    int     speed_samples = 0;
+    int     live_peers_min = -1;
+    auto percentile = [](std::vector<int64_t> v, double p) -> int64_t {
+        if (v.empty()) return 0;
+        std::sort(v.begin(), v.end());
+        size_t idx = static_cast<size_t>(std::ceil(v.size() * p / 100.0)) - 1;
+        return v[idx];
+    };
+    auto buildSummarySuffix = [&]() {
+        std::string msg = " starvation_events=" + std::to_string(starvation_count_.load());
+        if (!wait_ms_samples.empty()) {
+            msg += " wait_p50_ms=" + std::to_string(percentile(wait_ms_samples, 50.0)) +
+                   " wait_p95_ms=" + std::to_string(percentile(wait_ms_samples, 95.0)) +
+                   " wait_max_ms=" +
+                   std::to_string(*std::max_element(wait_ms_samples.begin(), wait_ms_samples.end())) +
+                   " stall_total_ms=" + std::to_string(stall_total_ms);
+        }
+        if (speed_samples > 0) {
+            msg += " install_speed_avg_kbps=" + std::to_string(static_cast<int>(install_speed_sum / speed_samples)) +
+                   " install_speed_max_kbps=" + std::to_string(static_cast<int>(install_speed_max)) +
+                   " source_speed_avg_kbps=" + std::to_string(static_cast<int>(source_speed_sum / speed_samples)) +
+                   " source_speed_max_kbps=" + std::to_string(static_cast<int>(source_speed_max)) +
+                   " consume_speed_avg_kbps=" + std::to_string(static_cast<int>(consume_speed_sum / speed_samples)) +
+                   " consume_speed_max_kbps=" + std::to_string(static_cast<int>(consume_speed_max));
+        }
+        if (live_peers_min >= 0) {
+            msg += " live_peers_min=" + std::to_string(live_peers_min);
+        }
+        return msg;
+    };
+    bool summary_logged = false;
+    auto logSummary = [&]() {
+        if (summary_logged) return;
+        summary_logged = true;
+        util::logLine("installer: summary" + buildSummarySuffix());
+    };
     auto logInstallerStats = [&]() {
         const auto now = std::chrono::steady_clock::now();
         const double elapsed =
@@ -685,11 +730,15 @@ void HybridNspInstaller::installerThreadFunc() {
 
         const uint64_t installed = bytes_installed_.load();
         const uint64_t downloaded = bytes_downloaded_.load();
+        const uint64_t consumed = payload_consumed_.load();
         const uint64_t installed_delta = installed >= last_installer_stats_installed
             ? installed - last_installer_stats_installed
             : 0;
         const uint64_t downloaded_delta = downloaded >= last_installer_stats_downloaded
             ? downloaded - last_installer_stats_downloaded
+            : 0;
+        const uint64_t consumed_delta = consumed >= last_installer_stats_consumed
+            ? consumed - last_installer_stats_consumed
             : 0;
         const double install_kbps = elapsed > 0.0
             ? static_cast<double>(installed_delta) / 1024.0 / elapsed
@@ -697,16 +746,36 @@ void HybridNspInstaller::installerThreadFunc() {
         const double source_kbps = elapsed > 0.0
             ? static_cast<double>(downloaded_delta) / 1024.0 / elapsed
             : 0.0;
+        const double consume_kbps = elapsed > 0.0
+            ? static_cast<double>(consumed_delta) / 1024.0 / elapsed
+            : 0.0;
         util::logLine("installer: stats installed=" + std::to_string(installed) +
                       " install_speed=" + std::to_string(static_cast<int>(install_kbps)) + "KB/s" +
                       " downloaded=" + std::to_string(downloaded) +
                       " source_speed=" + std::to_string(static_cast<int>(source_kbps)) + "KB/s" +
+                      " consume_speed=" + std::to_string(static_cast<int>(consume_kbps)) + "KB/s" +
                       " rb_avail=" + std::to_string(ring_buffer_.available()) +
                       " rb_free=" + std::to_string(ring_buffer_.freeSpace()) +
                       " rb_cap=" + std::to_string(ring_buffer_.capacity()));
+        if (elapsed > 0.0) {
+            install_speed_sum += install_kbps;
+            source_speed_sum  += source_kbps;
+            consume_speed_sum += consume_kbps;
+            if (install_kbps > install_speed_max) install_speed_max = install_kbps;
+            if (source_kbps  > source_speed_max)  source_speed_max  = source_kbps;
+            if (consume_kbps > consume_speed_max) consume_speed_max = consume_kbps;
+            speed_samples++;
+        }
+        if (source_) {
+            const int live = source_->livePeers();
+            if (live >= 0 && (live_peers_min < 0 || live < live_peers_min)) {
+                live_peers_min = live;
+            }
+        }
         last_installer_stats_at = now;
         last_installer_stats_installed = installed;
         last_installer_stats_downloaded = downloaded;
+        last_installer_stats_consumed = consumed;
     };
 
     if (source_ && source_->type() == datasource::SourceType::LocalInternal) {
@@ -714,6 +783,15 @@ void HybridNspInstaller::installerThreadFunc() {
         const uint64_t total = download_total_bytes_.load();
         if (total > 0 && total < target) {
             target = static_cast<size_t>(total);
+        }
+        // Адаптивный target: время наполнения буфера при текущей скорости
+        // сети. Медленный/нестабильный рой (полевой прогон: 3.5 МБ/с в
+        // среднем, просадки до нуля) получает максимум, быстрый рой не
+        // тратит лишние секунды на ожидание полного буфера.
+        const int src_kbps = source_->downloadSpeedKBps();
+        if (src_kbps > 0) {
+            const size_t speed_target = static_cast<size_t>(src_kbps) * 10 * 1024; // ~10s of network
+            target = std::max(MIN_BUFFER_SIZE, std::min(target, speed_target));
         }
         if (target > 0) {
             util::logLine("installer: waiting local prebuffer target=" + std::to_string(target));
@@ -740,8 +818,31 @@ void HybridNspInstaller::installerThreadFunc() {
     }
 
     const auto& entries = is_xci_ ? xci_header_.entries() : nsp_header_.entries();
+    // Сжатый объём payload (для NSZ total_bytes_ скорректирован вверх до
+    // распакованного размера — сравнение stream_pos (сжатый) с ним сломало
+    // бы хвостовое исключение watermark'а).
+    uint64_t total_payload = 0;
+    for (const auto& e : entries) total_payload += e.size;
     uint64_t stream_pos = 0;
     uint64_t progress_pos = 0;
+
+    // =========================================================================
+    // Pacing + watermark: единая реализация в installer_flow::InstallerFlow
+    // (тот же код исполняется в pctest/apptest — PC-прогон точно повторяет
+    // поведение железа). Не даём инсталлеру стабильно обгонять сеть: если
+    // потребление ring buffer заметно выше скорости скачивания, буфер
+    // упирается в пустоту и read() блокируется на секунды (starvation_events
+    // в полевых логах: 542 события, p95 ~15.6s). Ограничение потребления
+    // ~92% от download_speed превращает длинные ожидания в плавный поток и
+    // держит буфер наполненным (страховка от кратковременных просадок сети).
+    // =========================================================================
+    installer_flow::InstallerFlow flow{installer_flow::FlowConfig()};
+    auto flow_eof     = [&]() { return ring_buffer_.isEof(); };
+    auto flow_cancel  = [&]() { return cancel_requested_.load(); };
+    auto flow_err     = [&]() { return hasError(); };
+    auto flow_avail   = [&]() { return ring_buffer_.available(); };
+    auto flow_sleep   = [&]() { sleepPrebufferPoll(); };
+    auto flow_log     = [&](const std::string& m) { util::logLine("installer: " + m); };
 
 #ifdef __SWITCH__
     Sha256Context sha_ctx;
@@ -752,16 +853,21 @@ void HybridNspInstaller::installerThreadFunc() {
     cert_data_.clear();
 
     while (!cancel_requested_) {
+        flow.waitForWatermark(stream_pos, total_payload, flow_eof, flow_cancel,
+                              flow_err, flow_avail, flow_sleep);
         const auto read_wait_start = std::chrono::steady_clock::now();
         util::logLine("installer: [RingBuffer] read start rb_avail=" + std::to_string(ring_buffer_.available()) +
                       " downloaded=" + std::to_string(bytes_downloaded_.load()));
         size_t read = ring_buffer_.read(chunk_buf.data(), chunk_size);
+        payload_consumed_.fetch_add(read);
         util::logLine("installer: [RingBuffer] read done got=" + std::to_string(read));
         const auto read_wait_end = std::chrono::steady_clock::now();
         const auto read_wait_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(read_wait_end - read_wait_start).count();
         if (read_wait_ms >= 500 && read > 0) {
             ++starvation_count_;
+            wait_ms_samples.push_back(read_wait_ms);
+            stall_total_ms += read_wait_ms;
             util::logLine("installer: buffer wait wait_ms=" + std::to_string(read_wait_ms) +
                           " got=" + std::to_string(read) +
                           " rb_avail=" + std::to_string(ring_buffer_.available()) +
@@ -835,11 +941,14 @@ void HybridNspInstaller::installerThreadFunc() {
                                 while (actual_fetch > 0) {
                                     const auto rb_wait_start = std::chrono::steady_clock::now();
                                     size_t from_rb = ring_buffer_.read(out, actual_fetch);
+                                    payload_consumed_.fetch_add(from_rb);
                                     const auto rb_wait_end = std::chrono::steady_clock::now();
                                     const auto rb_wait_ms =
                                         std::chrono::duration_cast<std::chrono::milliseconds>(rb_wait_end - rb_wait_start).count();
                                     if (rb_wait_ms >= 500 && from_rb > 0) {
                                         ++starvation_count_;
+                                        wait_ms_samples.push_back(rb_wait_ms);
+                                        stall_total_ms += rb_wait_ms;
                                         util::logLine("installer: ncz buffer wait wait_ms=" + std::to_string(rb_wait_ms) +
                                                       " got=" + std::to_string(from_rb) +
                                                       " rb_avail=" + std::to_string(ring_buffer_.available()) +
@@ -1032,6 +1141,10 @@ void HybridNspInstaller::installerThreadFunc() {
             bytes_installed_ = progress_pos;
         }
         logInstallerStats();
+        flow.pace(source_ != nullptr,
+                  source_ ? source_->downloadSpeedKBps() : 0,
+                  payload_consumed_.load(),
+                  flow_cancel, flow_err, flow_sleep, flow_log);
     }
 
 #ifdef __SWITCH__
@@ -1044,7 +1157,8 @@ cleanup_sha:
 
         if (!hasError()) {
             state_ = InstallState::Completed;
-            util::logLine("installer: installation completed successfully starvation_events=" + std::to_string(starvation_count_.load()));
+            util::logLine("installer: installation completed successfully" + buildSummarySuffix());
+            summary_logged = true;
         }
     }
 
@@ -1055,6 +1169,8 @@ cleanup_sha:
     // Every installer-thread exit path converges here (completion, cancel,
     // error), so this is the single place the transfer releases its boost.
     util::cpuBoostEnd();
+
+    logSummary();
 
     util::logLine("installer: thread finished, installed " + std::to_string(bytes_installed_.load()) + " bytes");
 }
@@ -1096,33 +1212,20 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     state_ = InstallState::RegisteringMeta;
     util::logLine("hybrid: phase 5 - registering CNMT metadata");
 
-    if (cnmt_nca_data_.empty()) {
-        util::logLine("hybrid: CNMT NCA was not buffered, skipping metadata registration");
-        return true;
-    }
-
     CnmtData cnmt;
     bool cnmt_ready = false;
 
-    // 1) Пытаемся парсить из буфера CNMT NCA, собранного во время стрима.
-    if (CnmtParser::extractFromNca(cnmt_nca_data_.data(), cnmt_nca_data_.size(), cnmt)) {
-        cnmt_ready = true;
-    } else {
-        util::logLine("hybrid: failed to extract CNMT from NCA in-memory, trying direct parse");
-        if (CnmtParser::parse(cnmt_nca_data_.data(), cnmt_nca_data_.size(), cnmt)) {
-            cnmt_ready = true;
-        } else {
-            util::logLine("hybrid: direct CNMT parse from buffered data failed");
-        }
-    }
-
 #ifdef __SWITCH__
     // =========================================================================
-    // Шаг 5а: Если из буфера не вышло, читаем CNMT NCA из хранилища NCM.
+    // 1) Основной путь: читаем CNMT NCA из установленного контента через
+    //    FsFileSystemType_ContentMeta. Работает всегда: NCA уже финализирован
+    //    к этому моменту, размер файла не важен. Полевые логи: in-memory путь
+    //    спотыкался на неполных данных ring buffer ("insufficient data, need
+    //    3368553 but have 3584") в обоих файлах, а этот путь был стабилен.
     // =========================================================================
     {
         const NspFileEntry* cnmt_entry = is_xci_ ? xci_header_.findByType(NspEntryType::CnmtNca) : nsp_header_.findByType(NspEntryType::CnmtNca);
-        if (!cnmt_ready && cnmt_entry && ncm_.isInitialized()) {
+        if (cnmt_entry && ncm_.isInitialized()) {
             // Awoo-like путь: читаем внутренний *.cnmt через FsFileSystemType_ContentMeta.
             std::vector<uint8_t> cnmt_buf;
             if (ncm_.readCnmtFromContentMetaFs(cnmt_entry->content_id, cnmt_buf)) {
@@ -1157,6 +1260,22 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                 } else {
                     util::logLine("hybrid: failed to read back installed NCA file");
                 }
+            }
+        }
+    }
+
+    // 2) Запасной путь: парсим из буфера CNMT NCA, собранного во время стрима.
+    if (!cnmt_ready && !cnmt_nca_data_.empty()) {
+        util::logLine("hybrid: in-memory CNMT parse (fallback), buffered=" +
+                      std::to_string(cnmt_nca_data_.size()));
+        if (CnmtParser::extractFromNca(cnmt_nca_data_.data(), cnmt_nca_data_.size(), cnmt)) {
+            cnmt_ready = true;
+        } else {
+            util::logLine("hybrid: failed to extract CNMT from NCA in-memory, trying direct parse");
+            if (CnmtParser::parse(cnmt_nca_data_.data(), cnmt_nca_data_.size(), cnmt)) {
+                cnmt_ready = true;
+            } else {
+                util::logLine("hybrid: direct CNMT parse from buffered data failed");
             }
         }
     }

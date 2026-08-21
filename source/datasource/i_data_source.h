@@ -42,6 +42,9 @@ public:
     virtual uint64_t streamTorrentOffset() const { return 0; }
     virtual int downloadSpeedKBps() const { return -1; }
 
+    /// Число живых (handshaked) пиров источника; -1 = неизвестно.
+    virtual int livePeers() const { return -1; }
+
     virtual ReadFailureKind lastReadFailure() const { return ReadFailureKind::None; }
     virtual bool shouldFallbackOnReadFailure() const { return false; }
 

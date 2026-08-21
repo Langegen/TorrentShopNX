@@ -110,6 +110,13 @@ int BackendDataSource::downloadSpeedKBps() const {
     return backend_->downloadSpeedKBps();
 }
 
+int BackendDataSource::livePeers() const {
+    if (!backend_) {
+        return -1;
+    }
+    return backend_->status().peers;
+}
+
 ReadFailureKind BackendDataSource::lastReadFailure() const {
     if (!backend_) {
         return ReadFailureKind::None;

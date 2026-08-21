@@ -48,6 +48,10 @@ public:
     bool isEmpty() const;
     bool isFull() const;
 
+    /// true, если writer сигнализировал EOF (после этого read() вернёт 0,
+    /// когда буфер опустеет)
+    bool isEof() const;
+
     /// Сигнализировать о завершении записи (EOF).
     /// После этого read() вернёт 0 когда буфер опустеет.
     void setEof();

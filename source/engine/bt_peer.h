@@ -58,8 +58,8 @@ typedef struct {
 // prefix + one 16 KiB block): every recv() on Switch is a bsd IPC, so a small
 // buffer turns a fast peer's socket drain into a storm of small IPCs. 64 KiB
 // cuts the per-session recv IPC count ~4x versus one-message buffering; at 48
-// sessions that is 3 MB total.
-#define PEER_RX_CAP (64 * 1024)
+// sessions that is 6 MB total.
+#define PEER_RX_CAP (128 * 1024)
 
 typedef struct {
     int sock;

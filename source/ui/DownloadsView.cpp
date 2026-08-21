@@ -250,8 +250,16 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             break;
         case download::DownloadState::StreamInstalling:
         case download::DownloadState::Installing:
-            statusStr = "Установка";
-            statusColor = nvgRGB(33, 150, 243); // Blue
+            // Полевой случай: рой с 1 сидом висел молча (Pets Survivors,
+            // live=1, 0 прогресса 6 минут). Честно показываем отсутствие
+            // живых пиров, чтобы пользователь понимал, что это не фриз.
+            if (item.peers <= 0 && item.download_speed_kbps <= 0.0) {
+                statusStr = "Установка: нет пиров";
+                statusColor = nvgRGB(255, 152, 0); // Orange
+            } else {
+                statusStr = "Установка";
+                statusColor = nvgRGB(33, 150, 243); // Blue
+            }
             break;
         case download::DownloadState::Completed:
             statusStr = "Завершено ✓";

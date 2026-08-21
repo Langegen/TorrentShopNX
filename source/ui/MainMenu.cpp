@@ -1,6 +1,7 @@
 #include "MainMenu.hpp"
 #include "DownloadUiManager.hpp"
 #include "CatalogView.hpp"
+#include "CollectionsView.hpp"
 #include "FavoritesView.hpp"
 #include "DownloadsView.hpp"
 #include "SettingsTab.hpp"
@@ -27,7 +28,7 @@ void MainMenu::onContentAvailable() {
     
     // Register button click actions
     btnCatalog->registerClickAction([](brls::View* view) {
-        brls::Application::pushActivity(new ui::CatalogView());
+        brls::Application::pushActivity(new ui::CollectionsView());
         return true;
     });
 
