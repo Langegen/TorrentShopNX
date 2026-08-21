@@ -456,6 +456,24 @@ static void dht_bg_main(void *arg) {
                 s_last_change_log = now;
             }
             last_log = now;
+
+            // Periodically persist known good nodes every 3 minutes so a crash/shutdown
+            // does not lose warm DHT routing table.
+            static u64 last_cache_save = 0;
+            if (good >= 30 && (last_cache_save == 0 || now - last_cache_save > (u64)180 * freq)) {
+                last_cache_save = now;
+                struct sockaddr_in sins_p[DHT_CACHE_MAX_NODES];
+                int num_p = DHT_CACHE_MAX_NODES, num6_p = 0;
+                dht_get_nodes(sins_p, &num_p, NULL, &num6_p);
+                if (num_p > 0) {
+                    uint8_t nodes_p[DHT_CACHE_MAX_NODES][6];
+                    for (int i = 0; i < num_p; i++) {
+                        memcpy(nodes_p[i], &sins_p[i].sin_addr, 4);
+                        memcpy(nodes_p[i] + 4, &sins_p[i].sin_port, 2);
+                    }
+                    dht_cache_write(s_dht_cache_path, s_bg_node_id, nodes_p, num_p);
+                }
+            }
         }
     }
 

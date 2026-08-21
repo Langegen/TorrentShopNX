@@ -142,6 +142,7 @@ HybridNspInstaller::~HybridNspInstaller() {
         threads_started_ = false;
     }
 #endif
+    ring_buffer_.clear();
 }
 
 void HybridNspInstaller::setSourceFileNameHint(const std::string& name) {
@@ -176,8 +177,15 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     source_ = source;
     config_ = config;
 
-    size_t buf_size = autoBufferSize();
-    if (buf_size < MIN_BUFFER_SIZE) buf_size = MIN_BUFFER_SIZE;
+    size_t max_buf = autoBufferSize();
+    uint64_t file_sz = source_->totalSize();
+    size_t buf_size = max_buf;
+    if (file_sz > 0 && file_sz < max_buf) {
+        size_t needed = static_cast<size_t>(file_sz) + 2 * 1024 * 1024;
+        if (needed < 1024 * 1024) needed = 1024 * 1024;
+        buf_size = std::min(max_buf, needed);
+    }
+    if (buf_size < 1024 * 1024) buf_size = 1024 * 1024;
 
     ring_buffer_.reinit(buf_size);
 
@@ -783,21 +791,26 @@ void HybridNspInstaller::installerThreadFunc() {
         const uint64_t total = download_total_bytes_.load();
         if (total > 0 && total < target) {
             target = static_cast<size_t>(total);
+        } else {
+            // Адаптивный target: время наполнения буфера при текущей скорости
+            // сети. Медленный/нестабильный рой (полевой прогон: 3.5 МБ/с в
+            // среднем, просадки до нуля) получает максимум, быстрый рой не
+            // тратит лишние секунды на ожидание полного буфера.
+            const int src_kbps = source_->downloadSpeedKBps();
+            if (src_kbps > 0) {
+                const size_t speed_target = static_cast<size_t>(src_kbps) * 10 * 1024; // ~10s of network
+                target = std::max(MIN_BUFFER_SIZE, std::min(target, speed_target));
+            }
         }
-        // Адаптивный target: время наполнения буфера при текущей скорости
-        // сети. Медленный/нестабильный рой (полевой прогон: 3.5 МБ/с в
-        // среднем, просадки до нуля) получает максимум, быстрый рой не
-        // тратит лишние секунды на ожидание полного буфера.
-        const int src_kbps = source_->downloadSpeedKBps();
-        if (src_kbps > 0) {
-            const size_t speed_target = static_cast<size_t>(src_kbps) * 10 * 1024; // ~10s of network
-            target = std::max(MIN_BUFFER_SIZE, std::min(target, speed_target));
+        if (total > 0 && target > total) {
+            target = static_cast<size_t>(total);
         }
         if (target > 0) {
             util::logLine("installer: waiting local prebuffer target=" + std::to_string(target));
             const auto prebuffer_start = std::chrono::steady_clock::now();
-            while (!cancel_requested_ && !hasError() && ring_buffer_.available() < target) {
+            while (!cancel_requested_ && !hasError() && ring_buffer_.available() < target && !ring_buffer_.isEof()) {
                 sleepPrebufferPoll();
+                if (ring_buffer_.isEof()) break;
                 // Slow swarm: give up on the full target after a minute and
                 // install with what has arrived. Requires at least one byte --
                 // a completely dead swarm just keeps waiting (cancellable).
@@ -1509,6 +1522,16 @@ void HybridNspInstaller::cancel() {
         state_ == InstallState::Completed ||
         state_ == InstallState::Failed ||
         state_ == InstallState::Cancelled) {
+#ifdef __SWITCH__
+        if (threads_started_) {
+            threadWaitForExit(&collector_thread_);
+            threadWaitForExit(&installer_thread_);
+            threadClose(&collector_thread_);
+            threadClose(&installer_thread_);
+            threads_started_ = false;
+        }
+#endif
+        ring_buffer_.clear();
         return;
     }
 
@@ -1532,6 +1555,7 @@ void HybridNspInstaller::cancel() {
     ncm_.cleanup();
     util::cpuBoostEnd();   // idempotent safety net for the early-cancel paths
 #endif
+    ring_buffer_.clear();
 
     state_ = InstallState::Cancelled;
     util::logLine("hybrid: installation cancelled");
