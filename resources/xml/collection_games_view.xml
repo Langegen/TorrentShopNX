@@ -10,12 +10,12 @@
 
     <!-- Topbar -->
     <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
-        <brls:Label id="headerTitle" text="Подборка" fontSize="28" />
+        <brls:Label id="headerTitle" text="@i18n/app/collections/title" fontSize="28" />
         <brls:Label id="statsHint" text="" fontSize="16" textColor="#AAAAAA" />
     </brls:Box>
 
     <!-- Loading / error state -->
-    <brls:Label id="loadingLabel" text="Загрузка..." fontSize="18" textColor="#AAAAAA" marginTop="40" />
+    <brls:Label id="loadingLabel" text="@i18n/app/common/loading" fontSize="18" textColor="#AAAAAA" marginTop="40" />
 
     <!-- Games list -->
     <brls:RecyclerFrame

@@ -15,16 +15,16 @@ namespace datasource {
 
 struct CustomSchedulerConfig {
     int critical_pieces    = 2;
-    int urgent_pieces      = 8;
-    int prefetch_pieces    = 10;
+    int urgent_pieces      = 12;
+    int prefetch_pieces    = 16;
     int speculative_pieces = 6;
     int tail_pieces        = 2;
 
     int stall_extra_critical   = 0;
-    int stall_extra_urgent     = -4;
-    int stall_extra_prefetch   = -12;
+    int stall_extra_urgent     = -2;
+    int stall_extra_prefetch   = -6;
 
-    float slow_peer_speed_bps  = 100.0f * 1024.0f;
+    float slow_peer_speed_bps  = 200.0f * 1024.0f;
     int   slow_peer_count_max  = 3;
 };
 
@@ -88,8 +88,12 @@ private:
     int file_first_piece_ = 0;
     int file_last_piece_ = 0;
     int last_current_piece_ = -1;
+    int last_log_piece_ = -1;
     int stall_level_ = 0;
+    int last_boosted_count_ = 0;
     std::chrono::steady_clock::time_point last_apply_at_;
+    std::chrono::steady_clock::time_point last_log_at_;
+    std::chrono::steady_clock::time_point last_boost_log_at_;
 
     struct PeerEwma {
         uint32_t key_ip;

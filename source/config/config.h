@@ -57,6 +57,9 @@ public:
     void setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd);
     bool shouldCheckAppUpdateToday() const;
 
+    const std::string& getLanguage() const;
+    void setLanguage(const std::string& lang);
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -72,6 +75,7 @@ private:
     std::string app_update_url_;
     bool auto_app_update_;
     std::string last_app_update_check_date_;
+    std::string language_;
     std::string config_path_;
     std::string legacy_config_path_;
 };

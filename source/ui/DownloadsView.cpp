@@ -114,13 +114,13 @@ static std::string formatEta(float speed_kbps, unsigned long long remaining_byte
     if (sec > 3600.0) {
         int hr = (int)(sec / 3600.0);
         int min = (int)((sec - hr * 3600.0) / 60.0);
-        return "ETA: " + std::to_string(hr) + "ч " + std::to_string(min) + "м";
+        return brls::getStr("app/downloads/eta_h_m", std::to_string(hr), std::to_string(min));
     } else if (sec > 60.0) {
         int min = (int)(sec / 60.0);
         int s = (int)(sec - min * 60.0);
-        return "ETA: " + std::to_string(min) + "м " + std::to_string(s) + "с";
+        return brls::getStr("app/downloads/eta_m_s", std::to_string(min), std::to_string(s));
     } else {
-        return "ETA: " + std::to_string((int)sec) + "с";
+        return brls::getStr("app/downloads/eta_s", std::to_string((int)sec));
     }
 }
 
@@ -232,49 +232,46 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     }
 
     // Status descriptions mapping
-    std::string statusStr = "Ожидание";
+    std::string statusStr = "app/downloads/state_waiting"_i18n;
     NVGcolor statusColor = nvgRGB(200, 200, 200); // Gray
     
     switch (item.state) {
         case download::DownloadState::Queued:
-            statusStr = "В очереди";
+            statusStr = "app/downloads/state_queued"_i18n;
             statusColor = nvgRGB(255, 193, 7); // Amber
             break;
         case download::DownloadState::Downloading:
-            statusStr = "Загрузка";
+            statusStr = "app/downloads/state_downloading"_i18n;
             statusColor = nvgRGB(76, 175, 80); // Green
             break;
         case download::DownloadState::StreamPreparing:
-            statusStr = "Подготовка к установке";
+            statusStr = "app/downloads/state_preparing"_i18n;
             statusColor = nvgRGB(0, 188, 212); // Cyan
             break;
         case download::DownloadState::StreamInstalling:
         case download::DownloadState::Installing:
-            // Полевой случай: рой с 1 сидом висел молча (Pets Survivors,
-            // live=1, 0 прогресса 6 минут). Честно показываем отсутствие
-            // живых пиров, чтобы пользователь понимал, что это не фриз.
             if (item.peers <= 0 && item.download_speed_kbps <= 0.0) {
-                statusStr = "Установка: нет пиров";
+                statusStr = "app/downloads/state_no_peers"_i18n;
                 statusColor = nvgRGB(255, 152, 0); // Orange
             } else {
-                statusStr = "Установка";
+                statusStr = "app/downloads/state_installing"_i18n;
                 statusColor = nvgRGB(33, 150, 243); // Blue
             }
             break;
         case download::DownloadState::Completed:
-            statusStr = "Завершено ✓";
+            statusStr = "app/downloads/state_completed"_i18n;
             statusColor = nvgRGB(139, 195, 74); // Light Green
             break;
         case download::DownloadState::Cancelled:
-            statusStr = "Отменено";
+            statusStr = "app/downloads/state_cancelled"_i18n;
             statusColor = nvgRGB(244, 67, 54); // Red
             break;
         case download::DownloadState::Failed:
-            statusStr = "Ошибка";
+            statusStr = "app/downloads/state_failed"_i18n;
             statusColor = nvgRGB(244, 67, 54); // Red
             break;
         case download::DownloadState::Paused:
-            statusStr = "Пауза";
+            statusStr = "app/downloads/state_paused"_i18n;
             statusColor = nvgRGB(255, 152, 0); // Orange
             break;
     }
@@ -293,10 +290,10 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         cell->statsText->setText(stats);
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (item.state == download::DownloadState::Completed) {
-        cell->statsText->setText("Сохранено в: /switch/TorrentShopNX/downloads/" + item.topic_id + "/");
+        cell->statsText->setText(brls::getStr("app/downloads/saved_to", item.topic_id));
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (item.state == download::DownloadState::Failed) {
-        cell->statsText->setText(item.error_message.empty() ? "Неизвестная ошибка" : item.error_message);
+        cell->statsText->setText(item.error_message.empty() ? "app/downloads/unknown_error"_i18n : item.error_message);
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else {
         cell->statsText->setVisibility(brls::Visibility::GONE);
@@ -307,13 +304,13 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         item.state == download::DownloadState::StreamInstalling ||
         item.state == download::DownloadState::StreamPreparing) {
         
-        char peersBuf[128];
+        std::string peersStr;
         if (item.known_peers > item.peers) {
-            std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d (%d изв.) · DHT: %d", item.seeds, item.peers, item.known_peers, item.dht);
+            peersStr = brls::getStr("app/downloads/peers_with_known", std::to_string(item.seeds), std::to_string(item.peers), std::to_string(item.known_peers), std::to_string(item.dht));
         } else {
-            std::snprintf(peersBuf, sizeof(peersBuf), "Сиды: %d · Пиры: %d · DHT: %d", item.seeds, item.peers, item.dht);
+            peersStr = brls::getStr("app/downloads/peers_standard", std::to_string(item.seeds), std::to_string(item.peers), std::to_string(item.dht));
         }
-        cell->peersText->setText(peersBuf);
+        cell->peersText->setText(peersStr);
         cell->peersText->setVisibility(brls::Visibility::VISIBLE);
     } else {
         cell->peersText->setVisibility(brls::Visibility::GONE);
@@ -324,12 +321,12 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         item.state == download::DownloadState::Cancelled || 
         item.state == download::DownloadState::Failed) {
         
-        cell->registerAction("Удалить из списка", brls::ControllerButton::BUTTON_Y, [topic_id = item.topic_id](brls::View* view) {
+        cell->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [topic_id = item.topic_id](brls::View* view) {
             ui::DownloadManager::instance().deleteDownload(topic_id);
             return true;
         });
     } else {
-        cell->registerAction(item.state == download::DownloadState::Paused ? "Возобновить" : "Приостановить", 
+        cell->registerAction(item.state == download::DownloadState::Paused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n, 
                              brls::ControllerButton::BUTTON_A, [topic_id = item.topic_id, state = item.state](brls::View* view) {
             if (state == download::DownloadState::Paused) {
                 ui::DownloadManager::instance().resumeDownload(topic_id);
@@ -339,7 +336,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             return true;
         });
 
-        cell->registerAction("Отменить загрузку", brls::ControllerButton::BUTTON_X, [topic_id = item.topic_id](brls::View* view) {
+        cell->registerAction("app/downloads/action_cancel"_i18n, brls::ControllerButton::BUTTON_X, [topic_id = item.topic_id](brls::View* view) {
             ui::DownloadManager::instance().cancelDownload(topic_id);
             return true;
         });

@@ -136,6 +136,23 @@ inline std::string extractLangBadge(const std::string& interface_lang) {
     return interface_lang.substr(start + 1, end - start - 1);
 }
 
+// Fast file reading into a preallocated std::string buffer
+inline bool readFileFast(const std::string& path, std::string& out) {
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) return false;
+    std::streamsize size = in.tellg();
+    if (size < 0) return false;
+    in.seekg(0, std::ios::beg);
+    out.resize(static_cast<size_t>(size));
+    if (size > 0) {
+        in.read(&out[0], size);
+        if (!in && in.gcount() != size) {
+            out.resize(static_cast<size_t>(in.gcount()));
+        }
+    }
+    return true;
+}
+
 // Parse games directly from a JSON string in memory
 inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent) {
     util::logLine("GameData: parsing games from JSON string (size=" + std::to_string(jsonContent.size()) + ")");
@@ -167,15 +184,159 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
     return games;
 }
 
-// Load games from JSON file
+// Save games vector to high-speed binary cache
+inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<Game>& games) {
+    if (games.empty()) return false;
+    std::filesystem::path p(binPath);
+    if (p.has_parent_path()) {
+        std::error_code ec;
+        std::filesystem::create_directories(p.parent_path(), ec);
+    }
+    std::ofstream out(binPath, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        util::logLine("GameData: failed to open bin file for writing: " + binPath);
+        return false;
+    }
+
+    const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
+    out.write(magic, 8);
+    uint32_t version = 1;
+    out.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    uint32_t count = static_cast<uint32_t>(games.size());
+    out.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+    auto writeStr = [&out](const std::string& s) {
+        uint16_t len = static_cast<uint16_t>(std::min<size_t>(s.size(), 65535));
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        if (len > 0) {
+            out.write(s.data(), len);
+        }
+    };
+
+    for (const auto& g : games) {
+        writeStr(g.title);
+        writeStr(g.title_id);
+        writeStr(g.size);
+        writeStr(g.magnet);
+        writeStr(g.topic_id);
+        writeStr(g.url);
+        writeStr(g.year);
+        writeStr(g.genre);
+        writeStr(g.developer);
+        writeStr(g.publisher);
+        writeStr(g.image_format);
+        writeStr(g.interface_lang);
+        writeStr(g.voice_lang);
+        writeStr(g.cover);
+
+        uint16_t scCount = static_cast<uint16_t>(std::min<size_t>(g.screenshots.size(), 65535));
+        out.write(reinterpret_cast<const char*>(&scCount), sizeof(scCount));
+        for (size_t i = 0; i < scCount; ++i) {
+            writeStr(g.screenshots[i]);
+        }
+
+        writeStr(g.description);
+    }
+
+    out.flush();
+    bool ok = out.good();
+    util::logLine("GameData: saved binary cache to " + binPath + " count=" + std::to_string(games.size()) + " ok=" + std::to_string(ok));
+    return ok;
+}
+
+// Load games vector from high-speed binary cache (<50ms for 7000+ games)
+inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game>& games) {
+    std::string buffer;
+    if (!readFileFast(binPath, buffer)) {
+        return false;
+    }
+    if (buffer.size() < 16) {
+        util::logLine("GameData: bin cache file too small (" + std::to_string(buffer.size()) + " bytes)");
+        return false;
+    }
+
+    const char* ptr = buffer.data();
+    const char* end = buffer.data() + buffer.size();
+
+    const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
+    if (std::memcmp(ptr, magic, 8) != 0) {
+        util::logLine("GameData: bin cache magic mismatch");
+        return false;
+    }
+    ptr += 8;
+
+    uint32_t version = 0;
+    std::memcpy(&version, ptr, sizeof(version));
+    ptr += sizeof(version);
+    if (version != 1) {
+        util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
+        return false;
+    }
+
+    uint32_t count = 0;
+    std::memcpy(&count, ptr, sizeof(count));
+    ptr += sizeof(count);
+
+    auto readStr = [&ptr, end](std::string& s) -> bool {
+        if (ptr + sizeof(uint16_t) > end) return false;
+        uint16_t len = 0;
+        std::memcpy(&len, ptr, sizeof(len));
+        ptr += sizeof(len);
+        if (ptr + len > end) return false;
+        s.assign(ptr, len);
+        ptr += len;
+        return true;
+    };
+
+    games.clear();
+    games.reserve(count);
+
+    for (uint32_t i = 0; i < count; ++i) {
+        Game g;
+        if (!readStr(g.title)) return false;
+        if (!readStr(g.title_id)) return false;
+        if (!readStr(g.size)) return false;
+        if (!readStr(g.magnet)) return false;
+        if (!readStr(g.topic_id)) return false;
+        if (!readStr(g.url)) return false;
+        if (!readStr(g.year)) return false;
+        if (!readStr(g.genre)) return false;
+        if (!readStr(g.developer)) return false;
+        if (!readStr(g.publisher)) return false;
+        if (!readStr(g.image_format)) return false;
+        if (!readStr(g.interface_lang)) return false;
+        if (!readStr(g.voice_lang)) return false;
+        if (!readStr(g.cover)) return false;
+
+        if (ptr + sizeof(uint16_t) > end) return false;
+        uint16_t scCount = 0;
+        std::memcpy(&scCount, ptr, sizeof(scCount));
+        ptr += sizeof(scCount);
+
+        g.screenshots.reserve(scCount);
+        for (uint16_t s = 0; s < scCount; ++s) {
+            std::string sc;
+            if (!readStr(sc)) return false;
+            g.screenshots.push_back(std::move(sc));
+        }
+
+        if (!readStr(g.description)) return false;
+
+        games.push_back(std::move(g));
+    }
+
+    util::logLine("GameData: loaded " + std::to_string(games.size()) + " games from binary cache " + binPath);
+    return true;
+}
+
+// Load games from JSON file using fast block I/O
 inline std::vector<Game> loadGamesFromFile(const std::string& path) {
     util::logLine("GameData: loading games from " + path);
-    std::ifstream in(path, std::ios::binary);
-    if (!in.is_open()) {
+    std::string content;
+    if (!readFileFast(path, content)) {
         util::logLine("GameData: failed to open file " + path);
         return {};
     }
-    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     return parseGamesFromJsonString(content);
 }
 
@@ -184,6 +345,32 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
 #include <atomic>
 
 inline const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
+inline const char* kCatalogBinPath = "sdmc:/switch/TorrentShopNX/switch_games.bin";
+
+// Cached loader: prefers instant binary cache if up-to-date, falls back to JSON + generates binary cache
+inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std::string& binPath) {
+    struct stat stBin, stJson;
+    bool hasBin = (stat(binPath.c_str(), &stBin) == 0);
+    bool hasJson = (stat(jsonPath.c_str(), &stJson) == 0);
+
+    if (hasBin && (!hasJson || stBin.st_mtime >= stJson.st_mtime)) {
+        std::vector<Game> games;
+        if (loadGamesFromBinaryFile(binPath, games) && !games.empty()) {
+            return games;
+        }
+        util::logLine("GameData: binary cache invalid or empty, falling back to JSON");
+    }
+
+    if (hasJson) {
+        std::vector<Game> games = loadGamesFromFile(jsonPath);
+        if (!games.empty()) {
+            saveGamesToBinaryFile(binPath, games);
+        }
+        return games;
+    }
+
+    return {};
+}
 inline std::vector<std::string> g_pathsToDelete;
 inline std::atomic<bool> g_appExiting{false};
 inline std::atomic<bool> g_cleanupCancelled{false};

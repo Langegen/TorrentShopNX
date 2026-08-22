@@ -67,11 +67,12 @@ void GameDetailView::onContentAvailable() {
     setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/borealis_96.png", false, "", -1, -1, 2000000);
     
     // Metadata
-    metaDeveloper->setText("Разработчик: " + (game_.developer.empty() ? "(неизвестно)" : game_.developer));
-    metaPublisher->setText("Издатель: " + (game_.publisher.empty() ? "(неизвестно)" : game_.publisher));
-    metaYear->setText("Дата выпуска: " + (game_.year.empty() ? "(неизвестно)" : game_.year));
-    metaFormat->setText("Формат образа: " + (game_.image_format.empty() ? "(неизвестно)" : game_.image_format));
-    metaVoice->setText("Язык озвучки: " + (game_.voice_lang.empty() ? "(неизвестно)" : game_.voice_lang));
+    std::string unknownStr = "app/detail/unknown"_i18n;
+    metaDeveloper->setText(brls::getStr("app/detail/developer", game_.developer.empty() ? unknownStr : game_.developer));
+    metaPublisher->setText(brls::getStr("app/detail/publisher", game_.publisher.empty() ? unknownStr : game_.publisher));
+    metaYear->setText(brls::getStr("app/detail/release_date", game_.year.empty() ? unknownStr : game_.year));
+    metaFormat->setText(brls::getStr("app/detail/image_format", game_.image_format.empty() ? unknownStr : game_.image_format));
+    metaVoice->setText(brls::getStr("app/detail/voice_lang", game_.voice_lang.empty() ? unknownStr : game_.voice_lang));
     
     // Clean description (remove leading ': ')
     std::string desc = game_.description;
@@ -161,7 +162,7 @@ void GameDetailView::onContentAvailable() {
     });
     
     // Gamepad quick-favorites shortcut
-    this->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+    this->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
         catalog::FavoritesManager::instance().toggleFavorite(game_);
         updateFavoriteButton();
         return true;
@@ -187,9 +188,9 @@ void GameDetailView::onContentAvailable() {
 void GameDetailView::updateFavoriteButton() {
     bool isFav = catalog::FavoritesManager::instance().isFavorite(game_);
     if (isFav) {
-        btnFavorite->setText("Из избранного");
+        btnFavorite->setText("app/detail/remove_favorite_btn"_i18n);
     } else {
-        btnFavorite->setText("В избранное");
+        btnFavorite->setText("app/detail/add_favorite_btn"_i18n);
     }
 }
 

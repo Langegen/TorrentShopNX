@@ -17,7 +17,7 @@ public:
 
         // Title header
         headerLabel = new brls::Label();
-        headerLabel->setText("Обновление базы данных...");
+        headerLabel->setText("app/catalog/updating_db"_i18n);
         headerLabel->setFontSize(14);
         headerLabel->setTextColor(nvgRGB(255, 255, 255));
         headerLabel->setMarginBottom(6);
@@ -42,7 +42,7 @@ public:
 
         // Status text label
         statusLabel = new brls::Label();
-        statusLabel->setText("Подключение...");
+        statusLabel->setText("app/catalog/connecting"_i18n);
         statusLabel->setFontSize(12);
         statusLabel->setTextColor(nvgRGB(170, 170, 180));
         this->addView(statusLabel);
@@ -60,7 +60,7 @@ public:
     void setCompleted(const std::string& msg) {
         progressFill->setWidth(276);
         progressFill->setBackgroundColor(nvgRGB(76, 175, 80)); // Green fill on complete
-        headerLabel->setText("База данных обновлена");
+        headerLabel->setText("app/catalog/db_updated"_i18n);
         statusLabel->setText(msg);
 
         // Auto dismiss after 3 seconds
@@ -76,7 +76,7 @@ public:
 
     void setFailed(const std::string& msg) {
         progressFill->setBackgroundColor(nvgRGB(244, 67, 54)); // Red fill on error
-        headerLabel->setText("Ошибка обновления");
+        headerLabel->setText("app/catalog/update_error"_i18n);
         statusLabel->setText(msg);
 
         // Auto dismiss after 4 seconds

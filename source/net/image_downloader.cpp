@@ -37,9 +37,18 @@ std::string getThumbnailCachePath(const std::string& url) {
 }
 
 bool readWholeFileLocal(const std::string& path, std::string& out) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) return false;
-    out.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) return false;
+    std::streamsize size = in.tellg();
+    if (size < 0) return false;
+    in.seekg(0, std::ios::beg);
+    out.resize(static_cast<size_t>(size));
+    if (size > 0) {
+        in.read(&out[0], size);
+        if (!in && in.gcount() != size) {
+            out.resize(static_cast<size_t>(in.gcount()));
+        }
+    }
     return true;
 }
 

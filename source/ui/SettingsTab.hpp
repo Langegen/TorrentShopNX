@@ -16,6 +16,7 @@ public:
     void willDisappear(bool resetState = false) override;
 
 private:
+    BRLS_BIND(brls::SelectorCell, languageCell, "languageCell");
     BRLS_BIND(brls::DetailCell, updatesCell, "updatesCell");
     BRLS_BIND(brls::DetailCell, appUpdateCell, "appUpdateCell");
     BRLS_BIND(brls::BooleanCell, autoAppUpdateCell, "autoAppUpdateCell");

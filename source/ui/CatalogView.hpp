@@ -2,6 +2,7 @@
 
 #include <borealis.hpp>
 #include "../GameData.hpp"
+#include "../catalog/filter_manager.hpp"
 
 namespace ui {
 
@@ -64,13 +65,13 @@ public:
     void willDisappear(bool resetState) override;
     
     void filterCatalog();
+    void resetFilters();
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
 
 private:
-    std::string searchQuery_;
-    std::string selectedGenre_;
+    catalog::FilterSortState filterState_;
     std::vector<Game> filteredGames_;
 
     // Inner DataSource class

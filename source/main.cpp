@@ -23,6 +23,7 @@
 #include "ui/QrCodeView.hpp"
 #include "config/config.h"
 #include "utils/log.h"
+#include "utils/switch_utils.h"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
 #include <thread>
@@ -239,8 +240,19 @@ int main(int argc, char** argv) {
                   " applet_type=" + std::to_string(g_applet_type_detected));
     clearCaches();
 
+    // Load configurations before UI init to set desired locale
+    auto& cfg = config::ConfigManager::instance();
+
+    std::string userLang = cfg.getLanguage();
+    if (userLang == "ru") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_RU;
+    } else if (userLang == "en-US" || userLang == "en") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_EN_US;
+    } else {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
+    }
+
     // Initialize Borealis UI
-    brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     if (!brls::Application::init()) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
@@ -266,10 +278,7 @@ int main(int argc, char** argv) {
         util::logLine("main: Applet Mode detected! Displaying AppletWarningView...");
         brls::Application::pushActivity(new ui::AppletWarningView());
     } else {
-        // Initialize managers and load configurations for Title Mode
-        auto& cfg = config::ConfigManager::instance();
-        cfg.load();
-
+        // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
         ui::DownloadManager::instance().init();
 
@@ -279,8 +288,8 @@ int main(int argc, char** argv) {
     #endif
         net::ImageDownloader::instance().init(4);
 
-        // Load database games instantly on the main thread (takes <50ms)
-        g_games = loadGamesFromFile(kCatalogPath);
+        // Load database games via fast binary cache (or fallback to JSON)
+        g_games = loadGamesCached(kCatalogPath, kCatalogBinPath);
         util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()));
 
         // Logger configuration

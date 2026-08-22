@@ -53,41 +53,35 @@ void RemoteAddView::startServer() {
     if (serverRunning) return;
     
     svr.Get("/", [](const httplib::Request& req, httplib::Response& res) {
-        std::string html = R"(
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>TorrentShopNX - Добавить раздачу</title>
-                <style>
-                    body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; max-width: 600px; margin: 0 auto; }
-                    h2 { text-align: center; }
-                    .card { background: #333; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
-                    input[type="text"], input[type="file"] { width: 100%; padding: 10px; margin: 10px 0; border-radius: 4px; border: 1px solid #555; background: #444; color: #fff; box-sizing: border-box; }
-                    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-                    button:hover { background: #0056b3; }
-                </style>
-            </head>
-            <body>
-                <h2>TorrentShopNX</h2>
-                <div class="card">
-                    <h3>Вставить Magnet-ссылку</h3>
-                    <form action="/magnet" method="post">
-                        <input type="text" name="magnet" placeholder="magnet:?xt=urn:btih:..." required>
-                        <button type="submit">Отправить</button>
-                    </form>
-                </div>
-                <div class="card">
-                    <h3>Загрузить .torrent файл</h3>
-                    <form action="/torrent" method="post" enctype="multipart/form-data">
-                        <input type="file" name="file" accept=".torrent" required>
-                        <button type="submit">Загрузить</button>
-                    </form>
-                </div>
-            </body>
-            </html>
-        )";
+        std::string htmlTitle = "app/remote/web_title"_i18n;
+        std::string htmlInsert = "app/remote/web_insert_magnet"_i18n;
+        std::string htmlSend = "app/remote/web_send_btn"_i18n;
+        std::string htmlUpload = "app/remote/web_upload_torrent"_i18n;
+        std::string htmlUploadBtn = "app/remote/web_upload_btn"_i18n;
+
+        std::string html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            "<title>" + htmlTitle + "</title>"
+            "<style>"
+            "body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; max-width: 600px; margin: 0 auto; }"
+            "h2 { text-align: center; }"
+            ".card { background: #333; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }"
+            "input[type=\"text\"], input[type=\"file\"] { width: 100%; padding: 10px; margin: 10px 0; border-radius: 4px; border: 1px solid #555; background: #444; color: #fff; box-sizing: border-box; }"
+            "button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }"
+            "button:hover { background: #0056b3; }"
+            "</style></head><body>"
+            "<h2>TorrentShopNX</h2>"
+            "<div class=\"card\">"
+            "<h3>" + htmlInsert + "</h3>"
+            "<form action=\"/magnet\" method=\"post\">"
+            "<input type=\"text\" name=\"magnet\" placeholder=\"magnet:?xt=urn:btih:...\" required>"
+            "<button type=\"submit\">" + htmlSend + "</button>"
+            "</form></div>"
+            "<div class=\"card\">"
+            "<h3>" + htmlUpload + "</h3>"
+            "<form action=\"/torrent\" method=\"post\" enctype=\"multipart/form-data\">"
+            "<input type=\"file\" name=\"file\" accept=\".torrent\" required>"
+            "<button type=\"submit\">" + htmlUploadBtn + "</button>"
+            "</form></div></body></html>";
         res.set_content(html, "text/html");
     });
 
@@ -95,9 +89,9 @@ void RemoteAddView::startServer() {
         if (req.has_param("magnet")) {
             this->receivedMagnet = req.get_param_value("magnet");
             this->fileReceived = true;
-            res.set_content("Успешно! Посмотрите на экран приставки.", "text/plain");
+            res.set_content("app/remote/web_magnet_success"_i18n, "text/plain; charset=utf-8");
         } else {
-            res.set_content("Ошибка: нет ссылки", "text/plain");
+            res.set_content("app/remote/web_no_link"_i18n, "text/plain; charset=utf-8");
         }
     });
 
@@ -127,15 +121,15 @@ void RemoteAddView::startServer() {
                     this->receivedMagnet = "magnet:?xt=urn:btih:" + std::string(hex) + "&dn=" + name;
                     this->fileReceived = true;
                     torrent_unload(&t);
-                    res.set_content("Торрент файл успешно обработан! Посмотрите на экран приставки.", "text/plain");
+                    res.set_content("app/remote/web_torrent_success"_i18n, "text/plain; charset=utf-8");
                 } else {
-                    res.set_content(std::string("Ошибка парсинга торрента: ") + err, "text/plain");
+                    res.set_content(brls::getStr("app/remote/web_torrent_parse_error", err), "text/plain; charset=utf-8");
                 }
             } else {
-                res.set_content("Ошибка сохранения файла", "text/plain");
+                res.set_content("app/remote/web_torrent_save_error"_i18n, "text/plain; charset=utf-8");
             }
         } else {
-            res.set_content("Ошибка: файл не найден", "text/plain");
+            res.set_content("app/remote/web_file_not_found"_i18n, "text/plain; charset=utf-8");
         }
     });
 
@@ -153,10 +147,10 @@ void RemoteAddView::startServer() {
             this->fileReceived = false;
             
             Game game;
-            game.title = "Пользовательская раздача";
+            game.title = "app/remote/user_upload_title"_i18n;
             game.magnet = this->receivedMagnet;
-            game.size = "Неизвестно";
-            game.description = "Раздача добавлена по сети";
+            game.size = "app/common/unknown"_i18n;
+            game.description = "app/remote/user_upload_desc"_i18n;
             
             util::logLine("RemoteAddView: received magnet, pushing FileSelectView");
             brls::Application::pushActivity(new ui::FileSelectView(game));

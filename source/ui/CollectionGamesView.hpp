@@ -6,6 +6,7 @@
 #include <vector>
 #include "../GameData.hpp"
 #include "../catalog/collections_manager.h"
+#include "../catalog/filter_manager.hpp"
 
 namespace ui {
 
@@ -75,8 +76,10 @@ private:
     void loadAndShow();
     void rebuildDisplay();
     void ensureAllMatches();
+    void resetFilters();
 
     catalog::CollectionInfo info_;
+    catalog::FilterSortState filterState_;
     std::vector<catalog::CollectionEntry> entries_;
     std::vector<Game> matchedGames_;
     std::vector<bool> matchedComputed_;

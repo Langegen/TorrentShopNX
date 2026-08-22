@@ -39,9 +39,13 @@ void CustomEngineScheduler::init(tsnx_engine* engine,
     piece_size_ = piece_size;
     file_offset_in_torrent_ = file_offset_in_torrent;
     file_first_piece_ = file_first_piece;
-    file_last_piece_ = file_last_piece;
     last_current_piece_ = -1;
+    last_log_piece_ = -1;
     stall_level_ = 0;
+    last_boosted_count_ = 0;
+    last_apply_at_ = {};
+    last_log_at_ = {};
+    last_boost_log_at_ = {};
     peer_ewma_.clear();
     last_snapshot_ = {};
 }
@@ -144,10 +148,17 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offs
     CustomSchedulerSnapshot snap = rebuild(current_piece);
     apply_zones(snap);
 
-    std::string msg = "scheduler: current=" + std::to_string(current_piece) +
-        " critical=" + std::to_string(snap.critical.start) + ".." + std::to_string(snap.critical.end) +
-        " urgent=" + std::to_string(snap.urgent.start) + ".." + std::to_string(snap.urgent.end);
-    util::logLine(msg);
+    bool should_log = (last_log_piece_ != current_piece) ||
+                      (last_log_at_.time_since_epoch().count() == 0) ||
+                      (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_at_).count() >= 5000);
+    if (should_log) {
+        last_log_piece_ = current_piece;
+        last_log_at_ = now;
+        std::string msg = "scheduler: current=" + std::to_string(current_piece) +
+            " critical=" + std::to_string(snap.critical.start) + ".." + std::to_string(snap.critical.end) +
+            " urgent=" + std::to_string(snap.urgent.start) + ".." + std::to_string(snap.urgent.end);
+        util::logLine(msg);
+    }
 
     return snap;
 }
@@ -233,9 +244,18 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_tick() {
             boosted++;
         }
     }
-    if (boosted > 0) {
+    const auto now = std::chrono::steady_clock::now();
+    bool should_log_boost = (boosted > 0) &&
+        ((boosted != last_boosted_count_) ||
+         (last_boost_log_at_.time_since_epoch().count() == 0) ||
+         (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_boost_log_at_).count() >= 5000));
+    if (should_log_boost) {
+        last_boosted_count_ = boosted;
+        last_boost_log_at_ = now;
         util::logLine("scheduler: boosted " + std::to_string(boosted) +
                       " slow-peer claims to Critical");
+    } else if (boosted == 0) {
+        last_boosted_count_ = 0;
     }
 
     return last_snapshot_;
@@ -247,8 +267,12 @@ void CustomEngineScheduler::reset() {
         tsnx_engine_clear_piece_zones(engine_, hash_.c_str());
     }
     last_current_piece_ = -1;
+    last_log_piece_ = -1;
     stall_level_ = 0;
+    last_boosted_count_ = 0;
     last_apply_at_ = {};
+    last_log_at_ = {};
+    last_boost_log_at_ = {};
     peer_ewma_.clear();
     last_snapshot_ = {};
 }

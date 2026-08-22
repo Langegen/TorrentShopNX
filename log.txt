@@ -1,0 +1,2154 @@
+TorrentShopNX log start
+main: start g_nroPath=sdmc:/switch/TorrentShopNX/TorrentShopNX.nro
+main: socketInit result=0 mem_size=33554432 applet_type=0
+config: loaded config.ini, TorrServer URL: http://192.168.1.100:8090, install_location: auto, language: auto
+config: loaded config.ini, TorrServer URL: http://192.168.1.100:8090, install_location: auto, language: auto
+favorites: loaded games_count=5 legacy_count=0
+ds_mgr: remote URL: http://192.168.1.100:8090
+power: keep-awake disabled
+ds_mgr: mode set to: Custom engine
+ImageDownloader: initialized with 4 workers
+GameData: loading games from sdmc:/switch/TorrentShopNX/switch_games.json
+GameData: parsing games from JSON string (size=23350006)
+GameData: loaded array, count=7075
+main: initially loaded g_games count=7075
+main: instantiating and pushing MainMenu...
+MainMenu: constructor start
+MainMenu: constructor end
+main: MainMenu instantiated, pushing...
+MainMenu: onContentAvailable start
+main: entering mainLoop
+main: focus regained (console waking up)
+main: mainLoop frame=1
+main: mainLoop frame=2
+main: mainLoop frame=3
+CollectionsView: built 16 rows
+collections: top_100 parsed 100 entries
+collections: new_release parsed 41 entries
+collections: action_adventure parsed 100 entries
+collections: arcade parsed 100 entries
+collections: horror parsed 100 entries
+collections: metroidvania parsed 100 entries
+collections: party_multiplayer parsed 100 entries
+collections: puzzles parsed 100 entries
+collections: platformers parsed 100 entries
+collections: roguelike_roguelite parsed 100 entries
+collections: rpg_jrpg parsed 100 entries
+collections: shooters parsed 100 entries
+collections: simulation_cozy parsed 100 entries
+collections: strategy_tactics parsed 100 entries
+collections: visual_novels parsed 100 entries
+GameRowCell::prepareForReuse - Resetting card highlight/focus states
+GameRowCell::prepareForReuse - Resetting card highlight/focus states
+GameRowCell::prepareForReuse - Resetting card highlight/focus states
+GameRowCell::prepareForReuse - Resetting card highlight/focus states
+GameRowCell::prepareForReuse - Resetting card highlight/focus states
+ImageDownloader: HTTP 200 OK for url=https://i8.imageban.ru/out/2026/08/20/21580fd359b08238c48501f5159cfefe.png (size=511758)
+ImageDownloader: HTTP 200 OK for url=https://i7.imageban.ru/out/2026/08/20/d972375bc3e3f4551f71695315f83593.png (size=495029)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/19/81eb461b2c5d44a59e8afa9352246fec.png (size=340227)
+ImageDownloader: HTTP 200 OK for url=https://i5.imageban.ru/out/2026/08/20/7ffa91b871d24e76931ce488dbf615d8.png (size=459160)
+ImageDownloader: HTTP 200 OK for url=https://i5.imageban.ru/out/2026/08/19/c73d9042ff2939291c2c78231c78c72c.png (size=462807)
+ImageDownloader: HTTP 200 OK for url=https://i2.imageban.ru/out/2026/08/20/d2d5b8268cad0446a98d61f054ca489e.png (size=486684)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/19/6b8984733b4e45214ffe705b21f59eb0.png (size=429380)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/18/08ddb1226a4eb7153e4f32b62e847fe7.png (size=352135)
+ImageDownloader: HTTP 200 OK for url=https://i5.imageban.ru/out/2026/08/18/9ec1729af9650d6fbfeaa34ccb46b8ad.png (size=412021)
+ImageDownloader: HTTP 200 OK for url=https://i6.imageban.ru/out/2026/08/17/095f75ed50a094b54b5617f07dfa8f7a.png (size=358928)
+ImageDownloader: HTTP 200 OK for url=https://i6.imageban.ru/out/2026/08/17/3018b06e3f2db8cf1409a1f85353a96f.png (size=394540)
+ImageDownloader: HTTP 200 OK for url=https://i6.imageban.ru/out/2026/08/17/9d12f19ccd400cdd4318475aaf2359c4.png (size=579388)
+ImageDownloader: HTTP 200 OK for url=https://i2.imageban.ru/out/2026/08/16/cda738450143d7aae33aca5de1b4357e.png (size=439051)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/14/537bfe55c44a6bcf28f29c82927f6e87.png (size=310327)
+ImageDownloader: HTTP 200 OK for url=https://i2.imageban.ru/out/2026/08/16/fe802ec0362327409f27b3703c830159.png (size=403808)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/16/d2657c37e996a4c19f069c7f68a43fe6.png (size=565914)
+ImageDownloader: HTTP 200 OK for url=https://i1.imageban.ru/out/2026/08/13/2d67f1a59e6f95c69a84e62e3dfb544e.png (size=461646)
+ImageDownloader: HTTP 200 OK for url=https://i7.imageban.ru/out/2026/08/16/c9f9731a06befe63e4684da827d38a77.png (size=356955)
+ImageDownloader: HTTP 200 OK for url=https://i4.imageban.ru/out/2026/08/15/c35a7a90bc1b4bb082b1ebde7aee8611.png (size=227373)
+ImageDownloader: HTTP 200 OK for url=https://i5.imageban.ru/out/2026/08/14/330986934f45a28bcd24097023018a0b.png (size=376483)
+ImageDownloader: HTTP 200 OK for url=https://i8.imageban.ru/out/2026/08/14/e2ed5519a01fbf6600a9f9119bd4123f.png (size=393577)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/13/f865645cd78d9c37af0d715ce1798bf5.png (size=119962)
+ImageDownloader: HTTP 200 OK for url=https://i2.imageban.ru/out/2026/08/12/e0f3aecbca17734b13870ada6193e07b.png (size=488033)
+ImageDownloader: HTTP 200 OK for url=https://i5.imageban.ru/out/2026/08/12/e6b7baae80e44c390cf7a2b1eb06f2c7.png (size=414438)
+ImageDownloader: HTTP 200 OK for url=https://i2.imageban.ru/out/2026/08/12/60d7c746e7b2f178df98fab77829b9fe.png (size=470611)
+ImageDownloader: HTTP 200 OK for url=https://i6.imageban.ru/out/2026/08/12/450288c6454e6fe78d5cb9f1fb18ea46.png (size=433418)
+ImageDownloader: HTTP 200 OK for url=https://i4.imageban.ru/out/2026/08/12/10e67e4aca544e8008d4a12be9eaaf9b.png (size=360601)
+ImageDownloader: HTTP 200 OK for url=https://i2.imageban.ru/out/2026/08/12/a11c31d707b75bf40ed2edbaf72de8cc.png (size=419388)
+ImageDownloader: HTTP 200 OK for url=https://i4.imageban.ru/out/2026/08/11/d7451a3858a8674d25a934ac10132cff.png (size=511926)
+ImageDownloader: HTTP 200 OK for url=https://i3.imageban.ru/out/2026/08/10/3a1086061ed660612e2929e701b3617c.png (size=474904)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0813/09/ba74295a843b1bcc2db21a2c85d6c809.jpeg (size=32122)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0813/66/a0277157932ee5b822dadca7587b4566.jpeg (size=28336)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0813/e1/6936853c352d2939be0506889dbcc5e1.jpeg (size=43944)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0816/32/e179c5448c84962b1123571c8f09a932.jpeg (size=23502)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0813/b3/1e0fa78dafdbf1c5aac87611621086b3.jpeg (size=24440)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0816/d6/69ad03ea9ce043e82001930647db3fd6.jpeg (size=19629)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0816/88/d8c891b2ed674d60ea93382e2f29ca88.jpeg (size=18834)
+ImageDownloader: paused
+FileSelectView: onContentAvailable start
+FileSelectView: probe thread started
+switch_utils: getStorageFreeSpace start, storageId=1
+FileSelectView: probing magnet magnet:?xt=urn:btih:BE97720FCD450CF4EDA5D98F01A28410236958B4&tr=http%3A%2F%2Fbt.t-ru.org%2Fann%3Fmagnet
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=31341674496
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=31341674496
+switch_utils: getStorageFreeSpace start, storageId=0
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=5678563328
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=5678563328
+FileSelectView: onContentAvailable end
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0816/69/14c270432d9e6e422e64bcb1b6f35d69.jpeg (size=28734)
+ImageDownloader: HTTP 200 OK for url=http://i128.fastpic.org/thumb/2026/0816/8f/c55778c14ba3acd571219e083ce6168f.jpeg (size=21489)
+FileSelectView: probe done, success=1 count=2
+FileSelectView: sync callback, success=1 count=2
+switch_utils: getStorageFreeSpace start, storageId=1
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=31341608960
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=31341608960
+switch_utils: getStorageFreeSpace start, storageId=0
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=5678563328
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=5678563328
+FileSelectView: added row 0 name='Sacred 2 Remaster (RUSS MOD) [010074402766A000][v65536][RePack] (17.27 GB).nsz'
+FileSelectView: added row 1 name='ReadMe_Rus.txt'
+FileSelectView: rebuildFileList done, rows=2
+switch_utils: getStorageFreeSpace start, storageId=1
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=31341608960
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=31341608960
+switch_utils: getStorageFreeSpace start, storageId=0
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=5678563328
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=5678563328
+download: local client queued hash=be97720fcd450cf4eda5d98f01a28410236958b4
+download_ui: added game Sacred 2 Remaster (topic_id=6897584_0) to download queue
+ImageDownloader: resumed
+download: local client starts selected file without HTTP preload hash=be97720fcd450cf4eda5d98f01a28410236958b4 file_index=0
+download: starting async open for hybrid hash=be97720fcd450cf4eda5d98f01a28410236958b4 index=0
+CustomEngineBackend: reusing probed torrent be97720fcd450cf4eda5d98f01a28410236958b4
+power: keep-awake enabled
+switch_utils: getStorageFreeSpace start, storageId=1
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=31341543424
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=31341543424
+switch_utils: getStorageFreeSpace start, storageId=0
+switch_utils: calling ncmInitialize...
+switch_utils: calling ncmOpenContentStorage...
+switch_utils: calling ncmContentStorageGetFreeSpaceSize...
+switch_utils: ncmContentStorageGetFreeSpaceSize success, free=5678563328
+switch_utils: calling ncmContentStorageClose...
+switch_utils: calling ncmExit...
+switch_utils: getStorageFreeSpace success, free_space=5678563328
+hybrid: start install, buffer=128MB
+hybrid: phase 1 - parsing header
+scheduler: current=0 critical=0..1 urgent=2..9
+hybrid: NSP header probe read=4096 need=216 files=3
+hybrid: NSP contains 3 files, total size=10504MB, ticket=no
+scheduler: current=0 critical=0..1 urgent=2..9
+hybrid: phase 2 - creating placeholders
+ncm: initialized, storage=5
+installer: skipping placeholder creation for NCZ (will create later): 5602141FAD21CD2518A199A3903C637C.ncz
+ncm: placeholder created for C686A423FB3367322DAA6AEF50BD034F.nca
+ncm: placeholder created for 7924AC913838A50D45DABD58BEF4CDC1.cnmt.nca
+hybrid: phase 3 - starting Collector + Installer threads
+collector: start
+installer: start
+collector: source_type=1 chunk_size=4194304
+installer: local chunk size=4194304
+collector: local chunk size=4194304
+installer: waiting local prebuffer target=16777216
+scheduler: boosted 1 slow-peer claims to Critical
+switch_utils: CPU boost enabled (1785 MHz), auto-sleep disabled
+collector: partial read advance offset=216 requested=4194304 got=147240
+hybrid: both threads started
+download: hybrid install started for Sacred 2 Remaster (index=0)
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+download: configured file priorities and size=11014396573 for Sacred 2 Remaster
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=917288 speed=166KB/s rb_avail=917288 rb_free=133300440 rb_cap=134217728
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=3112744 speed=425KB/s rb_avail=3112744 rb_free=131104984 rb_cap=134217728
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: current=0 critical=0..1 urgent=2..9
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=16465920 requested=4194304 got=2670592
+scheduler: current=1 critical=1..2 urgent=3..10
+installer: local prebuffer ready available=19136296
+installer: [RingBuffer] read start rb_avail=19136296 downloaded=19136296
+installer: [RingBuffer] read done got=4194304
+ncz: overlapping or unsorted section at offset=3072
+ncz: using Solid Zstd decompression
+ncz: adjusted logical install size for 5602141FAD21CD2518A199A3903C637C.ncz from 11014241221 to 18540240384
+ncz: installing 5602141FAD21CD2518A199A3903C637C.ncz (compressed: 10503MB, orig: 17681MB)
+scheduler: current=1 critical=1..2 urgent=3..10
+installer: stats installed=4194304 install_speed=307KB/s downloaded=21167912 source_speed=1550KB/s consume_speed=308KB/s rb_avail=16957008 rb_free=117260720 rb_cap=134217728
+collector: partial read advance offset=25526272 requested=4194304 got=196608
+scheduler: current=1 critical=1..2 urgent=3..10
+installer: ncz buffer wait wait_ms=645 got=180656 rb_avail=360016 downloaded=27115304 installed=37748736 starvation_total=1
+collector: stats downloaded=30261032 speed=5260KB/s rb_avail=2457168 rb_free=131760560 rb_cap=134217728
+installer: ncz buffer wait wait_ms=518 got=98736 rb_avail=2457168 downloaded=30261032 installed=37748736 starvation_total=2
+scheduler: current=1 critical=1..2 urgent=3..10
+installer: ncz buffer wait wait_ms=828 got=147888 rb_avail=769616 downloaded=31194920 installed=41943040 starvation_total=3
+scheduler: current=2 critical=2..3 urgent=4..11
+collector: partial read advance offset=36978688 requested=4194304 got=2441216
+scheduler: current=2 critical=2..3 urgent=4..11
+installer: stats installed=54525952 install_speed=9814KB/s downloaded=41598760 source_speed=3983KB/s consume_speed=7290KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=2 critical=2..3 urgent=4..11
+collector: partial read advance offset=46628864 requested=4194304 got=49152
+collector: stats downloaded=50364200 speed=3807KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+installer: ncz buffer wait wait_ms=540 got=131504 rb_avail=15952 downloaded=50364200 installed=62914560 starvation_total=4
+scheduler: current=3 critical=3..4 urgent=5..12
+scheduler: current=3 critical=3..4 urgent=5..12
+installer: ncz buffer wait wait_ms=980 got=131504 rb_avail=2244176 downloaded=53641000 installed=62914560 starvation_total=5
+collector: partial read advance offset=55312384 requested=4194304 got=16384
+scheduler: current=3 critical=3..4 urgent=5..12
+installer: stats installed=67108864 install_speed=2451KB/s downloaded=56196904 source_speed=2844KB/s consume_speed=2828KB/s rb_avail=81488 rb_free=134136240 rb_cap=134217728
+scheduler: current=3 critical=3..4 urgent=5..12
+scheduler: current=3 critical=3..4 urgent=5..12
+scheduler: current=4 critical=4..5 urgent=6..13
+collector: partial read advance offset=71368704 requested=4194304 got=983040
+collector: stats downloaded=74137384 speed=4630KB/s rb_avail=6487632 rb_free=127730096 rb_cap=134217728
+scheduler: current=4 critical=4..5 urgent=6..13
+collector: partial read advance offset=80560128 requested=4194304 got=1458176
+scheduler: current=4 critical=4..5 urgent=6..13
+scheduler: current=5 critical=5..6 urgent=7..14
+collector: partial read advance offset=89276416 requested=4194304 got=147456
+installer: stats installed=230686720 install_speed=31058KB/s downloaded=90259240 source_speed=6467KB/s consume_speed=3882KB/s rb_avail=13696592 rb_free=120521136 rb_cap=134217728
+scheduler: current=5 critical=5..6 urgent=7..14
+scheduler: current=5 critical=5..6 urgent=7..14
+collector: partial read advance offset=98893824 requested=4194304 got=32768
+collector: stats downloaded=98926376 speed=4809KB/s rb_avail=6635088 rb_free=127582640 rb_cap=134217728
+scheduler: current=6 critical=6..7 urgent=8..15
+collector: partial read advance offset=107298816 requested=4194304 got=49152
+scheduler: current=6 critical=6..7 urgent=8..15
+scheduler: current=6 critical=6..7 urgent=8..15
+collector: stats downloaded=120454952 speed=2311KB/s rb_avail=4046416 rb_free=130171312 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6397 got=147888 rb_avail=4046416 downloaded=120454952 installed=448790528 starvation_total=6
+scheduler: current=7 critical=7..8 urgent=9..16
+installer: stats installed=448790528 install_speed=18864KB/s downloaded=120454952 source_speed=2611KB/s consume_speed=3446KB/s rb_avail=4046416 rb_free=130171312 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=133038080 requested=4194304 got=1179648
+scheduler: current=8 critical=8..9 urgent=10..17
+scheduler: current=8 critical=8..9 urgent=10..17
+installer: ncz buffer wait wait_ms=571 got=432 rb_avail=114256 downloaded=134348584 installed=478150656 starvation_total=7
+scheduler: current=8 critical=8..9 urgent=10..17
+installer: ncz buffer wait wait_ms=881 got=180656 rb_avail=1687120 downloaded=140640040 installed=486539264 starvation_total=8
+collector: partial read advance offset=149291008 requested=4194304 got=1703936
+scheduler: current=9 critical=9..10 urgent=11..18
+scheduler: current=9 critical=9..10 urgent=11..18
+collector: stats downloaded=153354024 speed=6025KB/s rb_avail=245328 rb_free=133972400 rb_cap=134217728
+installer: stats installed=503316480 install_speed=9995KB/s downloaded=153354024 source_speed=6031KB/s consume_speed=6727KB/s rb_avail=245328 rb_free=133972400 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=9 critical=9..10 urgent=11..18
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=9 critical=9..10 urgent=11..18
+installer: ncz buffer wait wait_ms=520 got=16816 rb_avail=245328 downloaded=153878312 installed=503316480 starvation_total=9
+scheduler: current=9 critical=9..10 urgent=11..18
+installer: ncz buffer wait wait_ms=839 got=16384 rb_avail=0 downloaded=154976040 installed=503316480 starvation_total=10
+scheduler: current=9 critical=9..10 urgent=11..18
+collector: partial read advance offset=159383552 requested=4194304 got=2850816
+scheduler: current=10 critical=10..11 urgent=12..19
+collector: partial read advance offset=170852352 requested=4194304 got=950272
+collector: stats downloaded=173211432 speed=3869KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=524288000 install_speed=4086KB/s downloaded=173211432 source_speed=3869KB/s consume_speed=3916KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=10 critical=10..11 urgent=12..19
+collector: partial read advance offset=179372032 requested=4194304 got=131072
+scheduler: current=11 critical=11..12 urgent=13..20
+collector: partial read advance offset=187809792 requested=4194304 got=81920
+scheduler: current=11 critical=11..12 urgent=13..20
+scheduler: current=11 critical=11..12 urgent=13..20
+collector: stats downloaded=200572712 speed=2440KB/s rb_avail=3948112 rb_free=130269616 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6816 got=246192 rb_avail=3948112 downloaded=200572712 installed=549453824 starvation_total=11
+scheduler: current=11 critical=11..12 urgent=13..20
+installer: stats installed=549453824 install_speed=2242KB/s downloaded=200572712 source_speed=2438KB/s consume_speed=2086KB/s rb_avail=3948112 rb_free=130269616 rb_cap=134217728
+scheduler: current=12 critical=12..13 urgent=14..21
+collector: partial read advance offset=217350144 requested=4194304 got=753664
+scheduler: current=13 critical=13..14 urgent=15..22
+scheduler: current=13 critical=13..14 urgent=15..22
+installer: ncz buffer wait wait_ms=583 got=262576 rb_avail=1539664 downloaded=222281512 installed=578813952 starvation_total=12
+scheduler: current=13 critical=13..14 urgent=15..22
+installer: ncz buffer wait wait_ms=2152 got=33200 rb_avail=4161104 downloaded=226475816 installed=578813952 starvation_total=13
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=234864640 requested=4194304 got=131072
+scheduler: current=14 critical=14..15 urgent=16..23
+scheduler: current=14 critical=14..15 urgent=16..23
+collector: stats downloaded=240058152 speed=7701KB/s rb_avail=2014800 rb_free=132202928 rb_cap=134217728
+installer: stats installed=599785472 install_speed=9761KB/s downloaded=240058152 source_speed=7658KB/s consume_speed=8134KB/s rb_avail=1490512 rb_free=132727216 rb_cap=134217728
+collector: partial read advance offset=243941376 requested=4194304 got=835584
+scheduler: current=14 critical=14..15 urgent=16..23
+scheduler: current=15 critical=15..16 urgent=17..24
+scheduler: current=15 critical=15..16 urgent=17..24
+installer: ncz buffer wait wait_ms=999 got=278528 rb_avail=0 downloaded=251969320 installed=612368384 starvation_total=14
+scheduler: current=15 critical=15..16 urgent=17..24
+installer: ncz buffer wait wait_ms=521 got=213424 rb_avail=1785424 downloaded=253984552 installed=612368384 starvation_total=15
+collector: partial read advance offset=253984768 requested=4194304 got=32768
+collector: stats downloaded=254607144 speed=2773KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=616562688 install_speed=3221KB/s downloaded=254607144 source_speed=2793KB/s consume_speed=3079KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=15 critical=15..16 urgent=17..24
+scheduler: current=15 critical=15..16 urgent=17..24
+installer: ncz buffer wait wait_ms=900 got=33200 rb_avail=4161104 downloaded=260030248 installed=616562688 starvation_total=16
+collector: partial read advance offset=264224768 requested=4194304 got=163840
+scheduler: current=16 critical=16..17 urgent=18..25
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=806 got=432 rb_avail=163408 downloaded=268615464 installed=633339904 starvation_total=17
+scheduler: current=16 critical=16..17 urgent=18..25
+collector: partial read advance offset=273842176 requested=4194304 got=49152
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=16 critical=16..17 urgent=18..25
+collector: partial read advance offset=282296320 requested=4194304 got=376832
+collector: stats downloaded=283426600 speed=5624KB/s rb_avail=294480 rb_free=133923248 rb_cap=134217728
+installer: stats installed=650117120 install_speed=6465KB/s downloaded=283655976 source_speed=5597KB/s consume_speed=5597KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=16 critical=16..17 urgent=18..25
+scheduler: current=17 critical=17..18 urgent=19..26
+collector: partial read advance offset=291897344 requested=4194304 got=442368
+scheduler: current=17 critical=17..18 urgent=19..26
+collector: partial read advance offset=301383680 requested=4194304 got=98304
+scheduler: current=17 critical=17..18 urgent=19..26
+scheduler: current=18 critical=18..19 urgent=20..27
+scheduler: current=18 critical=18..19 urgent=20..27
+installer: ncz buffer wait wait_ms=594 got=33200 rb_avail=4161104 downloaded=310361896 installed=675282944 starvation_total=18
+collector: partial read advance offset=310362112 requested=4194304 got=540672
+scheduler: current=19 critical=19..20 urgent=21..28
+collector: partial read advance offset=319291392 requested=4194304 got=524288
+collector: stats downloaded=320864040 speed=7156KB/s rb_avail=507472 rb_free=133710256 rb_cap=134217728
+installer: stats installed=687865856 install_speed=7309KB/s downloaded=320864040 source_speed=7204KB/s consume_speed=7106KB/s rb_avail=507472 rb_free=133710256 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=19 critical=19..20 urgent=21..28
+scheduler: current=19 critical=19..20 urgent=21..28
+installer: ncz buffer wait wait_ms=880 got=163840 rb_avail=0 downloaded=324239144 installed=696254464 starvation_total=19
+collector: partial read advance offset=333086720 requested=4194304 got=3817472
+scheduler: current=20 critical=20..21 urgent=22..29
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=341966848 requested=4194304 got=557056
+scheduler: current=20 critical=20..21 urgent=22..29
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=560 got=81920 rb_avail=0 downloaded=343916328 installed=717225984 starvation_total=20
+scheduler: current=20 critical=20..21 urgent=22..29
+installer: ncz buffer wait wait_ms=536 got=33200 rb_avail=392784 downloaded=344342312 installed=717225984 starvation_total=21
+collector: stats downloaded=352206632 speed=2632KB/s rb_avail=4062800 rb_free=130154928 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6644 got=131504 rb_avail=4062800 downloaded=352206632 installed=721420288 starvation_total=22
+scheduler: current=20 critical=20..21 urgent=22..29
+installer: stats installed=721420288 install_speed=2816KB/s downloaded=352206632 source_speed=2631KB/s consume_speed=2332KB/s rb_avail=4062800 rb_free=130154928 rb_cap=134217728
+scheduler: current=21 critical=21..22 urgent=23..30
+collector: partial read advance offset=368984064 requested=4194304 got=114688
+scheduler: current=22 critical=22..23 urgent=24..31
+scheduler: current=22 critical=22..23 urgent=24..31
+installer: ncz buffer wait wait_ms=866 got=432 rb_avail=114256 downloaded=369229608 installed=746586112 starvation_total=23
+scheduler: current=22 critical=22..23 urgent=24..31
+installer: ncz buffer wait wait_ms=700 got=131072 rb_avail=0 downloaded=370523944 installed=746586112 starvation_total=24
+scheduler: current=22 critical=22..23 urgent=24..31
+collector: stats downloaded=377470760 speed=2141KB/s rb_avail=4161104 rb_free=130056624 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6966 got=33200 rb_avail=4161104 downloaded=377470760 installed=750780416 starvation_total=25
+scheduler: current=22 critical=22..23 urgent=24..31
+installer: stats installed=750780416 install_speed=2488KB/s downloaded=377470760 source_speed=2141KB/s consume_speed=2133KB/s rb_avail=4161104 rb_free=130056624 rb_cap=134217728
+collector: partial read advance offset=385859584 requested=4194304 got=3325952
+scheduler: current=23 critical=23..24 urgent=25..32
+collector: partial read advance offset=394870784 requested=4194304 got=3768320
+scheduler: current=23 critical=23..24 urgent=25..32
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=23 critical=23..24 urgent=25..32
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=24 critical=24..25 urgent=26..33
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=24 critical=24..25 urgent=26..33
+collector: partial read advance offset=403374080 requested=4194304 got=16384
+scheduler: current=24 critical=24..25 urgent=26..33
+collector: stats downloaded=411385640 speed=6579KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=792723456 install_speed=8147KB/s downloaded=411385640 source_speed=6588KB/s consume_speed=7396KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=24 critical=24..25 urgent=26..33
+collector: partial read advance offset=415154176 requested=4194304 got=16384
+scheduler: current=25 critical=25..26 urgent=27..34
+collector: partial read advance offset=424361984 requested=4194304 got=573440
+scheduler: current=25 critical=25..26 urgent=27..34
+installer: ncz buffer wait wait_ms=520 got=81920 rb_avail=0 downloaded=425082664 installed=809500672 starvation_total=26
+collector: partial read advance offset=433487872 requested=4194304 got=901120
+scheduler: current=25 critical=25..26 urgent=27..34
+scheduler: current=26 critical=26..27 urgent=28..35
+scheduler: current=26 critical=26..27 urgent=28..35
+installer: ncz buffer wait wait_ms=560 got=81920 rb_avail=0 downloaded=441368360 installed=826277888 starvation_total=27
+collector: stats downloaded=441433896 speed=4362KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1780 got=32768 rb_avail=0 downloaded=441433896 installed=826277888 starvation_total=28
+scheduler: current=26 critical=26..27 urgent=28..35
+installer: stats installed=826277888 install_speed=4865KB/s downloaded=441433896 source_speed=4356KB/s consume_speed=4356KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=26 critical=26..27 urgent=28..35
+installer: ncz buffer wait wait_ms=1261 got=33200 rb_avail=1261136 downloaded=442728232 installed=826277888 starvation_total=29
+collector: partial read advance offset=442728448 requested=4194304 got=32768
+scheduler: current=26 critical=26..27 urgent=28..35
+scheduler: current=26 critical=26..27 urgent=28..35
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=452100096 requested=4194304 got=32768
+scheduler: current=27 critical=27..28 urgent=29..36
+collector: partial read advance offset=460554240 requested=4194304 got=229376
+collector: stats downloaded=461242152 speed=3862KB/s rb_avail=376400 rb_free=133841328 rb_cap=134217728
+installer: stats installed=847249408 install_speed=4095KB/s downloaded=461242152 source_speed=3868KB/s consume_speed=3868KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=27 critical=27..28 urgent=29..36
+collector: partial read advance offset=469614592 requested=4194304 got=32768
+scheduler: current=28 critical=28..29 urgent=30..37
+scheduler: current=28 critical=28..29 urgent=30..37
+scheduler: current=28 critical=28..29 urgent=30..37
+scheduler: current=28 critical=28..29 urgent=30..37
+collector: partial read advance offset=479690752 requested=4194304 got=49152
+collector: stats downloaded=483032872 speed=4241KB/s rb_avail=2768464 rb_free=131449264 rb_cap=134217728
+installer: stats installed=868220928 install_speed=4082KB/s downloaded=483032872 source_speed=4242KB/s consume_speed=3703KB/s rb_avail=2768464 rb_free=131449264 rb_cap=134217728
+scheduler: current=28 critical=28..29 urgent=30..37
+scheduler: current=29 critical=29..30 urgent=31..38
+collector: partial read advance offset=496582656 requested=4194304 got=1556480
+scheduler: current=29 critical=29..30 urgent=31..38
+scheduler: current=30 critical=30..31 urgent=32..39
+scheduler: current=30 critical=30..31 urgent=32..39
+installer: ncz buffer wait wait_ms=1482 got=432 rb_avail=15952 downloaded=503349032 installed=893386752 starvation_total=30
+collector: partial read advance offset=512180224 requested=4194304 got=2424832
+scheduler: current=30 critical=30..31 urgent=32..39
+collector: stats downloaded=523468584 speed=7748KB/s rb_avail=3358288 rb_free=130859440 rb_cap=134217728
+installer: stats installed=914358272 install_speed=8841KB/s downloaded=523468584 source_speed=7748KB/s consume_speed=7635KB/s rb_avail=3358288 rb_free=130859440 rb_cap=134217728
+scheduler: current=31 critical=31..32 urgent=33..40
+collector: partial read advance offset=523468800 requested=4194304 got=16384
+scheduler: current=31 critical=31..32 urgent=33..40
+scheduler: current=31 critical=31..32 urgent=33..40
+collector: partial read advance offset=534085632 requested=4194304 got=1425408
+collector: stats downloaded=539705128 speed=2003KB/s rb_avail=3866192 rb_free=130351536 rb_cap=134217728
+installer: ncz buffer wait wait_ms=5762 got=328112 rb_avail=3866192 downloaded=539705128 installed=931135488 starvation_total=31
+scheduler: current=32 critical=32..33 urgent=34..41
+installer: stats installed=931135488 install_speed=2067KB/s downloaded=539705128 source_speed=2001KB/s consume_speed=1938KB/s rb_avail=3866192 rb_free=130351536 rb_cap=134217728
+collector: partial read advance offset=552288256 requested=4194304 got=1359872
+scheduler: current=33 critical=33..34 urgent=35..42
+scheduler: current=33 critical=33..34 urgent=35..42
+scheduler: current=33 critical=33..34 urgent=35..42
+installer: ncz buffer wait wait_ms=2768 got=16816 rb_avail=425552 downloaded=556187432 installed=952107008 starvation_total=32
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=557055784 speed=3366KB/s rb_avail=245328 rb_free=133972400 rb_cap=134217728
+installer: stats installed=952107008 install_speed=4078KB/s downloaded=557055784 source_speed=3373KB/s consume_speed=4078KB/s rb_avail=245328 rb_free=133972400 rb_cap=134217728
+scheduler: current=33 critical=33..34 urgent=35..42
+installer: ncz buffer wait wait_ms=1579 got=16384 rb_avail=0 downloaded=557072168 installed=956301312 starvation_total=33
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=580 got=180224 rb_avail=0 downloaded=557317928 installed=956301312 starvation_total=34
+scheduler: current=33 critical=33..34 urgent=35..42
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=562020352 requested=4194304 got=311296
+scheduler: current=33 critical=33..34 urgent=35..42
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=565509928 speed=1600KB/s rb_avail=310864 rb_free=133906864 rb_cap=134217728
+installer: stats installed=964689920 install_speed=2381KB/s downloaded=565509928 source_speed=1600KB/s consume_speed=1587KB/s rb_avail=310864 rb_free=133906864 rb_cap=134217728
+scheduler: current=33 critical=33..34 urgent=35..42
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=33 critical=33..34 urgent=35..42
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=34 critical=34..35 urgent=36..43
+collector: partial read advance offset=584744960 requested=4194304 got=2228224
+scheduler: current=35 critical=35..36 urgent=37..44
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=564 got=508336 rb_avail=376400 downloaded=588119848 installed=989855744 starvation_total=35
+scheduler: current=35 critical=35..36 urgent=37..44
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=35 critical=35..36 urgent=37..44
+collector: partial read advance offset=593215488 requested=4194304 got=16384
+scheduler: current=35 critical=35..36 urgent=37..44
+collector: stats downloaded=600391464 speed=6534KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1002438656 install_speed=7071KB/s downloaded=600391464 source_speed=6534KB/s consume_speed=6592KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=602439680 requested=4194304 got=163840
+scheduler: current=35 critical=35..36 urgent=37..44
+installer: ncz buffer wait wait_ms=504 got=32768 rb_avail=0 downloaded=603012904 installed=1006632960 starvation_total=36
+scheduler: current=36 critical=36..37 urgent=38..45
+collector: partial read advance offset=611991552 requested=4194304 got=2031616
+scheduler: current=36 critical=36..37 urgent=38..45
+installer: ncz buffer wait wait_ms=540 got=81920 rb_avail=0 downloaded=617807656 installed=1023410176 starvation_total=37
+scheduler: current=36 critical=36..37 urgent=38..45
+installer: ncz buffer wait wait_ms=1080 got=16816 rb_avail=278096 downloaded=620527400 installed=1023410176 starvation_total=38
+scheduler: current=37 critical=37..38 urgent=39..46
+collector: partial read advance offset=624721920 requested=4194304 got=2686976
+collector: stats downloaded=628145960 speed=5385KB/s rb_avail=6848080 rb_free=127369648 rb_cap=134217728
+installer: stats installed=1027604480 install_speed=4857KB/s downloaded=628145960 source_speed=5357KB/s consume_speed=4136KB/s rb_avail=6323792 rb_free=127893936 rb_cap=134217728
+scheduler: current=37 critical=37..38 urgent=39..46
+scheduler: current=37 critical=37..38 urgent=39..46
+collector: partial read advance offset=633421824 requested=4194304 got=114688
+scheduler: current=37 critical=37..38 urgent=39..46
+installer: ncz buffer wait wait_ms=960 got=212992 rb_avail=0 downloaded=635961128 installed=1040187392 starvation_total=39
+scheduler: current=38 critical=38..39 urgent=40..47
+collector: partial read advance offset=648773632 requested=4194304 got=868352
+collector: stats downloaded=649920296 speed=4240KB/s rb_avail=10272336 rb_free=123945392 rb_cap=134217728
+installer: stats installed=1048576000 install_speed=4078KB/s downloaded=649936680 source_speed=4238KB/s consume_speed=3568KB/s rb_avail=9764432 rb_free=124453296 rb_cap=134217728
+scheduler: current=38 critical=38..39 urgent=40..47
+installer: ncz buffer wait wait_ms=760 got=16384 rb_avail=0 downloaded=651951912 installed=1061158912 starvation_total=40
+scheduler: current=38 critical=38..39 urgent=40..47
+scheduler: current=39 critical=39..40 urgent=41..48
+installer: ncz buffer wait wait_ms=883 got=16816 rb_avail=573008 downloaded=654901032 installed=1061158912 starvation_total=41
+scheduler: current=39 critical=39..40 urgent=41..48
+scheduler: current=39 critical=39..40 urgent=41..48
+collector: partial read advance offset=658407424 requested=4194304 got=180224
+collector: stats downloaded=658587432 speed=1657KB/s rb_avail=65104 rb_free=134152624 rb_cap=134217728
+installer: stats installed=1065353216 install_speed=3230KB/s downloaded=658587432 source_speed=1665KB/s consume_speed=3533KB/s rb_avail=65104 rb_free=134152624 rb_cap=134217728
+collector: partial read advance offset=667402240 requested=4194304 got=16384
+scheduler: current=40 critical=40..41 urgent=42..49
+scheduler: current=40 critical=40..41 urgent=42..49
+installer: ncz buffer wait wait_ms=1020 got=16384 rb_avail=0 downloaded=674348840 installed=1086324736 starvation_total=42
+collector: partial read advance offset=677511168 requested=4194304 got=524288
+scheduler: current=40 critical=40..41 urgent=42..49
+collector: partial read advance offset=687357952 requested=4194304 got=131072
+scheduler: current=41 critical=41..42 urgent=43..50
+collector: stats downloaded=695320360 speed=7168KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1107296256 install_speed=8184KB/s downloaded=695320360 source_speed=7168KB/s consume_speed=7180KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=695779328 requested=4194304 got=16384
+scheduler: current=41 critical=41..42 urgent=43..50
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=920 got=32768 rb_avail=0 downloaded=697302824 installed=1111490560 starvation_total=43
+scheduler: current=41 critical=41..42 urgent=43..50
+scheduler: current=41 critical=41..42 urgent=43..50
+scheduler: current=42 critical=42..43 urgent=44..51
+collector: partial read advance offset=708362240 requested=4194304 got=16384
+collector: partial read advance offset=716750848 requested=4194304 got=98304
+scheduler: current=43 critical=43..44 urgent=45..52
+collector: stats downloaded=721780520 speed=5154KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1136656384 install_speed=5719KB/s downloaded=721780520 source_speed=5154KB/s consume_speed=5154KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=43 critical=43..44 urgent=45..52
+collector: partial read advance offset=726073344 requested=4194304 got=2473984
+scheduler: current=43 critical=43..44 urgent=45..52
+installer: ncz buffer wait wait_ms=951 got=432 rb_avail=4193872 downloaded=735067944 installed=1145044992 starvation_total=44
+collector: partial read advance offset=735068160 requested=4194304 got=3096576
+scheduler: current=44 critical=44..45 urgent=46..53
+scheduler: current=44 critical=44..45 urgent=46..53
+collector: partial read advance offset=744275968 requested=4194304 got=32768
+scheduler: current=44 critical=44..45 urgent=46..53
+collector: stats downloaded=745848616 speed=4680KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1166016512 install_speed=5710KB/s downloaded=745848616 source_speed=4680KB/s consume_speed=4680KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=44 critical=44..45 urgent=46..53
+scheduler: current=44 critical=44..45 urgent=46..53
+collector: stats downloaded=755220264 speed=1068KB/s rb_avail=3898960 rb_free=130318768 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6586 got=295344 rb_avail=3898960 downloaded=755220264 installed=1170210816 starvation_total=45
+scheduler: current=45 critical=45..46 urgent=47..54
+installer: stats installed=1170210816 install_speed=477KB/s downloaded=755220264 source_speed=1067KB/s consume_speed=623KB/s rb_avail=3898960 rb_free=130318768 rb_cap=134217728
+collector: partial read advance offset=767803392 requested=4194304 got=3948544
+scheduler: current=46 critical=46..47 urgent=48..55
+scheduler: current=46 critical=46..47 urgent=48..55
+scheduler: current=46 critical=46..47 urgent=48..55
+collector: partial read advance offset=780124160 requested=4194304 got=2031616
+collector: partial read advance offset=788512768 requested=4194304 got=540672
+scheduler: current=47 critical=47..48 urgent=49..56
+scheduler: current=47 critical=47..48 urgent=49..56
+collector: stats downloaded=792969000 speed=7070KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1216348160 install_speed=8649KB/s downloaded=792969000 source_speed=7077KB/s consume_speed=7808KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=47 critical=47..48 urgent=49..56
+collector: partial read advance offset=797245440 requested=4194304 got=311296
+scheduler: current=47 critical=47..48 urgent=49..56
+scheduler: current=48 critical=48..49 urgent=50..57
+collector: partial read advance offset=807698432 requested=4194304 got=81920
+scheduler: current=48 critical=48..49 urgent=50..57
+scheduler: current=48 critical=48..49 urgent=50..57
+installer: ncz buffer wait wait_ms=820 got=16816 rb_avail=622160 downloaded=812760872 installed=1237319680 starvation_total=46
+collector: partial read advance offset=817463296 requested=4194304 got=589824
+collector: stats downloaded=819429160 speed=5132KB/s rb_avail=474704 rb_free=133743024 rb_cap=134217728
+installer: stats installed=1245708288 install_speed=5694KB/s downloaded=819429160 source_speed=5132KB/s consume_speed=5040KB/s rb_avail=474704 rb_free=133743024 rb_cap=134217728
+scheduler: current=48 critical=48..49 urgent=50..57
+scheduler: current=49 critical=49..50 urgent=51..58
+collector: partial read advance offset=830193664 requested=4194304 got=3309568
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=49 critical=49..50 urgent=51..58
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=838615040 requested=4194304 got=1245184
+scheduler: current=50 critical=50..51 urgent=52..59
+scheduler: current=50 critical=50..51 urgent=52..59
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=50 critical=50..51 urgent=52..59
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=847331328 requested=4194304 got=311296
+installer: stats installed=1275068416 install_speed=5729KB/s downloaded=847331112 source_speed=5445KB/s consume_speed=5013KB/s rb_avail=2686544 rb_free=131531184 rb_cap=134217728
+collector: stats downloaded=847642408 speed=5504KB/s rb_avail=2997840 rb_free=131219888 rb_cap=134217728
+scheduler: current=50 critical=50..51 urgent=52..59
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=50 critical=50..51 urgent=52..59
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=51 critical=51..52 urgent=53..60
+collector: partial read advance offset=869793792 requested=4194304 got=2621440
+scheduler: current=52 critical=52..53 urgent=54..61
+collector: stats downloaded=872447784 speed=3612KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+installer: ncz buffer wait wait_ms=3406 got=16816 rb_avail=15952 downloaded=872447784 installed=1304428544 starvation_total=47
+scheduler: current=52 critical=52..53 urgent=54..61
+installer: stats installed=1304428544 install_speed=4267KB/s downloaded=872447784 source_speed=3650KB/s consume_speed=4038KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+scheduler: current=52 critical=52..53 urgent=54..61
+collector: stats downloaded=880787240 speed=963KB/s rb_avail=4161104 rb_free=130056624 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6849 got=33200 rb_avail=4161104 downloaded=880787240 installed=1308622848 starvation_total=48
+scheduler: current=52 critical=52..53 urgent=54..61
+installer: stats installed=1308622848 install_speed=484KB/s downloaded=880787240 source_speed=963KB/s consume_speed=484KB/s rb_avail=4161104 rb_free=130056624 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=53 critical=53..54 urgent=55..62
+collector: partial read advance offset=905953280 requested=4194304 got=147456
+scheduler: current=54 critical=54..55 urgent=56..63
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=54 critical=54..55 urgent=56..63
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=54 critical=54..55 urgent=56..63
+scheduler: current=54 critical=54..55 urgent=56..63
+collector: partial read advance offset=915570688 requested=4194304 got=49152
+scheduler: current=54 critical=54..55 urgent=56..63
+scheduler: current=55 critical=55..56 urgent=57..64
+collector: partial read advance offset=924827648 requested=4194304 got=196608
+collector: stats downloaded=925056808 speed=8572KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1363148800 install_speed=10575KB/s downloaded=925056808 source_speed=8586KB/s consume_speed=9393KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=55 critical=55..56 urgent=57..64
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=55 critical=55..56 urgent=57..64
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=934445056 requested=4194304 got=16384
+scheduler: current=55 critical=55..56 urgent=57..64
+scheduler: current=56 critical=56..57 urgent=58..65
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=943439872 requested=4194304 got=294912
+scheduler: current=56 critical=56..57 urgent=58..65
+installer: stats installed=1384120320 install_speed=4077KB/s downloaded=946356008 source_speed=4141KB/s consume_speed=3733KB/s rb_avail=2096720 rb_free=132121008 rb_cap=134217728
+collector: stats downloaded=946536232 speed=4088KB/s rb_avail=179792 rb_free=134037936 rb_cap=134217728
+scheduler: current=56 critical=56..57 urgent=58..65
+collector: partial read advance offset=954859520 requested=4194304 got=81920
+collector: stats downloaded=959315752 speed=2323KB/s rb_avail=4046416 rb_free=130171312 rb_cap=134217728
+installer: ncz buffer wait wait_ms=3847 got=147888 rb_avail=4046416 downloaded=959315752 installed=1392508928 starvation_total=49
+scheduler: current=57 critical=57..58 urgent=59..66
+installer: stats installed=1392508928 install_speed=1493KB/s downloaded=959315752 source_speed=2306KB/s consume_speed=1959KB/s rb_avail=4046416 rb_free=130171312 rb_cap=134217728
+collector: partial read advance offset=967704576 requested=4194304 got=294912
+scheduler: current=57 critical=57..58 urgent=59..66
+scheduler: current=57 critical=57..58 urgent=59..66
+installer: ncz buffer wait wait_ms=580 got=432 rb_avail=32336 downloaded=972603176 installed=1413480448 starvation_total=50
+scheduler: current=57 critical=57..58 urgent=59..66
+scheduler: current=58 critical=58..59 urgent=60..67
+installer: ncz buffer wait wait_ms=666 got=16816 rb_avail=48720 downloaded=973143848 installed=1413480448 starvation_total=51
+scheduler: current=58 critical=58..59 urgent=60..67
+collector: stats downloaded=973373224 speed=2425KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=866 got=16384 rb_avail=0 downloaded=973373224 installed=1413480448 starvation_total=52
+installer: stats installed=1413480448 install_speed=3615KB/s downloaded=973373224 source_speed=2423KB/s consume_speed=3121KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=58 critical=58..59 urgent=60..67
+installer: ncz buffer wait wait_ms=760 got=16816 rb_avail=163408 downloaded=974307112 installed=1413480448 starvation_total=53
+scheduler: current=58 critical=58..59 urgent=60..67
+scheduler: current=59 critical=59..60 urgent=61..68
+collector: partial read advance offset=1004077056 requested=4194304 got=3751936
+scheduler: current=60 critical=60..61 urgent=62..69
+scheduler: current=60 critical=60..61 urgent=62..69
+scheduler: current=60 critical=60..61 urgent=62..69
+collector: partial read advance offset=1016184832 requested=4194304 got=835584
+collector: stats downloaded=1017052968 speed=8486KB/s rb_avail=4636240 rb_free=129581488 rb_cap=134217728
+installer: stats installed=1459617792 install_speed=8859KB/s downloaded=1017052968 source_speed=8387KB/s consume_speed=7597KB/s rb_avail=4111952 rb_free=130105776 rb_cap=134217728
+scheduler: current=60 critical=60..61 urgent=62..69
+scheduler: current=61 critical=61..62 urgent=63..70
+collector: partial read advance offset=1026473984 requested=4194304 got=1949696
+scheduler: current=61 critical=61..62 urgent=63..70
+scheduler: current=61 critical=61..62 urgent=63..70
+collector: partial read advance offset=1036369920 requested=4194304 got=81920
+scheduler: current=62 critical=62..63 urgent=64..71
+installer: ncz buffer wait wait_ms=520 got=32768 rb_avail=0 downloaded=1041301288 installed=1488977920 starvation_total=54
+collector: stats downloaded=1041317672 speed=4673KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=62 critical=62..63 urgent=64..71
+installer: stats installed=1488977920 install_speed=5468KB/s downloaded=1041334056 source_speed=4522KB/s consume_speed=5287KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=62 critical=62..63 urgent=64..71
+installer: ncz buffer wait wait_ms=983 got=180656 rb_avail=982608 downloaded=1044332328 installed=1493172224 starvation_total=55
+installer: ncz buffer wait wait_ms=515 got=65968 rb_avail=32336 downloaded=1044430632 installed=1493172224 starvation_total=56
+scheduler: current=62 critical=62..63 urgent=64..71
+scheduler: current=63 critical=63..64 urgent=65..72
+collector: partial read advance offset=1057259520 requested=4194304 got=2048000
+scheduler: current=63 critical=63..64 urgent=65..72
+collector: stats downloaded=1059520296 speed=2538KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2046 got=16384 rb_avail=0 downloaded=1059520296 installed=1509949440 starvation_total=57
+scheduler: current=63 critical=63..64 urgent=65..72
+installer: stats installed=1509949440 install_speed=3026KB/s downloaded=1059520296 source_speed=2624KB/s consume_speed=2624KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=520 got=65968 rb_avail=97872 downloaded=1059700520 installed=1509949440 starvation_total=58
+scheduler: current=63 critical=63..64 urgent=65..72
+scheduler: current=64 critical=64..65 urgent=66..73
+collector: partial read advance offset=1086472192 requested=4194304 got=4046848
+scheduler: current=65 critical=65..66 urgent=67..74
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=65 critical=65..66 urgent=67..74
+scheduler: current=65 critical=65..66 urgent=67..74
+installer: ncz buffer wait wait_ms=930 got=32768 rb_avail=0 downloaded=1092812584 installed=1547698176 starvation_total=59
+collector: partial read advance offset=1097007104 requested=4194304 got=1933312
+collector: stats downloaded=1098956584 speed=7252KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1556086784 install_speed=8498KB/s downloaded=1098956584 source_speed=7264KB/s consume_speed=7264KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=65 critical=65..66 urgent=67..74
+scheduler: current=66 critical=66..67 urgent=68..75
+scheduler: current=67 critical=67..68 urgent=69..76
+collector: partial read advance offset=1124597760 requested=4194304 got=360448
+scheduler: current=67 critical=67..68 urgent=69..76
+scheduler: current=67 critical=67..68 urgent=69..76
+scheduler: current=67 critical=67..68 urgent=69..76
+installer: ncz buffer wait wait_ms=700 got=16384 rb_avail=0 downloaded=1128218408 installed=1585446912 starvation_total=60
+collector: stats downloaded=1132478248 speed=6435KB/s rb_avail=4193872 rb_free=130023856 rb_cap=134217728
+installer: stats installed=1585446912 install_speed=5636KB/s downloaded=1132478248 source_speed=6435KB/s consume_speed=5630KB/s rb_avail=4193872 rb_free=130023856 rb_cap=134217728
+collector: partial read advance offset=1134723072 requested=4194304 got=1425408
+scheduler: current=67 critical=67..68 urgent=69..76
+scheduler: current=68 critical=68..69 urgent=70..77
+collector: partial read advance offset=1144782848 requested=4194304 got=2244608
+scheduler: current=68 critical=68..69 urgent=70..77
+scheduler: current=68 critical=68..69 urgent=70..77
+collector: partial read advance offset=1153220608 requested=4194304 got=442368
+scheduler: current=68 critical=68..69 urgent=70..77
+scheduler: current=69 critical=69..70 urgent=71..78
+installer: ncz buffer wait wait_ms=902 got=426416 rb_avail=3767888 downloaded=1159839528 installed=1619001344 starvation_total=61
+collector: partial read advance offset=1164034048 requested=4194304 got=3129344
+collector: stats downloaded=1167785768 speed=6845KB/s rb_avail=6471248 rb_free=127746480 rb_cap=134217728
+installer: stats installed=1627389952 install_speed=8056KB/s downloaded=1167785768 source_speed=6782KB/s consume_speed=6445KB/s rb_avail=5946960 rb_free=128270768 rb_cap=134217728
+collector: partial read advance offset=1172668416 requested=4194304 got=16384
+scheduler: current=69 critical=69..70 urgent=71..78
+scheduler: current=70 critical=70..71 urgent=72..79
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=599 got=81920 rb_avail=0 downloaded=1178730280 installed=1652555776 starvation_total=62
+scheduler: current=70 critical=70..71 urgent=72..79
+collector: partial read advance offset=1183055872 requested=4194304 got=262144
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=70 critical=70..71 urgent=72..79
+collector: stats downloaded=1187495720 speed=3521KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2217 got=16384 rb_avail=0 downloaded=1187495720 installed=1660944384 starvation_total=63
+scheduler: current=70 critical=70..71 urgent=72..79
+installer: stats installed=1660944384 install_speed=6036KB/s downloaded=1187495720 source_speed=3546KB/s consume_speed=4616KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=720 got=16384 rb_avail=0 downloaded=1187512104 installed=1660944384 starvation_total=64
+scheduler: current=70 critical=70..71 urgent=72..79
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=70 critical=70..71 urgent=72..79
+installer: ncz buffer wait wait_ms=1460 got=16384 rb_avail=0 downloaded=1188200232 installed=1660944384 starvation_total=65
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=71 critical=71..72 urgent=73..80
+collector: partial read advance offset=1196638208 requested=4194304 got=622592
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=1203158824 speed=3042KB/s rb_avail=949840 rb_free=133267888 rb_cap=134217728
+installer: stats installed=1681915904 install_speed=4033KB/s downloaded=1203158824 source_speed=3012KB/s consume_speed=2930KB/s rb_avail=425552 rb_free=133792176 rb_cap=134217728
+scheduler: current=71 critical=71..72 urgent=73..80
+scheduler: current=72 critical=72..73 urgent=74..81
+collector: partial read advance offset=1215741952 requested=4194304 got=311296
+scheduler: current=72 critical=72..73 urgent=74..81
+installer: ncz buffer wait wait_ms=740 got=295344 rb_avail=65104 downloaded=1218527016 installed=1698693120 starvation_total=66
+scheduler: current=72 critical=72..73 urgent=74..81
+installer: ncz buffer wait wait_ms=1177 got=180224 rb_avail=0 downloaded=1220034344 installed=1698693120 starvation_total=67
+scheduler: current=72 critical=72..73 urgent=74..81
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=73 critical=73..74 urgent=75..82
+collector: partial read advance offset=1225719808 requested=4194304 got=1851392
+collector: partial read advance offset=1235451904 requested=4194304 got=1032192
+collector: stats downloaded=1236483880 speed=6481KB/s rb_avail=3866192 rb_free=130351536 rb_cap=134217728
+installer: stats installed=1715470336 install_speed=6531KB/s downloaded=1236500264 source_speed=6489KB/s consume_speed=5918KB/s rb_avail=3358288 rb_free=130859440 rb_cap=134217728
+scheduler: current=73 critical=73..74 urgent=75..82
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=73 critical=73..74 urgent=75..82
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=73 critical=73..74 urgent=75..82
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=74 critical=74..75 urgent=76..83
+collector: partial read advance offset=1244889088 requested=4194304 got=2260992
+installer: ncz buffer wait wait_ms=500 got=131504 rb_avail=15952 downloaded=1247313704 installed=1728053248 starvation_total=68
+scheduler: current=74 critical=74..75 urgent=76..83
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=1254260736 requested=4194304 got=1261568
+collector: stats downloaded=1255571240 speed=3643KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1740636160 install_speed=4855KB/s downloaded=1255571240 source_speed=3679KB/s consume_speed=4327KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=74 critical=74..75 urgent=76..83
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=75 critical=75..76 urgent=77..84
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=767 got=295344 rb_avail=3898960 downloaded=1262731048 installed=1740636160 starvation_total=69
+collector: partial read advance offset=1262731264 requested=4194304 got=1540096
+scheduler: current=75 critical=75..76 urgent=77..84
+scheduler: current=75 critical=75..76 urgent=77..84
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=75 critical=75..76 urgent=77..84
+installer: ncz buffer wait wait_ms=1768 got=81920 rb_avail=0 downloaded=1267466024 installed=1753219072 starvation_total=70
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=1267531560 speed=1474KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=3503 got=65536 rb_avail=0 downloaded=1267531560 installed=1753219072 starvation_total=71
+scheduler: current=75 critical=75..76 urgent=77..84
+installer: stats installed=1753219072 install_speed=1550KB/s downloaded=1267531560 source_speed=1473KB/s consume_speed=1473KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1272168448 requested=4194304 got=2539520
+scheduler: current=76 critical=76..77 urgent=78..85
+scheduler: current=77 critical=77..78 urgent=79..86
+collector: partial read advance offset=1295679488 requested=4194304 got=2113536
+scheduler: current=77 critical=77..78 urgent=79..86
+installer: ncz buffer wait wait_ms=685 got=16384 rb_avail=0 downloaded=1298349864 installed=1786773504 starvation_total=72
+scheduler: current=77 critical=77..78 urgent=79..86
+installer: ncz buffer wait wait_ms=1359 got=81920 rb_avail=0 downloaded=1298956072 installed=1786773504 starvation_total=73
+collector: stats downloaded=1299119912 speed=5681KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1298 got=163840 rb_avail=0 downloaded=1299119912 installed=1786773504 starvation_total=74
+scheduler: current=77 critical=77..78 urgent=79..86
+installer: stats installed=1786773504 install_speed=6033KB/s downloaded=1299119912 source_speed=5679KB/s consume_speed=5679KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=77 critical=77..78 urgent=79..86
+installer: ncz buffer wait wait_ms=1219 got=82352 rb_avail=1916496 downloaded=1301118760 installed=1786773504 starvation_total=75
+scheduler: current=77 critical=77..78 urgent=79..86
+installer: ncz buffer wait wait_ms=1514 got=32768 rb_avail=0 downloaded=1301184296 installed=1790967808 starvation_total=76
+installer: ncz buffer wait wait_ms=977 got=32768 rb_avail=0 downloaded=1301217064 installed=1790967808 starvation_total=77
+scheduler: current=77 critical=77..78 urgent=79..86
+scheduler: current=78 critical=78..79 urgent=80..87
+collector: partial read advance offset=1317994496 requested=4194304 got=2162688
+collector: stats downloaded=1326350120 speed=5224KB/s rb_avail=1457744 rb_free=132759984 rb_cap=134217728
+installer: stats installed=1816133632 install_speed=5642KB/s downloaded=1326350120 source_speed=5233KB/s consume_speed=4952KB/s rb_avail=1457744 rb_free=132759984 rb_cap=134217728
+scheduler: current=79 critical=79..80 urgent=81..88
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1326383104 requested=4194304 got=49152
+scheduler: current=79 critical=79..80 urgent=81..88
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=79 critical=79..80 urgent=81..88
+installer: ncz buffer wait wait_ms=780 got=33200 rb_avail=114256 downloaded=1328152360 installed=1820327936 starvation_total=78
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=640 got=16384 rb_avail=0 downloaded=1328299816 installed=1820327936 starvation_total=79
+collector: partial read advance offset=1336688640 requested=4194304 got=442368
+scheduler: current=79 critical=79..80 urgent=81..88
+scheduler: current=80 critical=80..81 urgent=82..89
+collector: partial read advance offset=1345142784 requested=4194304 got=4014080
+collector: stats downloaded=1353465640 speed=5147KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1845493760 install_speed=5573KB/s downloaded=1353465640 source_speed=5146KB/s consume_speed=5423KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=80 critical=80..81 urgent=82..89
+collector: partial read advance offset=1353547776 requested=4194304 got=32768
+scheduler: current=80 critical=80..81 urgent=82..89
+installer: ncz buffer wait wait_ms=616 got=33200 rb_avail=704080 downloaded=1354956584 installed=1849688064 starvation_total=80
+scheduler: current=80 critical=80..81 urgent=82..89
+installer: ncz buffer wait wait_ms=2496 got=344496 rb_avail=523856 downloaded=1355824936 installed=1849688064 starvation_total=81
+scheduler: current=80 critical=80..81 urgent=82..89
+installer: ncz buffer wait wait_ms=1039 got=491952 rb_avail=114256 downloaded=1356988200 installed=1849688064 starvation_total=82
+collector: stats downloaded=1361182504 speed=1360KB/s rb_avail=3784272 rb_free=130433456 rb_cap=134217728
+installer: ncz buffer wait wait_ms=580 got=410032 rb_avail=3784272 downloaded=1361182504 installed=1849688064 starvation_total=83
+scheduler: current=81 critical=81..82 urgent=83..90
+installer: stats installed=1849688064 install_speed=738KB/s downloaded=1361182504 source_speed=1358KB/s consume_speed=692KB/s rb_avail=3784272 rb_free=130433456 rb_cap=134217728
+collector: partial read advance offset=1373765632 requested=4194304 got=1966080
+scheduler: current=82 critical=82..83 urgent=84..91
+scheduler: current=82 critical=82..83 urgent=84..91
+scheduler: current=82 critical=82..83 urgent=84..91
+collector: partial read advance offset=1385152512 requested=4194304 got=1933312
+scheduler: current=82 critical=82..83 urgent=84..91
+scheduler: current=83 critical=83..84 urgent=85..92
+collector: partial read advance offset=1397981184 requested=4194304 got=245760
+scheduler: current=83 critical=83..84 urgent=85..92
+collector: stats downloaded=1399029544 speed=7212KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=1895825408 install_speed=8805KB/s downloaded=1399029544 source_speed=7222KB/s consume_speed=7945KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=83 critical=83..84 urgent=85..92
+scheduler: current=83 critical=83..84 urgent=85..92
+installer: ncz buffer wait wait_ms=537 got=16384 rb_avail=0 downloaded=1401831208 installed=1900019712 starvation_total=84
+collector: partial read advance offset=1409073152 requested=4194304 got=147456
+scheduler: current=84 critical=84..85 urgent=86..93
+scheduler: current=84 critical=84..85 urgent=86..93
+collector: partial read advance offset=1420312576 requested=4194304 got=3866624
+installer: stats installed=1920991232 install_speed=4854KB/s downloaded=1424178984 source_speed=4851KB/s consume_speed=3802KB/s rb_avail=5439056 rb_free=128778672 rb_cap=134217728
+collector: stats downloaded=1425604392 speed=5116KB/s rb_avail=3718736 rb_free=130498992 rb_cap=134217728
+scheduler: current=84 critical=84..85 urgent=86..93
+scheduler: current=85 critical=85..86 urgent=87..94
+collector: partial read advance offset=1430142976 requested=4194304 got=1507328
+scheduler: current=85 critical=85..86 urgent=87..94
+scheduler: current=85 critical=85..86 urgent=87..94
+installer: ncz buffer wait wait_ms=940 got=360880 rb_avail=15952 downloaded=1437630248 installed=1937768448 starvation_total=85
+collector: partial read advance offset=1438547968 requested=4194304 got=16384
+installer: stats installed=1941962752 install_speed=4089KB/s downloaded=1438973736 source_speed=2884KB/s consume_speed=3884KB/s rb_avail=310864 rb_free=133906864 rb_cap=134217728
+collector: stats downloaded=1439055656 speed=2597KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=85 critical=85..86 urgent=87..94
+scheduler: current=86 critical=86..87 urgent=88..95
+collector: partial read advance offset=1450082304 requested=4194304 got=868352
+installer: ncz buffer wait wait_ms=560 got=432 rb_avail=343632 downloaded=1451589416 installed=1954545664 starvation_total=86
+scheduler: current=86 critical=86..87 urgent=88..95
+scheduler: current=86 critical=86..87 urgent=88..95
+collector: partial read advance offset=1458552832 requested=4194304 got=409600
+scheduler: current=87 critical=87..88 urgent=89..96
+installer: ncz buffer wait wait_ms=599 got=16384 rb_avail=0 downloaded=1460223784 installed=1967128576 starvation_total=87
+collector: stats downloaded=1470381864 speed=5888KB/s rb_avail=3931728 rb_free=130286000 rb_cap=134217728
+installer: stats installed=1971322880 install_speed=5455KB/s downloaded=1470381864 source_speed=5835KB/s consume_speed=5163KB/s rb_avail=3931728 rb_free=130286000 rb_cap=134217728
+scheduler: current=87 critical=87..88 urgent=89..96
+collector: partial read advance offset=1470382080 requested=4194304 got=4014080
+scheduler: current=87 critical=87..88 urgent=89..96
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=88 critical=88..89 urgent=90..97
+collector: partial read advance offset=1479868416 requested=4194304 got=32768
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=88 critical=88..89 urgent=90..97
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=88 critical=88..89 urgent=90..97
+collector: partial read advance offset=1488404480 requested=4194304 got=327680
+scheduler: current=89 critical=89..90 urgent=91..98
+installer: ncz buffer wait wait_ms=517 got=475568 rb_avail=3718736 downloaded=1496383272 installed=2000683008 starvation_total=88
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1500069888 requested=4194304 got=901120
+collector: stats downloaded=1500970792 speed=5086KB/s rb_avail=441936 rb_free=133775792 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1117 got=459184 rb_avail=441936 downloaded=1500970792 installed=2009071616 starvation_total=89
+scheduler: current=89 critical=89..90 urgent=91..98
+installer: stats installed=2009071616 install_speed=6271KB/s downloaded=1500970792 source_speed=5082KB/s consume_speed=5662KB/s rb_avail=441936 rb_free=133775792 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=779 got=82352 rb_avail=589392 downloaded=1501642536 installed=2009071616 starvation_total=90
+scheduler: current=89 critical=89..90 urgent=91..98
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=1504476968 speed=439KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=6669 got=262144 rb_avail=0 downloaded=1504476968 installed=2013265920 starvation_total=91
+scheduler: current=89 critical=89..90 urgent=91..98
+installer: stats installed=2013265920 install_speed=525KB/s downloaded=1504476968 source_speed=439KB/s consume_speed=494KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=90 critical=90..91 urgent=92..99
+collector: partial read advance offset=1525448704 requested=4194304 got=1277952
+scheduler: current=91 critical=91..92 urgent=93..100
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=91 critical=91..92 urgent=93..100
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=91 critical=91..92 urgent=93..100
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=607 got=65968 rb_avail=97872 downloaded=1531035432 installed=2042626048 starvation_total=92
+scheduler: current=91 critical=91..92 urgent=93..100
+scheduler: current=91 critical=91..92 urgent=93..100
+collector: stats downloaded=1532837672 speed=5519KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2046820352 install_speed=6539KB/s downloaded=1532837672 source_speed=5527KB/s consume_speed=5527KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=1534345216 requested=4194304 got=65536
+scheduler: current=91 critical=91..92 urgent=93..100
+installer: ncz buffer wait wait_ms=1363 got=65536 rb_avail=0 downloaded=1534410536 installed=2046820352 starvation_total=93
+installer: ncz buffer wait wait_ms=777 got=16384 rb_avail=0 downloaded=1534426920 installed=2046820352 starvation_total=94
+scheduler: current=91 critical=91..92 urgent=93..100
+scheduler: current=91 critical=91..92 urgent=93..100
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=92 critical=92..93 urgent=94..101
+collector: partial read advance offset=1550843904 requested=4194304 got=983040
+collector: stats downloaded=1553284904 speed=3983KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2067791872 install_speed=4085KB/s downloaded=1553284904 source_speed=3983KB/s consume_speed=3983KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=92 critical=92..93 urgent=94..101
+installer: ncz buffer wait wait_ms=1045 got=65536 rb_avail=0 downloaded=1553596200 installed=2067791872 starvation_total=95
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=92 critical=92..93 urgent=94..101
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=92 critical=92..93 urgent=94..101
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=93 critical=93..94 urgent=95..102
+collector: partial read advance offset=1564950528 requested=4194304 got=507904
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=1571471144 speed=3489KB/s rb_avail=163408 rb_free=134054320 rb_cap=134217728
+installer: stats installed=2088763392 install_speed=4024KB/s downloaded=1571471144 source_speed=3489KB/s consume_speed=3458KB/s rb_avail=163408 rb_free=134054320 rb_cap=134217728
+scheduler: current=93 critical=93..94 urgent=95..102
+collector: partial read advance offset=1573519360 requested=4194304 got=524288
+scheduler: current=93 critical=93..94 urgent=95..102
+scheduler: current=94 critical=94..95 urgent=96..103
+collector: partial read advance offset=1583022080 requested=4194304 got=147456
+scheduler: current=94 critical=94..95 urgent=96..103
+installer: ncz buffer wait wait_ms=980 got=16384 rb_avail=0 downloaded=1583251240 installed=2101346304 starvation_total=96
+collector: stats downloaded=1586495272 speed=1933KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=4261 got=163840 rb_avail=0 downloaded=1586495272 installed=2105540608 starvation_total=97
+scheduler: current=94 critical=94..95 urgent=96..103
+installer: stats installed=2105540608 install_speed=2156KB/s downloaded=1586495272 source_speed=1931KB/s consume_speed=1952KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=95 critical=95..96 urgent=97..104
+collector: partial read advance offset=1607991296 requested=4194304 got=1081344
+scheduler: current=96 critical=96..97 urgent=98..105
+installer: ncz buffer wait wait_ms=800 got=16384 rb_avail=0 downloaded=1610923816 installed=2130706432 starvation_total=98
+scheduler: current=96 critical=96..97 urgent=98..105
+collector: partial read advance offset=1616789504 requested=4194304 got=16384
+scheduler: current=96 critical=96..97 urgent=98..105
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=730 got=32768 rb_avail=0 downloaded=1616871208 installed=2139095040 starvation_total=99
+scheduler: current=96 critical=96..97 urgent=98..105
+collector: stats downloaded=1617100584 speed=5735KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2139095040 install_speed=6297KB/s downloaded=1617100584 source_speed=5743KB/s consume_speed=5743KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=96 critical=96..97 urgent=98..105
+collector: partial read advance offset=1625686016 requested=4194304 got=1343488
+scheduler: current=96 critical=96..97 urgent=98..105
+scheduler: current=97 critical=97..98 urgent=99..106
+collector: partial read advance offset=1635401728 requested=4194304 got=278528
+scheduler: current=98 critical=98..99 urgent=100..107
+installer: ncz buffer wait wait_ms=771 got=98736 rb_avail=4095568 downloaded=1646706472 installed=2164260864 starvation_total=100
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1650900992 requested=4194304 got=491520
+scheduler: current=98 critical=98..99 urgent=100..107
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=1653276456 speed=6255KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1287 got=65536 rb_avail=0 downloaded=1653276456 installed=2176843776 starvation_total=101
+scheduler: current=98 critical=98..99 urgent=100..107
+installer: stats installed=2176843776 install_speed=6517KB/s downloaded=1653276456 source_speed=6245KB/s consume_speed=6245KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=98 critical=98..99 urgent=100..107
+scheduler: current=99 critical=99..100 urgent=101..108
+scheduler: current=100 critical=100..101 urgent=102..109
+collector: partial read advance offset=1678852096 requested=4194304 got=1490944
+scheduler: current=100 critical=100..101 urgent=102..109
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=1685241640 speed=6228KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1293 got=65536 rb_avail=0 downloaded=1685241640 installed=2214592512 starvation_total=102
+scheduler: current=100 critical=100..101 urgent=102..109
+installer: stats installed=2214592512 install_speed=7358KB/s downloaded=1685241640 source_speed=6230KB/s consume_speed=6230KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1689960448 requested=4194304 got=3211264
+scheduler: current=101 critical=101..102 urgent=103..110
+collector: partial read advance offset=1700610048 requested=4194304 got=131072
+scheduler: current=101 critical=101..102 urgent=103..110
+installer: ncz buffer wait wait_ms=821 got=131072 rb_avail=0 downloaded=1700740904 installed=2231369728 starvation_total=103
+scheduler: current=101 critical=101..102 urgent=103..110
+collector: partial read advance offset=1709850624 requested=4194304 got=2162688
+scheduler: current=102 critical=102..103 urgent=104..111
+collector: partial read advance offset=1725546496 requested=4194304 got=344064
+collector: stats downloaded=1726971688 speed=8051KB/s rb_avail=998992 rb_free=133218736 rb_cap=134217728
+installer: ncz buffer wait wait_ms=942 got=82352 rb_avail=998992 downloaded=1726971688 installed=2256535552 starvation_total=104
+scheduler: current=102 critical=102..103 urgent=104..111
+installer: stats installed=2256535552 install_speed=8092KB/s downloaded=1726971688 source_speed=8051KB/s consume_speed=7858KB/s rb_avail=998992 rb_free=133218736 rb_cap=134217728
+scheduler: current=103 critical=103..104 urgent=105..112
+scheduler: current=103 critical=103..104 urgent=105..112
+installer: ncz buffer wait wait_ms=1304 got=16384 rb_avail=0 downloaded=1728069416 installed=2260729856 starvation_total=105
+scheduler: current=103 critical=103..104 urgent=105..112
+collector: partial read advance offset=1736916992 requested=4194304 got=1982464
+scheduler: current=104 critical=104..105 urgent=106..113
+collector: partial read advance offset=1747877888 requested=4194304 got=49152
+collector: stats downloaded=1747926824 speed=3894KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1519 got=49152 rb_avail=0 downloaded=1747926824 installed=2281701376 starvation_total=106
+scheduler: current=104 critical=104..105 urgent=106..113
+installer: stats installed=2281701376 install_speed=4678KB/s downloaded=1747926824 source_speed=3895KB/s consume_speed=4081KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=1756708864 requested=4194304 got=16384
+scheduler: current=104 critical=104..105 urgent=106..113
+installer: ncz buffer wait wait_ms=2091 got=16384 rb_avail=0 downloaded=1756725032 installed=2294284288 starvation_total=107
+scheduler: current=105 critical=105..106 urgent=107..114
+collector: partial read advance offset=1769553920 requested=4194304 got=3670016
+scheduler: current=106 critical=106..107 urgent=108..115
+collector: partial read advance offset=1778384896 requested=4194304 got=81920
+scheduler: current=106 critical=106..107 urgent=108..115
+collector: stats downloaded=1780760360 speed=6410KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2319450112 install_speed=7340KB/s downloaded=1780825896 source_speed=6397KB/s consume_speed=6397KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=106 critical=106..107 urgent=108..115
+collector: partial read advance offset=1792098304 requested=4194304 got=163840
+scheduler: current=106 critical=106..107 urgent=108..115
+scheduler: current=107 critical=107..108 urgent=109..116
+collector: partial read advance offset=1800699904 requested=4194304 got=1015808
+scheduler: current=107 critical=107..108 urgent=109..116
+scheduler: current=107 critical=107..108 urgent=109..116
+installer: ncz buffer wait wait_ms=739 got=410032 rb_avail=605776 downloaded=1806270248 installed=2344615936 starvation_total=108
+collector: stats downloaded=1807351592 speed=5169KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2348810240 install_speed=5639KB/s downloaded=1808006952 source_speed=5221KB/s consume_speed=5174KB/s rb_avail=245328 rb_free=133972400 rb_cap=134217728
+scheduler: current=107 critical=107..108 urgent=109..116
+installer: ncz buffer wait wait_ms=1220 got=16816 rb_avail=1130064 downloaded=1809940264 installed=2348810240 starvation_total=109
+collector: partial read advance offset=1809940480 requested=4194304 got=131072
+scheduler: current=108 critical=108..109 urgent=110..117
+collector: partial read advance offset=1827209216 requested=4194304 got=1507328
+scheduler: current=109 critical=109..110 urgent=111..118
+scheduler: current=109 critical=109..110 urgent=111..118
+scheduler: current=109 critical=109..110 urgent=111..118
+collector: stats downloaded=1832845096 speed=4940KB/s rb_avail=441936 rb_free=133775792 rb_cap=134217728
+installer: stats installed=2378170368 install_speed=5672KB/s downloaded=1833041704 source_speed=4836KB/s consume_speed=4861KB/s rb_avail=114256 rb_free=134103472 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=109 critical=109..110 urgent=111..118
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=109 critical=109..110 urgent=111..118
+collector: partial read advance offset=1837465600 requested=4194304 got=589824
+scheduler: current=110 critical=110..111 urgent=112..119
+scheduler: current=110 critical=110..111 urgent=112..119
+installer: ncz buffer wait wait_ms=959 got=16384 rb_avail=0 downloaded=1845559080 installed=2390753280 starvation_total=110
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=1845788456 speed=1668KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=3482 got=229376 rb_avail=0 downloaded=1845788456 installed=2390753280 starvation_total=111
+scheduler: current=110 critical=110..111 urgent=112..119
+installer: stats installed=2390753280 install_speed=1642KB/s downloaded=1845788456 source_speed=1664KB/s consume_speed=1679KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=111 critical=111..112 urgent=113..120
+collector: partial read advance offset=1862565888 requested=4194304 got=2801664
+scheduler: current=111 critical=111..112 urgent=113..120
+collector: partial read advance offset=1871691776 requested=4194304 got=16384
+scheduler: current=111 critical=111..112 urgent=113..120
+installer: ncz buffer wait wait_ms=878 got=16384 rb_avail=0 downloaded=1873084200 installed=2420113408 starvation_total=112
+scheduler: current=112 critical=112..113 urgent=114..121
+collector: partial read advance offset=1881145344 requested=4194304 got=163840
+scheduler: current=112 critical=112..113 urgent=114..121
+collector: partial read advance offset=1889828864 requested=4194304 got=32768
+collector: stats downloaded=1889877800 speed=4135KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=5537 got=16384 rb_avail=0 downloaded=1889877800 installed=2441084928 starvation_total=113
+scheduler: current=112 critical=112..113 urgent=114..121
+installer: stats installed=2441084928 install_speed=4721KB/s downloaded=1889877800 source_speed=4136KB/s consume_speed=4136KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=112 critical=112..113 urgent=114..121
+installer: ncz buffer wait wait_ms=1117 got=197040 rb_avail=245328 downloaded=1890320168 installed=2441084928 starvation_total=114
+scheduler: current=113 critical=113..114 urgent=115..122
+collector: partial read advance offset=1907982336 requested=4194304 got=573440
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=113 critical=113..114 urgent=115..122
+scheduler: current=113 critical=113..114 urgent=115..122
+installer: ncz buffer wait wait_ms=520 got=131504 rb_avail=1424976 downloaded=1911947048 installed=2462056448 starvation_total=115
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=114 critical=114..115 urgent=116..123
+installer: ncz buffer wait wait_ms=900 got=131504 rb_avail=736848 downloaded=1912831784 installed=2462056448 starvation_total=116
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=1912962856 speed=4483KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2466250752 install_speed=4893KB/s downloaded=1912962856 source_speed=4489KB/s consume_speed=4489KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=114 critical=114..115 urgent=116..123
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=114 critical=114..115 urgent=116..123
+installer: ncz buffer wait wait_ms=1131 got=49152 rb_avail=0 downloaded=1913765672 installed=2466250752 starvation_total=117
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=114 critical=114..115 urgent=116..123
+installer: ncz buffer wait wait_ms=1081 got=508336 rb_avail=3685968 downloaded=1918402344 installed=2466250752 starvation_total=118
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1918402560 requested=4194304 got=1064960
+collector: stats downloaded=1922006824 speed=1320KB/s rb_avail=2047568 rb_free=132170160 rb_cap=134217728
+installer: ncz buffer wait wait_ms=3634 got=491952 rb_avail=2047568 downloaded=1922006824 installed=2470445056 starvation_total=119
+scheduler: current=114 critical=114..115 urgent=116..123
+installer: stats installed=2470445056 install_speed=611KB/s downloaded=1922006824 source_speed=1319KB/s consume_speed=1020KB/s rb_avail=2047568 rb_free=132170160 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=114 critical=114..115 urgent=116..123
+installer: ncz buffer wait wait_ms=2404 got=49584 rb_avail=523856 downloaded=1922580264 installed=2474639360 starvation_total=120
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1927380992 requested=4194304 got=1638400
+scheduler: current=115 critical=115..116 urgent=117..124
+collector: partial read advance offset=1941602304 requested=4194304 got=589824
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=115 critical=115..116 urgent=117..124
+collector: stats downloaded=1944895272 speed=4080KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1459 got=32768 rb_avail=0 downloaded=1944895272 installed=2499805184 starvation_total=121
+scheduler: current=115 critical=115..116 urgent=117..124
+installer: stats installed=2499805184 install_speed=5232KB/s downloaded=1944895272 source_speed=4079KB/s consume_speed=4444KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=116 critical=116..117 urgent=118..125
+collector: partial read advance offset=1958723584 requested=4194304 got=3178496
+scheduler: current=117 critical=117..118 urgent=119..126
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=117 critical=117..118 urgent=119..126
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=117 critical=117..118 urgent=119..126
+scheduler: boosted 3 slow-peer claims to Critical
+collector: partial read advance offset=1967226880 requested=4194304 got=16384
+scheduler: current=117 critical=117..118 urgent=119..126
+installer: ncz buffer wait wait_ms=549 got=16384 rb_avail=0 downloaded=1967243048 installed=2524971008 starvation_total=122
+collector: stats downloaded=1967275816 speed=4327KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2524971008 install_speed=4873KB/s downloaded=1967275816 source_speed=4334KB/s consume_speed=4334KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=117 critical=117..118 urgent=119..126
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=1977647104 requested=4194304 got=1851392
+scheduler: current=118 critical=118..119 urgent=120..127
+collector: partial read advance offset=1992081408 requested=4194304 got=1605632
+scheduler: current=119 critical=119..120 urgent=121..128
+scheduler: current=119 critical=119..120 urgent=121..128
+installer: ncz buffer wait wait_ms=1161 got=32768 rb_avail=0 downloaded=1996554024 installed=2558525440 starvation_total=123
+scheduler: current=119 critical=119..120 urgent=121..128
+collector: stats downloaded=1999519528 speed=6203KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2558525440 install_speed=6456KB/s downloaded=1999519528 source_speed=6203KB/s consume_speed=6203KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=2004762624 requested=4194304 got=65536
+scheduler: current=119 critical=119..120 urgent=121..128
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=120 critical=120..121 urgent=122..129
+collector: partial read advance offset=2016870400 requested=4194304 got=131072
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=120 critical=120..121 urgent=122..129
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=120 critical=120..121 urgent=122..129
+collector: partial read advance offset=2025275392 requested=4194304 got=311296
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=120 critical=120..121 urgent=122..129
+scheduler: current=121 critical=121..122 urgent=123..130
+collector: stats downloaded=2030075688 speed=5632KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+installer: ncz buffer wait wait_ms=745 got=16816 rb_avail=15952 downloaded=2030075688 installed=2592079872 starvation_total=124
+scheduler: boosted 2 slow-peer claims to Critical
+installer: stats installed=2592079872 install_speed=6175KB/s downloaded=2030075688 source_speed=5623KB/s consume_speed=5620KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+scheduler: current=121 critical=121..122 urgent=123..130
+installer: ncz buffer wait wait_ms=877 got=16384 rb_avail=0 downloaded=2030092072 installed=2592079872 starvation_total=125
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=121 critical=121..122 urgent=123..130
+installer: ncz buffer wait wait_ms=767 got=426416 rb_avail=3767888 downloaded=2034351912 installed=2592079872 starvation_total=126
+scheduler: current=122 critical=122..123 urgent=124..131
+collector: partial read advance offset=2046935040 requested=4194304 got=376832
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=122 critical=122..123 urgent=124..131
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2056536064 requested=4194304 got=1228800
+scheduler: current=122 critical=122..123 urgent=124..131
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=2062090024 speed=6210KB/s rb_avail=48720 rb_free=134169008 rb_cap=134217728
+installer: stats installed=2625634304 install_speed=6520KB/s downloaded=2062090024 source_speed=6221KB/s consume_speed=6215KB/s rb_avail=48720 rb_free=134169008 rb_cap=134217728
+scheduler: current=122 critical=122..123 urgent=124..131
+scheduler: current=123 critical=123..124 urgent=125..132
+collector: partial read advance offset=2067398656 requested=4194304 got=16384
+scheduler: current=123 critical=123..124 urgent=125..132
+collector: partial read advance offset=2076590080 requested=4194304 got=212992
+scheduler: current=123 critical=123..124 urgent=125..132
+scheduler: current=124 critical=124..125 urgent=126..133
+collector: partial read advance offset=2086191104 requested=4194304 got=507904
+scheduler: current=124 critical=124..125 urgent=126..133
+installer: ncz buffer wait wait_ms=1080 got=377264 rb_avail=458320 downloaded=2088714024 installed=2654994432 starvation_total=127
+collector: partial read advance offset=2094759936 requested=4194304 got=262144
+installer: stats installed=2667577344 install_speed=8099KB/s downloaded=2096709416 source_speed=6685KB/s consume_speed=6694KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: stats downloaded=2096725800 speed=6635KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=124 critical=124..125 urgent=126..133
+scheduler: current=125 critical=125..126 urgent=127..134
+collector: partial read advance offset=2104246272 requested=4194304 got=491520
+scheduler: current=125 critical=125..126 urgent=127..134
+collector: partial read advance offset=2112782336 requested=4194304 got=311296
+scheduler: current=126 critical=126..127 urgent=128..135
+installer: ncz buffer wait wait_ms=560 got=163840 rb_avail=0 downloaded=2114174760 installed=2684354560 starvation_total=128
+scheduler: current=126 critical=126..127 urgent=128..135
+collector: partial read advance offset=2122301440 requested=4194304 got=1343488
+collector: stats downloaded=2124365608 speed=5348KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1279 got=147456 rb_avail=0 downloaded=2124365608 installed=2692743168 starvation_total=129
+scheduler: current=126 critical=126..127 urgent=128..135
+installer: stats installed=2692743168 install_speed=4824KB/s downloaded=2124365608 source_speed=5302KB/s consume_speed=5302KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=518 got=65968 rb_avail=278096 downloaded=2124709672 installed=2692743168 starvation_total=130
+scheduler: current=126 critical=126..127 urgent=128..135
+installer: ncz buffer wait wait_ms=503 got=246192 rb_avail=523856 downloaded=2125479720 installed=2696937472 starvation_total=131
+scheduler: current=127 critical=127..128 urgent=129..136
+collector: partial read advance offset=2137817088 requested=4194304 got=49152
+scheduler: current=128 critical=128..129 urgent=130..137
+collector: partial read advance offset=2150563840 requested=4194304 got=802816
+scheduler: current=128 critical=128..129 urgent=130..137
+scheduler: current=128 critical=128..129 urgent=130..137
+installer: ncz buffer wait wait_ms=642 got=393648 rb_avail=3800656 downloaded=2160738088 installed=2730491904 starvation_total=132
+collector: partial read advance offset=2160738304 requested=4194304 got=229376
+collector: stats downloaded=2160967464 speed=7131KB/s rb_avail=1408592 rb_free=132809136 rb_cap=134217728
+installer: stats installed=2734686208 install_speed=8059KB/s downloaded=2160983848 source_speed=7036KB/s consume_speed=6863KB/s rb_avail=900688 rb_free=133317040 rb_cap=134217728
+scheduler: current=129 critical=129..130 urgent=131..138
+installer: ncz buffer wait wait_ms=3146 got=229808 rb_avail=3964496 downloaded=2168241960 installed=2738880512 starvation_total=133
+collector: partial read advance offset=2180825088 requested=4194304 got=212992
+scheduler: current=130 critical=130..131 urgent=132..139
+scheduler: current=130 critical=130..131 urgent=132..139
+collector: stats downloaded=2181627688 speed=4018KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2755657728 install_speed=4088KB/s downloaded=2181676840 source_speed=4033KB/s consume_speed=4209KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=130 critical=130..131 urgent=132..139
+scheduler: current=130 critical=130..131 urgent=132..139
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=130 critical=130..131 urgent=132..139
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=130 critical=130..131 urgent=132..139
+installer: ncz buffer wait wait_ms=599 got=16384 rb_avail=0 downloaded=2184806184 installed=2759852032 starvation_total=134
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2196258816 requested=4194304 got=638976
+scheduler: current=130 critical=130..131 urgent=132..139
+collector: stats downloaded=2201222952 speed=3713KB/s rb_avail=3391056 rb_free=130826672 rb_cap=134217728
+installer: stats installed=2772434944 install_speed=3220KB/s downloaded=2201222952 source_speed=3751KB/s consume_speed=3100KB/s rb_avail=3391056 rb_free=130826672 rb_cap=134217728
+scheduler: current=131 critical=131..132 urgent=133..140
+collector: partial read advance offset=2205990912 requested=4194304 got=3047424
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=131 critical=131..132 urgent=133..140
+scheduler: current=131 critical=131..132 urgent=133..140
+installer: ncz buffer wait wait_ms=939 got=81920 rb_avail=0 downloaded=2211069736 installed=2789212160 starvation_total=135
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=132 critical=132..133 urgent=134..141
+collector: partial read advance offset=2214739968 requested=4194304 got=16384
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=704 got=16384 rb_avail=0 downloaded=2214756136 installed=2793406464 starvation_total=136
+scheduler: current=132 critical=132..133 urgent=134..141
+installer: ncz buffer wait wait_ms=763 got=360880 rb_avail=3833424 downloaded=2218966824 installed=2793406464 starvation_total=137
+scheduler: current=133 critical=133..134 urgent=135..142
+collector: partial read advance offset=2231549952 requested=4194304 got=4030464
+collector: stats downloaded=2235580200 speed=6689KB/s rb_avail=18349648 rb_free=115868080 rb_cap=134217728
+installer: stats installed=2797600768 install_speed=4814KB/s downloaded=2235580200 source_speed=6573KB/s consume_speed=3811KB/s rb_avail=17825360 rb_free=116392368 rb_cap=134217728
+scheduler: current=133 critical=133..134 urgent=135..142
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=133 critical=133..134 urgent=135..142
+installer: ncz buffer wait wait_ms=622 got=432 rb_avail=2997840 downloaded=2241724200 installed=2818572288 starvation_total=138
+collector: partial read advance offset=2241724416 requested=4194304 got=131072
+scheduler: current=133 critical=133..134 urgent=135..142
+scheduler: current=133 critical=133..134 urgent=135..142
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=2242101032 speed=1260KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=2822766592 install_speed=4827KB/s downloaded=2242117416 source_speed=1253KB/s consume_speed=4673KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=133 critical=133..134 urgent=135..142
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=134 critical=134..135 urgent=136..143
+collector: partial read advance offset=2250637312 requested=4194304 got=376832
+scheduler: current=134 critical=134..135 urgent=136..143
+installer: ncz buffer wait wait_ms=818 got=147888 rb_avail=228944 downloaded=2251013928 installed=2831155200 starvation_total=139
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=134 critical=134..135 urgent=136..143
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=135 critical=135..136 urgent=137..144
+collector: partial read advance offset=2265284608 requested=4194304 got=557056
+scheduler: boosted 3 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=576 got=147888 rb_avail=179792 downloaded=2266169128 installed=2847932416 starvation_total=140
+collector: stats downloaded=2271215400 speed=4552KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1148 got=98304 rb_avail=0 downloaded=2271215400 installed=2852126720 starvation_total=141
+scheduler: current=135 critical=135..136 urgent=137..144
+installer: stats installed=2852126720 install_speed=4674KB/s downloaded=2271215400 source_speed=4633KB/s consume_speed=4633KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 4 slow-peer claims to Critical
+collector: partial read advance offset=2273673216 requested=4194304 got=16384
+scheduler: current=135 critical=135..136 urgent=137..144
+installer: ncz buffer wait wait_ms=1064 got=16384 rb_avail=0 downloaded=2273689384 installed=2856321024 starvation_total=142
+scheduler: boosted 5 slow-peer claims to Critical
+scheduler: current=135 critical=135..136 urgent=137..144
+installer: ncz buffer wait wait_ms=999 got=197040 rb_avail=540240 downloaded=2275966760 installed=2856321024 starvation_total=143
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=136 critical=136..137 urgent=138..145
+collector: partial read advance offset=2282061824 requested=4194304 got=16384
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=136 critical=136..137 urgent=138..145
+scheduler: current=137 critical=137..138 urgent=139..146
+collector: partial read advance offset=2298986496 requested=4194304 got=507904
+collector: stats downloaded=2299559720 speed=5503KB/s rb_avail=12598864 rb_free=121618864 rb_cap=134217728
+installer: stats installed=2873098240 install_speed=4075KB/s downloaded=2299559720 source_speed=5508KB/s consume_speed=3162KB/s rb_avail=12074576 rb_free=122143152 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=137 critical=137..138 urgent=139..146
+collector: partial read advance offset=2308079616 requested=4194304 got=196608
+scheduler: current=137 critical=137..138 urgent=139..146
+scheduler: current=137 critical=137..138 urgent=139..146
+scheduler: current=138 critical=138..139 urgent=140..147
+collector: partial read advance offset=2319843328 requested=4194304 got=2834432
+collector: stats downloaded=2323349288 speed=4145KB/s rb_avail=212560 rb_free=134005168 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1417 got=426416 rb_avail=212560 downloaded=2323349288 installed=2910846976 starvation_total=144
+scheduler: current=138 critical=138..139 urgent=140..147
+installer: stats installed=2910846976 install_speed=6581KB/s downloaded=2323349288 source_speed=4147KB/s consume_speed=6215KB/s rb_avail=212560 rb_free=134005168 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=2325430056 speed=313KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=5761 got=163840 rb_avail=0 downloaded=2325430056 installed=2910846976 starvation_total=145
+scheduler: current=138 critical=138..139 urgent=140..147
+installer: stats installed=2910846976 install_speed=0KB/s downloaded=2325430056 source_speed=313KB/s consume_speed=345KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=139 critical=139..140 urgent=141..148
+collector: partial read advance offset=2348220416 requested=4194304 got=589824
+scheduler: current=140 critical=140..141 urgent=142..149
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=140 critical=140..141 urgent=142..149
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=140 critical=140..141 urgent=142..149
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=140 critical=140..141 urgent=142..149
+installer: ncz buffer wait wait_ms=962 got=432 rb_avail=4193872 downloaded=2359312168 installed=2944401408 starvation_total=146
+scheduler: current=141 critical=141..142 urgent=143..150
+collector: partial read advance offset=2367700992 requested=4194304 got=147456
+collector: stats downloaded=2367848232 speed=7506KB/s rb_avail=147024 rb_free=134070704 rb_cap=134217728
+installer: ncz buffer wait wait_ms=684 got=432 rb_avail=147024 downloaded=2367848232 installed=2961178624 starvation_total=147
+scheduler: current=141 critical=141..142 urgent=143..150
+installer: stats installed=2961178624 install_speed=8905KB/s downloaded=2367848232 source_speed=7505KB/s consume_speed=7479KB/s rb_avail=147024 rb_free=134070704 rb_cap=134217728
+scheduler: current=141 critical=141..142 urgent=143..150
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=141 critical=141..142 urgent=143..150
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=141 critical=141..142 urgent=143..150
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=2375515944 speed=839KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=5159 got=16384 rb_avail=0 downloaded=2375515944 installed=2969567232 starvation_total=148
+scheduler: current=141 critical=141..142 urgent=143..150
+installer: stats installed=2969567232 install_speed=918KB/s downloaded=2375515944 source_speed=839KB/s consume_speed=855KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=560 got=16384 rb_avail=0 downloaded=2375532328 installed=2969567232 starvation_total=149
+scheduler: current=142 critical=142..143 urgent=144..151
+scheduler: current=143 critical=143..144 urgent=145..152
+collector: partial read advance offset=2400698368 requested=4194304 got=2310144
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=143 critical=143..144 urgent=145..152
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2412347392 requested=4194304 got=1687552
+collector: stats downloaded=2414100264 speed=7177KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2387 got=65536 rb_avail=0 downloaded=2414100264 installed=3011510272 starvation_total=150
+scheduler: current=143 critical=143..144 urgent=145..152
+installer: stats installed=3011510272 install_speed=7798KB/s downloaded=2414100264 source_speed=7174KB/s consume_speed=7174KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=144 critical=144..145 urgent=146..153
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2423242752 requested=4194304 got=81920
+scheduler: current=144 critical=144..145 urgent=146..153
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=684 got=344496 rb_avail=245328 downloaded=2426142504 installed=3024093184 starvation_total=151
+scheduler: current=145 critical=145..146 urgent=147..154
+collector: partial read advance offset=2432696320 requested=4194304 got=16384
+scheduler: current=145 critical=145..146 urgent=147..154
+installer: ncz buffer wait wait_ms=1635 got=16384 rb_avail=0 downloaded=2432712488 installed=3028287488 starvation_total=152
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=2433318696 speed=3625KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=3032481792 install_speed=3962KB/s downloaded=2433318696 source_speed=3630KB/s consume_speed=3630KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=145 critical=145..146 urgent=147..154
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2441117696 requested=4194304 got=1671168
+scheduler: current=145 critical=145..146 urgent=147..154
+scheduler: current=146 critical=146..147 urgent=148..155
+collector: partial read advance offset=2457010176 requested=4194304 got=458752
+scheduler: current=146 critical=146..147 urgent=148..155
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=146 critical=146..147 urgent=148..155
+installer: ncz buffer wait wait_ms=534 got=344064 rb_avail=0 downloaded=2461482792 installed=3061841920 starvation_total=153
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=146 critical=146..147 urgent=148..155
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=147 critical=147..148 urgent=149..156
+installer: stats installed=3074424832 install_speed=8076KB/s downloaded=2466250536 source_speed=6341KB/s consume_speed=6341KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=2466250752 requested=4194304 got=16384
+collector: stats downloaded=2466266920 speed=6083KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=643 got=432 rb_avail=97872 downloaded=2466365224 installed=3074424832 starvation_total=154
+scheduler: current=147 critical=147..148 urgent=149..156
+scheduler: current=148 critical=148..149 urgent=150..157
+collector: partial read advance offset=2483273728 requested=4194304 got=180224
+scheduler: current=148 critical=148..149 urgent=150..157
+installer: ncz buffer wait wait_ms=1861 got=98304 rb_avail=0 downloaded=2483552040 installed=3091202048 starvation_total=155
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2492186624 requested=4194304 got=983040
+installer: stats installed=3103784960 install_speed=5614KB/s downloaded=2494725928 source_speed=5445KB/s consume_speed=5445KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: stats downloaded=2494742312 speed=4905KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=775 got=16384 rb_avail=0 downloaded=2494742312 installed=3103784960 starvation_total=156
+scheduler: current=148 critical=148..149 urgent=150..157
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=149 critical=149..150 urgent=151..158
+installer: ncz buffer wait wait_ms=563 got=16384 rb_avail=0 downloaded=2499821352 installed=3107979264 starvation_total=157
+scheduler: current=149 critical=149..150 urgent=151..158
+installer: ncz buffer wait wait_ms=694 got=432 rb_avail=687696 downloaded=2500509480 installed=3107979264 starvation_total=158
+scheduler: boosted 3 slow-peer claims to Critical
+collector: partial read advance offset=2501214208 requested=4194304 got=245760
+collector: partial read advance offset=2513174528 requested=4194304 got=802816
+scheduler: current=150 critical=150..151 urgent=152..159
+scheduler: current=150 critical=150..151 urgent=152..159
+installer: ncz buffer wait wait_ms=941 got=16816 rb_avail=2489936 downloaded=2521710376 installed=3133145088 starvation_total=159
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2521710592 requested=4194304 got=573440
+installer: stats installed=3137339392 install_speed=6443KB/s downloaded=2522677032 source_speed=5367KB/s consume_speed=5367KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=609 got=81920 rb_avail=0 downloaded=2522758952 installed=3137339392 starvation_total=160
+collector: stats downloaded=2522922792 speed=4299KB/s rb_avail=32336 rb_free=134185392 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1420 got=16816 rb_avail=32336 downloaded=2522922792 installed=3137339392 starvation_total=161
+scheduler: current=150 critical=150..151 urgent=152..159
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=150 critical=150..151 urgent=152..159
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=151 critical=151..152 urgent=153..160
+collector: partial read advance offset=2548563968 requested=4194304 got=3522560
+scheduler: current=152 critical=152..153 urgent=154..161
+scheduler: boosted 1 slow-peer claims to Critical
+installer: stats installed=3170893824 install_speed=6414KB/s downloaded=2555641640 source_speed=6302KB/s consume_speed=6255KB/s rb_avail=245328 rb_free=133972400 rb_cap=134217728
+scheduler: current=152 critical=152..153 urgent=154..161
+collector: partial read advance offset=2558132224 requested=4194304 got=212992
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=152 critical=152..153 urgent=154..161
+collector: stats downloaded=2560802600 speed=7281KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=608 got=16384 rb_avail=0 downloaded=2560802600 installed=3179282432 starvation_total=162
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=152 critical=152..153 urgent=154..161
+scheduler: current=152 critical=152..153 urgent=154..161
+installer: ncz buffer wait wait_ms=1373 got=377264 rb_avail=1850960 downloaded=2566160168 installed=3179282432 starvation_total=163
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=153 critical=153..154 urgent=155..162
+collector: partial read advance offset=2567389184 requested=4194304 got=65536
+installer: ncz buffer wait wait_ms=540 got=432 rb_avail=179792 downloaded=2567634728 installed=3183476736 starvation_total=164
+scheduler: boosted 2 slow-peer claims to Critical
+installer: stats installed=3183476736 install_speed=2418KB/s downloaded=2567667496 source_speed=2311KB/s consume_speed=2358KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=153 critical=153..154 urgent=155..162
+collector: stats downloaded=2571976488 speed=2002KB/s rb_avail=3997264 rb_free=130220464 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1903 got=197040 rb_avail=3997264 downloaded=2571976488 installed=3183476736 starvation_total=165
+scheduler: current=153 critical=153..154 urgent=155..162
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2580365312 requested=4194304 got=3375104
+scheduler: current=154 critical=154..155 urgent=156..163
+scheduler: current=154 critical=154..155 urgent=156..163
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2589622272 requested=4194304 got=2949120
+scheduler: current=154 critical=154..155 urgent=156..163
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=155 critical=155..156 urgent=157..164
+collector: partial read advance offset=2600468480 requested=4194304 got=180224
+scheduler: current=155 critical=155..156 urgent=157..164
+installer: ncz buffer wait wait_ms=1186 got=16816 rb_avail=163408 downloaded=2600648488 installed=3221225472 starvation_total=166
+scheduler: boosted 2 slow-peer claims to Critical
+installer: stats installed=3221225472 install_speed=5957KB/s downloaded=2600648488 source_speed=5204KB/s consume_speed=5178KB/s rb_avail=163408 rb_free=134054320 rb_cap=134217728
+collector: stats downloaded=2601074472 speed=4540KB/s rb_avail=65104 rb_free=134152624 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2495 got=360880 rb_avail=65104 downloaded=2601074472 installed=3221225472 starvation_total=167
+scheduler: current=155 critical=155..156 urgent=157..164
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=155 critical=155..156 urgent=157..164
+installer: ncz buffer wait wait_ms=963 got=311728 rb_avail=3882576 downloaded=2605416232 installed=3221225472 starvation_total=168
+scheduler: boosted 3 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=893 got=16384 rb_avail=0 downloaded=2606448424 installed=3225419776 starvation_total=169
+scheduler: current=155 critical=155..156 urgent=157..164
+scheduler: boosted 4 slow-peer claims to Critical
+installer: stats installed=3225419776 install_speed=811KB/s downloaded=2606497576 source_speed=1131KB/s consume_speed=1163KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=155 critical=155..156 urgent=157..164
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=156 critical=156..157 urgent=158..165
+collector: partial read advance offset=2632138752 requested=4194304 got=2146304
+scheduler: current=157 critical=157..158 urgent=159..166
+scheduler: boosted 3 slow-peer claims to Critical
+collector: stats downloaded=2634317608 speed=5874KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=838 got=16384 rb_avail=0 downloaded=2634317608 installed=3254779904 starvation_total=170
+scheduler: current=157 critical=157..158 urgent=159..166
+scheduler: boosted 3 slow-peer claims to Critical
+collector: partial read advance offset=2641035264 requested=4194304 got=163840
+scheduler: current=157 critical=157..158 urgent=159..166
+installer: ncz buffer wait wait_ms=1093 got=163840 rb_avail=0 downloaded=2641198888 installed=3263168512 starvation_total=171
+scheduler: boosted 3 slow-peer claims to Critical
+installer: stats installed=3263168512 install_speed=7098KB/s downloaded=2641444648 source_speed=6571KB/s consume_speed=6559KB/s rb_avail=65104 rb_free=134152624 rb_cap=134217728
+scheduler: current=157 critical=157..158 urgent=159..166
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=158 critical=158..159 urgent=160..167
+collector: partial read advance offset=2665070592 requested=4194304 got=835584
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=159 critical=159..160 urgent=161..168
+collector: stats downloaded=2672148264 speed=6664KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=607 got=65536 rb_avail=0 downloaded=2672148264 installed=3296722944 starvation_total=172
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=159 critical=159..160 urgent=161..168
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2680864768 requested=4194304 got=802816
+scheduler: current=160 critical=160..161 urgent=162..169
+installer: stats installed=3309305856 install_speed=8354KB/s downloaded=2684796712 source_speed=7850KB/s consume_speed=7861KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=160 critical=160..161 urgent=162..169
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=160 critical=160..161 urgent=162..169
+installer: ncz buffer wait wait_ms=519 got=32768 rb_avail=0 downloaded=2685730600 installed=3309305856 starvation_total=173
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=2688892712 speed=2799KB/s rb_avail=327248 rb_free=133890480 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1155 got=278960 rb_avail=327248 downloaded=2688892712 installed=3313500160 starvation_total=174
+scheduler: current=160 critical=160..161 urgent=162..169
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2693087232 requested=4194304 got=4161536
+scheduler: current=161 critical=161..162 urgent=163..170
+collector: partial read advance offset=2710093824 requested=4194304 got=2146304
+installer: stats installed=3334471680 install_speed=4857KB/s downloaded=2712239912 source_speed=5297KB/s consume_speed=3864KB/s rb_avail=7421520 rb_free=126796208 rb_cap=134217728
+scheduler: current=161 critical=161..162 urgent=163..170
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=162 critical=162..163 urgent=164..171
+collector: partial read advance offset=2719891456 requested=4194304 got=212992
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=162 critical=162..163 urgent=164..171
+installer: ncz buffer wait wait_ms=946 got=16384 rb_avail=0 downloaded=2722316072 installed=3351248896 starvation_total=175
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2730639360 requested=4194304 got=65536
+collector: stats downloaded=2730786600 speed=8087KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=162 critical=162..163 urgent=164..171
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=163 critical=163..164 urgent=165..172
+installer: stats installed=3368026112 install_speed=6469KB/s downloaded=2735013672 source_speed=4390KB/s consume_speed=5821KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=163 critical=163..164 urgent=165..172
+installer: ncz buffer wait wait_ms=1497 got=16384 rb_avail=0 downloaded=2735030056 installed=3368026112 starvation_total=176
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2743418880 requested=4194304 got=2686976
+scheduler: current=163 critical=163..164 urgent=165..172
+installer: ncz buffer wait wait_ms=816 got=458752 rb_avail=0 downloaded=2746728232 installed=3380609024 starvation_total=177
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=2751463208 speed=3959KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=164 critical=164..165 urgent=166..173
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=668 got=16384 rb_avail=0 downloaded=2751479592 installed=3393191936 starvation_total=178
+scheduler: current=164 critical=164..165 urgent=166..173
+installer: stats installed=3393191936 install_speed=4785KB/s downloaded=2751610664 source_speed=3156KB/s consume_speed=3156KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=164 critical=164..165 urgent=166..173
+collector: partial read advance offset=2751807488 requested=4194304 got=81920
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=760 got=98304 rb_avail=0 downloaded=2751987496 installed=3393191936 starvation_total=179
+scheduler: current=164 critical=164..165 urgent=166..173
+collector: partial read advance offset=2764570624 requested=4194304 got=3719168
+scheduler: current=165 critical=165..166 urgent=167..174
+collector: partial read advance offset=2772992000 requested=4194304 got=2768896
+collector: partial read advance offset=2781970432 requested=4194304 got=3047424
+scheduler: current=166 critical=166..167 urgent=168..175
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=2785312552 speed=5690KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1380 got=32768 rb_avail=0 downloaded=2785312552 installed=3430940672 starvation_total=180
+scheduler: current=166 critical=166..167 urgent=168..175
+scheduler: boosted 1 slow-peer claims to Critical
+installer: stats installed=3430940672 install_speed=7057KB/s downloaded=2786344744 source_speed=6493KB/s consume_speed=6346KB/s rb_avail=786000 rb_free=133431728 rb_cap=134217728
+scheduler: current=166 critical=166..167 urgent=168..175
+installer: ncz buffer wait wait_ms=692 got=16384 rb_avail=0 downloaded=2786361128 installed=3430940672 starvation_total=181
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=166 critical=166..167 urgent=168..175
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=167 critical=167..168 urgent=169..176
+collector: partial read advance offset=2803154944 requested=4194304 got=802816
+scheduler: current=167 critical=167..168 urgent=169..176
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=167 critical=167..168 urgent=169..176
+installer: ncz buffer wait wait_ms=519 got=114688 rb_avail=0 downloaded=2806677288 installed=3451912192 starvation_total=182
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=2808905512 speed=4304KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=167 critical=167..168 urgent=169..176
+installer: ncz buffer wait wait_ms=1806 got=81920 rb_avail=0 downloaded=2808987432 installed=3456106496 starvation_total=183
+scheduler: boosted 1 slow-peer claims to Critical
+installer: stats installed=3456106496 install_speed=3820KB/s downloaded=2808987432 source_speed=3437KB/s consume_speed=3556KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=167 critical=167..168 urgent=169..176
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=168 critical=168..169 urgent=170..177
+scheduler: current=169 critical=169..170 urgent=171..178
+collector: partial read advance offset=2838724608 requested=4194304 got=49152
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=169 critical=169..170 urgent=171..178
+installer: ncz buffer wait wait_ms=760 got=278528 rb_avail=0 downloaded=2842066728 installed=3493855232 starvation_total=184
+collector: stats downloaded=2842148648 speed=6377KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=169 critical=169..170 urgent=171..178
+scheduler: boosted 2 slow-peer claims to Critical
+installer: stats installed=3498049536 install_speed=8160KB/s downloaded=2845163304 source_speed=7038KB/s consume_speed=7038KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=169 critical=169..170 urgent=171..178
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=169 critical=169..170 urgent=171..178
+installer: ncz buffer wait wait_ms=1839 got=163840 rb_avail=0 downloaded=2846555944 installed=3498049536 starvation_total=185
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=2849783808 requested=4194304 got=180224
+scheduler: current=170 critical=170..171 urgent=172..179
+scheduler: current=171 critical=171..172 urgent=173..180
+collector: partial read advance offset=2870951936 requested=4194304 got=786432
+collector: stats downloaded=2871836456 speed=4761KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=586 got=98304 rb_avail=0 downloaded=2871836456 installed=3527409664 starvation_total=186
+scheduler: current=171 critical=171..172 urgent=173..180
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=547 got=229808 rb_avail=851536 downloaded=2872917800 installed=3527409664 starvation_total=187
+scheduler: current=171 critical=171..172 urgent=173..180
+installer: ncz buffer wait wait_ms=2079 got=82352 rb_avail=605776 downloaded=2874244904 installed=3527409664 starvation_total=188
+scheduler: boosted 2 slow-peer claims to Critical
+installer: stats installed=3527409664 install_speed=4075KB/s downloaded=2874244904 source_speed=4036KB/s consume_speed=3952KB/s rb_avail=605776 rb_free=133611952 rb_cap=134217728
+scheduler: current=171 critical=171..172 urgent=173..180
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=2881945384 speed=1606KB/s rb_avail=4111952 rb_free=130105776 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2278 got=82352 rb_avail=4111952 downloaded=2881945384 installed=3531603968 starvation_total=189
+scheduler: current=171 critical=171..172 urgent=173..180
+scheduler: current=172 critical=172..173 urgent=174..181
+collector: partial read advance offset=2898722816 requested=4194304 got=4128768
+scheduler: current=173 critical=173..174 urgent=175..182
+scheduler: current=173 critical=173..174 urgent=175..182
+scheduler: boosted 2 slow-peer claims to Critical
+installer: stats installed=3565158400 install_speed=7212KB/s downloaded=2904866600 source_speed=5850KB/s consume_speed=5910KB/s rb_avail=294480 rb_free=133923248 rb_cap=134217728
+scheduler: current=173 critical=173..174 urgent=175..182
+installer: ncz buffer wait wait_ms=760 got=98736 rb_avail=15952 downloaded=2905112360 installed=3565158400 starvation_total=190
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=602 got=114688 rb_avail=0 downloaded=2905227048 installed=3565158400 starvation_total=191
+scheduler: current=173 critical=173..174 urgent=175..182
+installer: ncz buffer wait wait_ms=1174 got=16384 rb_avail=0 downloaded=2905243432 installed=3565158400 starvation_total=192
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2909683712 requested=4194304 got=1048576
+collector: stats downloaded=2910879528 speed=5593KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+scheduler: current=174 critical=174..175 urgent=176..183
+collector: partial read advance offset=2919301120 requested=4194304 got=4177920
+collector: partial read advance offset=2927689728 requested=4194304 got=3080192
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=174 critical=174..175 urgent=176..183
+collector: stats downloaded=2932883240 speed=3341KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=5043 got=131072 rb_avail=0 downloaded=2932883240 installed=3594518528 starvation_total=193
+scheduler: current=174 critical=174..175 urgent=176..183
+installer: stats installed=3594518528 install_speed=2915KB/s downloaded=2932883240 source_speed=2782KB/s consume_speed=2811KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=175 critical=175..176 urgent=177..184
+collector: partial read advance offset=2938470400 requested=4194304 got=2342912
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=2949890048 requested=4194304 got=2899968
+scheduler: current=176 critical=176..177 urgent=178..185
+installer: ncz buffer wait wait_ms=510 got=49152 rb_avail=0 downloaded=2952904488 installed=3619684352 starvation_total=194
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=176 critical=176..177 urgent=178..185
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=176 critical=176..177 urgent=178..185
+installer: ncz buffer wait wait_ms=526 got=16384 rb_avail=0 downloaded=2953396008 installed=3619684352 starvation_total=195
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=176 critical=176..177 urgent=178..185
+collector: partial read advance offset=2958753792 requested=4194304 got=16384
+collector: stats downloaded=2958802728 speed=5005KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=3623878656 install_speed=5676KB/s downloaded=2958802728 source_speed=5011KB/s consume_speed=5011KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=176 critical=176..177 urgent=178..185
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=176 critical=176..177 urgent=178..185
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=176 critical=176..177 urgent=178..185
+scheduler: current=177 critical=177..178 urgent=179..186
+collector: partial read advance offset=2977808384 requested=4194304 got=425984
+scheduler: current=177 critical=177..178 urgent=179..186
+installer: ncz buffer wait wait_ms=599 got=32768 rb_avail=0 downloaded=2979069736 installed=3649044480 starvation_total=196
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=2980118312 speed=3641KB/s rb_avail=573008 rb_free=133644720 rb_cap=134217728
+installer: ncz buffer wait wait_ms=940 got=49584 rb_avail=573008 downloaded=2980118312 installed=3649044480 starvation_total=197
+scheduler: current=177 critical=177..178 urgent=179..186
+installer: stats installed=3649044480 install_speed=4294KB/s downloaded=2980118312 source_speed=3637KB/s consume_speed=3539KB/s rb_avail=573008 rb_free=133644720 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=600 got=98736 rb_avail=1424976 downloaded=2982018856 installed=3649044480 starvation_total=198
+scheduler: current=177 critical=177..178 urgent=179..186
+installer: ncz buffer wait wait_ms=1503 got=147888 rb_avail=163408 downloaded=2982330152 installed=3653238784 starvation_total=199
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=178 critical=178..179 urgent=180..187
+collector: partial read advance offset=2986524672 requested=4194304 got=2834432
+collector: partial read advance offset=3001942016 requested=4194304 got=1261568
+scheduler: current=179 critical=179..180 urgent=181..188
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=179 critical=179..180 urgent=181..188
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=179 critical=179..180 urgent=181..188
+collector: stats downloaded=3007299368 speed=5256KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=3682598912 install_speed=6498KB/s downloaded=3007299368 source_speed=5264KB/s consume_speed=5375KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=3013836800 requested=4194304 got=3899392
+scheduler: current=179 critical=179..180 urgent=181..188
+scheduler: current=180 critical=180..181 urgent=182..189
+collector: partial read advance offset=3023863808 requested=4194304 got=32768
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=180 critical=180..181 urgent=182..189
+installer: ncz buffer wait wait_ms=1686 got=49152 rb_avail=0 downloaded=3023994664 installed=3699376128 starvation_total=200
+scheduler: current=180 critical=180..181 urgent=182..189
+installer: ncz buffer wait wait_ms=990 got=65536 rb_avail=0 downloaded=3028991784 installed=3707764736 starvation_total=201
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=3032121128 speed=4811KB/s rb_avail=1719888 rb_free=132497840 rb_cap=134217728
+installer: stats installed=3707764736 install_speed=4877KB/s downloaded=3032121128 source_speed=4810KB/s consume_speed=4477KB/s rb_avail=1719888 rb_free=132497840 rb_cap=134217728
+scheduler: current=181 critical=181..182 urgent=183..190
+collector: partial read advance offset=3053256704 requested=4194304 got=196608
+scheduler: current=182 critical=182..183 urgent=184..191
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=182 critical=182..183 urgent=184..191
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=182 critical=182..183 urgent=184..191
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=182 critical=182..183 urgent=184..191
+collector: stats downloaded=3060465448 speed=5439KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1606 got=49152 rb_avail=0 downloaded=3060465448 installed=3741319168 starvation_total=202
+scheduler: current=182 critical=182..183 urgent=184..191
+installer: stats installed=3741319168 install_speed=6431KB/s downloaded=3060465448 source_speed=5432KB/s consume_speed=5762KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=3064119296 requested=4194304 got=16384
+scheduler: current=183 critical=183..184 urgent=185..192
+collector: partial read advance offset=3074736128 requested=4194304 got=49152
+scheduler: current=183 critical=183..184 urgent=185..192
+installer: ncz buffer wait wait_ms=1280 got=16384 rb_avail=0 downloaded=3074801448 installed=3758096384 starvation_total=203
+collector: partial read advance offset=3083567104 requested=4194304 got=163840
+scheduler: current=183 critical=183..184 urgent=185..192
+collector: stats downloaded=3085287208 speed=4047KB/s rb_avail=884304 rb_free=133333424 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2239 got=33200 rb_avail=884304 downloaded=3085287208 installed=3766484992 starvation_total=204
+scheduler: current=183 critical=183..184 urgent=185..192
+installer: stats installed=3766484992 install_speed=4103KB/s downloaded=3085287208 source_speed=4047KB/s consume_speed=3903KB/s rb_avail=884304 rb_free=133333424 rb_cap=134217728
+scheduler: current=184 critical=184..185 urgent=186..193
+collector: partial read advance offset=3102572544 requested=4194304 got=1212416
+scheduler: current=185 critical=185..186 urgent=187..194
+scheduler: current=185 critical=185..186 urgent=187..194
+scheduler: current=185 critical=185..186 urgent=187..194
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3113943040 requested=4194304 got=1015808
+scheduler: current=185 critical=185..186 urgent=187..194
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=186 critical=186..187 urgent=188..195
+collector: partial read advance offset=3124690944 requested=4194304 got=802816
+collector: stats downloaded=3125870376 speed=7378KB/s rb_avail=48720 rb_free=134169008 rb_cap=134217728
+installer: ncz buffer wait wait_ms=882 got=328112 rb_avail=48720 downloaded=3125870376 installed=3812622336 starvation_total=205
+scheduler: current=186 critical=186..187 urgent=188..195
+installer: stats installed=3812622336 install_speed=8383KB/s downloaded=3125870376 source_speed=7374KB/s consume_speed=7526KB/s rb_avail=48720 rb_free=134169008 rb_cap=134217728
+scheduler: current=186 critical=186..187 urgent=188..195
+collector: partial read advance offset=3134177280 requested=4194304 got=16384
+scheduler: current=187 critical=187..188 urgent=189..196
+installer: ncz buffer wait wait_ms=621 got=432 rb_avail=3997264 downloaded=3143974696 installed=3829399552 starvation_total=206
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=187 critical=187..188 urgent=189..196
+installer: ncz buffer wait wait_ms=1088 got=197040 rb_avail=3997264 downloaded=3148169000 installed=3833593856 starvation_total=207
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3148169216 requested=4194304 got=1392640
+installer: ncz buffer wait wait_ms=696 got=32768 rb_avail=0 downloaded=3149594408 installed=3841982464 starvation_total=208
+scheduler: current=187 critical=187..188 urgent=189..196
+scheduler: current=188 critical=188..189 urgent=190..197
+collector: partial read advance offset=3162177536 requested=4194304 got=1179648
+installer: stats installed=3854565376 install_speed=8115KB/s downloaded=3164618536 source_speed=7497KB/s consume_speed=6898KB/s rb_avail=3145296 rb_free=131072432 rb_cap=134217728
+collector: stats downloaded=3164634920 speed=7386KB/s rb_avail=540240 rb_free=133677488 rb_cap=134217728
+scheduler: current=189 critical=189..190 urgent=191..198
+collector: partial read advance offset=3170975744 requested=4194304 got=114688
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=189 critical=189..190 urgent=191..198
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=189 critical=189..190 urgent=191..198
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3181871104 requested=4194304 got=65536
+scheduler: current=189 critical=189..190 urgent=191..198
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=190 critical=190..191 urgent=192..199
+collector: partial read advance offset=3192586240 requested=4194304 got=3407872
+collector: stats downloaded=3196059432 speed=5562KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=720 got=32768 rb_avail=0 downloaded=3196059432 installed=3892314112 starvation_total=209
+scheduler: current=190 critical=190..191 urgent=192..199
+installer: stats installed=3892314112 install_speed=6589KB/s downloaded=3196059432 source_speed=5488KB/s consume_speed=6037KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3203825664 requested=4194304 got=16384
+scheduler: current=191 critical=191..192 urgent=193..200
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=191 critical=191..192 urgent=193..200
+collector: partial read advance offset=3212951552 requested=4194304 got=753664
+scheduler: current=191 critical=191..192 urgent=193..200
+installer: ncz buffer wait wait_ms=2141 got=426416 rb_avail=3767888 downloaded=3218194216 installed=3913285632 starvation_total=210
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=3220438824 speed=3543KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2115 got=81920 rb_avail=0 downloaded=3220438824 installed=3921674240 starvation_total=211
+scheduler: current=191 critical=191..192 urgent=193..200
+installer: stats installed=3921674240 install_speed=4268KB/s downloaded=3220438824 source_speed=3544KB/s consume_speed=3544KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=192 critical=192..193 urgent=194..201
+collector: partial read advance offset=3233775616 requested=4194304 got=1441792
+scheduler: current=193 critical=193..194 urgent=195..202
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=193 critical=193..194 urgent=195..202
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=193 critical=193..194 urgent=195..202
+scheduler: current=193 critical=193..194 urgent=195..202
+installer: ncz buffer wait wait_ms=760 got=65536 rb_avail=0 downloaded=3241606952 installed=3946840064 starvation_total=212
+collector: stats downloaded=3241819944 speed=3861KB/s rb_avail=130640 rb_free=134087088 rb_cap=134217728
+installer: ncz buffer wait wait_ms=998 got=82352 rb_avail=130640 downloaded=3241819944 installed=3946840064 starvation_total=213
+scheduler: current=193 critical=193..194 urgent=195..202
+installer: stats installed=3946840064 install_speed=4544KB/s downloaded=3241819944 source_speed=3861KB/s consume_speed=3837KB/s rb_avail=130640 rb_free=134087088 rb_cap=134217728
+collector: partial read advance offset=3246243840 requested=4194304 got=1130496
+scheduler: current=193 critical=193..194 urgent=195..202
+scheduler: current=193 critical=193..194 urgent=195..202
+installer: ncz buffer wait wait_ms=2029 got=508336 rb_avail=3685968 downloaded=3251666728 installed=3951034368 starvation_total=214
+scheduler: current=194 critical=194..195 urgent=196..203
+scheduler: current=195 critical=195..196 urgent=197..204
+collector: partial read advance offset=3278979072 requested=4194304 got=3162112
+collector: stats downloaded=3283402536 speed=8102KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=3992977408 install_speed=9003KB/s downloaded=3283402536 source_speed=8114KB/s consume_speed=8140KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=195 critical=195..196 urgent=197..204
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=195 critical=195..196 urgent=197..204
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=195 critical=195..196 urgent=197..204
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=728 got=212992 rb_avail=0 downloaded=3286056744 installed=3992977408 starvation_total=215
+scheduler: current=195 critical=195..196 urgent=197..204
+installer: ncz buffer wait wait_ms=1554 got=16384 rb_avail=0 downloaded=3286073128 installed=3992977408 starvation_total=216
+collector: stats downloaded=3286695720 speed=642KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=3992977408 install_speed=0KB/s downloaded=3286695720 source_speed=642KB/s consume_speed=642KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=3287924736 requested=4194304 got=16384
+scheduler: current=196 critical=196..197 urgent=198..205
+scheduler: current=197 critical=197..198 urgent=199..206
+collector: partial read advance offset=3317415936 requested=4194304 got=1687552
+scheduler: current=197 critical=197..198 urgent=199..206
+installer: ncz buffer wait wait_ms=988 got=16384 rb_avail=0 downloaded=3319152424 installed=4030726144 starvation_total=217
+scheduler: current=197 critical=197..198 urgent=199..206
+scheduler: current=198 critical=198..199 urgent=200..207
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=3322363688 speed=6294KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1206 got=32768 rb_avail=0 downloaded=3322363688 installed=4034920448 starvation_total=218
+scheduler: current=198 critical=198..199 urgent=200..207
+installer: stats installed=4034920448 install_speed=7386KB/s downloaded=3322363688 source_speed=6281KB/s consume_speed=6281KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=560 got=32768 rb_avail=0 downloaded=3322396456 installed=4034920448 starvation_total=219
+collector: partial read advance offset=3330785280 requested=4194304 got=2883584
+scheduler: current=198 critical=198..199 urgent=200..207
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=199 critical=199..200 urgent=201..208
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=199 critical=199..200 urgent=201..208
+installer: ncz buffer wait wait_ms=1209 got=49152 rb_avail=0 downloaded=3338747688 installed=4051697664 starvation_total=220
+scheduler: boosted 4 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=700 got=49152 rb_avail=0 downloaded=3338878760 installed=4051697664 starvation_total=221
+collector: stats downloaded=3338895144 speed=2514KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1813 got=16384 rb_avail=0 downloaded=3338895144 installed=4051697664 starvation_total=222
+scheduler: current=199 critical=199..200 urgent=201..208
+installer: stats installed=4051697664 install_speed=2551KB/s downloaded=3338895144 source_speed=2514KB/s consume_speed=2514KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=199 critical=199..200 urgent=201..208
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3347578880 requested=4194304 got=1179648
+scheduler: current=200 critical=200..201 urgent=202..209
+scheduler: current=201 critical=201..202 urgent=203..210
+collector: partial read advance offset=3372220416 requested=4194304 got=114688
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=201 critical=201..202 urgent=203..210
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=201 critical=201..202 urgent=203..210
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=3376348968 speed=7194KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4093640704 install_speed=8075KB/s downloaded=3376348968 source_speed=7211KB/s consume_speed=7211KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=201 critical=201..202 urgent=203..210
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=202 critical=202..203 urgent=204..211
+collector: partial read advance offset=3389718528 requested=4194304 got=4096000
+scheduler: current=202 critical=202..203 urgent=204..211
+collector: partial read advance offset=3399188480 requested=4194304 got=1671168
+scheduler: current=202 critical=202..203 urgent=204..211
+installer: ncz buffer wait wait_ms=2122 got=278960 rb_avail=3915344 downloaded=3405512488 installed=4123000832 starvation_total=223
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=203 critical=203..204 urgent=205..212
+collector: stats downloaded=3406020392 speed=5774KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4127195136 install_speed=6529KB/s downloaded=3406020392 source_speed=5774KB/s consume_speed=5774KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=3410378752 requested=4194304 got=1376256
+scheduler: current=203 critical=203..204 urgent=205..212
+collector: partial read advance offset=3420143616 requested=4194304 got=2408448
+scheduler: current=204 critical=204..205 urgent=206..213
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=204 critical=204..205 urgent=206..213
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=204 critical=204..205 urgent=206..213
+collector: stats downloaded=3426762536 speed=2898KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=4140 got=16384 rb_avail=0 downloaded=3426762536 installed=4148166656 starvation_total=224
+scheduler: current=204 critical=204..205 urgent=206..213
+installer: stats installed=4148166656 install_speed=2927KB/s downloaded=3426762536 source_speed=2895KB/s consume_speed=2895KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=205 critical=205..206 urgent=207..214
+scheduler: current=206 critical=206..207 urgent=208..215
+collector: partial read advance offset=3460431872 requested=4194304 got=1654784
+scheduler: current=206 critical=206..207 urgent=208..215
+collector: partial read advance offset=3470295040 requested=4194304 got=196608
+scheduler: current=206 critical=206..207 urgent=208..215
+installer: ncz buffer wait wait_ms=780 got=278960 rb_avail=687696 downloaded=3471490856 installed=4198498304 starvation_total=225
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=207 critical=207..208 urgent=209..216
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=782 got=442800 rb_avail=1326672 downloaded=3476324136 installed=4202692608 starvation_total=226
+scheduler: current=207 critical=207..208 urgent=209..216
+collector: stats downloaded=3476537128 speed=9493KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4206886912 install_speed=11216KB/s downloaded=3476537128 source_speed=9507KB/s consume_speed=9507KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+collector: partial read advance offset=3479928832 requested=4194304 got=475136
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=207 critical=207..208 urgent=209..216
+collector: partial read advance offset=3488514048 requested=4194304 got=1146880
+scheduler: current=208 critical=208..209 urgent=210..217
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=611 got=16816 rb_avail=261712 downloaded=3489939240 installed=4219469824 starvation_total=227
+scheduler: current=208 critical=208..209 urgent=210..217
+installer: ncz buffer wait wait_ms=685 got=65968 rb_avail=48720 downloaded=3490250536 installed=4219469824 starvation_total=228
+scheduler: current=208 critical=208..209 urgent=210..217
+installer: ncz buffer wait wait_ms=510 got=475568 rb_avail=196176 downloaded=3490922280 installed=4223664128 starvation_total=229
+collector: stats downloaded=3490987816 speed=2205KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2620 got=16384 rb_avail=0 downloaded=3490987816 installed=4223664128 starvation_total=230
+scheduler: current=208 critical=208..209 urgent=210..217
+installer: stats installed=4223664128 install_speed=2557KB/s downloaded=3490987816 source_speed=2202KB/s consume_speed=2202KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=209 critical=209..210 urgent=211..218
+scheduler: current=210 critical=210..211 urgent=212..219
+collector: partial read advance offset=3528818688 requested=4194304 got=81920
+scheduler: current=210 critical=210..211 urgent=212..219
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=210 critical=210..211 urgent=212..219
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=210 critical=210..211 urgent=212..219
+installer: ncz buffer wait wait_ms=744 got=81920 rb_avail=0 downloaded=3533389608 installed=4269801472 starvation_total=231
+scheduler: current=211 critical=211..212 urgent=213..220
+collector: partial read advance offset=3550363648 requested=4194304 got=3538944
+collector: stats downloaded=3556392744 speed=12756KB/s rb_avail=3276368 rb_free=130941360 rb_cap=134217728
+installer: stats installed=4290772992 install_speed=13107KB/s downloaded=3556392744 source_speed=12774KB/s consume_speed=12236KB/s rb_avail=2752080 rb_free=131465648 rb_cap=134217728
+scheduler: current=212 critical=212..213 urgent=214..221
+scheduler: current=212 critical=212..213 urgent=214..221
+collector: partial read advance offset=3558785024 requested=4194304 got=32768
+scheduler: current=212 critical=212..213 urgent=214..221
+scheduler: current=212 critical=212..213 urgent=214..221
+installer: ncz buffer wait wait_ms=1266 got=32768 rb_avail=0 downloaded=3563339560 installed=4303355904 starvation_total=232
+collector: stats downloaded=3567796008 speed=2206KB/s rb_avail=4193872 rb_free=130023856 rb_cap=134217728
+installer: stats installed=4303355904 install_speed=2434KB/s downloaded=3567796008 source_speed=2206KB/s consume_speed=1927KB/s rb_avail=4193872 rb_free=130023856 rb_cap=134217728
+collector: partial read advance offset=3567796224 requested=4194304 got=1441792
+scheduler: current=213 critical=213..214 urgent=215..222
+collector: partial read advance offset=3580837888 requested=4194304 got=819200
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=213 critical=213..214 urgent=215..222
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=213 critical=213..214 urgent=215..222
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=213 critical=213..214 urgent=215..222
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3589505024 requested=4194304 got=180224
+scheduler: current=214 critical=214..215 urgent=216..223
+collector: stats downloaded=3592585000 speed=4612KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4336910336 install_speed=6243KB/s downloaded=3592585000 source_speed=4612KB/s consume_speed=5392KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=214 critical=214..215 urgent=216..223
+collector: partial read advance offset=3599810560 requested=4194304 got=2277376
+scheduler: current=214 critical=214..215 urgent=216..223
+installer: ncz buffer wait wait_ms=1120 got=432 rb_avail=687696 downloaded=3603087144 installed=4345298944 starvation_total=233
+installer: ncz buffer wait wait_ms=536 got=311296 rb_avail=0 downloaded=3603398440 installed=4345298944 starvation_total=234
+scheduler: current=215 critical=215..216 urgent=217..224
+collector: partial read advance offset=3619389440 requested=4194304 got=1032192
+scheduler: current=216 critical=216..217 urgent=218..225
+scheduler: current=216 critical=216..217 urgent=218..225
+collector: stats downloaded=3625238312 speed=6376KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4370464768 install_speed=6552KB/s downloaded=3625238312 source_speed=6376KB/s consume_speed=6376KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=216 critical=216..217 urgent=218..225
+collector: partial read advance offset=3628498944 requested=4194304 got=65536
+scheduler: current=216 critical=216..217 urgent=218..225
+collector: partial read advance offset=3637149696 requested=4194304 got=16384
+scheduler: current=217 critical=217..218 urgent=219..226
+collector: partial read advance offset=3645947904 requested=4194304 got=147456
+scheduler: current=217 critical=217..218 urgent=219..226
+installer: ncz buffer wait wait_ms=637 got=360880 rb_avail=3030608 downloaded=3652091688 installed=4399824896 starvation_total=235
+scheduler: current=217 critical=217..218 urgent=219..226
+collector: stats downloaded=3652632360 speed=5230KB/s rb_avail=425552 rb_free=133792176 rb_cap=134217728
+installer: stats installed=4404019200 install_speed=6406KB/s downloaded=3652632360 source_speed=5230KB/s consume_speed=5148KB/s rb_avail=425552 rb_free=133792176 rb_cap=134217728
+scheduler: current=217 critical=217..218 urgent=219..226
+collector: partial read advance offset=3654385664 requested=4194304 got=458752
+scheduler: current=218 critical=218..219 urgent=220..227
+collector: partial read advance offset=3663593472 requested=4194304 got=32768
+scheduler: current=218 critical=218..219 urgent=220..227
+scheduler: current=218 critical=218..219 urgent=220..227
+collector: partial read advance offset=3672080384 requested=4194304 got=16384
+collector: stats downloaded=3672571688 speed=3637KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1519 got=16384 rb_avail=0 downloaded=3672571688 installed=4424990720 starvation_total=236
+scheduler: current=218 critical=218..219 urgent=220..227
+installer: stats installed=4424990720 install_speed=3820KB/s downloaded=3672571688 source_speed=3632KB/s consume_speed=3709KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=218 critical=218..219 urgent=220..227
+scheduler: current=219 critical=219..220 urgent=221..228
+scheduler: current=220 critical=220..221 urgent=222..229
+collector: partial read advance offset=3694280704 requested=4194304 got=262144
+scheduler: current=220 critical=220..221 urgent=222..229
+installer: ncz buffer wait wait_ms=565 got=16384 rb_avail=0 downloaded=3700391720 installed=4458545152 starvation_total=237
+scheduler: current=220 critical=220..221 urgent=222..229
+installer: ncz buffer wait wait_ms=1080 got=432 rb_avail=360016 downloaded=3701325608 installed=4458545152 starvation_total=238
+collector: stats downloaded=3701341992 speed=4186KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2033 got=16384 rb_avail=0 downloaded=3701341992 installed=4458545152 starvation_total=239
+scheduler: current=220 critical=220..221 urgent=222..229
+installer: stats installed=4458545152 install_speed=4882KB/s downloaded=3701341992 source_speed=4186KB/s consume_speed=4186KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=220 critical=220..221 urgent=222..229
+installer: ncz buffer wait wait_ms=1758 got=147888 rb_avail=81488 downloaded=3701571368 installed=4458545152 starvation_total=240
+collector: partial read advance offset=3702718464 requested=4194304 got=229376
+scheduler: current=220 critical=220..221 urgent=222..229
+scheduler: current=221 critical=221..222 urgent=223..230
+collector: partial read advance offset=3722215424 requested=4194304 got=1048576
+scheduler: current=222 critical=222..223 urgent=224..231
+collector: stats downloaded=3725131560 speed=4617KB/s rb_avail=48720 rb_free=134169008 rb_cap=134217728
+installer: stats installed=4483710976 install_speed=4892KB/s downloaded=3725131560 source_speed=4625KB/s consume_speed=4615KB/s rb_avail=48720 rb_free=134169008 rb_cap=134217728
+scheduler: current=222 critical=222..223 urgent=224..231
+scheduler: current=222 critical=222..223 urgent=224..231
+scheduler: current=222 critical=222..223 urgent=224..231
+installer: ncz buffer wait wait_ms=2060 got=49152 rb_avail=0 downloaded=3728572200 installed=4487905280 starvation_total=241
+collector: stats downloaded=3728752424 speed=683KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4487905280 install_speed=791KB/s downloaded=3728752424 source_speed=683KB/s consume_speed=692KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=222 critical=222..223 urgent=224..231
+scheduler: current=223 critical=223..224 urgent=225..232
+collector: partial read advance offset=3745677312 requested=4194304 got=3768320
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=223 critical=223..224 urgent=225..232
+collector: partial read advance offset=3754967040 requested=4194304 got=16384
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=223 critical=223..224 urgent=225..232
+scheduler: current=223 critical=223..224 urgent=225..232
+installer: ncz buffer wait wait_ms=900 got=32768 rb_avail=0 downloaded=3756113704 installed=4525654016 starvation_total=242
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=522 got=196608 rb_avail=0 downloaded=3756310312 installed=4525654016 starvation_total=243
+scheduler: current=224 critical=224..225 urgent=226..233
+collector: partial read advance offset=3764699136 requested=4194304 got=2064384
+collector: stats downloaded=3769220904 speed=7747KB/s rb_avail=2195024 rb_free=132022704 rb_cap=134217728
+installer: stats installed=4538236928 install_speed=9635KB/s downloaded=3769220904 source_speed=7747KB/s consume_speed=7327KB/s rb_avail=2195024 rb_free=132022704 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=224 critical=224..225 urgent=226..233
+installer: ncz buffer wait wait_ms=636 got=426416 rb_avail=179792 downloaded=3769827112 installed=4538236928 starvation_total=244
+installer: ncz buffer wait wait_ms=615 got=344496 rb_avail=3849808 downloaded=3774021416 installed=4542431232 starvation_total=245
+scheduler: current=225 critical=225..226 urgent=227..234
+collector: partial read advance offset=3778215936 requested=4194304 got=3276800
+collector: partial read advance offset=3787767808 requested=4194304 got=1130496
+scheduler: current=225 critical=225..226 urgent=227..234
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=226 critical=226..227 urgent=228..235
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=226 critical=226..227 urgent=228..235
+scheduler: boosted 2 slow-peer claims to Critical
+collector: stats downloaded=3791847208 speed=4416KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: stats installed=4563402752 install_speed=4912KB/s downloaded=3791847208 source_speed=4416KB/s consume_speed=4845KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=226 critical=226..227 urgent=228..235
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3799351296 requested=4194304 got=2883584
+scheduler: current=227 critical=227..228 urgent=229..236
+collector: partial read advance offset=3809230848 requested=4194304 got=1163264
+scheduler: current=227 critical=227..228 urgent=229..236
+installer: ncz buffer wait wait_ms=1805 got=262576 rb_avail=900688 downloaded=3810393896 installed=4584374272 starvation_total=246
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=539 got=16384 rb_avail=0 downloaded=3813981992 installed=4588568576 starvation_total=247
+collector: stats downloaded=3816570664 speed=3023KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=3655 got=16384 rb_avail=0 downloaded=3816570664 installed=4592762880 starvation_total=248
+scheduler: current=227 critical=227..228 urgent=229..236
+installer: stats installed=4592762880 install_speed=3587KB/s downloaded=3816570664 source_speed=3020KB/s consume_speed=3020KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=228 critical=228..229 urgent=230..237
+scheduler: current=229 critical=229..230 urgent=231..238
+collector: partial read advance offset=3842310144 requested=4194304 got=2064384
+scheduler: current=229 critical=229..230 urgent=231..238
+installer: ncz buffer wait wait_ms=1160 got=432 rb_avail=704080 downloaded=3850043176 installed=4626317312 starvation_total=249
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=3850829824 requested=4194304 got=65536
+scheduler: current=229 critical=229..230 urgent=231..238
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=230 critical=230..231 urgent=232..239
+collector: partial read advance offset=3865870336 requested=4194304 got=245760
+installer: stats installed=4638900224 install_speed=8878KB/s downloaded=3866115880 source_speed=9533KB/s consume_speed=7919KB/s rb_avail=8388176 rb_free=125829552 rb_cap=134217728
+collector: stats downloaded=3866181416 speed=7234KB/s rb_avail=65104 rb_free=134152624 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1434 got=432 rb_avail=65104 downloaded=3866181416 installed=4647288832 starvation_total=250
+scheduler: current=230 critical=230..231 urgent=232..239
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=230 critical=230..231 urgent=232..239
+installer: ncz buffer wait wait_ms=1880 got=98304 rb_avail=0 downloaded=3866312488 installed=4647288832 starvation_total=251
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=230 critical=230..231 urgent=232..239
+installer: ncz buffer wait wait_ms=1124 got=328112 rb_avail=3866192 downloaded=3870506792 installed=4647288832 starvation_total=252
+scheduler: current=231 critical=231..232 urgent=233..240
+collector: partial read advance offset=3883089920 requested=4194304 got=3162112
+installer: stats installed=4659871744 install_speed=4041KB/s downloaded=3886251816 source_speed=3880KB/s consume_speed=3738KB/s rb_avail=9125456 rb_free=125092272 rb_cap=134217728
+installer: ncz buffer wait wait_ms=534 got=459184 rb_avail=376400 downloaded=3887464232 installed=4668260352 starvation_total=253
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=232 critical=232..233 urgent=234..241
+collector: partial read advance offset=3893100544 requested=4194304 got=49152
+collector: stats downloaded=3894165288 speed=4911KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=659 got=245760 rb_avail=0 downloaded=3894165288 installed=4676648960 starvation_total=254
+scheduler: current=232 critical=232..233 urgent=234..241
+scheduler: current=232 critical=232..233 urgent=234..241
+collector: partial read advance offset=3905552384 requested=4194304 got=1933312
+scheduler: current=233 critical=233..234 urgent=235..242
+installer: stats installed=4697620480 install_speed=7293KB/s downloaded=3915218728 source_speed=5596KB/s consume_speed=7090KB/s rb_avail=1392208 rb_free=132825520 rb_cap=134217728
+collector: partial read advance offset=3915218944 requested=4194304 got=737280
+scheduler: current=233 critical=233..234 urgent=235..242
+collector: stats downloaded=3920461608 speed=3036KB/s rb_avail=1392208 rb_free=132825520 rb_cap=134217728
+installer: ncz buffer wait wait_ms=4041 got=131504 rb_avail=1392208 downloaded=3920461608 installed=4701814784 starvation_total=255
+scheduler: current=233 critical=233..234 urgent=235..242
+installer: stats installed=4701814784 install_speed=742KB/s downloaded=3920461608 source_speed=927KB/s consume_speed=927KB/s rb_avail=1392208 rb_free=132825520 rb_cap=134217728
+collector: partial read advance offset=3924574208 requested=4194304 got=131072
+scheduler: current=234 critical=234..235 urgent=236..243
+collector: partial read advance offset=3942400000 requested=4194304 got=245760
+scheduler: current=235 critical=235..236 urgent=237..244
+scheduler: current=235 critical=235..236 urgent=237..244
+installer: ncz buffer wait wait_ms=600 got=147888 rb_avail=900688 downloaded=3944611624 installed=4726980608 starvation_total=256
+scheduler: current=235 critical=235..236 urgent=237..244
+collector: partial read advance offset=3952443392 requested=4194304 got=16384
+scheduler: current=235 critical=235..236 urgent=237..244
+scheduler: current=236 critical=236..237 urgent=238..245
+collector: partial read advance offset=3962716160 requested=4194304 got=819200
+collector: stats downloaded=3965861672 speed=7761KB/s rb_avail=130640 rb_free=134087088 rb_cap=134217728
+installer: ncz buffer wait wait_ms=739 got=246192 rb_avail=130640 downloaded=3965861672 installed=4752146432 starvation_total=257
+installer: stats installed=4752146432 install_speed=8603KB/s downloaded=3965861672 source_speed=7760KB/s consume_speed=7975KB/s rb_avail=130640 rb_free=134087088 rb_cap=134217728
+scheduler: current=236 critical=236..237 urgent=238..245
+scheduler: current=236 critical=236..237 urgent=238..245
+collector: partial read advance offset=3971235840 requested=4194304 got=196608
+scheduler: current=237 critical=237..238 urgent=239..246
+collector: partial read advance offset=3979739136 requested=4194304 got=98304
+scheduler: current=237 critical=237..238 urgent=239..246
+installer: ncz buffer wait wait_ms=786 got=98304 rb_avail=0 downloaded=3979837224 installed=4764729344 starvation_total=258
+scheduler: current=237 critical=237..238 urgent=239..246
+installer: ncz buffer wait wait_ms=1345 got=81920 rb_avail=0 downloaded=3980033832 installed=4768923648 starvation_total=259
+collector: stats downloaded=3981868840 speed=2085KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=2777 got=49152 rb_avail=0 downloaded=3981868840 installed=4768923648 starvation_total=260
+scheduler: current=237 critical=237..238 urgent=239..246
+installer: stats installed=4768923648 install_speed=2186KB/s downloaded=3981868840 source_speed=2085KB/s consume_speed=2102KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: current=238 critical=238..239 urgent=240..247
+collector: partial read advance offset=4007034880 requested=4194304 got=2719744
+scheduler: current=239 critical=239..240 urgent=241..248
+scheduler: current=239 critical=239..240 urgent=241..248
+installer: ncz buffer wait wait_ms=551 got=49584 rb_avail=97872 downloaded=4010393384 installed=4798283776 starvation_total=261
+scheduler: current=239 critical=239..240 urgent=241..248
+scheduler: current=239 critical=239..240 urgent=241..248
+collector: stats downloaded=4013981480 speed=5886KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1260 got=432 rb_avail=15952 downloaded=4013981480 installed=4802478080 starvation_total=262
+scheduler: current=239 critical=239..240 urgent=241..248
+installer: stats installed=4802478080 install_speed=6148KB/s downloaded=4013981480 source_speed=5884KB/s consume_speed=5881KB/s rb_avail=15952 rb_free=134201776 rb_cap=134217728
+collector: partial read advance offset=4018634752 requested=4194304 got=2965504
+scheduler: current=240 critical=240..241 urgent=242..249
+collector: partial read advance offset=4034641920 requested=4194304 got=819200
+scheduler: current=240 critical=240..241 urgent=242..249
+installer: ncz buffer wait wait_ms=898 got=131072 rb_avail=0 downloaded=4038786856 installed=4831838208 starvation_total=263
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=4039425832 speed=4690KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1860 got=229376 rb_avail=0 downloaded=4039425832 installed=4831838208 starvation_total=264
+scheduler: current=240 critical=240..241 urgent=242..249
+installer: stats installed=4831838208 install_speed=5411KB/s downloaded=4039425832 source_speed=4689KB/s consume_speed=4692KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=240 critical=240..241 urgent=242..249
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=241 critical=241..242 urgent=243..250
+collector: partial read advance offset=4057153536 requested=4194304 got=1720320
+scheduler: current=242 critical=242..243 urgent=244..251
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=242 critical=242..243 urgent=244..251
+scheduler: boosted 1 slow-peer claims to Critical
+collector: stats downloaded=4065689384 speed=4740KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+installer: ncz buffer wait wait_ms=1026 got=163840 rb_avail=0 downloaded=4065689384 installed=4936695808 starvation_total=265
+scheduler: current=242 critical=242..243 urgent=244..251
+installer: stats installed=4936695808 install_speed=18921KB/s downloaded=4065689384 source_speed=4739KB/s consume_speed=4739KB/s rb_avail=0 rb_free=134217728 rb_cap=134217728
+scheduler: boosted 2 slow-peer claims to Critical
+collector: partial read advance offset=4065689600 requested=4194304 got=2949120
+installer: ncz buffer wait wait_ms=668 got=180656 rb_avail=2768464 downloaded=4068638504 installed=4936695808 starvation_total=266
+scheduler: current=242 critical=242..243 urgent=244..251
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=4074815488 requested=4194304 got=16384
+scheduler: current=243 critical=243..244 urgent=245..252
+main: focus lost (console going to sleep / minimized)
+scheduler: current=243 critical=243..244 urgent=245..252
+installer: ncz buffer wait wait_ms=1663 got=16384 rb_avail=0 downloaded=4077600552 installed=4995416064 starvation_total=267
+scheduler: boosted 1 slow-peer claims to Critical
+collector: partial read advance offset=4083236864 requested=4194304 got=98304
+collector: stats downloaded=4083531560 speed=3433KB/s rb_avail=4030032 rb_free=130187696 rb_cap=134217728
+installer: stats installed=5007998976 install_speed=13562KB/s downloaded=4083531560 source_speed=3393KB/s consume_speed=2726KB/s rb_avail=3505744 rb_free=130711984 rb_cap=134217728
+scheduler: current=243 critical=243..244 urgent=245..252
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=243 critical=243..244 urgent=245..252
+installer: ncz buffer wait wait_ms=1645 got=147888 rb_avail=1769040 downloaded=4087562024 installed=5041553408 starvation_total=268
+scheduler: boosted 1 slow-peer claims to Critical

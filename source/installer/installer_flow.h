@@ -25,9 +25,9 @@
 namespace installer_flow {
 
 struct FlowConfig {
-    size_t   low_watermark        = 8 * 1024 * 1024;
+    size_t   low_watermark        = 4 * 1024 * 1024;
     int64_t  watermark_timeout_ms = 15000;
-    bool     enable_pacing        = false; // Disabled: let 128MB RingBuffer naturally buffer without artificial sleep
+    bool     enable_pacing        = true;
     double   pace_ratio           = 0.92;
     int      pace_min_src_kbps    = 200;   // при неизвестной/нулевой скорости не пасуем
     int      pace_max_sleep_ms    = 3000;  // потолок на одно торможение

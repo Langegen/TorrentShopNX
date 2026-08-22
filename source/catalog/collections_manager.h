@@ -18,8 +18,11 @@ struct CollectionEntry {
 
 struct CollectionInfo {
     std::string id;          // имя файла без расширения .json
-    std::string name;        // русское название подборки
-    std::string description; // русское описание
+    std::string name;        // русское название по умолчанию
+    std::string description; // русское описание по умолчанию
+
+    std::string getName() const;
+    std::string getDescription() const;
 };
 
 // Предсобранный индекс по каталогу для быстрого матчинга без полных проходов.
