@@ -8,7 +8,8 @@ cd "$(dirname "$0")/.."
 GCC=/c/devkitPro/msys2/usr/bin/gcc.exe
 
 $GCC -O2 -g -Wall \
-    -Ipctest/compat -Isource/engine -Iinclude/engine -Ipctest/deps/include \\
+    -Ipctest/compat -Isource/engine -Iinclude/engine -Ipctest/deps/include \
+    -L/c/devkitPro/msys2/mingw64/lib \
     source/engine/bencode.c \
     source/engine/torrent_meta.c \
     source/engine/udp_tracker.c \

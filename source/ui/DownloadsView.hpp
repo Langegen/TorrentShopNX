@@ -35,14 +35,25 @@ public:
     ~DownloadsView() override;
     void onContentAvailable() override;
     void willAppear(bool resetState) override;
+    void willDisappear(bool resetState) override;
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
     BRLS_BIND(brls::Label, emptyLabel, "emptyLabel");
+    BRLS_BIND(brls::Label, backlightHint, "backlightHint");
 
     void updateCell(DownloadCell* cell, const download::DownloadItem& item);
     size_t lastRows_ = 0;
 
 private:
+    void checkBacklightState();
+    void toggleBacklight();
+
+    std::chrono::steady_clock::time_point lastInputTime_;
+    std::chrono::steady_clock::time_point backlightToggleTime_;
+    brls::RepeatingTimer* backlightTimer_ = nullptr;
+    brls::ControllerState prevControllerState_{};
+    bool isFirstStateCheck_ = true;
+
     class DownloadsDataSource : public brls::RecyclerDataSource {
     public:
         DownloadsDataSource(DownloadsView* parent) : parent_(parent) {}

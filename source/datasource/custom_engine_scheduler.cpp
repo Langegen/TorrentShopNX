@@ -39,6 +39,7 @@ void CustomEngineScheduler::init(tsnx_engine* engine,
     piece_size_ = piece_size;
     file_offset_in_torrent_ = file_offset_in_torrent;
     file_first_piece_ = file_first_piece;
+    file_last_piece_  = file_last_piece;
     last_current_piece_ = -1;
     last_log_piece_ = -1;
     stall_level_ = 0;
@@ -47,6 +48,7 @@ void CustomEngineScheduler::init(tsnx_engine* engine,
     last_log_at_ = {};
     last_boost_log_at_ = {};
     peer_ewma_.clear();
+    boosted_pieces_.clear();
     last_snapshot_ = {};
 }
 
@@ -122,6 +124,13 @@ void CustomEngineScheduler::apply_zones(const CustomSchedulerSnapshot& snap) {
     apply(snap.prefetch,    TSNX_ZONE_PREFETCH);
     apply(snap.speculative, TSNX_ZONE_SPECULATIVE);
     apply(snap.tail,        TSNX_ZONE_TAIL);
+
+    // Re-apply any currently boosted slow-peer pieces so they aren't wiped out by on_read_request
+    for (int p : boosted_pieces_) {
+        if (p >= file_first_piece_ && p <= file_last_piece_) {
+            tsnx_engine_set_piece_zone(engine_, hash_.c_str(), p, 1, TSNX_ZONE_CRITICAL);
+        }
+    }
 }
 
 CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offset,
@@ -231,24 +240,33 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_tick() {
     last_snapshot_.slow_peer_count = slow_count;
 
     // Slow-peer isolation: boost any piece held by a slow peer back to Critical
-    // so the internal fast-peer steering will take it over quickly.
+    // only if there are enough other peers (n > 2) to actually take it over.
     int boosted = 0;
-    for (int i = 0; i < n && slow_count > 0; i++) {
+    boosted_pieces_.clear();
+    for (int i = 0; i < n && slow_count > 0 && n > 2; i++) {
+        if (boosted >= cfg_.slow_peer_count_max) break;
         if (!peers[i].handshaked || peers[i].claim_piece < 0) continue;
         auto it = std::find_if(peer_ewma_.begin(), peer_ewma_.end(),
             [&](const PeerEwma& e) { return e.key_ip == peers[i].ip && e.key_port == peers[i].port; });
         if (it != peer_ewma_.end() && it->is_slow) {
-            tsnx_engine_set_piece_zone(engine_, hash_.c_str(),
-                                       static_cast<int>(peers[i].claim_piece), 1,
-                                       TSNX_ZONE_CRITICAL);
-            boosted++;
+            int p = static_cast<int>(peers[i].claim_piece);
+            // Only boost pieces that are within the immediate playhead window (critical + urgent),
+            // so we don't distract fast peers with speculative pieces far in the future.
+            int max_boost_piece = (last_current_piece_ >= 0)
+                ? last_current_piece_ + cfg_.critical_pieces + cfg_.urgent_pieces
+                : file_first_piece_ + cfg_.critical_pieces + cfg_.urgent_pieces;
+            if (p >= last_current_piece_ && p <= max_boost_piece) {
+                tsnx_engine_set_piece_zone(engine_, hash_.c_str(), p, 1, TSNX_ZONE_CRITICAL);
+                boosted_pieces_.push_back(p);
+                boosted++;
+            }
         }
     }
     const auto now = std::chrono::steady_clock::now();
     bool should_log_boost = (boosted > 0) &&
         ((boosted != last_boosted_count_) ||
          (last_boost_log_at_.time_since_epoch().count() == 0) ||
-         (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_boost_log_at_).count() >= 5000));
+         (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_boost_log_at_).count() >= 15000));
     if (should_log_boost) {
         last_boosted_count_ = boosted;
         last_boost_log_at_ = now;
@@ -274,6 +292,7 @@ void CustomEngineScheduler::reset() {
     last_log_at_ = {};
     last_boost_log_at_ = {};
     peer_ewma_.clear();
+    boosted_pieces_.clear();
     last_snapshot_ = {};
 }
 

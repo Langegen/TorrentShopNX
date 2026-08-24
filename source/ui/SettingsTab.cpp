@@ -287,6 +287,7 @@ void SettingsTab::onContentAvailable() {
 
         if (newLang != cfg.getLanguage()) {
             cfg.setLanguage(newLang);
+            cfg.setLastCatalogUpdateDate(""); // Force catalog refresh for new language
             cfg.save();
 
             brls::Dialog* restartDialog = new brls::Dialog("app/settings/lang_changed_restart"_i18n);
@@ -435,6 +436,31 @@ void SettingsTab::onContentAvailable() {
         cfg.save();
     });
 
+    // 1.1 Turn off backlight during downloads (OLED burn-in prevention)
+    std::vector<std::string> backlightOptions = {
+        "app/settings/backlight_manual"_i18n,
+        "app/settings/backlight_15s"_i18n,
+        "app/settings/backlight_30s"_i18n,
+        "app/settings/backlight_60s"_i18n,
+        "app/settings/backlight_120s"_i18n
+    };
+    int currentBacklightTimeout = cfg.getBacklightTimeout();
+    int initialBacklightIdx = 0;
+    if (currentBacklightTimeout == 15) initialBacklightIdx = 1;
+    else if (currentBacklightTimeout == 30) initialBacklightIdx = 2;
+    else if (currentBacklightTimeout == 60) initialBacklightIdx = 3;
+    else if (currentBacklightTimeout == 120) initialBacklightIdx = 4;
+
+    backlightTimeoutCell->init("app/settings/backlight_timeout"_i18n, backlightOptions, initialBacklightIdx, [](int selected) {}, [&cfg](int selected) {
+        int timeoutSec = 0;
+        if (selected == 1) timeoutSec = 15;
+        else if (selected == 2) timeoutSec = 30;
+        else if (selected == 3) timeoutSec = 60;
+        else if (selected == 4) timeoutSec = 120;
+        cfg.setBacklightTimeout(timeoutSec);
+        cfg.save();
+    });
+
     // 2. Download mode
     std::vector<std::string> modes = {
         "app/settings/mode_torrserver"_i18n,
@@ -505,6 +531,7 @@ void SettingsTab::onContentAvailable() {
             [updateCatalogUrlDisplay, &cfg](std::string text) {
                 if (!text.empty()) {
                     cfg.setCatalogSourceUrl(text);
+                    cfg.setLastCatalogUpdateDate(""); // Force catalog refresh with new URL
                     cfg.save();
                     brls::Application::notify("app/settings/catalog_url_updated"_i18n);
                     updateCatalogUrlDisplay();

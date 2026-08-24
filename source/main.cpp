@@ -85,8 +85,8 @@ extern "C" {
             cfg.sb_efficiency = 8;
             cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
             cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x40000;  // 256 KB stock
-            cfg.tcp_rx_buf_max_size = 0x40000;  // 256 KB stock
+            cfg.tcp_tx_buf_max_size = 0x60000;  // 384 KB max
+            cfg.tcp_rx_buf_max_size = 0x60000;  // 384 KB max
             cfg.udp_rx_buf_size = 0x8000;       // 32 KB
             cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }
@@ -118,6 +118,7 @@ extern "C" {
 
         if (!is_applet) {
             net::ImageDownloader::instance().stop();
+            util::setBacklightOff(false);
             lblExit();
             nifmExit();
             inssExit();
@@ -289,8 +290,8 @@ int main(int argc, char** argv) {
         net::ImageDownloader::instance().init(4);
 
         // Load database games via fast binary cache (or fallback to JSON)
-        g_games = loadGamesCached(kCatalogPath, kCatalogBinPath);
-        util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()));
+        g_games = loadGamesCached(getCatalogPath(), getCatalogBinPath());
+        util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()) + " (path=" + getCatalogPath() + ")");
 
         // Logger configuration
         brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
@@ -320,6 +321,7 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
+    util::setBacklightOff(false);
 
     // Signal background tasks and network transfers to cancel immediately
     g_appExiting.store(true);

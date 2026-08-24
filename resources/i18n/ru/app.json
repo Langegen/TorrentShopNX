@@ -117,7 +117,9 @@
     "action_delete": "Удалить из списка",
     "action_resume": "Возобновить",
     "action_pause": "Приостановить",
-    "action_cancel": "Отменить загрузку"
+    "action_cancel": "Отменить загрузку",
+    "action_turn_off_backlight": "Отключить подсветку",
+    "action_turn_off_backlight_hint": "[-] Отключить подсветку"
   },
   "detail": {
     "developer": "Разработчик: {0}",
@@ -239,6 +241,12 @@
     "auto_app_update": "Авто-проверка обновлений",
     "cache_thumbnails": "Кешировать миниатюры обложек",
     "keep_awake": "Предотвращать сон при скачивании",
+    "backlight_timeout": "Отключать подсветку во время загрузки",
+    "backlight_manual": "Вручную",
+    "backlight_15s": "15 сек",
+    "backlight_30s": "30 сек",
+    "backlight_60s": "60 сек",
+    "backlight_120s": "120 сек",
     "data_mode": "Режим работы",
     "mode_torrserver": "Удаленный TorrServer",
     "mode_engine": "Собственный движок",

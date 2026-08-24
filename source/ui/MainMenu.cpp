@@ -106,8 +106,8 @@ void MainMenu::onContentAvailable() {
                 online_games = parseGamesFromJsonString(res.body);
                 if (!online_games.empty()) {
                     util::logLine("catalog: background online update parsed " + std::to_string(online_games.size()) + " games directly in memory");
-                    writeTextFile(kCatalogPath, res.body);
-                    saveGamesToBinaryFile(kCatalogBinPath, online_games);
+                    writeTextFile(getCatalogPath(), res.body);
+                    saveGamesToBinaryFile(getCatalogBinPath(), online_games);
                     updated = true;
                 }
             } else {
@@ -136,8 +136,8 @@ void MainMenu::onContentAvailable() {
 
                     if (!online_games.empty()) {
                         nlohmann::json jg = online_games;
-                        writeTextFile(kCatalogPath, jg.dump(2));
-                        saveGamesToBinaryFile(kCatalogBinPath, online_games);
+                        writeTextFile(getCatalogPath(), jg.dump(2));
+                        saveGamesToBinaryFile(getCatalogBinPath(), online_games);
                         updated = true;
                     }
                 }

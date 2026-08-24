@@ -29,9 +29,9 @@ struct FlowConfig {
     int64_t  watermark_timeout_ms = 15000;
     bool     enable_pacing        = true;
     double   pace_ratio           = 0.92;
-    int      pace_min_src_kbps    = 200;   // при неизвестной/нулевой скорости не пасуем
-    int      pace_max_sleep_ms    = 3000;  // потолок на одно торможение
-    int      pace_sleep_step_ms   = 100;   // шаг сна — отменяемость
+    int      pace_min_src_kbps    = 300;   // minimum speed before pacing activates
+    int      pace_max_sleep_ms    = 1000;  // max pacing sleep per check
+    int      pace_sleep_step_ms   = 100;   // cancellable sleep step
 };
 
 class InstallerFlow {

@@ -83,10 +83,10 @@ static void tlog(const char *fmt, ...) {
 // лог. Список почищен до подтверждённо живых. t-ru.org добавляется из
 // магнита раздачи, в дефолт не входит.
 static const char *DEFAULT_TRACKERS[] = {
-    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://open.stealth.si:80/announce",
     "udp://exodus.desync.com:6969/announce",
     "udp://tracker.dler.org:6969/announce",
-    "udp://tracker.filemail.com:6969/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
 };
 
 static void add_tracker(torrent_meta *t, const char *url, size_t len);
@@ -96,7 +96,7 @@ static void add_default_trackers(torrent_meta *t) {
         add_tracker(t, DEFAULT_TRACKERS[i], strlen(DEFAULT_TRACKERS[i]));
 }
 
-static void add_tracker(torrent_meta *t, const char *url, size_t len) {
+static void add_tracker_single(torrent_meta *t, const char *url, size_t len) {
     if (t->tracker_count >= MAX_TRACKERS) return;
     int is_http = len > 4 && strncmp(url, "http", 4) == 0;
     int is_udp = len > 6 && strncmp(url, "udp://", 6) == 0;
@@ -109,6 +109,20 @@ static void add_tracker(torrent_meta *t, const char *url, size_t len) {
     memcpy(copy, url, len);
     copy[len] = '\0';
     t->trackers[t->tracker_count++] = copy;
+}
+
+static void add_tracker(torrent_meta *t, const char *url, size_t len) {
+    add_tracker_single(t, url, len);
+    if (len >= 13 && (strstr(url, "t-ru.org/ann") != NULL || strstr(url, "bt.t-ru.org") != NULL || strstr(url, "bt2.t-ru.org") != NULL)) {
+        static const char *RU_MIRRORS[] = {
+            "http://bt.t-ru.org/ann?magnet",
+            "http://bt2.t-ru.org/ann?magnet",
+            "http://bt4.t-ru.org/ann?magnet"
+        };
+        for (size_t m = 0; m < sizeof(RU_MIRRORS)/sizeof(RU_MIRRORS[0]); m++) {
+            add_tracker_single(t, RU_MIRRORS[m], strlen(RU_MIRRORS[m]));
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -521,6 +535,7 @@ int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
                 "http://bt.t-ru.org/ann?magnet",
                 "http://bt2.t-ru.org/ann?magnet",
                 "http://bt3.t-ru.org/ann?magnet",
+                "http://bt4.t-ru.org/ann?magnet",
             };
             for (size_t i = 0;
                  i < sizeof(tru_mirrors) / sizeof(*tru_mirrors);

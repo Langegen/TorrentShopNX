@@ -1,16 +1,17 @@
 # Builds the PC engine test on Windows with devkitPro MSYS2.
 # Run from the repo root:  powershell -ExecutionPolicy Bypass -File pctest\build.ps1
 
-$GCC = "C:\devkitPro\msys2\usr\bin\gcc.exe"
-$GPP = "C:\devkitPro\msys2\usr\bin\g++.exe"
+$env:PATH = "C:\devkitPro\msys2\mingw64\bin;C:\devkitPro\msys2\usr\bin;$env:PATH"
+
+$GCC = "C:\devkitPro\msys2\mingw64\bin\gcc.exe"
+$GPP = "C:\devkitPro\msys2\mingw64\bin\g++.exe"
 
 $CFLAGS = @(
     "-O2", "-g", "-Wall",
     "-Ipctest\compat",
     "-Isource\engine",
     "-Iinclude\engine",
-    "-Ipctest\deps\include",
-    "-IC:\devkitPro\msys2\usr\include"
+    "-Ipctest\deps\include"
 )
 
 $CXXFLAGS = @(
@@ -18,8 +19,7 @@ $CXXFLAGS = @(
     "-Ipctest\compat",
     "-Isource\engine",
     "-Iinclude\engine",
-    "-Ipctest\deps\include",
-    "-IC:\devkitPro\msys2\usr\include"
+    "-Ipctest\deps\include"
 )
 
 $COMMON_SOURCES = @(
@@ -52,9 +52,8 @@ $CPP_OBJ = @(
 )
 
 $LIBS = @(
-    "-Lpctest\deps\lib",
     "-lmbedcrypto", "-lmbedtls", "-lmbedx509",
-    "-lcurl", "-lz", "-lpthread"
+    "-lcurl", "-lz", "-lws2_32", "-liphlpapi", "-lpthread"
 )
 
 function Build-CppObjects {

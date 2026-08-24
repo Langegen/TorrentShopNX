@@ -15,8 +15,8 @@ namespace datasource {
 
 struct CustomSchedulerConfig {
     int critical_pieces    = 2;
-    int urgent_pieces      = 12;
-    int prefetch_pieces    = 16;
+    int urgent_pieces      = 24;
+    int prefetch_pieces    = 36;
     int speculative_pieces = 6;
     int tail_pieces        = 2;
 
@@ -24,7 +24,7 @@ struct CustomSchedulerConfig {
     int stall_extra_urgent     = -2;
     int stall_extra_prefetch   = -6;
 
-    float slow_peer_speed_bps  = 200.0f * 1024.0f;
+    float slow_peer_speed_bps  = 100.0f * 1024.0f;
     int   slow_peer_count_max  = 3;
 };
 
@@ -102,6 +102,7 @@ private:
         bool  is_slow = false;
     };
     std::vector<PeerEwma> peer_ewma_;
+    std::vector<int> boosted_pieces_;
 
     mutable std::mutex mutex_;
     CustomSchedulerSnapshot last_snapshot_;

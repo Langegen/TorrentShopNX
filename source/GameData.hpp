@@ -12,6 +12,7 @@
 #include <borealis/core/cache_helper.hpp>
 #include "net/http_client.h"
 #include "net/image_downloader.h"
+#include "config/config.h"
 #include "utils/log.h"
 #include <borealis/extern/nlohmann/json.hpp>
 
@@ -344,14 +345,51 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
 #include <dirent.h>
 #include <atomic>
 
-inline const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games.json";
-inline const char* kCatalogBinPath = "sdmc:/switch/TorrentShopNX/switch_games.bin";
+inline std::string getCatalogPath() {
+    auto& cfg = config::ConfigManager::instance();
+    std::string effUrl = cfg.getEffectiveCatalogSourceUrl();
+    if (effUrl.find("EN_catalog") != std::string::npos) {
+        return "sdmc:/switch/TorrentShopNX/switch_games_en.json";
+    }
+    return "sdmc:/switch/TorrentShopNX/switch_games_ru.json";
+}
+
+inline std::string getCatalogBinPath() {
+    auto& cfg = config::ConfigManager::instance();
+    std::string effUrl = cfg.getEffectiveCatalogSourceUrl();
+    if (effUrl.find("EN_catalog") != std::string::npos) {
+        return "sdmc:/switch/TorrentShopNX/switch_games_en.bin";
+    }
+    return "sdmc:/switch/TorrentShopNX/switch_games_ru.bin";
+}
+
+inline const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games_ru.json";
+inline const char* kCatalogBinPath = "sdmc:/switch/TorrentShopNX/switch_games_ru.bin";
 
 // Cached loader: prefers instant binary cache if up-to-date, falls back to JSON + generates binary cache
 inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std::string& binPath) {
     struct stat stBin, stJson;
     bool hasBin = (stat(binPath.c_str(), &stBin) == 0);
     bool hasJson = (stat(jsonPath.c_str(), &stJson) == 0);
+
+    // Fallback to legacy switch_games.bin / switch_games.json for Russian catalog if new lang files don't exist yet
+    if (!hasBin && !hasJson && binPath.find("switch_games_ru.bin") != std::string::npos) {
+        std::string legacyBin = "sdmc:/switch/TorrentShopNX/switch_games.bin";
+        std::string legacyJson = "sdmc:/switch/TorrentShopNX/switch_games.json";
+        if (stat(legacyBin.c_str(), &stBin) == 0) {
+            std::vector<Game> games;
+            if (loadGamesFromBinaryFile(legacyBin, games) && !games.empty()) {
+                return games;
+            }
+        }
+        if (stat(legacyJson.c_str(), &stJson) == 0) {
+            std::vector<Game> games = loadGamesFromFile(legacyJson);
+            if (!games.empty()) {
+                saveGamesToBinaryFile(binPath, games);
+                return games;
+            }
+        }
+    }
 
     if (hasBin && (!hasJson || stBin.st_mtime >= stJson.st_mtime)) {
         std::vector<Game> games;

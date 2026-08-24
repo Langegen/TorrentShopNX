@@ -100,7 +100,12 @@ bool NcmInstaller::createPlaceHolder(const NcmContentId& id, uint64_t size) {
                                                     &placeholder_id,
                                                     static_cast<s64>(size));
     if (R_FAILED(rc)) {
-        util::logLine("ncm: createPlaceHolder failed, rc=" + std::to_string(rc));
+        if (R_MODULE(rc) == 2 && R_DESCRIPTION(rc) == 39) {
+            util::logLine("ncm: createPlaceHolder failed: Not enough free space on storage (requires " +
+                          std::to_string((size + 1024*1024*1024 - 1) / (1024*1024*1024)) + " GB, rc=" + std::to_string(rc) + ")");
+        } else {
+            util::logLine("ncm: createPlaceHolder failed, rc=" + std::to_string(rc));
+        }
         return false;
     }
 

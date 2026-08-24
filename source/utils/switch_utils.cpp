@@ -58,9 +58,45 @@ void cpuBoostEnd() {
         util::logLine("switch_utils: CPU boost released");
     }
 }
+
+namespace {
+std::atomic<bool> g_backlight_off{false};
+} // namespace
+
+void setBacklightOff(bool off) {
+    if (!hosversionAtLeast(4, 0, 0)) return;
+    if (g_backlight_off.load() == off) return;
+    
+    Result rc = appletSetLcdBacklightOffEnabled(off);
+    if (R_SUCCEEDED(rc)) {
+        g_backlight_off.store(off);
+        util::logLine(std::string("switch_utils: screen backlight ") + (off ? "turned OFF" : "turned ON"));
+    } else {
+        util::logLine("switch_utils: appletSetLcdBacklightOffEnabled(" + std::to_string(off) + ") failed rc=" + std::to_string(rc));
+    }
+}
+
+bool isBacklightOff() {
+    return g_backlight_off.load();
+}
 #else
 void cpuBoostBegin() {}
 void cpuBoostEnd() {}
+
+namespace {
+bool g_mock_backlight_off = false;
+} // namespace
+
+void setBacklightOff(bool off) {
+    if (g_mock_backlight_off != off) {
+        g_mock_backlight_off = off;
+        util::logLine(std::string("switch_utils (mock): screen backlight ") + (off ? "OFF" : "ON"));
+    }
+}
+
+bool isBacklightOff() {
+    return g_mock_backlight_off;
+}
 #endif
 
 bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {

@@ -49,7 +49,7 @@
     "title": "Collections",
     "subtitle": "Curated collections from switch-game-collection",
     "all_catalog": "Full Catalog",
-    "all_catalog_desc": "Complete catalog of releases from RU_catalog.json",
+    "all_catalog_desc": "Complete catalog of releases from EN_catalog.json",
     "games_count": "Games: {0}",
     "collection_prefix": "Collection: {0}",
     "search_hint": "Search in collection",
@@ -117,7 +117,9 @@
     "action_delete": "Remove from list",
     "action_resume": "Resume",
     "action_pause": "Pause",
-    "action_cancel": "Cancel download"
+    "action_cancel": "Cancel download",
+    "action_turn_off_backlight": "Turn off screen",
+    "action_turn_off_backlight_hint": "[-] Turn off screen"
   },
   "detail": {
     "developer": "Developer: {0}",
@@ -239,6 +241,12 @@
     "auto_app_update": "Auto-check for app updates",
     "cache_thumbnails": "Cache cover thumbnails",
     "keep_awake": "Prevent sleep during downloads",
+    "backlight_timeout": "Turn off backlight during download",
+    "backlight_manual": "Manual",
+    "backlight_15s": "15 sec",
+    "backlight_30s": "30 sec",
+    "backlight_60s": "60 sec",
+    "backlight_120s": "120 sec",
     "data_mode": "Operation Mode",
     "mode_torrserver": "Remote TorrServer",
     "mode_engine": "Internal Engine",

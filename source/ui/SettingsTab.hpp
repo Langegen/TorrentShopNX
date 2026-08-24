@@ -22,6 +22,7 @@ private:
     BRLS_BIND(brls::BooleanCell, autoAppUpdateCell, "autoAppUpdateCell");
     BRLS_BIND(brls::BooleanCell, cacheThumbnailsCell, "cacheThumbnailsCell");
     BRLS_BIND(brls::BooleanCell, keepAwakeCell, "keepAwakeCell");
+    BRLS_BIND(brls::SelectorCell, backlightTimeoutCell, "backlightTimeoutCell");
     BRLS_BIND(brls::SelectorCell, modeCell, "modeCell");
     BRLS_BIND(brls::DetailCell, remoteUrlCell, "remoteUrlCell");
     BRLS_BIND(brls::DetailCell, catalogUrlCell, "catalogUrlCell");

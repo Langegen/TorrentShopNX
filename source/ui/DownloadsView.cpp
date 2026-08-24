@@ -1,6 +1,10 @@
 #include "DownloadsView.hpp"
 #include "DownloadUiManager.hpp"
+#include "../config/config.h"
+#include "../utils/switch_utils.h"
 #include <iomanip>
+#include <chrono>
+#include <cmath>
 
 extern std::vector<Game> g_games;
 
@@ -21,12 +25,32 @@ DownloadCell::~DownloadCell() {
 
 // DOWNLOADSVIEW IMPLEMENTATION
 DownloadsView::DownloadsView() {
+    lastInputTime_ = std::chrono::steady_clock::now();
 }
 
 void DownloadsView::onContentAvailable() {
 
     recycler->registerCell("Download", []() { return DownloadCell::create(); });
     recycler->setDataSource(new DownloadsDataSource(this));
+
+    // Register hidden button action to toggle screen backlight (shown in top-right header instead of footer)
+    this->registerAction("", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        toggleBacklight();
+        return true;
+    }, true /* hidden from footer */);
+
+    this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_MINUS, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
+        toggleBacklight();
+        return true;
+    });
+
+    // Start repeating timer for auto-sleep / backlight timeout monitoring
+    backlightTimer_ = new brls::RepeatingTimer();
+    backlightTimer_->setPeriod(200);
+    backlightTimer_->setCallback([this]() {
+        checkBacklightState();
+    });
+    backlightTimer_->start();
 
     // Register callback for auto-refreshing the view when progress updates
     ui::DownloadManager::instance().setProgressCallback([this]() {
@@ -78,15 +102,117 @@ void DownloadsView::onContentAvailable() {
 }
 
 DownloadsView::~DownloadsView() {
+    if (backlightTimer_) {
+        backlightTimer_->stop();
+        delete backlightTimer_;
+        backlightTimer_ = nullptr;
+    }
+    if (util::isBacklightOff()) {
+        util::setBacklightOff(false);
+    }
     // Unregister callback on destruction to avoid crashes
     ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
+    lastInputTime_ = std::chrono::steady_clock::now();
     if (!ui::DownloadManager::instance().getImpl().queue().empty()) {
         brls::Application::giveFocus(recycler);
     }
+}
+
+void DownloadsView::willDisappear(bool resetState) {
+    brls::Activity::willDisappear(resetState);
+    if (util::isBacklightOff()) {
+        util::setBacklightOff(false);
+    }
+}
+
+void DownloadsView::toggleBacklight() {
+    bool isOff = util::isBacklightOff();
+    util::setBacklightOff(!isOff);
+    auto now = std::chrono::steady_clock::now();
+    lastInputTime_ = now;
+    backlightToggleTime_ = now;
+}
+
+void DownloadsView::checkBacklightState() {
+    const auto now = std::chrono::steady_clock::now();
+    const auto& cState = brls::Application::getControllerState();
+
+    if (isFirstStateCheck_) {
+        prevControllerState_ = cState;
+        isFirstStateCheck_ = false;
+        return;
+    }
+
+    // Check for NEW input (button pressed down on this frame, or stick moved)
+    bool hasNewButtonPress = false;
+    for (int i = 0; i < brls::_BUTTON_MAX; ++i) {
+        if (cState.buttons[i] && !prevControllerState_.buttons[i]) {
+            hasNewButtonPress = true;
+            break;
+        }
+    }
+
+    bool hasStickMoved = false;
+    if (std::abs(cState.axes[brls::LEFT_X]) > 0.6f ||
+        std::abs(cState.axes[brls::LEFT_Y]) > 0.6f ||
+        std::abs(cState.axes[brls::RIGHT_X]) > 0.6f ||
+        std::abs(cState.axes[brls::RIGHT_Y]) > 0.6f) {
+        hasStickMoved = true;
+    }
+
+    bool hasAnyHeldButton = false;
+    for (int i = 0; i < brls::_BUTTON_MAX; ++i) {
+        if (cState.buttons[i]) {
+            hasAnyHeldButton = true;
+            break;
+        }
+    }
+
+    // If user is actively pressing buttons or moving sticks, update activity timestamp
+    if (hasNewButtonPress || hasStickMoved || hasAnyHeldButton) {
+        lastInputTime_ = now;
+    }
+
+    // If backlight is currently OFF:
+    if (util::isBacklightOff()) {
+        int activeCount = ui::DownloadManager::instance().getActiveDownloadsCount();
+
+        // If all downloads have completed, turn backlight back on to notify user
+        if (activeCount == 0) {
+            util::setBacklightOff(false);
+            prevControllerState_ = cState;
+            return;
+        }
+
+        // Debounce: ignore inputs during the first 800ms after toggling to avoid immediate re-wake
+        auto msSinceToggle = std::chrono::duration_cast<std::chrono::milliseconds>(now - backlightToggleTime_).count();
+        if (msSinceToggle >= 800) {
+            // Wake up on NEW button press or stick movement
+            if (hasNewButtonPress || hasStickMoved) {
+                util::setBacklightOff(false);
+                lastInputTime_ = now;
+            }
+        }
+        prevControllerState_ = cState;
+        return;
+    }
+
+    // If backlight is currently ON: check auto-dim timeout
+    int activeCount = ui::DownloadManager::instance().getActiveDownloadsCount();
+    int timeoutSec = config::ConfigManager::instance().getBacklightTimeout();
+    if (timeoutSec > 0 && activeCount > 0) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastInputTime_).count();
+        if (elapsed >= timeoutSec) {
+            util::setBacklightOff(true);
+            backlightToggleTime_ = now;
+        }
+    }
+
+    prevControllerState_ = cState;
 }
 
 

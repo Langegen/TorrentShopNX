@@ -68,7 +68,7 @@ void CustomEngineHealth::evaluate(int peers, float download_kbps, bool starving)
     consecutive_bad_ticks_++;
 
     // Recovery escalation.
-    if (consecutive_bad_ticks_ >= 3) executeRecovery();
+    if (consecutive_bad_ticks_ >= 10) executeRecovery();
 }
 
 void CustomEngineHealth::executeRecovery() {
@@ -82,7 +82,7 @@ void CustomEngineHealth::executeRecovery() {
     }
 
     const auto since_stage = std::chrono::duration_cast<std::chrono::seconds>(now - last_stage_time_).count();
-    if (since_stage < 10) return;
+    if (since_stage < 25) return;
 
     if (recovery_stage_ == 1) {
         util::logLine("health: stage2 DHT bootstrap / reannounce");
@@ -94,6 +94,8 @@ void CustomEngineHealth::executeRecovery() {
         last_stage_time_ = now;
         return;
     }
+
+    if (since_stage < 45) return;
 
     if (recovery_stage_ == 2) {
         util::logLine("health: stage3 session restart requested");

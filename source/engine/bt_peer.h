@@ -59,7 +59,7 @@ typedef struct {
 // buffer turns a fast peer's socket drain into a storm of small IPCs. 64 KiB
 // cuts the per-session recv IPC count ~4x versus one-message buffering; at 48
 // sessions that is 6 MB total.
-#define PEER_RX_CAP (128 * 1024)
+#define PEER_RX_CAP (512 * 1024)
 
 typedef struct {
     int sock;
@@ -99,6 +99,7 @@ typedef struct {
 int peer_nb_init(peer_nb *p, int sock, int64_t piece_count);
 // Same, but uses a µTP session instead of a TCP socket.
 int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count);
+void peer_nb_apply_speed_opts(peer_nb *p);
 void peer_nb_free(peer_nb *p);
 
 // Drain the socket into the rx buffer. Returns the number of bytes read (0 if

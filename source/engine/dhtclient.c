@@ -84,12 +84,12 @@ void dht_hash(void *hash_return, int hash_size,
               const void *v3, int len3) {
     mbedtls_sha1_context ctx;
     mbedtls_sha1_init(&ctx);
-    mbedtls_sha1_starts_ret(&ctx);
-    if (v1 && len1 > 0) mbedtls_sha1_update_ret(&ctx, v1, len1);
-    if (v2 && len2 > 0) mbedtls_sha1_update_ret(&ctx, v2, len2);
-    if (v3 && len3 > 0) mbedtls_sha1_update_ret(&ctx, v3, len3);
+    mbedtls_sha1_starts(&ctx);
+    if (v1 && len1 > 0) mbedtls_sha1_update(&ctx, v1, len1);
+    if (v2 && len2 > 0) mbedtls_sha1_update(&ctx, v2, len2);
+    if (v3 && len3 > 0) mbedtls_sha1_update(&ctx, v3, len3);
     uint8_t digest[20];
-    mbedtls_sha1_finish_ret(&ctx, digest);
+    mbedtls_sha1_finish(&ctx, digest);
     mbedtls_sha1_free(&ctx);
 
     uint8_t *out = hash_return;

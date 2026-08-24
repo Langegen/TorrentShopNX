@@ -44,6 +44,9 @@
                     id="keepAwakeCell" />
                     
                 <brls:SelectorCell
+                    id="backlightTimeoutCell" />
+                    
+                <brls:SelectorCell
                     id="modeCell" />
                     
                 <brls:DetailCell

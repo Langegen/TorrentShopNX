@@ -60,7 +60,7 @@ static constexpr size_t NSP_HEADER_READ_SIZE = 128 * 1024; // 128KB для за�
 static constexpr size_t NSP_HEADER_PROBE_SIZE = 4 * 1024;  // 4KB для быстрого определения реального размера header
 static constexpr size_t NSP_HEADER_MAX_SIZE  = 4 * 1024 * 1024; // защитный лимит для неадекватных header
 static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 4 * 1024 * 1024; // Increased from 128KB to 4MB to prevent starvation
-static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 64 * 1024 * 1024; // Increased to 64MB for smoother play buffer
+static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 96 * 1024 * 1024; // Increased to 96MB for smoother play buffer
 // If the full prebuffer target never fills (slow/dead swarm), start installing
 // with whatever has arrived after this long -- provided at least one byte is
 // there. Without the timeout a 3-peer wifi swarm that trickles below the
@@ -68,7 +68,7 @@ static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 64 * 1024 * 1024; // Incre
 static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 60000;
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
-static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (saves RAM in Applet mode)
+static constexpr size_t MIN_BUFFER_SIZE = 32 * 1024 * 1024; // 32MB (smooth streaming buffer)
 static constexpr size_t DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;  // 4MB chunk
 #ifdef __SWITCH__
 static constexpr size_t COLLECTOR_THREAD_STACK_SIZE = 0x20000; // 128KB
@@ -503,7 +503,7 @@ void HybridNspInstaller::collectorThreadFunc() {
     std::vector<uint8_t> chunk_buf(chunk_size);
 
     int retry_count = 0;
-    const int max_retries = 12; // increased from 5: stall recovery can take 3-12 seconds
+    const int max_retries = 240; // 240 * 500ms = 120s patience for large 16MB pieces or slow swarms
     const uint64_t partial_log_interval = 16ULL * 1024ULL * 1024ULL;
     const size_t min_coalesce_size = (chunk_size >= 1024 * 1024) ? (1024 * 1024) : chunk_size;
     uint64_t next_partial_log_offset = data_offset;
@@ -533,16 +533,16 @@ void HybridNspInstaller::collectorThreadFunc() {
         last_collector_stats_bytes = downloaded;
     };
 
-    while (current_offset < data_end && !cancel_requested_.load() && !g_appExiting.load()) {
+    while (current_offset < data_end && !cancel_requested_.load() && !g_appExiting.load() && !hasError()) {
         size_t to_read_total = static_cast<size_t>(
             std::min(static_cast<uint64_t>(chunk_size), data_end - current_offset));
         to_read_total = limitReadToPieceBoundary(source_, current_offset, to_read_total);
 
         size_t accumulated = 0;
-        while (accumulated < to_read_total && !cancel_requested_.load() && !g_appExiting.load()) {
+        while (accumulated < to_read_total && !cancel_requested_.load() && !g_appExiting.load() && !hasError()) {
             size_t req = to_read_total - accumulated;
             size_t read = source_->read(current_offset + accumulated, chunk_buf.data() + accumulated, req);
-            if (cancel_requested_.load() || g_appExiting.load()) break;
+            if (cancel_requested_.load() || g_appExiting.load() || hasError()) break;
 
             if (read > 0) {
                 accumulated += read;
@@ -573,9 +573,11 @@ void HybridNspInstaller::collectorThreadFunc() {
                                + " got=0");
                 break;
             }
-            util::logLine("collector: retry " + std::to_string(retry_count)
-                           + "/" + std::to_string(max_retries)
-                           + " offset=" + std::to_string(current_offset));
+            if (retry_count == 1 || (retry_count % 10) == 0) {
+                util::logLine("collector: retry " + std::to_string(retry_count)
+                               + "/" + std::to_string(max_retries)
+                               + " offset=" + std::to_string(current_offset));
+            }
 #ifdef __SWITCH__
             svcSleepThread(500000000LL); // 500ms
 #else
@@ -814,7 +816,7 @@ void HybridNspInstaller::installerThreadFunc() {
             // тратит лишние секунды на ожидание полного буфера.
             const int src_kbps = source_->downloadSpeedKBps();
             if (src_kbps > 0) {
-                const size_t speed_target = static_cast<size_t>(src_kbps) * 10 * 1024; // ~10s of network
+                const size_t speed_target = static_cast<size_t>(src_kbps) * 20 * 1024; // ~20s of network
                 target = std::max(MIN_BUFFER_SIZE, std::min(target, speed_target));
             }
         }
@@ -1015,7 +1017,9 @@ void HybridNspInstaller::installerThreadFunc() {
                                           + " to " + std::to_string(d_size));
                         }
                         if (!ncm_.createPlaceHolder(current_entry->content_id, d_size)) {
-                            setError("NCZ: Failed to create placeholder for " + current_entry->name);
+                            setError("NCZ: Not enough free space or failed to create placeholder for " +
+                                     current_entry->name + " (requires " +
+                                     std::to_string((d_size + 1024*1024*1024 - 1) / (1024*1024*1024)) + " GB)");
                             ring_buffer_.setEof();
                             goto cleanup_sha;
                         }
@@ -1502,10 +1506,20 @@ bool HybridNspInstaller::registerContentMetaPhase() {
             if (R_SUCCEEDED(ctrl_rc) && app_ctrl_size >= sizeof(app_ctrl[0].nacp)) {
                 NacpLanguageEntry* lang = nullptr;
                 Result lang_rc = nacpGetLanguageEntry(&app_ctrl[0].nacp, &lang);
-                if (R_SUCCEEDED(lang_rc) && lang) {
+                if (R_SUCCEEDED(lang_rc) && lang && lang->name[0] != '\0') {
                     util::logLine("hybrid: application title from NACP: " + std::string(lang->name));
                 } else {
-                    util::logLine("hybrid: nacpGetLanguageEntry failed, rc=" + std::to_string(lang_rc));
+                    bool found = false;
+                    for (int l = 0; l < 16; l++) {
+                        if (app_ctrl[0].nacp.lang[l].name[0] != '\0') {
+                            util::logLine("hybrid: application title from NACP (lang " + std::to_string(l) + "): " + std::string(app_ctrl[0].nacp.lang[l].name));
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        util::logLine("hybrid: nacpGetLanguageEntry failed or empty, rc=" + std::to_string(lang_rc));
+                    }
                 }
             } else {
                 util::logLine("hybrid: nsGetApplicationControlData failed, rc=" + std::to_string(ctrl_rc));
@@ -1663,6 +1677,8 @@ bool HybridNspInstaller::isFinished() const {
 void HybridNspInstaller::setError(const std::string& message) {
     error_message_ = message;
     state_ = InstallState::Failed;
+    cancel_requested_.store(true);
+    ring_buffer_.setEof();
     util::logLine("hybrid: ERROR - " + message);
 }
 
