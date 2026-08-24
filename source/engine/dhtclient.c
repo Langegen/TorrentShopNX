@@ -406,11 +406,17 @@ static void dht_bg_main(void *arg) {
                 engine_log(ENGINE_LOG_INFO,
                            "[dht] background bootstrap: %d routers", boot_count);
             }
-        } else if (good == 0 && now - last_bootstrap > (u64)15 * freq) {
+        } else if (good < 32 &&
+                   now - last_bootstrap > (u64)(good == 0 ? 15 : 60) * freq) {
+            // anacrolix re-bootstraps whenever the routing table is thin;
+            // same idea here: the table can decay below usefulness (field:
+            // 163 good nodes -> 12 in ~10 min) and then every search walks
+            // dead addresses. Refill from the router set + cache.
             int boot_count = bg_bootstrap(s_bg_sock);
             last_bootstrap = now;
             engine_log(ENGINE_LOG_INFO,
-                       "[dht] background re-bootstrap: %d routers", boot_count);
+                       "[dht] background re-bootstrap (good=%d): %d routers",
+                       good, boot_count);
         }
 
         if (s_bg_bootstrapped && (good + dubious) >= 1) {
@@ -432,14 +438,48 @@ static void dht_bg_main(void *arg) {
             mutexUnlock(&s_bg_mtx);
 
             // Random-id walk: fills buckets across the whole id space.
-            // When bootstrapping (< 120 nodes) walk every ~20 s; once warm (>= 120 nodes),
-            // walk every ~60 s for low-overhead maintenance.
-            u64 walk_iv = (u64)(good < 120 ? 20 : 60) * freq;
+            // anacrolix refreshes buckets until they are full; a sparse
+            // table must walk aggressively or it decays (measured in the
+            // field: 163 good nodes -> 12 in ~10 min with a 60 s walk,
+            // because jech never re-pings nodes off the search path).
+            u64 walk_iv = (u64)(good < 150 ? 15 : 60) * freq;
             if (now - s_last_walk > walk_iv) {
                 uint8_t rid[20];
                 randomGet(rid, sizeof(rid));
                 dht_search(rid, 0, AF_INET, NULL, NULL);
                 s_last_walk = now;
+            }
+        }
+
+        // Table refresh sweep (anacrolix TableMaintainer equivalent): jech
+        // marks a node dubious 15 min after its last reply and never pings
+        // it again unless it sits on a search path, so the table decays
+        // passively. A rolling sweep pings every known node every 10 min:
+        // live nodes refresh their reply time and stay good, dead ones stay
+        // dubious and get replaced by the walk above. Rate-limited to a
+        // handful of pings per loop iteration (~1/s) to avoid a UDP burst.
+        {
+            static u64 sweep_start = 0;
+            static int sweep_pos = 0;
+            u64 sweep_iv = (u64)600 * freq;
+            if (sweep_start == 0) sweep_start = now;
+            if (now - sweep_start > sweep_iv) {
+                struct sockaddr_in sins_p[DHT_CACHE_MAX_NODES];
+                int num_p = DHT_CACHE_MAX_NODES, num6_p = 0;
+                dht_get_nodes(sins_p, &num_p, NULL, &num6_p);
+                int sent = 0;
+                while (sent < 8 && sweep_pos < num_p) {
+                    dht_ping_node((struct sockaddr *)&sins_p[sweep_pos],
+                                  sizeof(sins_p[sweep_pos]));
+                    sweep_pos++;
+                    sent++;
+                }
+                if (sweep_pos >= num_p) {
+                    engine_log(ENGINE_LOG_INFO,
+                               "[dht] table refresh sweep done (%d nodes)", num_p);
+                    sweep_pos = 0;
+                    sweep_start = now;
+                }
             }
         }
 
@@ -605,7 +645,10 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
     mutexUnlock(&s_bg_mtx);
 
     dlog("DHT fin: %d peers", delivered);
-    s_last_peers_found = delivered;
+    // NB: s_last_peers_found is deliberately NOT reset here. It is a
+    // session-cumulative diagnostic: a value that stops growing means the
+    // DHT stopped delivering peers entirely (usually a decayed routing
+    // table), which is exactly what the log should show.
     return delivered;
 }
 

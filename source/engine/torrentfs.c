@@ -224,11 +224,9 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 // productive seed could be using (measured: with a 45-180 s rotation the
 // live set plateaued far below the swarm's reachable seed count).
 #define CHOKED_ROTATE_SECS 20
-// During bootstrap (fewer than this many pieces ever completed) we have nothing
-// to reciprocate with yet, so seeds are precious: they optimistic-unchoke us
-// every ~30 s. Still keep the cap short enough to cycle through the chokers.
-#define BOOTSTRAP_THRESH              5
-#define CHOKED_ROTATE_BOOTSTRAP_SECS 60
+// Bootstrap: fewer than this many pieces ever completed -- we have nothing to
+// reciprocate with yet, so full seeds are precious and never rotated out.
+#define BOOTSTRAP_THRESH 5
 
 // Reciprocation-based choking (BEP-3 tit-for-tat, adapted: ranking is by the
 // peer's download rate TO US, not their upload rate from us -- a streaming
@@ -824,11 +822,16 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             // (measured: ~half of all dial slots went to re-dialing dead
             // addresses).
             secs = f > 1 ? BACKOFF_MAX_SECS : 60;
-        } else if (t->pieces_ever < BOOTSTRAP_THRESH &&
+        } else if (!had_conn &&
+                   t->pieces_ever < BOOTSTRAP_THRESH &&
                    t->peer_src[pidx] == PEER_SRC_TRACKER) {
             // During bootstrap, tracker-reported addresses are live seeders:
-            // keep the reconnect cadence flat so a missed optimistic slot is
-            // retried before the next one passes.
+            // keep the DIAL cadence flat so a missed optimistic slot is
+            // retried before the next one passes. A peer that DID complete
+            // a connection falls through to the exponential ladder below --
+            // flat 5 s redials of a seed that connects but sends nothing is
+            // a reconnect loop, not recovery (measured in the field: the
+            // same silent seed re-dialed every ~30 s for 10+ minutes).
             secs = BACKOFF_DROP_SECS;
         } else {
             // Exponential backoff for repeat failures to prevent 11s reconnect storms
@@ -2260,20 +2263,19 @@ static void netloop_main(void *arg) {
                 }
                 // A peer that keeps us choked forever without ever delivering
                 // is dead weight: with candidates waiting in the pool, drop it
-                // and dial a fresh one. 60 s is past the ~30 s optimistic
-                // unchoke rotation, so a seed that merely rotates slots still
-                // gets its chance; a peer that already proved useful
-                // (rx_total > 0) is never rotated out on this basis. During
-                // bootstrap a FULL seed gets triple the patience: it will
-                // optimistic-unchoke us eventually, and killing it early just
-                // throws away the slot we were waiting for.
+                // and dial a fresh one. A peer that already proved useful
+                // (rx_total > 0) is never rotated out on this basis. FULL
+                // seeds during bootstrap are exempt entirely (anacrolix/
+                // torrserver model): they optimistic-unchoke on a ~30 s cycle
+                // and are the only thing that can start the download -- killing
+                // the connection just re-dials the same seed over and over,
+                // which is exactly the reconnect loop we observed in the
+                // field (one live seed, handshake every ~30 s, zero blocks).
                 if (!s->connecting && s->nb.handshaked && s->nb.choked &&
                     s->rx_total == 0 &&
-                    t->peer_count > t->st_live + t->st_connecting) {
+                    t->peer_count > t->st_live + t->st_connecting &&
+                    !(t->pieces_ever < BOOTSTRAP_THRESH && peer_is_seed(t, s))) {
                     int rotate_secs = CHOKED_ROTATE_SECS;
-                    if (t->pieces_ever < BOOTSTRAP_THRESH &&
-                        peer_is_seed(t, s))
-                        rotate_secs = CHOKED_ROTATE_BOOTSTRAP_SECS;
                     if (now - s->started > (u64)rotate_secs * t->freq) {
                         engine_log(ENGINE_LOG_DEBUG,
                                    "[sess %d] rotate: peer choked us %ds without delivering",
@@ -2291,11 +2293,17 @@ static void netloop_main(void *arg) {
                     sess_close(t, s, true);
                     continue;
                 }
-                // Requested blocks and nothing came: give strikes before
-                // disconnecting. Undelivered requests are NOT expired -- the
-                // duplicate timer in next_block_in() re-requests their blocks
-                // from other sessions after DUP_REQ_SECS, and this strike
-                // path is what eventually removes the dead peer itself.
+                // Requested blocks and nothing came. Proven peers get
+                // strikes before disconnecting. A peer that NEVER delivered
+                // a single byte keeps its connection (anacrolix model: the
+                // duplicate timer in next_block_in() redistributes its
+                // blocks to other sessions); its outstanding requests are
+                // dropped so the per-block duplicate caps cannot saturate,
+                // and the next scan re-requests them fresh. Closing the
+                // connection here was one half of the observed ~30 s
+                // reconnect loop: with a flat backoff the same silent seed
+                // got re-dialed every half minute for 10+ minutes without a
+                // single block delivered.
                 if (s->req_n > 0 &&
                     now - s->last_block > (u64)STALL_SECS * t->freq) {
                     if (s->rx_total > 0 && s->timeout_strikes < 3) {
@@ -2303,7 +2311,7 @@ static void netloop_main(void *arg) {
                         s->last_block = now;
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] stall strike %d/3",
                                    i, s->timeout_strikes);
-                    } else {
+                    } else if (s->rx_total > 0) {
                         t->st_fetch_fail++;
                         set_err(t, "stall", 0);
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] close stall strikes=%d",
@@ -2311,6 +2319,11 @@ static void netloop_main(void *arg) {
                         s->fail_kind = PEER_FAIL_TIMEOUT;
                         sess_close(t, s, true);
                         continue;
+                    } else {
+                        engine_log(ENGINE_LOG_DEBUG,
+                                   "[sess %d] stall (never delivered): drop requests, keep conn",
+                                   i);
+                        sess_drop_requests(t, s);
                     }
                 }
 
