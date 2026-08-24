@@ -67,41 +67,62 @@ CustomSchedulerSnapshot CustomEngineScheduler::rebuild(int current_piece) {
 
     int urgent_count = cfg_.urgent_pieces +
         (stall_level_ > 0 ? cfg_.stall_extra_urgent : 0);
-    if (urgent_count < 2) urgent_count = 2;
+    if (urgent_count < 1) urgent_count = 1;
 
     int prefetch_count = cfg_.prefetch_pieces +
         (stall_level_ > 0 ? cfg_.stall_extra_prefetch : 0);
     if (prefetch_count < 2) prefetch_count = 2;
 
     int speculative_count = cfg_.speculative_pieces;
-    if (stall_level_ > 0) speculative_count = 0;
+    int normal_count = cfg_.normal_pieces;
+    if (stall_level_ > 0) {
+        speculative_count = 0;
+        normal_count = 0;
+    }
 
-    // Critical: current piece and the next one.
+    // Now: the reader's current piece.
     snap.critical.start = current_piece;
     snap.critical.end   = std::min(file_last_piece_, current_piece + cfg_.critical_pieces - 1);
 
-    // Urgent: just ahead.
+    // Next: just behind it.
     snap.urgent.start = snap.critical.end + 1;
     snap.urgent.end   = std::min(file_last_piece_, snap.urgent.start + urgent_count - 1);
 
-    // Prefetch: sequential read-ahead.
+    // Readahead: sequential read-ahead (torrserver: readahead pieces).
     snap.prefetch.start = snap.urgent.end + 1;
     snap.prefetch.end   = std::min(file_last_piece_, snap.prefetch.start + prefetch_count - 1);
 
-    // Speculative: further ahead.
+    // High: the next few after the readahead window.
     snap.speculative.start = snap.prefetch.end + 1;
     snap.speculative.end   = std::min(file_last_piece_,
                                       snap.speculative.start + speculative_count - 1);
 
+    // Normal: the remainder of the connection budget.
+    snap.normal.start = snap.speculative.end + 1;
+    snap.normal.end   = std::min(file_last_piece_,
+                                 snap.normal.start + normal_count - 1);
+
     // Tail: a few pieces behind the playhead for cache/seek resilience.
-    snap.tail.start = std::max(file_first_piece_, current_piece - cfg_.tail_pieces);
-    snap.tail.end   = std::max(file_first_piece_, current_piece - 1);
-    if (snap.tail.end < snap.tail.start) snap.tail = {};
+    // Disabled for the sequential installer (tail_pieces == 0): the range
+    // current..current-1 is empty. Must never produce a range touching or
+    // ahead of the playhead (a bogus [0,0] tail at the file start would
+    // overwrite the Now piece's Critical zone with the lowest priority).
+    {
+        int64_t ts = current_piece - cfg_.tail_pieces;
+        int64_t te = current_piece - 1;
+        if (te < ts || te < file_first_piece_ || ts > file_last_piece_) {
+            snap.tail = {};
+        } else {
+            snap.tail.start = std::max(ts, (int64_t)file_first_piece_);
+            snap.tail.end   = std::min(te, (int64_t)file_last_piece_);
+        }
+    }
 
     snap.critical    = clamp_range(snap.critical,    file_first_piece_, file_last_piece_);
     snap.urgent      = clamp_range(snap.urgent,      file_first_piece_, file_last_piece_);
     snap.prefetch    = clamp_range(snap.prefetch,    file_first_piece_, file_last_piece_);
     snap.speculative = clamp_range(snap.speculative, file_first_piece_, file_last_piece_);
+    snap.normal      = clamp_range(snap.normal,      file_first_piece_, file_last_piece_);
     snap.tail        = clamp_range(snap.tail,        file_first_piece_, file_last_piece_);
 
     last_snapshot_ = snap;
@@ -123,6 +144,9 @@ void CustomEngineScheduler::apply_zones(const CustomSchedulerSnapshot& snap) {
     apply(snap.urgent,      TSNX_ZONE_URGENT);
     apply(snap.prefetch,    TSNX_ZONE_PREFETCH);
     apply(snap.speculative, TSNX_ZONE_SPECULATIVE);
+    // The lowest engine zone (TAIL=5) carries the torrserver "Normal" class:
+    // lowest priority, still downloaded, never behind the playhead.
+    apply(snap.normal,      TSNX_ZONE_TAIL);
     apply(snap.tail,        TSNX_ZONE_TAIL);
 
     // Re-apply any currently boosted slow-peer pieces so they aren't wiped out by on_read_request
