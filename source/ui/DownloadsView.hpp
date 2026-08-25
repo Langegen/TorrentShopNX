@@ -22,6 +22,7 @@ public:
     BRLS_BIND(brls::Box, installBarBg, "installBarBg");
     BRLS_BIND(brls::Label, installText, "installText");
     BRLS_BIND(brls::Label, statsText, "statsText");
+    BRLS_BIND(brls::Label, elapsedText, "elapsedText");
     BRLS_BIND(brls::Label, peersText, "peersText");
     BRLS_BIND(brls::Label, statusText, "statusText");
     BRLS_BIND(brls::Box, installProgressRow, "installProgressRow");
