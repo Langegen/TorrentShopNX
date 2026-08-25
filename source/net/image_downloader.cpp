@@ -8,6 +8,11 @@
 #include <fstream>
 #include <filesystem>
 
+// Vendored stb headers emit a wall of "defined but not used" for their
+// static API surface; the implementation is intentionally compiled into this
+// TU. Silence the noise locally instead of patching vendored code.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #include <borealis/extern/nanovg/stb_image.h>
@@ -15,6 +20,7 @@
 #define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#pragma GCC diagnostic pop
 
 namespace net {
 

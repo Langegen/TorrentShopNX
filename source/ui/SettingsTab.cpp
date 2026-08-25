@@ -371,7 +371,7 @@ void SettingsTab::onContentAvailable() {
                             url = j.value("url", "");
                         }
                         
-                        std::string currentVersion = "2.2"; // Current app version
+                        std::string currentVersion = "2.3"; // Current app version
                         
                         std::string cleanVersion = version;
                         if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) {

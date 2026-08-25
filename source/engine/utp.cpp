@@ -135,7 +135,7 @@ struct PACKED_ATTRIBUTE PackedSockAddr {
 	PackedSockAddr(const SOCKADDR_STORAGE* sa, socklen_t len)
 	{
 		if (sa->ss_family == AF_INET) {
-			assert(len >= sizeof(sockaddr_in));
+			assert(len >= (socklen_t)sizeof(sockaddr_in));
 			const sockaddr_in *sin = (sockaddr_in*)sa;
 			_sin6w[0] = 0;
 			_sin6w[1] = 0;
@@ -146,7 +146,7 @@ struct PACKED_ATTRIBUTE PackedSockAddr {
 			_sin4 = sin->sin_addr.s_addr;
 			_port = ntohs(sin->sin_port);
 		} else {
-			assert(len >= sizeof(sockaddr_in6));
+			assert(len >= (socklen_t)sizeof(sockaddr_in6));
 			const sockaddr_in6 *sin6 = (sockaddr_in6*)sa;
 			_in._in6addr = sin6->sin6_addr;
 			_port = ntohs(sin6->sin6_port);
@@ -196,7 +196,7 @@ struct PACKED_ATTRIBUTE PackedSockAddr {
 	}
 } ALIGNED_ATTRIBUTE(4);
 
-struct PACKED_ATTRIBUTE RST_Info {
+struct PACKED_ATTRIBUTE ALIGNED_ATTRIBUTE(4) RST_Info {
 	PackedSockAddr addr;
 	uint32 connid;
 	uint32 timestamp;
@@ -859,7 +859,7 @@ void UTPSocket::send_data(PacketFormat* b, size_t length, bandwidth_type_t type)
 	int flags = version == 0 ? b->flags : b1->type();
 	uint16 seq_nr = version == 0 ? b->seq_nr : b1->seq_nr;
 	uint16 ack_nr = version == 0 ? b->ack_nr : b1->ack_nr;
-	LOG_UTPV("0x%08x: send %s len:%u id:%u timestamp:"I64u" reply_micro:%u flags:%s seq_nr:%u ack_nr:%u",
+	LOG_UTPV("0x%08x: send %s len:%u id:%u timestamp:" I64u " reply_micro:%u flags:%s seq_nr:%u ack_nr:%u",
 			 this, addrfmt(addr, addrbuf), (uint)length, conn_id_send, time, reply_micro, flagnames[flags],
 			 seq_nr, ack_nr);
 #endif
@@ -1705,7 +1705,7 @@ void UTPSocket::apply_ledbat_ccontrol(size_t bytes_acked, uint32 actual_delay, i
 	// used in parse_log.py
 	LOG_UTP("0x%08x: actual_delay:%u our_delay:%d their_delay:%u off_target:%d max_window:%u "
 			"delay_base:%u delay_sum:%d target_delay:%d acked_bytes:%u cur_window:%u "
-			"scaled_gain:%f rtt:%u rate:%u quota:%d wnduser:%u rto:%u timeout:%d get_microseconds:"I64u" "
+			"scaled_gain:%f rtt:%u rate:%u quota:%d wnduser:%u rto:%u timeout:%d get_microseconds:" I64u " "
 			"cur_window_packets:%u packet_size:%u their_delay_base:%u their_actual_delay:%u",
 			this, actual_delay, our_delay / 1000, their_hist.get_value() / 1000,
 			(int)off_target / 1000, (uint)(max_window),  our_hist.delay_base,
@@ -1790,7 +1790,7 @@ size_t UTP_ProcessIncoming(UTPSocket *conn, const byte *packet, size_t len, bool
 
 	if (pk_flags >= ST_NUM_STATES) return 0;
 
-	LOG_UTPV("0x%08x: Got %s. seq_nr:%u ack_nr:%u state:%s version:%u timestamp:"I64u" reply_micro:%u",
+	LOG_UTPV("0x%08x: Got %s. seq_nr:%u ack_nr:%u state:%s version:%u timestamp:" I64u " reply_micro:%u",
 			 conn, flagnames[pk_flags], pk_seq_nr, pk_ack_nr, statenames[conn->state], conn->version,
 			 conn->version == 0?(uint64)(pf->tv_sec) * 1000000 + pf->tv_usec:uint64(pf1->tv_usec),
 			 conn->version == 0?(uint32)(pf->reply_micro):(uint32)(pf1->reply_micro));

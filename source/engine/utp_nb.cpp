@@ -219,9 +219,9 @@ void utp_nb_service(void) {
         if (n == 0) break;
         if (getenv("UTP_DBG")) {
             fprintf(stderr, "[utp_nb] rx %u bytes from %u.%u.%u.%u:%u\n", (unsigned)n,
-                    from.sin_addr.s_addr & 0xff, (from.sin_addr.s_addr >> 8) & 0xff,
-                    (from.sin_addr.s_addr >> 16) & 0xff, (from.sin_addr.s_addr >> 24) & 0xff,
-                    ntohs(from.sin_port));
+                    (unsigned)(from.sin_addr.s_addr & 0xff), (unsigned)((from.sin_addr.s_addr >> 8) & 0xff),
+                    (unsigned)((from.sin_addr.s_addr >> 16) & 0xff), (unsigned)((from.sin_addr.s_addr >> 24) & 0xff),
+                    (unsigned)ntohs(from.sin_port));
         }
         UTP_IsIncomingUTP(cb_on_incoming, cb_send_to, NULL,
                           buf, (size_t)n, (struct sockaddr *)&from, fromlen);

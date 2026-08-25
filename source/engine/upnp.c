@@ -231,7 +231,7 @@ static int soap_add_mapping(const char *control_url, const char *svc_type,
     struct curl_slist *hdrs = NULL;
     hdrs = curl_slist_append(hdrs, "Content-Type: text/xml; charset=\"utf-8\"");
     hdrs = curl_slist_append(hdrs, soapaction);
-    hdrs = curl_slist_append(hdrs, "User-Agent: TorrentShopNX/2.2 UPnP/1.1");
+    hdrs = curl_slist_append(hdrs, "User-Agent: TorrentShopNX/2.3 UPnP/1.1");
 
     curl_easy_setopt(c, CURLOPT_URL, control_url);
     curl_easy_setopt(c, CURLOPT_POST, 1L);
@@ -293,8 +293,10 @@ static int local_ip_for(const char *location, char *out, size_t outlen) {
     }
     close(sock);
     snprintf(out, outlen, "%u.%u.%u.%u",
-             (me.sin_addr.s_addr >> 0) & 0xff, (me.sin_addr.s_addr >> 8) & 0xff,
-             (me.sin_addr.s_addr >> 16) & 0xff, (me.sin_addr.s_addr >> 24) & 0xff);
+             (unsigned)((me.sin_addr.s_addr >> 0) & 0xff),
+             (unsigned)((me.sin_addr.s_addr >> 8) & 0xff),
+             (unsigned)((me.sin_addr.s_addr >> 16) & 0xff),
+             (unsigned)((me.sin_addr.s_addr >> 24) & 0xff));
     return 0;
 }
 
