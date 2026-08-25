@@ -78,7 +78,7 @@ typedef struct {
     bool     connecting;
     bool     handshaked;
     bool     choked;
-    int64_t  claim_piece; // -1 if none
+    int64_t  claim_piece; // highest-priority piece with an outstanding request, -1 if none
 } torrentfs_peer_info;
 
 // Fill up to `max` live session entries; returns count written.
@@ -117,8 +117,8 @@ void torrentfs_claim_stats(const torrentfs *tfs, int *claiming, int *idle);
 // messages accepted / dropped because their length didn't match what we expect.
 void torrentfs_bitfield_stats(const torrentfs *tfs, int *empty, int *ok, int *bad);
 
-// The window claim_piece last searched (playhead, and the [lo,hi) range), how
-// often it found nothing vs something, and how many pieces are held INFLIGHT.
+// The streaming window [lo,hi) around the playhead, how often the request
+// scan found nothing vs something, and how many pieces are held INFLIGHT.
 void torrentfs_claim_debug(const torrentfs *tfs, int64_t *ph, int64_t *lo,
                            int64_t *hi, int *fail, int *ok, int *inflight);
 

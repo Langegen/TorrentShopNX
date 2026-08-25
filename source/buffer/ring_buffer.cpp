@@ -189,6 +189,18 @@ void RingBuffer::reset() {
     RB_UNLOCK();
 }
 
+void RingBuffer::clear() {
+    RB_LOCK();
+    capacity_ = 0;
+    buffer_.clear();
+    buffer_.shrink_to_fit();
+    read_pos_  = 0;
+    write_pos_ = 0;
+    stored_    = 0;
+    eof_       = false;
+    RB_UNLOCK();
+}
+
 void RingBuffer::reinit(size_t capacity) {
     RB_LOCK();
     capacity_ = capacity;

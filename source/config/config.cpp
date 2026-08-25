@@ -7,7 +7,28 @@
 #include <ctime>
 #include "../utils/log.h"
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 namespace config {
+
+static std::string normalizeCatalogUrl(std::string url) {
+    if (url.empty()) return url;
+    // If github.com/.../blob/..., convert to raw.githubusercontent.com/.../
+    size_t ghPos = url.find("github.com/");
+    if (ghPos != std::string::npos) {
+        size_t blobPos = url.find("/blob/", ghPos);
+        if (blobPos != std::string::npos) {
+            url.replace(blobPos, 6, "/");
+            ghPos = url.find("github.com/");
+            if (ghPos != std::string::npos) {
+                url.replace(ghPos, 10, "raw.githubusercontent.com");
+            }
+        }
+    }
+    return url;
+}
 
 namespace {
 
@@ -24,13 +45,15 @@ bool parseConfigBody(const std::string& body,
                      std::string& catalog_source_url,
                      std::string& data_mode,
                      bool& keep_awake_during_downloads,
+                     int& backlight_timeout,
                      bool& cache_cover_thumbnails,
                      int& listen_port,
                      std::string& last_catalog_update_date,
                      std::string& install_location,
                      std::string& app_update_url,
                      bool& auto_app_update,
-                     std::string& last_app_update_check_date) {
+                     std::string& last_app_update_check_date,
+                     std::string& language) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
 
@@ -65,6 +88,11 @@ bool parseConfigBody(const std::string& body,
                 } else if (key == "keep_awake_during_downloads") {
                     keep_awake_during_downloads = parseBool(val, keep_awake_during_downloads);
                     parsed_known_keys = true;
+                } else if (key == "backlight_timeout") {
+                    int t = std::atoi(val.c_str());
+                    if (t == 15 || t == 30 || t == 60 || t == 120) backlight_timeout = t;
+                    else backlight_timeout = 0;
+                    parsed_known_keys = true;
                 } else if (key == "cache_cover_thumbnails") {
                     cache_cover_thumbnails = parseBool(val, cache_cover_thumbnails);
                     parsed_known_keys = true;
@@ -87,6 +115,9 @@ bool parseConfigBody(const std::string& body,
                 } else if (key == "last_app_update_check_date") {
                     last_app_update_check_date = val;
                     parsed_known_keys = true;
+                } else if (key == "language") {
+                    language = val;
+                    parsed_known_keys = true;
                 }
             } else if (legacy_single_value.empty()) {
                 // Legacy format: config.txt contained only TorrServer URL in one line.
@@ -105,10 +136,18 @@ bool parseConfigBody(const std::string& body,
 }
 
 bool readWholeFile(const std::string& path, std::string& out) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) return false;
-    out.assign((std::istreambuf_iterator<char>(file)),
-               std::istreambuf_iterator<char>());
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) return false;
+    std::streamsize size = in.tellg();
+    if (size < 0) return false;
+    in.seekg(0, std::ios::beg);
+    out.resize(static_cast<size_t>(size));
+    if (size > 0) {
+        in.read(&out[0], size);
+        if (!in && in.gcount() != size) {
+            out.resize(static_cast<size_t>(in.gcount()));
+        }
+    }
     return true;
 }
 
@@ -131,6 +170,7 @@ ConfigManager::ConfigManager() {
     catalog_source_url_.clear();
     data_mode_ = "local_client";
     keep_awake_during_downloads_ = true;
+    backlight_timeout_ = 0;
     cache_cover_thumbnails_ = false;
     listen_port_ = 6882;
     last_catalog_update_date_.clear();
@@ -138,6 +178,7 @@ ConfigManager::ConfigManager() {
     app_update_url_ = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
     auto_app_update_ = true;
     last_app_update_check_date_.clear();
+    language_ = "auto";
     load();
 }
 
@@ -145,23 +186,25 @@ void ConfigManager::load() {
     std::string body;
     if (readWholeFile(config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, cache_cover_thumbnails_, listen_port_,
+                        keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, install_location_, app_update_url_,
-                        auto_app_update_, last_app_update_check_date_);
+                        auto_app_update_, last_app_update_check_date_, language_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
-        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", install_location: " + install_location_);
+        if (language_ != "ru" && language_ != "en-US" && language_ != "en") language_ = "auto";
+        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", install_location: " + install_location_ + ", language: " + language_);
         return;
     }
 
     // Backward compatibility: migrate old config.txt on first run.
     if (readWholeFile(legacy_config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
-                        keep_awake_during_downloads_, cache_cover_thumbnails_, listen_port_,
+                        keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, install_location_, app_update_url_,
-                        auto_app_update_, last_app_update_check_date_);
+                        auto_app_update_, last_app_update_check_date_, language_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
+        if (language_ != "ru" && language_ != "en-US" && language_ != "en") language_ = "auto";
         util::logLine("config: loaded legacy config.txt, migrating to config.ini");
         save();
         return;
@@ -192,6 +235,7 @@ void ConfigManager::save() {
     file << "catalog_source_url=" << catalog_source_url_ << "\n";
     file << "data_mode=" << data_mode_ << "\n";
     file << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
+    file << "backlight_timeout=" << backlight_timeout_ << "\n";
     file << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
     file << "listen_port=" << listen_port_ << "\n";
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
@@ -199,6 +243,7 @@ void ConfigManager::save() {
     file << "app_update_url=" << app_update_url_ << "\n";
     file << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
     file << "last_app_update_check_date=" << last_app_update_check_date_ << "\n";
+    file << "language=" << language_ << "\n";
     util::logLine("config: saved config.ini");
 }
 
@@ -216,18 +261,45 @@ const std::string& ConfigManager::getCatalogSourceUrl() const {
 }
 
 std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
-    if (catalog_source_url_.empty()) {
-        return DEFAULT_CATALOG_URL;
+    std::string url = normalizeCatalogUrl(catalog_source_url_);
+
+    bool isCustom = !url.empty() &&
+                    url != DEFAULT_CATALOG_URL_RU &&
+                    url != DEFAULT_CATALOG_URL_EN &&
+                    url != LEGACY_CATALOG_URL &&
+                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/main/RU_catalog.json" &&
+                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/main/EN_catalog.json" &&
+                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json" &&
+                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
+
+    if (isCustom) {
+        return url;
     }
-    if (catalog_source_url_ == LEGACY_CATALOG_URL) {
-        util::logLine("config: saved catalog URL is legacy switch_games.json, using new default RU_catalog.json");
-        return DEFAULT_CATALOG_URL;
+
+    // Determine default catalog based on active / configured language
+    std::string lang = language_;
+    if (lang.empty() || lang == "auto") {
+#ifdef __SWITCH__
+        uint64_t languageCode = 0;
+        if (R_SUCCEEDED(setGetSystemLanguage(&languageCode))) {
+            char* languageName = (char*)&languageCode;
+            lang = std::string(languageName);
+        } else {
+            lang = "en-US";
+        }
+#else
+        lang = "ru";
+#endif
     }
-    return catalog_source_url_;
+
+    if (lang == "ru" || lang.rfind("ru", 0) == 0) {
+        return DEFAULT_CATALOG_URL_RU;
+    }
+    return DEFAULT_CATALOG_URL_EN;
 }
 
 void ConfigManager::setCatalogSourceUrl(const std::string& url) {
-    catalog_source_url_ = url;
+    catalog_source_url_ = normalizeCatalogUrl(url);
     save();
 }
 
@@ -256,6 +328,19 @@ void ConfigManager::setKeepAwakeDuringDownloads(bool enabled) {
     save();
 }
 
+int ConfigManager::getBacklightTimeout() const {
+    return backlight_timeout_;
+}
+
+void ConfigManager::setBacklightTimeout(int seconds) {
+    if (seconds != 15 && seconds != 30 && seconds != 60 && seconds != 120) {
+        backlight_timeout_ = 0;
+    } else {
+        backlight_timeout_ = seconds;
+    }
+    save();
+}
+
 int ConfigManager::getListenPort() const {
     return listen_port_;
 }
@@ -280,7 +365,7 @@ std::string ConfigManager::currentDateString() {
     if (now <= 0) return "";
 
     std::tm tm_now = {};
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) || defined(__MINGW32__)
     localtime_s(&tm_now, &now);
 #else
     localtime_r(&now, &tm_now);
@@ -354,6 +439,19 @@ bool ConfigManager::shouldCheckAppUpdateToday() const {
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_app_update_check_date_ != today;
+}
+
+const std::string& ConfigManager::getLanguage() const {
+    return language_;
+}
+
+void ConfigManager::setLanguage(const std::string& lang) {
+    if (lang != "ru" && lang != "en-US" && lang != "en") {
+        language_ = "auto";
+    } else {
+        language_ = lang;
+    }
+    save();
 }
 
 } // namespace config

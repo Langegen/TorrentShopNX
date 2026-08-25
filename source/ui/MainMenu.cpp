@@ -19,7 +19,7 @@ extern std::vector<Game> g_games;
 
 MainMenu::MainMenu() {
     util::logLine("MainMenu: constructor start");
-    brls::Application::setCommonFooter("TorrentShopNX v2.2 | Игр в каталоге: " + std::to_string(g_games.size()));
+    brls::Application::setCommonFooter(brls::getStr("app/menu/footer", std::to_string(g_games.size())));
     util::logLine("MainMenu: constructor end");
 }
 
@@ -87,10 +87,11 @@ void MainMenu::onContentAvailable() {
                     float percent = (static_cast<float>(dlnow) * 75.0f) / static_cast<float>(dltotal);
                     float dlMB = static_cast<float>(dlnow) / (1024.0f * 1024.0f);
                     float totMB = static_cast<float>(dltotal) / (1024.0f * 1024.0f);
-                    char buf[64];
-                    std::snprintf(buf, sizeof(buf), "Загрузка: %.1f MB / %.1f MB (%.0f%%)",
-                                  dlMB, totMB, (static_cast<float>(dlnow) * 100.0f) / static_cast<float>(dltotal));
-                    std::string status = buf;
+                    char bufDl[32], bufTot[32], bufPct[32];
+                    std::snprintf(bufDl, sizeof(bufDl), "%.1f", dlMB);
+                    std::snprintf(bufTot, sizeof(bufTot), "%.1f", totMB);
+                    std::snprintf(bufPct, sizeof(bufPct), "%.0f", (static_cast<float>(dlnow) * 100.0f) / static_cast<float>(dltotal));
+                    std::string status = brls::getStr("app/catalog/downloading_progress", std::string(bufDl), std::string(bufTot), std::string(bufPct));
                     brls::sync([notif, percent, status]() {
                         if (notif) notif->updateProgress(percent, status);
                     });
@@ -100,12 +101,13 @@ void MainMenu::onContentAvailable() {
             auto res = http.httpGet(catalog_url);
             if (res.status_code == 200 && !res.body.empty()) {
                 brls::sync([notif]() {
-                    if (notif) notif->updateProgress(85.0f, "Обработка списка игр...");
+                    if (notif) notif->updateProgress(85.0f, "app/catalog/processing"_i18n);
                 });
                 online_games = parseGamesFromJsonString(res.body);
                 if (!online_games.empty()) {
                     util::logLine("catalog: background online update parsed " + std::to_string(online_games.size()) + " games directly in memory");
-                    writeTextFile(kCatalogPath, res.body);
+                    writeTextFile(getCatalogPath(), res.body);
+                    saveGamesToBinaryFile(getCatalogBinPath(), online_games);
                     updated = true;
                 }
             } else {
@@ -134,7 +136,8 @@ void MainMenu::onContentAvailable() {
 
                     if (!online_games.empty()) {
                         nlohmann::json jg = online_games;
-                        writeTextFile(kCatalogPath, jg.dump(2));
+                        writeTextFile(getCatalogPath(), jg.dump(2));
+                        saveGamesToBinaryFile(getCatalogBinPath(), online_games);
                         updated = true;
                     }
                 }
@@ -145,7 +148,7 @@ void MainMenu::onContentAvailable() {
                     g_games = online_games;
                     catalog::FavoritesManager::instance().syncLegacyFavorites(g_games);
 
-                    brls::Application::setCommonFooter("TorrentShopNX v2.2 | Игр в каталоге: " + std::to_string(g_games.size()));
+                    brls::Application::setCommonFooter(brls::getStr("app/menu/footer", std::to_string(g_games.size())));
                     
                     auto& main_cfg = config::ConfigManager::instance();
                     main_cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
@@ -156,13 +159,13 @@ void MainMenu::onContentAvailable() {
                     }
 
                     if (notif) {
-                        notif->setCompleted("Загружено игр: " + std::to_string(g_games.size()));
+                        notif->setCompleted(brls::getStr("app/catalog/loaded_games", std::to_string(g_games.size())));
                     }
                 });
             } else {
                 brls::sync([notif]() {
                     if (notif) {
-                        notif->setFailed("Не удалось обновить базу");
+                        notif->setFailed("app/catalog/update_failed"_i18n);
                     }
                 });
             }
@@ -199,7 +202,7 @@ void MainMenu::onContentAvailable() {
                         url = j.value("url", "");
                     }
                     
-                    std::string currentVersion = "2.2"; // Current app version
+                    std::string currentVersion = "2.3"; // Current app version
                     std::string cleanVersion = version;
                     if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) cleanVersion = cleanVersion.substr(1);
                     std::string cleanCurrent = currentVersion;
@@ -207,14 +210,14 @@ void MainMenu::onContentAvailable() {
                     
                     if (!version.empty() && !url.empty() && cleanVersion != cleanCurrent) {
                         brls::sync([url, version]() {
-                            std::string msg = "Доступна новая версия: " + version + "\n\nХотите скачать и установить обновление?";
+                            std::string msg = brls::getStr("app/settings/app_update_prompt", version);
                             brls::Dialog* dialog = new brls::Dialog(msg);
-                            dialog->addButton("Да", [url, version, dialog]() {
+                            dialog->addButton("app/common/yes"_i18n, [url, version, dialog]() {
                                 dialog->close([url, version]() {
                                     ui::downloadAndInstallAppUpdate(url, version);
                                 });
                             });
-                            dialog->addButton("Нет", [dialog]() { dialog->close(); });
+                            dialog->addButton("app/common/no"_i18n, [dialog]() { dialog->close(); });
                             dialog->open();
                         });
                     }
@@ -249,9 +252,9 @@ void MainMenu::onContentAvailable() {
 void MainMenu::updateDownloadsBadge(int count) {
     if (lblDownloads) {
         if (count > 0) {
-            lblDownloads->setText("Загрузки (" + std::to_string(count) + ")");
+            lblDownloads->setText("app/menu/downloads"_i18n + " (" + std::to_string(count) + ")");
         } else {
-            lblDownloads->setText("Загрузки");
+            lblDownloads->setText("app/menu/downloads"_i18n);
         }
     }
 }

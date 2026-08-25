@@ -156,7 +156,7 @@ FileSelectView::~FileSelectView() {
 void FileSelectView::onContentAvailable() {
     util::logLine("FileSelectView: onContentAvailable start");
     title->setText(cleanTitle(game_.title));
-    subtitle->setText("Получение списка файлов торрента...");
+    subtitle->setText("app/fileselect/subtitle"_i18n);
 
     // Configure install location selector
     auto& cfg = config::ConfigManager::instance();
@@ -164,13 +164,13 @@ void FileSelectView::onContentAvailable() {
         if (!installLocationText) return;
         std::string loc = cfg.getInstallLocation();
         if (loc == "sd") {
-            installLocationText->setText("Карта памяти (SD)");
+            installLocationText->setText("app/fileselect/loc_sd"_i18n);
             installLocationText->setTextColor(nvgRGB(46, 204, 113)); // green
         } else if (loc == "nand") {
-            installLocationText->setText("Память консоли (NAND)");
+            installLocationText->setText("app/fileselect/loc_nand"_i18n);
             installLocationText->setTextColor(nvgRGB(231, 76, 60)); // red/orange
         } else {
-            installLocationText->setText("Авто (выбор системы)");
+            installLocationText->setText("app/fileselect/loc_auto"_i18n);
             installLocationText->setTextColor(nvgRGB(52, 152, 219)); // blue
         }
     };
@@ -197,10 +197,10 @@ void FileSelectView::onContentAvailable() {
     fileListScroll->setFocusable(true);
     brls::Application::giveFocus(fileListScroll);
 
-    this->registerAction("Выбрать/Снять все", brls::ControllerButton::BUTTON_X,
+    this->registerAction("app/actions/toggle_all"_i18n, brls::ControllerButton::BUTTON_X,
         [this](brls::View*) { toggleAllSelection(); return true; });
 
-    this->registerAction("Начать загрузку", brls::ControllerButton::BUTTON_START,
+    this->registerAction("app/actions/start_download"_i18n, brls::ControllerButton::BUTTON_START,
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
 
     auto alive = alive_flag_;
@@ -213,17 +213,13 @@ void FileSelectView::onContentAvailable() {
             auto status = datasource::CustomEngineClient::instance().probeStatus();
             brls::sync([this, status, status_running, alive]() {
                 if (!alive->load() || !status_running->load()) return;
-                std::string text = "Получение списка файлов... ";
+                std::string text = "app/fileselect/probing"_i18n;
                 if (status.active && status.meta_peers_total > 0) {
-                    text += "(метаданные: пиры " +
-                            std::to_string(status.meta_peers_tried) + "/" +
-                            std::to_string(status.meta_peers_total) + ")";
+                    text += brls::getStr("app/fileselect/meta_peers", std::to_string(status.meta_peers_tried), std::to_string(status.meta_peers_total));
                 } else if (status.active) {
-                    text += "(поиск пиров: " + status.phase + ")";
+                    text += brls::getStr("app/fileselect/peer_search", status.phase);
                 } else {
-                    text += "(Сиды: " + std::to_string(status.seeds) +
-                            ", Пиры: " + std::to_string(status.peers) +
-                            ", DHT: " + std::to_string(status.dht_nodes) + ")";
+                    text += brls::getStr("app/fileselect/swarm_stats", std::to_string(status.seeds), std::to_string(status.peers), std::to_string(status.dht_nodes));
                 }
                 subtitle->setText(text);
             });
@@ -264,7 +260,7 @@ void FileSelectView::onContentAvailable() {
                         selected_[i] = true;
                     }
                 }
-                subtitle->setText("Выберите файлы для загрузки");
+                subtitle->setText("app/fileselect/select_prompt"_i18n);
                 updateTotalSize();
                 rebuildFileList();
                 util::logLine("FileSelectView: rebuildFileList done, rows=" +
@@ -287,9 +283,9 @@ void FileSelectView::onContentAvailable() {
                     }
                 }
             } else {
-                subtitle->setText("Ошибка загрузки метаданных");
-                brls::Application::notify("Ошибка: " +
-                    (err.empty() ? "превышено время ожидания" : err));
+                subtitle->setText("app/fileselect/meta_error"_i18n);
+                brls::Application::notify("app/common/error"_i18n + ": " +
+                    (err.empty() ? "app/fileselect/timeout_error"_i18n : err));
                 util::logLine("FileSelectView: probe error: " + err);
             }
         });
@@ -320,7 +316,7 @@ void FileSelectView::rebuildFileList() {
     std::vector<DisplayItem> displayItems;
 
     // 1. Group: NOT INSTALLED
-    displayItems.push_back({0, true, "НЕ УСТАНОВЛЕННЫЕ"});
+    displayItems.push_back({0, true, "app/fileselect/group_uninstalled"_i18n});
     bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
         uint64_t tid = parseTitleIdFromFilename(files_[i].name);
@@ -330,11 +326,11 @@ void FileSelectView::rebuildFileList() {
         }
     }
     if (!hasUninstalled) {
-        displayItems.push_back({0, true, "  (нет файлов)"});
+        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
     }
 
     // 2. Group: OTHER FILES
-    displayItems.push_back({0, true, "ПРОЧИЕ ФАЙЛЫ (РУСИФИКАТОРЫ И ДОП. ФАЙЛЫ)"});
+    displayItems.push_back({0, true, "app/fileselect/group_other"_i18n});
     bool hasOther = false;
     for (size_t i = 0; i < files_.size(); ++i) {
         if (!isSwitchGameFile(files_[i].name)) {
@@ -343,11 +339,11 @@ void FileSelectView::rebuildFileList() {
         }
     }
     if (!hasOther) {
-        displayItems.push_back({0, true, "  (нет файлов)"});
+        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
     }
 
     // 3. Group: INSTALLED
-    displayItems.push_back({0, true, "УСТАНОВЛЕННЫЕ"});
+    displayItems.push_back({0, true, "app/fileselect/group_installed"_i18n});
     bool hasInstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
         uint64_t tid = parseTitleIdFromFilename(files_[i].name);
@@ -357,7 +353,7 @@ void FileSelectView::rebuildFileList() {
         }
     }
     if (!hasInstalled) {
-        displayItems.push_back({0, true, "  (нет файлов)"});
+        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
     }
 
     // Now render them
@@ -376,7 +372,7 @@ void FileSelectView::rebuildFileList() {
             label->setFontSize(16);
             label->setText(item.headerTitle);
             
-            if (item.headerTitle.find("(нет файлов)") != std::string::npos) {
+            if (item.headerTitle == "app/fileselect/no_files"_i18n) {
                 label->setTextColor(nvgRGB(150, 150, 150));
             } else {
                 label->setTextColor(nvgRGB(255, 87, 34)); // Orange/red accent for headers
@@ -471,17 +467,17 @@ void FileSelectView::updateTotalSize() {
     int64_t nandFree = 0;
     if (freeSpaceSdText) {
         if (util::getStorageFreeSpace(1, sdFree)) {
-            freeSpaceSdText->setText("Свободно на SD: " + formatBytes(sdFree));
+            freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
         } else {
-            freeSpaceSdText->setText("Свободно на SD: ---");
+            freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", "app/fileselect/free_unknown"_i18n));
         }
     }
 
     if (freeSpaceNandText) {
         if (util::getStorageFreeSpace(0, nandFree)) {
-            freeSpaceNandText->setText("Свободно на консоли: " + formatBytes(nandFree));
+            freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", formatBytes(nandFree)));
         } else {
-            freeSpaceNandText->setText("Свободно на консоли: ---");
+            freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
         }
     }
 }
@@ -525,7 +521,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     }
 
     if (selectedIndices.empty()) {
-        brls::Application::notify("Не выбрано ни одного файла для загрузки!");
+        brls::Application::notify("app/fileselect/no_files_selected"_i18n);
         return;
     }
 
@@ -550,19 +546,19 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     bool checkPassed = true;
 
     if (loc == "sd") {
-        targetStorageName = "карте памяти (SD)";
+        targetStorageName = "app/fileselect/storage_sd"_i18n;
         util::getStorageFreeSpace(1, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
             checkPassed = false;
         }
     } else if (loc == "nand") {
-        targetStorageName = "памяти консоли (NAND)";
+        targetStorageName = "app/fileselect/storage_nand"_i18n;
         util::getStorageFreeSpace(0, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
             checkPassed = false;
         }
     } else { // "auto"
-        targetStorageName = "системе (SD или NAND)";
+        targetStorageName = "app/fileselect/storage_auto"_i18n;
         int64_t sdFree = 0;
         int64_t nandFree = 0;
         util::getStorageFreeSpace(1, sdFree);
@@ -579,18 +575,15 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     }
 
     if (!checkPassed) {
-        std::string msg = "Внимание: Недостаточно свободного места на " + targetStorageName + "!\n" +
-                          "Требуется: " + formatBytes(totalNeededSize) + "\n" +
-                          "Доступно: " + formatBytes(freeSpace) + "\n\n" +
-                          "Продолжить установку?";
+        std::string msg = brls::getStr("app/fileselect/low_space_prompt", targetStorageName, formatBytes(totalNeededSize), formatBytes(freeSpace));
         
         brls::Dialog* dialog = new brls::Dialog(msg);
-        dialog->addButton("Продолжить", [this, selectedIndices, forcedIndex, forcedName, dialog]() {
+        dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName, dialog]() {
             dialog->close([this, selectedIndices, forcedIndex, forcedName]() {
                 this->executeDownloads(selectedIndices, forcedIndex, forcedName);
             });
         });
-        dialog->addButton("Отмена", [dialog]() {
+        dialog->addButton("app/common/cancel"_i18n, [dialog]() {
             dialog->close();
         });
         dialog->open();

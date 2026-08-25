@@ -27,19 +27,19 @@
                 </brls:Box>
 
                 <!-- Description -->
-                <brls:Label text="Описание" fontSize="20" marginBottom="10" />
+                <brls:Label text="@i18n/app/detail/description_header" fontSize="20" marginBottom="10" />
                 <brls:Label id="description" fontSize="16" marginBottom="30" />
 
                 <!-- Screenshots -->
-                <brls:Label text="Скриншоты" fontSize="20" marginBottom="10" />
+                <brls:Label text="@i18n/app/detail/screenshots_header" fontSize="20" marginBottom="10" />
                 <brls:HScrollingFrame id="screenshotsScroll" width="auto" height="160px" marginBottom="30">
                     <brls:Box id="screenshotsBox" width="auto" height="auto" axis="row" alignItems="center" />
                 </brls:HScrollingFrame>
 
                 <!-- Action Buttons -->
                 <brls:Box width="auto" height="auto" axis="row" justifyContent="flexStart" marginTop="10" marginBottom="40">
-                    <brls:Button id="btnDownload" text="Скачать" width="220px" height="50px" marginRight="20" style="primary" />
-                    <brls:Button id="btnFavorite" text="В избранное" width="220px" height="50px" />
+                    <brls:Button id="btnDownload" text="@i18n/app/detail/download_btn" width="220px" height="50px" marginRight="20" style="primary" />
+                    <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="220px" height="50px" />
                 </brls:Box>
 
             </brls:Box>

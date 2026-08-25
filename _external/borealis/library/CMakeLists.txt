@@ -247,7 +247,7 @@ elseif(PLATFORM_SWITCH)
     list(APPEND BOREALIS_SRC ${SWITCH_PLATFORM_SRC})
     list(APPEND BOREALIS_INCLUDE ${BOREALIS_PATH}/lib/extern/switch-libpulsar/include)
     list(APPEND BRLS_PLATFORM_OPTION $<$<COMPILE_LANGUAGE:CXX>:-Wno-volatile> -DHAVE_LIBNX -DSWITCH -D__SWITCH__ -DSTBI_NO_THREAD_LOCALS)
-    find_package(PkgConfig REQUIRED)
+    # find_package(PkgConfig REQUIRED)
 
     if (BOREALIS_USE_DEKO3D)
         list(APPEND BRLS_PLATFORM_LIBS deko3d nx m)

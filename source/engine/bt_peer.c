@@ -645,19 +645,31 @@ int peer_fetch_metadata(peer_addr addr, const uint8_t info_hash[20],
 // Non-blocking peer transport (TCP only). See the block comment in peer.h.
 // ---------------------------------------------------------------------------
 
-// TCP throughput knobs applied to every download socket. Nagle off (17-byte
-// requests must not wait for a delayed ACK), and the kernel receive buffer
-// grown: the libnx bsd service default is far too small to fill the pipe on
-// a 100 Mbit wifi link with any RTT (pipensx pattern). The bsd service
-// caps per-socket memory, so a smaller fallback keeps a constrained session
-// usable instead of failing the setsockopt outright.
+// TCP options applied at socket creation: Nagle off (17-byte requests must not
+// wait for delayed ACK). Large SO_RCVBUF/SO_SNDBUF is deferred to peer_nb_apply_speed_opts
+// after handshake to avoid ENOBUFS pool exhaustion during concurrent connect waves.
 static void tcp_speed_opts(int sock) {
     int one = 1;
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-    int rbuf = 256 * 1024;
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-        rbuf = 128 * 1024;
-        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+}
+
+void peer_nb_apply_speed_opts(peer_nb *p) {
+    if (!p || p->sock < 0) return;
+    int rbuf = 512 * 1024;
+    if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+        rbuf = 384 * 1024;
+        if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+            rbuf = 256 * 1024;
+            if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+                rbuf = 128 * 1024;
+                setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+            }
+        }
+    }
+    int sbuf = 64 * 1024;
+    if (setsockopt(p->sock, SOL_SOCKET, SO_SNDBUF, &sbuf, sizeof(sbuf)) != 0) {
+        sbuf = 32 * 1024;
+        setsockopt(p->sock, SOL_SOCKET, SO_SNDBUF, &sbuf, sizeof(sbuf));
     }
 }
 

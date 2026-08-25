@@ -39,10 +39,16 @@ void CustomEngineScheduler::init(tsnx_engine* engine,
     piece_size_ = piece_size;
     file_offset_in_torrent_ = file_offset_in_torrent;
     file_first_piece_ = file_first_piece;
-    file_last_piece_ = file_last_piece;
+    file_last_piece_  = file_last_piece;
     last_current_piece_ = -1;
+    last_log_piece_ = -1;
     stall_level_ = 0;
+    last_boosted_count_ = 0;
+    last_apply_at_ = {};
+    last_log_at_ = {};
+    last_boost_log_at_ = {};
     peer_ewma_.clear();
+    boosted_pieces_.clear();
     last_snapshot_ = {};
 }
 
@@ -61,41 +67,62 @@ CustomSchedulerSnapshot CustomEngineScheduler::rebuild(int current_piece) {
 
     int urgent_count = cfg_.urgent_pieces +
         (stall_level_ > 0 ? cfg_.stall_extra_urgent : 0);
-    if (urgent_count < 2) urgent_count = 2;
+    if (urgent_count < 1) urgent_count = 1;
 
     int prefetch_count = cfg_.prefetch_pieces +
         (stall_level_ > 0 ? cfg_.stall_extra_prefetch : 0);
     if (prefetch_count < 2) prefetch_count = 2;
 
     int speculative_count = cfg_.speculative_pieces;
-    if (stall_level_ > 0) speculative_count = 0;
+    int normal_count = cfg_.normal_pieces;
+    if (stall_level_ > 0) {
+        speculative_count = 0;
+        normal_count = 0;
+    }
 
-    // Critical: current piece and the next one.
+    // Now: the reader's current piece.
     snap.critical.start = current_piece;
     snap.critical.end   = std::min(file_last_piece_, current_piece + cfg_.critical_pieces - 1);
 
-    // Urgent: just ahead.
+    // Next: just behind it.
     snap.urgent.start = snap.critical.end + 1;
     snap.urgent.end   = std::min(file_last_piece_, snap.urgent.start + urgent_count - 1);
 
-    // Prefetch: sequential read-ahead.
+    // Readahead: sequential read-ahead (torrserver: readahead pieces).
     snap.prefetch.start = snap.urgent.end + 1;
     snap.prefetch.end   = std::min(file_last_piece_, snap.prefetch.start + prefetch_count - 1);
 
-    // Speculative: further ahead.
+    // High: the next few after the readahead window.
     snap.speculative.start = snap.prefetch.end + 1;
     snap.speculative.end   = std::min(file_last_piece_,
                                       snap.speculative.start + speculative_count - 1);
 
+    // Normal: the remainder of the connection budget.
+    snap.normal.start = snap.speculative.end + 1;
+    snap.normal.end   = std::min(file_last_piece_,
+                                 snap.normal.start + normal_count - 1);
+
     // Tail: a few pieces behind the playhead for cache/seek resilience.
-    snap.tail.start = std::max(file_first_piece_, current_piece - cfg_.tail_pieces);
-    snap.tail.end   = std::max(file_first_piece_, current_piece - 1);
-    if (snap.tail.end < snap.tail.start) snap.tail = {};
+    // Disabled for the sequential installer (tail_pieces == 0): the range
+    // current..current-1 is empty. Must never produce a range touching or
+    // ahead of the playhead (a bogus [0,0] tail at the file start would
+    // overwrite the Now piece's Critical zone with the lowest priority).
+    {
+        int64_t ts = current_piece - cfg_.tail_pieces;
+        int64_t te = current_piece - 1;
+        if (te < ts || te < file_first_piece_ || ts > file_last_piece_) {
+            snap.tail = {};
+        } else {
+            snap.tail.start = std::max(ts, (int64_t)file_first_piece_);
+            snap.tail.end   = std::min(te, (int64_t)file_last_piece_);
+        }
+    }
 
     snap.critical    = clamp_range(snap.critical,    file_first_piece_, file_last_piece_);
     snap.urgent      = clamp_range(snap.urgent,      file_first_piece_, file_last_piece_);
     snap.prefetch    = clamp_range(snap.prefetch,    file_first_piece_, file_last_piece_);
     snap.speculative = clamp_range(snap.speculative, file_first_piece_, file_last_piece_);
+    snap.normal      = clamp_range(snap.normal,      file_first_piece_, file_last_piece_);
     snap.tail        = clamp_range(snap.tail,        file_first_piece_, file_last_piece_);
 
     last_snapshot_ = snap;
@@ -117,7 +144,17 @@ void CustomEngineScheduler::apply_zones(const CustomSchedulerSnapshot& snap) {
     apply(snap.urgent,      TSNX_ZONE_URGENT);
     apply(snap.prefetch,    TSNX_ZONE_PREFETCH);
     apply(snap.speculative, TSNX_ZONE_SPECULATIVE);
+    // The lowest engine zone (TAIL=5) carries the torrserver "Normal" class:
+    // lowest priority, still downloaded, never behind the playhead.
+    apply(snap.normal,      TSNX_ZONE_TAIL);
     apply(snap.tail,        TSNX_ZONE_TAIL);
+
+    // Re-apply any currently boosted slow-peer pieces so they aren't wiped out by on_read_request
+    for (int p : boosted_pieces_) {
+        if (p >= file_first_piece_ && p <= file_last_piece_) {
+            tsnx_engine_set_piece_zone(engine_, hash_.c_str(), p, 1, TSNX_ZONE_CRITICAL);
+        }
+    }
 }
 
 CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offset,
@@ -144,10 +181,17 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offs
     CustomSchedulerSnapshot snap = rebuild(current_piece);
     apply_zones(snap);
 
-    std::string msg = "scheduler: current=" + std::to_string(current_piece) +
-        " critical=" + std::to_string(snap.critical.start) + ".." + std::to_string(snap.critical.end) +
-        " urgent=" + std::to_string(snap.urgent.start) + ".." + std::to_string(snap.urgent.end);
-    util::logLine(msg);
+    bool should_log = (last_log_piece_ != current_piece) ||
+                      (last_log_at_.time_since_epoch().count() == 0) ||
+                      (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_at_).count() >= 5000);
+    if (should_log) {
+        last_log_piece_ = current_piece;
+        last_log_at_ = now;
+        std::string msg = "scheduler: current=" + std::to_string(current_piece) +
+            " critical=" + std::to_string(snap.critical.start) + ".." + std::to_string(snap.critical.end) +
+            " urgent=" + std::to_string(snap.urgent.start) + ".." + std::to_string(snap.urgent.end);
+        util::logLine(msg);
+    }
 
     return snap;
 }
@@ -220,22 +264,40 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_tick() {
     last_snapshot_.slow_peer_count = slow_count;
 
     // Slow-peer isolation: boost any piece held by a slow peer back to Critical
-    // so the internal fast-peer steering will take it over quickly.
+    // only if there are enough other peers (n > 2) to actually take it over.
     int boosted = 0;
-    for (int i = 0; i < n && slow_count > 0; i++) {
+    boosted_pieces_.clear();
+    for (int i = 0; i < n && slow_count > 0 && n > 2; i++) {
+        if (boosted >= cfg_.slow_peer_count_max) break;
         if (!peers[i].handshaked || peers[i].claim_piece < 0) continue;
         auto it = std::find_if(peer_ewma_.begin(), peer_ewma_.end(),
             [&](const PeerEwma& e) { return e.key_ip == peers[i].ip && e.key_port == peers[i].port; });
         if (it != peer_ewma_.end() && it->is_slow) {
-            tsnx_engine_set_piece_zone(engine_, hash_.c_str(),
-                                       static_cast<int>(peers[i].claim_piece), 1,
-                                       TSNX_ZONE_CRITICAL);
-            boosted++;
+            int p = static_cast<int>(peers[i].claim_piece);
+            // Only boost pieces that are within the immediate playhead window (critical + urgent),
+            // so we don't distract fast peers with speculative pieces far in the future.
+            int max_boost_piece = (last_current_piece_ >= 0)
+                ? last_current_piece_ + cfg_.critical_pieces + cfg_.urgent_pieces
+                : file_first_piece_ + cfg_.critical_pieces + cfg_.urgent_pieces;
+            if (p >= last_current_piece_ && p <= max_boost_piece) {
+                tsnx_engine_set_piece_zone(engine_, hash_.c_str(), p, 1, TSNX_ZONE_CRITICAL);
+                boosted_pieces_.push_back(p);
+                boosted++;
+            }
         }
     }
-    if (boosted > 0) {
+    const auto now = std::chrono::steady_clock::now();
+    bool should_log_boost = (boosted > 0) &&
+        ((boosted != last_boosted_count_) ||
+         (last_boost_log_at_.time_since_epoch().count() == 0) ||
+         (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_boost_log_at_).count() >= 15000));
+    if (should_log_boost) {
+        last_boosted_count_ = boosted;
+        last_boost_log_at_ = now;
         util::logLine("scheduler: boosted " + std::to_string(boosted) +
                       " slow-peer claims to Critical");
+    } else if (boosted == 0) {
+        last_boosted_count_ = 0;
     }
 
     return last_snapshot_;
@@ -247,9 +309,14 @@ void CustomEngineScheduler::reset() {
         tsnx_engine_clear_piece_zones(engine_, hash_.c_str());
     }
     last_current_piece_ = -1;
+    last_log_piece_ = -1;
     stall_level_ = 0;
+    last_boosted_count_ = 0;
     last_apply_at_ = {};
+    last_log_at_ = {};
+    last_boost_log_at_ = {};
     peer_ewma_.clear();
+    boosted_pieces_.clear();
     last_snapshot_ = {};
 }
 

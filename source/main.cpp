@@ -23,6 +23,7 @@
 #include "ui/QrCodeView.hpp"
 #include "config/config.h"
 #include "utils/log.h"
+#include "utils/switch_utils.h"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
 #include <thread>
@@ -84,8 +85,8 @@ extern "C" {
             cfg.sb_efficiency = 8;
             cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
             cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x40000;  // 256 KB stock
-            cfg.tcp_rx_buf_max_size = 0x40000;  // 256 KB stock
+            cfg.tcp_tx_buf_max_size = 0x60000;  // 384 KB max
+            cfg.tcp_rx_buf_max_size = 0x60000;  // 384 KB max
             cfg.udp_rx_buf_size = 0x8000;       // 32 KB
             cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }
@@ -117,6 +118,7 @@ extern "C" {
 
         if (!is_applet) {
             net::ImageDownloader::instance().stop();
+            util::setBacklightOff(false);
             lblExit();
             nifmExit();
             inssExit();
@@ -239,8 +241,19 @@ int main(int argc, char** argv) {
                   " applet_type=" + std::to_string(g_applet_type_detected));
     clearCaches();
 
+    // Load configurations before UI init to set desired locale
+    auto& cfg = config::ConfigManager::instance();
+
+    std::string userLang = cfg.getLanguage();
+    if (userLang == "ru") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_RU;
+    } else if (userLang == "en-US" || userLang == "en") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_EN_US;
+    } else {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
+    }
+
     // Initialize Borealis UI
-    brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     if (!brls::Application::init()) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
@@ -266,10 +279,7 @@ int main(int argc, char** argv) {
         util::logLine("main: Applet Mode detected! Displaying AppletWarningView...");
         brls::Application::pushActivity(new ui::AppletWarningView());
     } else {
-        // Initialize managers and load configurations for Title Mode
-        auto& cfg = config::ConfigManager::instance();
-        cfg.load();
-
+        // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
         ui::DownloadManager::instance().init();
 
@@ -279,9 +289,9 @@ int main(int argc, char** argv) {
     #endif
         net::ImageDownloader::instance().init(4);
 
-        // Load database games instantly on the main thread (takes <50ms)
-        g_games = loadGamesFromFile(kCatalogPath);
-        util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()));
+        // Load database games via fast binary cache (or fallback to JSON)
+        g_games = loadGamesCached(getCatalogPath(), getCatalogBinPath());
+        util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()) + " (path=" + getCatalogPath() + ")");
 
         // Logger configuration
         brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
@@ -311,6 +321,7 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
+    util::setBacklightOff(false);
 
     // Signal background tasks and network transfers to cancel immediately
     g_appExiting.store(true);

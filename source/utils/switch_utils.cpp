@@ -1,5 +1,6 @@
 #include "switch_utils.h"
 #include <string>
+#include <chrono>
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -21,6 +22,13 @@ bool boostAllowed() {
         return false;   // no apm privileges / no point in applet mode
     return hosversionAtLeast(7, 0, 0);   // ApmCpuBoostMode needs 7.0.0+
 }
+
+struct SpaceCache {
+    std::chrono::steady_clock::time_point last_query;
+    s64 free_space = 0;
+    bool valid = false;
+};
+SpaceCache g_space_cache[2]; // 0: NAND (BuiltInUser), 1: SD (SdCard)
 } // namespace
 
 void cpuBoostBegin() {
@@ -50,26 +58,67 @@ void cpuBoostEnd() {
         util::logLine("switch_utils: CPU boost released");
     }
 }
+
+namespace {
+std::atomic<bool> g_backlight_off{false};
+} // namespace
+
+void setBacklightOff(bool off) {
+    if (!hosversionAtLeast(4, 0, 0)) return;
+    if (g_backlight_off.load() == off) return;
+    
+    Result rc = appletSetLcdBacklightOffEnabled(off);
+    if (R_SUCCEEDED(rc)) {
+        g_backlight_off.store(off);
+        util::logLine(std::string("switch_utils: screen backlight ") + (off ? "turned OFF" : "turned ON"));
+    } else {
+        util::logLine("switch_utils: appletSetLcdBacklightOffEnabled(" + std::to_string(off) + ") failed rc=" + std::to_string(rc));
+    }
+}
+
+bool isBacklightOff() {
+    return g_backlight_off.load();
+}
 #else
 void cpuBoostBegin() {}
 void cpuBoostEnd() {}
+
+namespace {
+bool g_mock_backlight_off = false;
+} // namespace
+
+void setBacklightOff(bool off) {
+    if (g_mock_backlight_off != off) {
+        g_mock_backlight_off = off;
+        util::logLine(std::string("switch_utils (mock): screen backlight ") + (off ? "OFF" : "ON"));
+    }
+}
+
+bool isBacklightOff() {
+    return g_mock_backlight_off;
+}
 #endif
 
 bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
 #ifdef __SWITCH__
-    util::logLine("switch_utils: getStorageFreeSpace start, storageId=" + std::to_string(storageId));
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+    int cache_idx = (storageId == 1) ? 1 : 0;
+    const auto now = std::chrono::steady_clock::now();
+    if (g_space_cache[cache_idx].valid &&
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - g_space_cache[cache_idx].last_query).count() < 5000) {
+        out_free_space = g_space_cache[cache_idx].free_space;
+        return true;
+    }
+
     NcmContentStorage cs = {};
     NcmStorageId target_id = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
     
-    util::logLine("switch_utils: calling ncmInitialize...");
     Result rc = ncmInitialize();
     if (R_FAILED(rc)) {
         util::logLine("switch_utils: ncmInitialize failed, rc=" + std::to_string(rc));
         return false;
     }
     
-    util::logLine("switch_utils: calling ncmOpenContentStorage...");
     rc = ncmOpenContentStorage(&cs, target_id);
     if (R_FAILED(rc)) {
         util::logLine("switch_utils: ncmOpenContentStorage failed for storage=" + std::to_string(storageId) + ", rc=" + std::to_string(rc));
@@ -77,27 +126,24 @@ bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
         return false;
     }
     
-    util::logLine("switch_utils: calling ncmContentStorageGetFreeSpaceSize...");
     s64 free_space = 0;
     rc = ncmContentStorageGetFreeSpaceSize(&cs, &free_space);
     if (R_FAILED(rc)) {
         util::logLine("switch_utils: ncmContentStorageGetFreeSpaceSize failed, rc=" + std::to_string(rc));
-    } else {
-        util::logLine("switch_utils: ncmContentStorageGetFreeSpaceSize success, free=" + std::to_string(free_space));
     }
     
-    util::logLine("switch_utils: calling ncmContentStorageClose...");
     ncmContentStorageClose(&cs);
-    
-    util::logLine("switch_utils: calling ncmExit...");
     ncmExit();
     
     if (R_FAILED(rc)) {
         return false;
     }
     
+    g_space_cache[cache_idx].free_space = free_space;
+    g_space_cache[cache_idx].last_query = now;
+    g_space_cache[cache_idx].valid = true;
+
     out_free_space = free_space;
-    util::logLine("switch_utils: getStorageFreeSpace success, free_space=" + std::to_string(free_space));
     return true;
 #else
     // Mock space on host system (PC)

@@ -13,8 +13,8 @@
 #endif
 
 // This should return the global number of bytes sent, used for determining dynamic
-// packet size based on rate
-#warning implement UTP_GetGlobalUTPBytesSent for this platform
+// packet size based on rate. Current build is single-connection per socket and
+// rate control is driven by the window/CC logic, so a stub is sufficient.
 static inline uint64 UTP_GetGlobalUTPBytesSent(const struct sockaddr *remote, socklen_t remotelen) {
     (void)remote; (void)remotelen;
     return 0;

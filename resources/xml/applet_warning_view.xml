@@ -11,14 +11,14 @@
 
     <brls:Label
         id="lblTitle"
-        text="Режим апплета не поддерживается"
+        text="@i18n/app/applet/title"
         fontSize="28px"
         textColor="#FF5722"
         marginBottom="16px" />
 
     <brls:Label
         id="lblDesc"
-        text="Приложение запущено через Альбом в режиме ограниченной памяти (Applet Mode). Для работы торрент-движка и установки игр требуется полный объем ОЗУ (Title Mode)."
+        text="@i18n/app/applet/desc"
         fontSize="18px"
         textColor="#DCDCDC"
         marginBottom="24px" />
@@ -32,40 +32,40 @@
         marginBottom="28px">
 
         <brls:Label
-            text="Как запустить приложение в режиме тайтла (Title Mode):"
+            text="@i18n/app/applet/steps_header"
             fontSize="18px"
             textColor="#4CAF50"
             marginBottom="12px" />
 
         <brls:Label
-            text="1. Нажмите кнопку HOME и закройте это приложение (кнопка [X])."
+            text="@i18n/app/applet/step1"
             fontSize="16px"
             marginBottom="6px" />
 
         <brls:Label
-            text="2. Зажмите и удерживайте клавишу [R] на джойстике."
+            text="@i18n/app/applet/step2"
             fontSize="16px"
             marginBottom="6px" />
 
         <brls:Label
-            text="3. Запустите ЛЮБУЮ установленную игру или приложение из главного меню Switch."
+            text="@i18n/app/applet/step3"
             fontSize="16px"
             marginBottom="6px" />
 
         <brls:Label
-            text="4. Не отпускайте [R], пока не откроется Homebrew Menu."
+            text="@i18n/app/applet/step4"
             fontSize="16px"
             marginBottom="6px" />
 
         <brls:Label
-            text="5. Выберите и запустите TorrentShopNX."
+            text="@i18n/app/applet/step5"
             fontSize="16px" />
 
     </brls:Box>
 
     <brls:Button
         id="btnExit"
-        text="Выйти из приложения"
+        text="@i18n/app/applet/exit_btn"
         width="260px"
         height="48px" />
 

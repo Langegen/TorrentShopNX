@@ -9,11 +9,14 @@
     paddingLeft="20">
 
     <!-- Header -->
-    <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="10">
-        <brls:Label text="Загрузки" fontSize="28" />
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+        <brls:Label text="@i18n/app/downloads/title" fontSize="28" />
+        <brls:Box width="auto" height="auto" axis="row" alignItems="center">
+            <brls:Label id="backlightHint" text="@i18n/app/downloads/action_turn_off_backlight_hint" fontSize="16" textColor="#AAAAAA" />
+        </brls:Box>
     </brls:Box>
 
-    <brls:Label id="emptyLabel" text="Нет активных или завершенных загрузок." fontSize="20" textColor="#AAAAAA" />
+    <brls:Label id="emptyLabel" text="@i18n/app/downloads/empty" fontSize="20" textColor="#AAAAAA" />
 
     <!-- Recycler Grid -->
     <brls:RecyclerFrame

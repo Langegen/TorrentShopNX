@@ -4,6 +4,7 @@
 #include "../net/http_client.h"
 #include "../utils/log.h"
 
+#include <borealis.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 
 #include <algorithm>
@@ -15,6 +16,18 @@
 #include <sys/stat.h>
 
 namespace catalog {
+
+std::string CollectionInfo::getName() const {
+    std::string key = "app/collections/item_" + id + "_name";
+    std::string val = brls::getStr(key);
+    return (val == key) ? name : val;
+}
+
+std::string CollectionInfo::getDescription() const {
+    std::string key = "app/collections/item_" + id + "_desc";
+    std::string val = brls::getStr(key);
+    return (val == key) ? description : val;
+}
 
 namespace {
 
@@ -37,10 +50,7 @@ const std::vector<CollectionInfo> kCollections = {
 };
 
 bool readWholeFileLocal(const std::string& path, std::string& out) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) return false;
-    out.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    return true;
+    return readFileFast(path, out);
 }
 
 std::string normalizeForMatch(const std::string& s) {

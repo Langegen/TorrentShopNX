@@ -341,7 +341,7 @@ void UpdatesView::scanForUpdates() {
     isScanning_ = true;
     
     if (statsHint) {
-        statsHint->setText("Загрузка базы версий titledb...");
+        statsHint->setText("app/updates/loading_titledb"_i18n);
     }
     
     auto cancelToken = cancelToken_;
@@ -355,7 +355,7 @@ void UpdatesView::scanForUpdates() {
             brls::sync([this, cancelToken]() {
                 if (cancelToken && *cancelToken) return;
                 if (statsHint) {
-                    statsHint->setText("Ошибка: не удалось загрузить titledb. Подключите интернет.");
+                    statsHint->setText("app/updates/titledb_failed"_i18n);
                 }
                 isScanning_ = false;
             });
@@ -365,7 +365,7 @@ void UpdatesView::scanForUpdates() {
         brls::sync([this, cancelToken]() {
             if (cancelToken && *cancelToken) return;
             if (statsHint) {
-                statsHint->setText("Сканирование установленных игр...");
+                statsHint->setText("app/updates/scanning_games"_i18n);
             }
         });
         
@@ -560,7 +560,7 @@ void UpdatesView::scanForUpdates() {
             }
             
             if (statsHint) {
-                statsHint->setText("Доступно обновлений: " + std::to_string(updateCount) + " / Всего игр: " + std::to_string(displayItems_.size()));
+                statsHint->setText(brls::getStr("app/updates/stats", std::to_string(updateCount), std::to_string(displayItems_.size())));
             }
             if (recycler) {
                 recycler->reloadData();
@@ -611,11 +611,11 @@ brls::RecyclerCell* UpdatesView::UpdatesDataSource::cellForRow(brls::RecyclerFra
 
         // Configure status badge dynamically
         if (item.needsUpdate) {
-            cell->statusBadge->setText("ОБНОВИТЬ");
+            cell->statusBadge->setText("app/updates/badge_update"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
             cell->statusBox->setBackgroundColor(nvgRGB(255, 87, 34)); // Orange/red
         } else {
-            cell->statusBadge->setText("АКТУАЛЬНО");
+            cell->statusBadge->setText("app/updates/badge_uptodate"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
             cell->statusBox->setBackgroundColor(nvgRGB(76, 175, 80)); // Green
         }

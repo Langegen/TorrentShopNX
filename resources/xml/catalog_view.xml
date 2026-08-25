@@ -10,7 +10,7 @@
 
     <!-- Topbar -->
     <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
-        <brls:Label id="headerTitle" text="Каталог" fontSize="28" />
+        <brls:Label id="headerTitle" text="@i18n/app/catalog/title" fontSize="28" />
         
         <!-- Search and Filter triggers -->
         <brls:Box width="auto" height="auto" axis="row" alignItems="center">

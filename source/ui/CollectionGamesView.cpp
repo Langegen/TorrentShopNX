@@ -1,8 +1,31 @@
 #include "CollectionGamesView.hpp"
 #include "GameDetailView.hpp"
+#include "FavoritesManager.hpp"
+#include "FilterSortDialog.hpp"
+#include "../catalog/filter_manager.hpp"
 #include "../utils/log.h"
 
 #include <cstdio>
+#include <algorithm>
+
+#ifdef __SWITCH__
+#include <switch.h>
+static std::string showCollectionKeyboard(const char* hint) {
+    SwkbdConfig kbd;
+    swkbdCreate(&kbd, 0);
+    swkbdConfigMakePresetDefault(&kbd);
+    swkbdConfigSetGuideText(&kbd, hint);
+    char out[256] = {0};
+    Result rc = swkbdShow(&kbd, out, sizeof(out));
+    swkbdClose(&kbd);
+    if (R_FAILED(rc)) return "";
+    return std::string(out);
+}
+#else
+static std::string showCollectionKeyboard(const char* hint) {
+    return "";
+}
+#endif
 
 extern std::vector<Game> g_games;
 
@@ -86,8 +109,30 @@ CollectionGamesView::~CollectionGamesView() {
 }
 
 void CollectionGamesView::onContentAvailable() {
-    headerTitle->setText("Подборка: " + info_.name);
-    statsHint->setText(info_.description);
+    headerTitle->setText(brls::getStr("app/collections/collection_prefix", info_.getName()));
+    statsHint->setText(brls::getStr("app/collections/games_count", "..."));
+
+    this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+        std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
+        filterState_.searchQuery = query;
+        rebuildDisplay();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+        FilterSortDialog::show(filterState_, g_games, [this](const catalog::FilterSortState& newState) {
+            filterState_ = newState;
+            rebuildDisplay();
+        }, [this]() {
+            resetFilters();
+        });
+        return true;
+    }, true);
+
+    this->registerAction("", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
+        resetFilters();
+        return true;
+    }, true);
 
     recycler->registerCell("Row", []() { return CollectionGameRowCell::create(); });
     recycler->setDataSource(new GamesDataSource(this));
@@ -100,7 +145,7 @@ void CollectionGamesView::loadAndShow() {
     if (loading_) return;
     loading_ = true;
 
-    loadingLabel->setText("Загрузка...");
+    loadingLabel->setText("app/common/loading"_i18n);
     loadingLabel->setVisibility(brls::Visibility::VISIBLE);
     recycler->setVisibility(brls::Visibility::GONE);
 
@@ -119,7 +164,7 @@ void CollectionGamesView::loadAndShow() {
             loading_ = false;
 
             if (!ok) {
-                loadingLabel->setText("Не удалось загрузить подборку");
+                loadingLabel->setText("app/collections/load_failed"_i18n);
                 loadingLabel->setVisibility(brls::Visibility::VISIBLE);
                 recycler->setVisibility(brls::Visibility::GONE);
                 return;
@@ -133,7 +178,7 @@ void CollectionGamesView::loadAndShow() {
             matchIndex_ = catalog::buildMatchIndex(g_games);
 
             if (entries_.empty()) {
-                loadingLabel->setText("В подборке нет игр");
+                loadingLabel->setText("app/collections/empty"_i18n);
                 loadingLabel->setVisibility(brls::Visibility::VISIBLE);
                 recycler->setVisibility(brls::Visibility::GONE);
                 return;
@@ -164,15 +209,51 @@ void CollectionGamesView::ensureAllMatches() {
 }
 
 void CollectionGamesView::rebuildDisplay() {
+    ensureAllMatches();
+
     displayIdx_.clear();
     displayIdx_.reserve(entries_.size());
+
+    auto& fm = catalog::FavoritesManager::instance();
+
     for (size_t i = 0; i < entries_.size(); ++i) {
-        displayIdx_.push_back(static_cast<int>(i));
+        Game effectiveGame = matchedGames_[i];
+        if (effectiveGame.title.empty()) {
+            effectiveGame.title = entries_[i].title;
+            effectiveGame.title_id = entries_[i].title_id;
+        }
+
+        bool isFav = filterState_.onlyFavorites ? fm.isFavorite(effectiveGame) : false;
+
+        // Check if game passes the filter state
+        if (catalog::matchesGameFilter(effectiveGame, filterState_, isFav)) {
+            displayIdx_.push_back(static_cast<int>(i));
+        }
     }
 
-    statsHint->setText(info_.description + " | Показано: " +
-                       std::to_string(displayIdx_.size()) + " из " +
-                       std::to_string(entries_.size()));
+    if (filterState_.sort != catalog::SortOption::DEFAULT) {
+        std::stable_sort(displayIdx_.begin(), displayIdx_.end(), [this](int a, int b) {
+            Game gameA = matchedGames_[a];
+            if (gameA.title.empty()) {
+                gameA.title = entries_[a].title;
+                gameA.title_id = entries_[a].title_id;
+            }
+            Game gameB = matchedGames_[b];
+            if (gameB.title.empty()) {
+                gameB.title = entries_[b].title;
+                gameB.title_id = entries_[b].title_id;
+            }
+            return catalog::compareGames(gameA, gameB, filterState_.sort);
+        });
+    }
+
+    std::string countStr;
+    if (displayIdx_.size() != entries_.size()) {
+        countStr = brls::getStr("app/collections/shown_of", std::to_string(displayIdx_.size()), std::to_string(entries_.size()));
+    } else {
+        countStr = brls::getStr("app/collections/games_count", std::to_string(displayIdx_.size()));
+    }
+    statsHint->setText(countStr);
 
     if (recycler && recycler->getVisibility() == brls::Visibility::VISIBLE) {
         CollectionGameRowCell::s_lastFocusedColumn = 0;
@@ -181,6 +262,12 @@ void CollectionGamesView::rebuildDisplay() {
         recycler->reloadData();
         brls::Application::giveFocus(recycler);
     }
+}
+
+void CollectionGamesView::resetFilters() {
+    filterState_.reset();
+    rebuildDisplay();
+    brls::Application::notify("app/catalog/filters_reset"_i18n);
 }
 
 // DATASOURCE IMPLEMENTATION
@@ -321,11 +408,21 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                 Game matchedCopy;
                 if (hasMatch) matchedCopy = parent_->matchedGames_[idx];
 
+                if (hasMatch) {
+                    cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [matchedCopy](brls::View* view) {
+                        bool fav = catalog::FavoritesManager::instance().toggleFavorite(matchedCopy);
+                        brls::Application::notify(fav ? "app/favorites/added"_i18n : "app/favorites/removed"_i18n);
+                        return true;
+                    });
+                } else {
+                    cardBox->registerAction("", brls::ControllerButton::BUTTON_Y, [](brls::View*) { return false; });
+                }
+
                 cardBox->registerClickAction([matchedCopy, hasMatch](brls::View*) {
                     if (hasMatch) {
                         brls::Application::pushActivity(new GameDetailView(matchedCopy));
                     } else {
-                        brls::Application::notify("Раздача не найдена в каталоге");
+                        brls::Application::notify("app/collections/not_found_in_catalog"_i18n);
                     }
                     return true;
                 });
@@ -342,6 +439,7 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                     cards[i].card->getFocusEvent()->clear();
                     cards[i].card->getFocusLostEvent()->clear();
                     cards[i].card->registerClickAction([](brls::View*) { return false; });
+                    cards[i].card->registerAction("", brls::ControllerButton::BUTTON_Y, [](brls::View*) { return false; });
                 }
             } catch (...) {}
         }

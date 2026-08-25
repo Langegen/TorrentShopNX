@@ -1,9 +1,12 @@
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
+#include "FilterSortDialog.hpp"
+#include "../catalog/filter_manager.hpp"
 #include "../utils/log.h"
 #include <sstream>
 #include <set>
+#include <algorithm>
 #include "../config/config.h"
 
 #ifdef __SWITCH__
@@ -61,7 +64,6 @@ GameRowCell* GameRowCell::create() {
 }
 
 void GameRowCell::prepareForReuse() {
-    util::logLine("GameRowCell::prepareForReuse - Resetting card highlight/focus states");
     brls::RecyclerCell::prepareForReuse();
 
     if (imageToken) {
@@ -75,7 +77,6 @@ void GameRowCell::prepareForReuse() {
     for (int i = 0; i < 6; ++i) {
         if (cards[i]) {
             if (cards[i]->isFocused()) {
-                util::logLine("GameRowCell::prepareForReuse - Card " + std::to_string(i) + " was focused, resetting.");
                 cards[i]->onFocusLost();
                 if (brls::Application::getCurrentFocus() == cards[i]) {
                     brls::Application::giveFocus(nullptr);
@@ -104,33 +105,40 @@ brls::View* GameRowCell::getDefaultFocus() {
 }
 
 // CATALOGVIEW IMPLEMENTATION
-CatalogView::CatalogView(const std::string& searchQuery) : searchQuery_(searchQuery) {
-    // Empty constructor
+CatalogView::CatalogView(const std::string& searchQuery) {
+    if (!searchQuery.empty()) {
+        filterState_.searchQuery = searchQuery;
+    }
 }
 
 void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: onContentAvailable start");
 
-    // Genre tabs have been removed to save screen space
-
-    std::string updateDate = config::ConfigManager::instance().getLastCatalogUpdateDate();
-    if (updateDate.empty()) updateDate = "Никогда";
-    statsHint->setText("Игр: " + std::to_string(g_games.size()) + " | Обновлено: " + updateDate);
+    std::string countStr = "Игр: " + std::to_string(g_games.size());
+    statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
 
     // Register search/filter action keys
-    this->registerAction("Поиск", brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        std::string query = showKeyboard("Поиск по названию игры");
-        searchQuery_ = query;
+    this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+        std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
+        filterState_.searchQuery = query;
         filterCatalog();
         return true;
     });
 
-    this->registerAction("Сбросить фильтры", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
-        searchQuery_.clear();
-        selectedGenre_.clear();
-        filterCatalog();
+    this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+        FilterSortDialog::show(filterState_, g_games, [this](const catalog::FilterSortState& newState) {
+            filterState_ = newState;
+            filterCatalog();
+        }, [this]() {
+            resetFilters();
+        });
         return true;
-    });
+    }, true);
+
+    this->registerAction("", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
+        resetFilters();
+        return true;
+    }, true);
 
     // Configure recycler
     brls::Logger::info("CatalogView: registering recycler cell");
@@ -148,48 +156,34 @@ void CatalogView::onContentAvailable() {
     recycler->setDataSource(ds);
     brls::Logger::info("CatalogView: data source set, constructor done");
     // RecyclerFrame will call reloadData() on its first onLayout()
-    if (!searchQuery_.empty()) {
+    if (!filterState_.isDefault()) {
         filterCatalog();
     }
 }
 
-
-
-
-static std::string toLowerLocal(const std::string& s) {
-    std::string lower = s;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return lower;
-}
-
 void CatalogView::filterCatalog() {
     filteredGames_.clear();
-    std::string lowerQuery = toLowerLocal(searchQuery_);
-    
+    auto& fm = catalog::FavoritesManager::instance();
+
     for (const auto& game : g_games) {
-        // Filter by genre tag
-        if (!selectedGenre_.empty()) {
-            if (toLowerLocal(game.genre).find(toLowerLocal(selectedGenre_)) == std::string::npos) {
-                continue;
-            }
+        bool isFav = filterState_.onlyFavorites ? fm.isFavorite(game) : false;
+        if (catalog::matchesGameFilter(game, filterState_, isFav)) {
+            filteredGames_.push_back(game);
         }
-        
-        // Filter by title search query
-        if (!lowerQuery.empty()) {
-            if (toLowerLocal(game.title).find(lowerQuery) == std::string::npos) {
-                continue;
-            }
-        }
-        
-        filteredGames_.push_back(game);
     }
-    
+
+    if (filterState_.sort != catalog::SortOption::DEFAULT) {
+        std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [this](const Game& a, const Game& b) {
+            return catalog::compareGames(a, b, filterState_.sort);
+        });
+    }
+
     if (statsHint) {
-        std::string updateDate = config::ConfigManager::instance().getLastCatalogUpdateDate();
-        if (updateDate.empty()) updateDate = "Никогда";
-        statsHint->setText("Игр: " + std::to_string(g_games.size()) + " | Обновлено: " + updateDate);
+        std::string countStr = "Игр: " + std::to_string(filteredGames_.size());
+        if (filteredGames_.size() != g_games.size()) {
+            countStr += " из " + std::to_string(g_games.size());
+        }
+        statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
     }
 
     GameRowCell::s_lastFocusedColumn = 0;
@@ -200,6 +194,12 @@ void CatalogView::filterCatalog() {
         recycler->reloadData();
         brls::Application::giveFocus(this->recycler);
     }
+}
+
+void CatalogView::resetFilters() {
+    filterState_.reset();
+    filterCatalog();
+    brls::Application::notify("app/catalog/filters_reset"_i18n);
 }
 
 // DATASOURCE IMPLEMENTATION
@@ -295,9 +295,9 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 
                 setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
                 
-                cardBox->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
+                cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
                     bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
-                    brls::Application::notify(fav ? "Добавлено в избранное" : "Удалено из избранного");
+                    brls::Application::notify(fav ? "app/favorites/added"_i18n : "app/favorites/removed"_i18n);
                     return true;
                 });
 

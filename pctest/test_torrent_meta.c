@@ -4,6 +4,11 @@
 #include <sys/stat.h>
 #include <mbedtls/sha1.h>
 
+#ifdef __MINGW32__
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#endif
+
 #include "torrent_meta.h"
 
 static int tests_run = 0;

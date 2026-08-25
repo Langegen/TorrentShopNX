@@ -21,7 +21,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 TARGET      :=  TorrentShopNX
 APP_TITLE   :=  TorrentShopNX
 APP_AUTHOR  :=  Langegen
-APP_VERSION :=  2.2
+APP_VERSION :=  2.3
 BUILD       :=  build
 SOURCES     :=  source source/ui source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
 DATA        :=
@@ -36,7 +36,7 @@ ARCH    :=  -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 # Base CFLAGS. -flto + -DNDEBUG: the whole-file optimizer wins back the
 # abstraction overhead in the engine hot paths (pipensx does the same), and
 # NDEBUG keeps vendored libutp asserts from aborting homebrew.
-CFLAGS  :=  -g -Wall -O2 -ffunction-sections -fdata-sections -flto -DNDEBUG $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS \
+CFLAGS  :=  -g -Wall -O2 -ffunction-sections -fdata-sections -flto=auto -DNDEBUG $(ARCH) $(DEFINES) -DYG_ENABLE_EVENTS -DBRLS_RESOURCES=\"romfs:/\" -DHAVE_LIBNX -DSWITCH -DSTBI_NO_THREAD_LOCALS \
             -include $(TOPDIR)/include/switch_posix_compat.h
 
 #---------------------------------------------------------------------------------

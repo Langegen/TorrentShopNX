@@ -127,7 +127,7 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     
     brls::Label* statusLabel = new brls::Label();
     statusLabel->setFontSize(16);
-    statusLabel->setText("Скачивание обновления v" + version + "...\nПрогресс: 0%");
+    statusLabel->setText(brls::getStr("app/settings/downloading_update", version, "0%"));
     content->addView(statusLabel);
     
     brls::Dialog* progressDialog = new brls::Dialog(content);
@@ -144,18 +144,18 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
             return;
         }
         
-        std::string text = "Скачивание обновления v" + version + "...\n";
         uint64_t dl = progressObj->downloaded.load();
         uint64_t tot = progressObj->total.load();
+        std::string progressInfo;
         if (tot > 0) {
             double percent = (double)dl / (double)tot * 100.0;
             char pctBuf[32];
             std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", percent);
-            text += "Прогресс: " + std::string(pctBuf) + " (" + formatBytes(dl) + " / " + formatBytes(tot) + ")";
+            progressInfo = std::string(pctBuf) + " (" + formatBytes(dl) + " / " + formatBytes(tot) + ")";
         } else {
-            text += "Скачано: " + formatBytes(dl);
+            progressInfo = formatBytes(dl);
         }
-        statusLabel->setText(text);
+        statusLabel->setText(brls::getStr("app/settings/downloading_update", version, progressInfo));
     });
     timer->start();
     
@@ -219,8 +219,8 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                         std::remove(tmpPath.c_str());
                         
                         if (updateSaved) {
-                            brls::Dialog* pendingDialog = new brls::Dialog("Обновление скачано!\nПерезапустить приложение для завершения установки?");
-                            pendingDialog->addButton("Перезапустить", []() {
+                            brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
+                            pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
 #ifdef __SWITCH__
                                 if (envHasNextLoad()) {
                                     envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
@@ -228,32 +228,32 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
 #endif
                                 brls::Application::quit();
                             });
-                            pendingDialog->addButton("Позже", [pendingDialog]() { pendingDialog->close(); });
+                            pendingDialog->addButton("app/settings/later_btn"_i18n, [pendingDialog]() { pendingDialog->close(); });
                             pendingDialog->open();
                         } else {
-                            brls::Dialog* errDialog = new brls::Dialog("Ошибка сохранения файла обновления.");
-                            errDialog->addButton("ОК", [errDialog]() { errDialog->close(); });
+                            brls::Dialog* errDialog = new brls::Dialog("app/settings/update_save_error"_i18n);
+                            errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
                             errDialog->open();
                         }
                     } catch (const std::exception& e) {
-                        brls::Dialog* errDialog = new brls::Dialog("Исключение при замене файла приложения:\n" + std::string(e.what()));
-                        errDialog->addButton("ОК", [errDialog]() { errDialog->close(); });
+                        brls::Dialog* errDialog = new brls::Dialog(brls::getStr("app/settings/update_replace_exception", std::string(e.what())));
+                        errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
                         errDialog->open();
                     }
                 } else {
                     std::error_code ec;
                     std::filesystem::remove(tmpPath, ec);
                     
-                    std::string errMsg = "Не удалось скачать файл обновления.\n";
+                    std::string errMsg = "app/settings/update_download_failed"_i18n;
                     if (res != CURLE_OK) {
-                        errMsg += "cURL ошибка: " + std::to_string(res);
+                        errMsg += brls::getStr("app/settings/update_curl_error", std::to_string(res));
                     } else if (http_code != 200) {
-                        errMsg += "HTTP статус: " + std::to_string(http_code);
+                        errMsg += brls::getStr("app/settings/update_http_status", std::to_string(http_code));
                     } else if (!validDownloadedFile) {
-                        errMsg += "Скачанный файл недействителен или повреждён (" + (stat(tmpPath.c_str(), &st) == 0 ? std::to_string(st.st_size) : "0") + " байт).";
+                        errMsg += brls::getStr("app/settings/update_file_corrupted", (stat(tmpPath.c_str(), &st) == 0 ? std::to_string(st.st_size) : "0"));
                     }
                     brls::Dialog* errDialog = new brls::Dialog(errMsg);
-                    errDialog->addButton("ОК", [errDialog]() { errDialog->close(); });
+                    errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
                     errDialog->open();
                 }
             });
@@ -269,17 +269,54 @@ void SettingsTab::onContentAvailable() {
     auto& cfg = config::ConfigManager::instance();
     auto& dm = ui::DownloadManager::instance().getImpl();
 
-    // 0. Updates manager
-    updatesCell->setText("Менеджер обновлений");
-    updatesCell->setDetailText("Проверить наличие и установить обновления");
+    // 0. Language selector
+    std::vector<std::string> languages = {
+        "app/settings/lang_auto"_i18n,
+        "app/settings/lang_ru"_i18n,
+        "app/settings/lang_en"_i18n
+    };
+    int initialLang = 0;
+    std::string curLang = cfg.getLanguage();
+    if (curLang == "ru") initialLang = 1;
+    else if (curLang == "en-US" || curLang == "en") initialLang = 2;
+
+    languageCell->init("app/settings/language"_i18n, languages, initialLang, [](int selected) {}, [&cfg](int selected) {
+        std::string newLang = "auto";
+        if (selected == 1) newLang = "ru";
+        else if (selected == 2) newLang = "en-US";
+
+        if (newLang != cfg.getLanguage()) {
+            cfg.setLanguage(newLang);
+            cfg.setLastCatalogUpdateDate(""); // Force catalog refresh for new language
+            cfg.save();
+
+            brls::Dialog* restartDialog = new brls::Dialog("app/settings/lang_changed_restart"_i18n);
+            restartDialog->addButton("app/settings/restart_btn"_i18n, []() {
+#ifdef __SWITCH__
+                if (envHasNextLoad()) {
+                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                }
+#endif
+                brls::Application::quit();
+            });
+            restartDialog->addButton("app/settings/later_btn"_i18n, [restartDialog]() {
+                restartDialog->close();
+            });
+            restartDialog->open();
+        }
+    });
+
+    // 0.1 Updates manager
+    updatesCell->setText("app/settings/updates_manager"_i18n);
+    updatesCell->setDetailText("app/settings/updates_manager_desc"_i18n);
     updatesCell->registerClickAction([](brls::View* view) {
         brls::Application::pushActivity(new ui::UpdatesView());
         return true;
     });
 
     // 0.2 App Update
-    appUpdateCell->setText("Обновление приложения");
-    appUpdateCell->setDetailText("Проверить наличие новой версии TorrentShopNX");
+    appUpdateCell->setText("app/settings/app_update"_i18n);
+    appUpdateCell->setDetailText("app/settings/app_update_desc"_i18n);
     appUpdateCell->registerClickAction([this, &cfg](brls::View* view) {
         brls::Box* content = new brls::Box();
         content->setAxis(brls::Axis::COLUMN);
@@ -288,7 +325,7 @@ void SettingsTab::onContentAvailable() {
         
         brls::Label* statusLabel = new brls::Label();
         statusLabel->setFontSize(16);
-        statusLabel->setText("Проверка обновлений...");
+        statusLabel->setText("app/settings/checking_updates"_i18n);
         content->addView(statusLabel);
         
         brls::Dialog* checkDialog = new brls::Dialog(content);
@@ -302,8 +339,8 @@ void SettingsTab::onContentAvailable() {
             brls::sync([res, checkDialog]() {
                 checkDialog->close([res]() {
                     if (res.status_code != 200 || res.body.empty()) {
-                        brls::Dialog* dialog = new brls::Dialog("Не удалось проверить обновления.\nПроверьте подключение к сети.");
-                        dialog->addButton("ОК", [dialog]() { dialog->close(); });
+                        brls::Dialog* dialog = new brls::Dialog("app/settings/update_check_failed"_i18n);
+                        dialog->addButton("app/common/ok"_i18n, [dialog]() { dialog->close(); });
                         dialog->open();
                         return;
                     }
@@ -334,7 +371,7 @@ void SettingsTab::onContentAvailable() {
                             url = j.value("url", "");
                         }
                         
-                        std::string currentVersion = "2.2"; // Current app version
+                        std::string currentVersion = "2.3"; // Current app version
                         
                         std::string cleanVersion = version;
                         if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) {
@@ -346,33 +383,33 @@ void SettingsTab::onContentAvailable() {
                         }
                         
                         if (version.empty() || url.empty()) {
-                            brls::Dialog* dialog = new brls::Dialog("Неверный формат ответа обновлений.");
-                            dialog->addButton("ОК", [dialog]() { dialog->close(); });
+                            brls::Dialog* dialog = new brls::Dialog("app/settings/update_invalid_response"_i18n);
+                            dialog->addButton("app/common/ok"_i18n, [dialog]() { dialog->close(); });
                             dialog->open();
                             return;
                         }
                         
                         if (cleanVersion == cleanCurrent) {
-                            brls::Dialog* dialog = new brls::Dialog("У вас установлена последняя версия приложения (" + version + ").");
-                            dialog->addButton("ОК", [dialog]() { dialog->close(); });
+                            brls::Dialog* dialog = new brls::Dialog(brls::getStr("app/settings/app_latest", version));
+                            dialog->addButton("app/common/ok"_i18n, [dialog]() { dialog->close(); });
                             dialog->open();
                             return;
                         }
                         
-                        std::string msg = "Доступна новая версия: " + version + "\n\nХотите скачать и установить обновление?";
+                        std::string msg = brls::getStr("app/settings/app_update_prompt", version);
                         
                         brls::Dialog* dialog = new brls::Dialog(msg);
-                        dialog->addButton("Да", [url, version, dialog]() {
+                        dialog->addButton("app/common/yes"_i18n, [url, version, dialog]() {
                             dialog->close([url, version]() {
                                 downloadAndInstallAppUpdate(url, version);
                             });
                         });
-                        dialog->addButton("Нет", [dialog]() { dialog->close(); });
+                        dialog->addButton("app/common/no"_i18n, [dialog]() { dialog->close(); });
                         dialog->open();
                         
                     } catch (const std::exception& e) {
-                        brls::Dialog* dialog = new brls::Dialog("Ошибка парсинга обновления:\n" + std::string(e.what()));
-                        dialog->addButton("ОК", [dialog]() { dialog->close(); });
+                        brls::Dialog* dialog = new brls::Dialog(brls::getStr("app/settings/update_parse_error", std::string(e.what())));
+                        dialog->addButton("app/common/ok"_i18n, [dialog]() { dialog->close(); });
                         dialog->open();
                     }
                 });
@@ -382,32 +419,57 @@ void SettingsTab::onContentAvailable() {
     });
 
     // 0.3 Auto App Update
-    autoAppUpdateCell->init("Авто-проверка обновлений", cfg.getAutoAppUpdate(), [&cfg](bool value) {
+    autoAppUpdateCell->init("app/settings/auto_app_update"_i18n, cfg.getAutoAppUpdate(), [&cfg](bool value) {
         cfg.setAutoAppUpdate(value);
         cfg.save();
     });
 
     // 0.4 Cache Cover Thumbnails
-    cacheThumbnailsCell->init("Кешировать миниатюры обложек", cfg.getCacheCoverThumbnails(), [&cfg](bool value) {
+    cacheThumbnailsCell->init("app/settings/cache_thumbnails"_i18n, cfg.getCacheCoverThumbnails(), [&cfg](bool value) {
         cfg.setCacheCoverThumbnails(value);
         cfg.save();
     });
 
     // 1. Prevent sleep
-    keepAwakeCell->init("Предотвращать сон при скачивании", cfg.getKeepAwakeDuringDownloads(), [&cfg](bool value) {
+    keepAwakeCell->init("app/settings/keep_awake"_i18n, cfg.getKeepAwakeDuringDownloads(), [&cfg](bool value) {
         cfg.setKeepAwakeDuringDownloads(value);
+        cfg.save();
+    });
+
+    // 1.1 Turn off backlight during downloads (OLED burn-in prevention)
+    std::vector<std::string> backlightOptions = {
+        "app/settings/backlight_manual"_i18n,
+        "app/settings/backlight_15s"_i18n,
+        "app/settings/backlight_30s"_i18n,
+        "app/settings/backlight_60s"_i18n,
+        "app/settings/backlight_120s"_i18n
+    };
+    int currentBacklightTimeout = cfg.getBacklightTimeout();
+    int initialBacklightIdx = 0;
+    if (currentBacklightTimeout == 15) initialBacklightIdx = 1;
+    else if (currentBacklightTimeout == 30) initialBacklightIdx = 2;
+    else if (currentBacklightTimeout == 60) initialBacklightIdx = 3;
+    else if (currentBacklightTimeout == 120) initialBacklightIdx = 4;
+
+    backlightTimeoutCell->init("app/settings/backlight_timeout"_i18n, backlightOptions, initialBacklightIdx, [](int selected) {}, [&cfg](int selected) {
+        int timeoutSec = 0;
+        if (selected == 1) timeoutSec = 15;
+        else if (selected == 2) timeoutSec = 30;
+        else if (selected == 3) timeoutSec = 60;
+        else if (selected == 4) timeoutSec = 120;
+        cfg.setBacklightTimeout(timeoutSec);
         cfg.save();
     });
 
     // 2. Download mode
     std::vector<std::string> modes = {
-        "Удаленный TorrServer",
-        "Собственный движок"
+        "app/settings/mode_torrserver"_i18n,
+        "app/settings/mode_engine"_i18n
     };
     int initialMode = 0;
     if (cfg.getDataMode() == "local_client" || cfg.getDataMode() == "custom_engine") initialMode = 1;
 
-    modeCell->init("Режим работы", modes, initialMode, [](int selected) {}, [&cfg, &dm](int selected) {
+    modeCell->init("app/settings/data_mode"_i18n, modes, initialMode, [](int selected) {}, [&cfg, &dm](int selected) {
         if (selected == 1) {
             cfg.setDataMode("custom_engine");
             dm.dataSourceManager().setMode(datasource::DataSourceMode::CustomEngine);
@@ -416,11 +478,11 @@ void SettingsTab::onContentAvailable() {
             dm.dataSourceManager().setMode(datasource::DataSourceMode::Remote);
         }
         cfg.save();
-        brls::Application::notify("Режим загрузки изменен");
+        brls::Application::notify("app/settings/mode_changed"_i18n);
     });
 
     // 3. Remote TorrServer URL
-    remoteUrlCell->setText("Адрес TorrServer");
+    remoteUrlCell->setText("app/settings/remote_url"_i18n);
     auto updateRemoteUrlDisplay = [this, &cfg]() {
         std::string url = cfg.getTorrServerUrl();
         if (url.length() > 35) {
@@ -438,12 +500,12 @@ void SettingsTab::onContentAvailable() {
                     cfg.setTorrServerUrl(text);
                     dm.dataSourceManager().setRemoteUrl(text);
                     cfg.save();
-                    brls::Application::notify("Адрес TorrServer обновлен");
+                    brls::Application::notify("app/settings/remote_url_updated"_i18n);
                     updateRemoteUrlDisplay();
                 }
             },
-            "Адрес TorrServer",
-            "Введите адрес удаленного TorrServer",
+            "app/settings/remote_url_dialog_title"_i18n,
+            "app/settings/remote_url_hint"_i18n,
             255,
             cfg.getTorrServerUrl(),
             0
@@ -452,7 +514,7 @@ void SettingsTab::onContentAvailable() {
     });
 
     // 4. Catalog JSON URL
-    catalogUrlCell->setText("URL каталога JSON");
+    catalogUrlCell->setText("app/settings/catalog_url"_i18n);
     auto updateCatalogUrlDisplay = [this, &cfg]() {
         std::string url = cfg.getCatalogSourceUrl();
         if (url.empty()) {
@@ -469,13 +531,14 @@ void SettingsTab::onContentAvailable() {
             [updateCatalogUrlDisplay, &cfg](std::string text) {
                 if (!text.empty()) {
                     cfg.setCatalogSourceUrl(text);
+                    cfg.setLastCatalogUpdateDate(""); // Force catalog refresh with new URL
                     cfg.save();
-                    brls::Application::notify("Адрес каталога обновлен");
+                    brls::Application::notify("app/settings/catalog_url_updated"_i18n);
                     updateCatalogUrlDisplay();
                 }
             },
-            "URL каталога JSON",
-            "Введите адрес JSON файла каталога игр",
+            "app/settings/catalog_url_dialog_title"_i18n,
+            "app/settings/catalog_url_hint"_i18n,
             255,
             cfg.getCatalogSourceUrl(),
             0
@@ -487,7 +550,7 @@ void SettingsTab::onContentAvailable() {
 void SettingsTab::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     if (resetState) {
-        brls::Application::giveFocus(this->updatesCell);
+        brls::Application::giveFocus(this->languageCell);
     }
 }
 

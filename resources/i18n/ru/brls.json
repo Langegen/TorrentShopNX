@@ -1,17 +1,16 @@
 {
     "hints": {
-        "ok": "OK",
+        "ok": "ОК",
         "back": "Назад",
-        "exit": "Закрыть",
+        "exit": "Выход",
+        "cancel": "Отмена",
         "on": "Вкл.",
         "off": "Выкл."
     },
-
     "crash_frame": {
-        "button": "OK"
+        "button": "ОК"
     },
-
     "thumbnail_sidebar": {
-        "save": "Save"
+        "save": "Сохранить"
     }
 }

@@ -7,6 +7,11 @@
 #include <string>
 #include <sys/stat.h>
 
+#if defined(__MINGW32__)
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#endif
+
 namespace util {
 
 static const char* kLogPath = "sdmc:/switch/TorrentShopNX/log.txt";

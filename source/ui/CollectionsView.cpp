@@ -15,9 +15,8 @@ namespace ui {
 namespace {
 
 int cachedCount(const catalog::CollectionInfo& info) {
-    std::ifstream in(catalog::CollectionsManager::cachePathFor(info.id), std::ios::binary);
-    if (!in.is_open()) return -1;
-    std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string body;
+    if (!readFileFast(catalog::CollectionsManager::cachePathFor(info.id), body)) return -1;
     try {
         auto j = nlohmann::json::parse(body);
         if (j.is_array()) return static_cast<int>(j.size());
@@ -51,7 +50,7 @@ void CollectionsView::onContentAvailable() {
             size_t count = entries.size();
             brls::sync([flag, label, count]() {
                 if (flag->load() && label) {
-                    label->setText("Игр: " + std::to_string(count));
+                    label->setText(brls::getStr("app/collections/games_count", std::to_string(count)));
                 }
             });
         });
@@ -80,13 +79,13 @@ void CollectionsView::rebuildList() {
 
         auto* title = new brls::Label();
         title->setFontSize(20);
-        title->setText("Весь каталог");
+        title->setText("app/collections/all_catalog"_i18n);
         col->addView(title);
 
         auto* desc = new brls::Label();
         desc->setFontSize(13);
         desc->setTextColor(nvgRGB(158, 158, 158));
-        desc->setText("Полный каталог раздач RU_catalog.json");
+        desc->setText("app/collections/all_catalog_desc"_i18n);
         col->addView(desc);
 
         row->addView(col);
@@ -94,7 +93,7 @@ void CollectionsView::rebuildList() {
         auto* count = new brls::Label();
         count->setFontSize(14);
         count->setTextColor(nvgRGB(170, 170, 170));
-        count->setText("Игр: " + std::to_string(g_games.size()));
+        count->setText(brls::getStr("app/collections/games_count", std::to_string(g_games.size())));
         row->addView(count);
 
         row->registerClickAction([](brls::View*) {
@@ -124,13 +123,13 @@ void CollectionsView::rebuildList() {
 
         auto* title = new brls::Label();
         title->setFontSize(20);
-        title->setText(info.name);
+        title->setText(info.getName());
         col->addView(title);
 
         auto* desc = new brls::Label();
         desc->setFontSize(13);
         desc->setTextColor(nvgRGB(158, 158, 158));
-        desc->setText(info.description);
+        desc->setText(info.getDescription());
         col->addView(desc);
 
         row->addView(col);
@@ -139,7 +138,7 @@ void CollectionsView::rebuildList() {
         count->setFontSize(14);
         count->setTextColor(nvgRGB(170, 170, 170));
         int cached = cachedCount(info);
-        count->setText(cached >= 0 ? "Игр: " + std::to_string(cached) : "—");
+        count->setText(cached >= 0 ? brls::getStr("app/collections/games_count", std::to_string(cached)) : "");
         row->addView(count);
         countLabels_.push_back(count);
 

@@ -1,12 +1,24 @@
-// torrentfs3.c вЂ” v3 of the streaming torrent engine (same public API as v1/v2).
+// torrentfs3.c — v3 of the streaming torrent engine (same public API as v1/v2).
 //
-// A deliberate simplification of v2. What v2 bought with its complexity
-// (global block scheduler, adaptive pipelines, upload serving, incoming
-// acceptors, stalled-piece racing) was throughput headroom the player rarely
-// needs: the stream plays at a few MB/s and the platform costs (bsd IPC per
-// packet, SD latency, three CPU cores shared with mpv) dominate long before
-// the scheduler does. v3 keeps the parts that were hard-won on this platform
-// and deletes the rest:
+// The v3 scheduler was rebuilt to mirror torrserver's engine (the anacrolix/
+// torrent client, requestStrategy 3), because that client streams on this very
+// swarm at line rate while the old per-piece-owner design stalled:
+//
+//   - NO piece ownership. Every unchoked session, on every refill, scans ALL
+//     pieces in priority order (Now > Next > Readahead > High > Normal) and
+//     requests the first blocks that are not held by someone else yet. The
+//     reader's piece therefore gets the whole swarm's in-flight capacity
+//     before any other piece does (anacrolix: PiecePriorityNow).
+//   - Duplicate requests: a block requested but not delivered for 1 s may be
+//     re-requested by another session (up to MAX_DUP copies). This is
+//     anacrolix's duplicateRequestTimeout -- it is what unblocks a piece held
+//     by a slow/stalled peer without any owner-takeover machinery.
+//   - Per-session pipeline depth = ~0.5 s of that session's measured useful
+//     delivery, clamped 2..250 (anacrolix nominalMaxRequests, strategy 3).
+//     Requests are never expired and never cancelled on release: stragglers
+//     land, get deduplicated, and count toward the piece. On arrival of a
+//     block, duplicate copies in flight on other sessions are CANCELed
+//     (anacrolix postCancel) so the swarm stops wasting bandwidth on it.
 //
 //   KEPT (load-bearing, see v1/v2 history):
 //   - one poll() netloop (libnx caps concurrent *blocking* BSD calls at 16)
@@ -22,13 +34,12 @@
 //   - backlog-driven calm mode + fill-rate governor (wifi bursts on the OS
 //     core are what freeze the console)
 //
-//   DROPPED:
+//   DROPPED (v3 ownership model):
 //   - upload serving, incoming acceptors, the listen socket (leech-only;
 //     removes 2 threads, the INQ, tit-for-tat state)
-//   - the global block scheduler (a session claims ONE piece at a time and
-//     pipelines blocks within it; a stalled claim is parked -- buffer and
-//     progress kept -- and adopted by the next session that has the piece)
-//   - per-session adaptive request pipeline (~2 s of the peer's rate in flight)
+//   - the per-session piece claim + owner/helper worker caps, parked blocks,
+//     stall-driven hedging, hot-piece steering: all replaced by the global
+//     priority scan + 1 s duplicate timer above
 //   - separate announce and DHT threads (one discovery thread runs both)
 //
 // Session framing/handshake lives in peer.c's peer_nb layer instead of being
@@ -73,14 +84,14 @@
    uTP session, ~25 MB worst case -- fine in title mode. On a 100 Mbit wifi
    link a few dozen 500-800 KB/s peers are what saturates it, so the cap sits
    above the typical 20-25 reachable peers with headroom for churn. */
-#define MAX_SESS         48
-#define MAX_CONNECTING   24     // slots allowed to sit in a pending connect
-#define DIAL_STOP_LIVE   40     // enough live sessions: stop dialing new peers
+#define MAX_SESS         96
+#define MAX_CONNECTING   48     // slots allowed to sit in a pending connect
+#define DIAL_STOP_LIVE   80     // enough live sessions: stop dialing new peers
 #else
 // PC can hold more concurrent BSD sockets; use them to stress-test the engine.
-#define MAX_SESS         64
-#define MAX_CONNECTING   32
-#define DIAL_STOP_LIVE   48
+#define MAX_SESS         96
+#define MAX_CONNECTING   48
+#define DIAL_STOP_LIVE   80
 #endif
 #define CONNECT_SECS     2      // outbound SYN patience
 // When the swarm is starved the old code dropped the connect budget to 1 s to
@@ -95,49 +106,38 @@
 // New outbound dials per 250 ms upkeep tick (~8-12/s): a SYN storm of failed
 // connects accumulates half-open entries in the home router's NAT table and
 // starts dropping EVERYTHING, including the healthy sessions.
-#define DIAL_BUDGET_PER_TICK 3
+#define DIAL_BUDGET_PER_TICK 4
 #define PREHS_SECS       10     // connected but no handshake yet
 #define IDLE_SECS        130    // handshaked, nothing received (see header)
 #define KEEPALIVE_SECS   60
-#define STALL_SECS       6      // requested blocks but nothing came: drop peer
-// A peer can dodge STALL_SECS forever by dribbling one block every few seconds:
-// last_block keeps resetting while the piece it holds never lands. Rather than
-// ban it, we meter every session's receive rate (per session, so it is piece-
-// size independent) and steer the fastest peer onto the most urgent piece --
-// demoting a slow owner to a less urgent one instead of killing it. The takeover
-// only fires on a clear rate win, so a uniformly slow swarm is never thrashed.
-#define SLOW_MEASURE_SECS 5          // download time before a session's rate counts
-#define SLOW_FACTOR_CRIT  4          // take over only if this much faster than the owner
+// A peer can dodge STALL_SECS forever by dribbling one block every few
+// seconds: last_block keeps resetting while the piece it holds never lands.
+// Rather than ban it, the request scheduler below just stops waiting for it:
+// its undelivered blocks are re-requested from other peers after 1 s.
+#define STALL_SECS       25     // requested blocks but nothing came: drop peer (with strike tolerance)
+#define DUP_REQ_SECS     1      // anacrolix duplicateRequestTimeout: re-request an undelivered block after this long
+#define MAX_DUP          4      // outstanding copies of one block (anacrolix caps re-requests similarly)
 
-#define REQ_RING         256    // per-session outstanding-request capacity
-#define REQ_EXPIRE_SECS  30     // re-request a block after this long undelivered
-#define REQ_FIRST_EXPIRE_SECS 4 // zero-delivery peers: free their blocks fast
-// Duplicate (hedge) requests a piece may issue over its whole lifetime: each
-// hedge is a deliberate duplicate whose delivery is guaranteed waste unless
-// the original requester died first. 32 blocks = 512 KiB of hedge traffic
-// per piece.
-#define HEDGE_BUDGET     32
+#define REQ_RING         512    // per-session outstanding-request capacity
+// Per-session in-flight request budget, cloned from anacrolix/torrent
+// (requestStrategy 3: nominalMaxRequests = clamp(1, PeerMaxRequests=250,
+// max(2, delivered_rate * duplicateRequestTimeout / 2))). Requests are never
+// expired: stale ones on a dead peer are simply duplicated by other sessions
+// after DUP_REQ_SECS, and the peer itself is strike-timed out by STALL_SECS.
+#define MAX_REQ_PER_CONN 250
+#define REQ_MIN          2
 
-// RAM for in-flight piece buffers; bounds how many pieces are open at once. The
-// budget is in BYTES: the floor is only there to keep a tiny bit of pipelining,
-// NOT to force a piece count -- a 64 MB-piece torrent clamped to 4 buffers held
-// 256 MB of them (and 8 look-ahead pieces = 512 MB, more than the RAM window,
-// which then evicted what it had just fetched ahead and re-downloaded it).
-// 80 MB puts ~9 of the common 8 MB pieces in flight: with ~20 live sessions the
-// old 5-buffer pool left most of the swarm idle while one slow piece blocked
-// the reader, and the idle sessions capped the aggregate download rate.
-#define RAM_BUDGET       (80LL << 20)
-#define AQ_MAX           16
-#define AQ_MIN           2
+// RAM for in-flight piece buffers; bounds how many pieces are open at once.
+// Raised to 512 MB (AQ_MAX 64, AQ_MIN 4): on Title mode Switch we have ample RAM,
+// allowing 30-32 active pieces for 16 MB pieces (or 64 for 8 MB pieces), ensuring
+// full utilization of all 60+ swarm sessions.
+#define RAM_BUDGET       (512LL << 20)
+#define AQ_MAX           64
+#define AQ_MIN           4
 
-// Streaming window: wide enough to feed the sessions, narrow enough that they
-// don't advance 50 pieces in parallel while the player starves on one. Byte-
-// budgeted, with a small piece floor and (in RAM mode) a ceiling of half the
-// RAM window so the look-ahead can never outrun what the window can hold.
-// 80 MB (~9 of the common 8 MB pieces) matches the in-flight buffer pool so
-// every live session can hold a claim; the installer's 128 MB ring buffer plus
-// this window is what absorbs a slow piece without the read blocking on it.
-#define STREAM_WINDOW    (80LL * 1024 * 1024)
+// Streaming window: raised to 384 MB to match the enlarged in-flight buffer pool
+// and ensure scheduler Urgent/Prefetch zones are visible to the peer picker.
+#define STREAM_WINDOW    (384LL * 1024 * 1024)
 #define STREAM_MIN_PIECES 2
 
 // Startup criticals: mpv probes the container head and tail (moov atom) first,
@@ -167,7 +167,7 @@
 // are dropped; a read that lands on a dropped piece re-downloads it (the read
 // moves the playhead there, so the streaming window covers it). Sized to leave
 // the forward window plenty of seek-back slack; needs a full-RAM launch.
-#define RAM_STREAM_BUDGET (256LL << 20)
+#define RAM_STREAM_BUDGET (512LL << 20)
 
 #define TFS_MAX_PEERS    512
 #define BACKOFF_CONN_SECS 5
@@ -192,15 +192,22 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 // a single peer address when a client re-announces every few dozen seconds,
 // so starving must not turn into an announce spam that gets us cut off.
 #define DISC_INTERVAL_SECS (15 * 60)
-#define DISC_STARVED_SECS  90
-#define STARVED_LIVE       6
+#define DISC_STARVED_SECS  15
+// Below this many live sessions the engine runs starvation mode (fast
+// re-announces, DHT hungry, no uTP dials, backoff churn). It used to be 30,
+// which a healthy 20-30 peer swarm NEVER exceeded on real downloads -- the
+// engine permanently self-identified as starved, spammed trackers every 15 s
+// and got throttled (measured: t-ru.org started refusing connections within
+// a minute, killing the largest peer source). A handful of good peers is
+// enough to saturate a 100 Mbit link; treat anything above that as healthy.
+#define STARVED_LIVE       14
 
 // PEX (BEP 11): exchange peer addresses with live sessions. Peers discovered
 // this way are by definition reachable (they come from someone who is talking
 // to us right now), which is what makes PEX the antidote to the dead-address
 // flood from trackers/DHT. Send every minute, at most 50 addresses per
 // message; accept at most one message per session per 5 s (abuse guard).
-#define PEX_INTERVAL_SECS        60
+#define PEX_INTERVAL_SECS        30
 #define PEX_MAX_PEERS            50
 #define PEX_RX_MIN_INTERVAL_SECS 5
 
@@ -212,17 +219,14 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 #define UP_TX_WATERMARK  (384 * 1024)
 
 // A handshaked peer that keeps us choked for this long while never having
-// delivered a block is dead weight: drop it and dial a fresh candidate (the
-// pool has alternatives most of the time; 60 s > the ~30 s optimistic-unchoke
-// rotation of a seed that might still come around).
-#define CHOKED_ROTATE_SECS 60
-// During bootstrap (fewer than this many pieces ever completed) we have nothing
-// to reciprocate with yet, so seeds are precious: they optimistic-unchoke us
-// every ~30 s, and killing them after 60 s meant we missed their slot and then
-// had to wait out the backoff to try again. Give full seeds three times the
-// patience so the first optimistic window is always caught.
-#define BOOTSTRAP_THRESH              5
-#define CHOKED_ROTATE_BOOTSTRAP_SECS 180
+// delivered a block is dead weight: drop it and dial a fresh candidate.
+// 20 s: a slot squatted by a silent choker for a minute is a slot a
+// productive seed could be using (measured: with a 45-180 s rotation the
+// live set plateaued far below the swarm's reachable seed count).
+#define CHOKED_ROTATE_SECS 20
+// Bootstrap: fewer than this many pieces ever completed -- we have nothing to
+// reciprocate with yet, so full seeds are precious and never rotated out.
+#define BOOTSTRAP_THRESH 5
 
 // Reciprocation-based choking (BEP-3 tit-for-tat, adapted: ranking is by the
 // peer's download rate TO US, not their upload rate from us -- a streaming
@@ -232,16 +236,14 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 // rotate one optimistic slot every OPTIMISTIC_SECS so a new peer can prove
 // itself and the swarm sees us as a willing uploader.
 #define CHOKE_INTERVAL_SECS 10
-#define MAX_UNCHOKE_SLOTS    4
+#define MAX_UNCHOKE_SLOTS    8
 #define OPTIMISTIC_SECS     30
 
-// One poll() call covers at most this many sockets. On cygwin/msys2 poll()
-// is built on WaitForMultipleObjects, which waits on at most 64 handles: the
-// PC build's MAX_SESS(64) + uTP socket = 65 pollfds could exceed it and the
-// call misbehaved (rare full-process hangs on the PC test build). The netloop
-// rotates through the session set, so a socket that misses one poll waits at
-// most one extra 100 ms loop. Switch builds (48 + 1) never hit the cap.
+#ifdef __SWITCH__
+#define POLL_CHUNK_MAX   100
+#else
 #define POLL_CHUNK_MAX   56
+#endif
 
 enum { PIECE_NEEDED = 0, PIECE_ACTIVE = 1, PIECE_DONE = 2, PIECE_WRITING = 3 };
 
@@ -259,21 +261,20 @@ int  torrentfs_ram_stream(void)       { return g_ram_stream; }
 // Types
 //-----------------------------------------------------------------------------
 
-// One piece being assembled in RAM. idx -1 = slot free. owner is the session
-// currently requesting its blocks (-1 = parked: progress kept, waiting to be
-// adopted). Only the netloop touches entries, except the writer returning a
-// buffer under t->lock.
+// One piece being assembled in RAM. idx -1 = slot free. There is no owner:
+// any session may request any of its blocks at any time (anacrolix model).
+// Only the netloop touches entries, except the writer returning a buffer
+// under t->lock.
 typedef struct {
     int64_t idx;
-    int owner;          // session that allocated the slot, or -1 (parked)
-    int workers;        // how many sessions currently hold this piece claim
     uint8_t *buf;       // piece_len bytes, lazily allocated, reused
     uint8_t *have;      // one byte per block: data present in buf
-    uint8_t *req;       // one byte per block: outstanding-request COUNT
+    uint8_t *req;       // one byte per block: outstanding-request COUNT (capped at 255)
+    uint64_t *req_ts;   // when the block was last requested (dup gate: DUP_REQ_SECS)
     int nblocks;
     int have_cnt;
     int next_req;       // scan cursor for the next block to request
-    int hedge_budget;   // duplicate requests this piece may still ISSUE
+    u64 last_deliver;   // last time a block of this piece arrived (diagnostics)
 } aq_entry;
 
 typedef struct {
@@ -283,15 +284,13 @@ typedef struct {
     peer_nb nb;         // sock/framing/handshake/bitfield (peer.c)
     peer_addr addr;     // remote endpoint
     int pidx;           // peer pool index (for backoff bookkeeping)
-    int64_t claim;      // piece being fetched, -1 = none
     // Outstanding block requests, as a ring of (piece, block, time). A PIECE
     // is only accepted if it exactly matches an entry here -- piece AND block,
     // because a late delivery for a previous claim shares block numbers with
-    // the new one and would otherwise eat the new claim's entries (that was
-    // silently dropping every fresh block of the new piece, freezing the
-    // stream). Expired entries free their per-piece request counts so other
-    // peers can re-request the block (the pipensx model: request counts +
-    // exact matching, no duplicate storms).
+    // the new one and would otherwise eat the new claim's entries. Requests
+    // are never expired: a block that never arrives is re-requested by other
+    // sessions after DUP_REQ_SECS (duplicate), and deliveries simply pop the
+    // matching entry.
     int req_n;
     int req_piece[REQ_RING];
     int req_block[REQ_RING];
@@ -301,11 +300,13 @@ typedef struct {
     int fail_kind;       // why this session failed, for pool bookkeeping
     u64 last_pex;      // last ut_pex we SENT (0 = never)
     u64 last_pex_rx;   // last ut_pex we ACCEPTED (rate-limit guard)
-    // Per-session receive-rate meter, for the relative slow-peer cull.
+    // Per-session receive meter, for the pipeline depth (anacrolix
+    // nominalMaxRequests: delivered_rate * DUP_REQ_SECS / 2, clamped 2..250).
     int64_t rx_total;   // cumulative bytes received (never reset)
+    int64_t useful;     // matched (expected) blocks received
+    u64 expect_ticks;   // time spent with outstanding requests (rate anchor)
     int64_t rate_prev;  // rx_total at the last rate sample
     u64 rate_tick;      // last rate sample (0 = meter not started yet)
-    u64 rate_start;     // first sample: start of the measure grace
     double rate;        // smoothed receive rate, bytes/s
     // Per-session upload meter, for the choking round's reciprocity ranking.
     int64_t tx_total;   // cumulative bytes we sent to this peer
@@ -313,9 +314,10 @@ typedef struct {
     u64 up_rate_tick;       // last up-rate sample (0 = meter not started yet)
     double  up_rate;        // smoothed upload rate to this peer, bytes/s
     bool peer_interested;  // peer wants our pieces (we may unchoke)
+    uint8_t timeout_strikes; // strikes before closing on stall
 } sess;
 
-static void release_claim(torrentfs *t, sess *s);
+static void sess_drop_requests(torrentfs *t, sess *s);
 static aq_entry *aq_find(torrentfs *t, int64_t idx);
 
 typedef struct {
@@ -440,7 +442,6 @@ struct torrentfs {
     int64_t st_dup_have;       //   of which: ring matched but block already held
     int64_t st_dup_gone;       //   of which: assembly slot gone (piece finished)
     int64_t st_blocks_have;    // blocks resident in RAM partials
-    int64_t st_win_ph, st_win_lo, st_win_hi;
     char st_last_err[128];
 
     u64 hb_tick[4];
@@ -681,32 +682,19 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         if (!c->buf) c->buf = malloc((size_t)t->meta.piece_len);
         if (!c->buf) continue;
         c->idx = idx;
-        c->owner    = -1;
-        c->workers  = 0;
         c->have_cnt = 0;
+        c->next_req = 0;
+        c->last_deliver = armGetSystemTick();
         c->nblocks  =
             (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
-        int hb = c->nblocks / 16;
-        if (hb < HEDGE_BUDGET) hb = HEDGE_BUDGET;
-        if (hb > 64) hb = 64;
-        c->hedge_budget = hb;
         memset(c->have, 0, (size_t)t->blocks_per_piece);
         memset(c->req, 0, (size_t)t->blocks_per_piece);
+        memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
         a = c;
         break;
     }
     mutexUnlock(&t->lock);
     return a;
-}
-
-// Park: keep buffer and progress, forget who was fetching it. The session
-// leaving already freed its per-piece request counts (release_claim), so
-// in-flight blocks of its own are re-requestable by the adopter; blocks still
-// on order from other sessions keep their counts until they arrive or expire.
-static void aq_park(torrentfs *t, aq_entry *a) {
-    (void)t;
-    a->owner    = -1;
-    a->workers  = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -723,13 +711,12 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
         if (peers[i].port <= 1) continue;
         bool dup = false;
         for (int j = 0; j < t->peer_count; j++)
-            if (t->peers[j].ip == peers[i].ip &&
-                t->peers[j].port == peers[i].port) {
-                // Upgrade provenance: a DHT-cached address re-reported by a
-                // live tracker/PEX peer is far more likely to be alive. Lower
-                // enum values are better sources, so PEX never demotes a
-                // tracker-reported entry.
-                if ((uint8_t)src < t->peer_src[j]) t->peer_src[j] = (uint8_t)src;
+            if (t->peers[j].ip == peers[i].ip) {
+                // Same IP: upgrade provenance and update port if newer source
+                if ((uint8_t)src < t->peer_src[j]) {
+                    t->peer_src[j] = (uint8_t)src;
+                    t->peers[j].port = peers[i].port;
+                }
                 dup = true;
                 break;
             }
@@ -794,6 +781,15 @@ static int take_peer(torrentfs *t, peer_addr *out) {
                 if (t->peer_busy[i]) continue;
                 if (t->peer_next_try[i] > now) continue;
                 if (pass == 0 && t->peer_src[i] == PEER_SRC_DHT) continue;
+                // Avoid opening multiple parallel connections to the same IP.
+                bool ip_busy = false;
+                for (int s = 0; s < MAX_SESS; s++) {
+                    if (t->S[s].active && t->S[s].addr.ip == t->peers[i].ip) {
+                        ip_busy = true;
+                        break;
+                    }
+                }
+                if (ip_busy) continue;
                 idx = i;
                 *out = t->peers[i];
                 break;
@@ -819,15 +815,30 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             // A seed that rotated us out is not a dead address: the minimal
             // backoff gets us back into its next optimistic-unchoke window.
             secs = BACKOFF_DROP_SECS;
-        } else if (t->pieces_ever < BOOTSTRAP_THRESH &&
+        } else if (fail_kind == PEER_FAIL_TIMEOUT && !had_conn) {
+            // Dead/unreachable address (TCP connect never answered). Park it
+            // for a long time on the FIRST miss: re-dialing dead DHT entries
+            // every few seconds burns the dial budget that fresh peers need
+            // (measured: ~half of all dial slots went to re-dialing dead
+            // addresses).
+            secs = f > 1 ? BACKOFF_MAX_SECS : 60;
+        } else if (!had_conn &&
+                   t->pieces_ever < BOOTSTRAP_THRESH &&
                    t->peer_src[pidx] == PEER_SRC_TRACKER) {
             // During bootstrap, tracker-reported addresses are live seeders:
-            // keep the reconnect cadence flat so a missed optimistic slot is
-            // retried before the next one passes.
+            // keep the DIAL cadence flat so a missed optimistic slot is
+            // retried before the next one passes. A peer that DID complete
+            // a connection falls through to the exponential ladder below --
+            // flat 5 s redials of a seed that connects but sends nothing is
+            // a reconnect loop, not recovery (measured in the field: the
+            // same silent seed re-dialed every ~30 s for 10+ minutes).
             secs = BACKOFF_DROP_SECS;
         } else {
-            secs = had_conn ? BACKOFF_DROP_SECS
-                            : BACKOFF_CONN_SECS * (1 << (f > 5 ? 5 : f - 1));
+            // Exponential backoff for repeat failures to prevent 11s reconnect storms
+            int shift = (f > 1) ? (f - 1) : 0;
+            if (shift > 5) shift = 5;
+            secs = BACKOFF_CONN_SECS * (1 << shift);
+            if (had_conn && f == 1) secs = BACKOFF_DROP_SECS;
         }
         if (secs > BACKOFF_MAX_SECS) secs = BACKOFF_MAX_SECS;
         t->peer_next_try[pidx] = armGetSystemTick() + (u64)secs * t->freq;
@@ -1040,7 +1051,7 @@ static void writer_main(void *arg) {
 
 static void sess_close(torrentfs *t, sess *s, bool failed) {
     if (!s->active) return;
-    if (s->claim >= 0) release_claim(t, s);
+    sess_drop_requests(t, s);   // free per-piece request counts, no cancels
     if (s == t->optimistic_peer) t->optimistic_peer = NULL;
     bool had_conn = s->nb.handshaked;
     // A TCP dial that never connected may have died to a strict NAT: before
@@ -1158,7 +1169,6 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
     s->nb.sock     = sock;   // raw until the connect completes
     s->addr        = pa;
     s->pidx        = pidx;
-    s->claim       = -1;
     s->started     = now;
     s->conn_budget = now + (u64)secs * t->freq;
     t->st_connecting++;
@@ -1193,7 +1203,6 @@ static bool sess_dial_utp_at(torrentfs *t, u64 now, int pidx, peer_addr pa) {
     s->nb.utp      = us;
     s->addr        = pa;
     s->pidx        = pidx;
-    s->claim       = -1;
     s->started     = now;
     s->last_rx     = now;
     s->last_ka     = now;
@@ -1266,9 +1275,10 @@ static void sess_connected(torrentfs *t, sess *s, u64 now) {
 // Claiming and the request pipeline
 //-----------------------------------------------------------------------------
 
-// Streaming window; also published for the debug panel.
+// Streaming window, for the debug panel. The request scheduler itself works
+// off the piece-priority gradient (piece_priority), not this window.
 static void calc_window(torrentfs *t, int64_t *ph, int64_t *lo, int64_t *hi) {
-    int64_t p = t->playhead_piece;   // lock-free read (netloop only writes stats)
+    int64_t p = t->playhead_piece;   // lock-free read
     int64_t flo = t->file_first_piece, fhi = t->file_last_piece;
     if (p < flo) p = flo;
     if (p > fhi) p = fhi;
@@ -1279,14 +1289,13 @@ static void calc_window(torrentfs *t, int64_t *ph, int64_t *lo, int64_t *hi) {
     // it just fetched -- only to re-download them. Cap at half the window so the
     // other half stays available for seek-back behind the playhead.
     if (t->ram_mode) {
-        int64_t cap = (t->ram_budget / 2) / t->meta.piece_len;
+        int64_t cap = (t->ram_budget * 3 / 4) / t->meta.piece_len;
         if (cap < STREAM_MIN_PIECES) cap = STREAM_MIN_PIECES;
         if (win > cap) win = cap;
     }
     int64_t h = p + win;
     if (h > fhi + 1) h = fhi + 1;
     *ph = p; *lo = flo; *hi = h;
-    t->st_win_ph = p; t->st_win_lo = flo; t->st_win_hi = h;
 }
 
 // The header/moov probe pieces (the ends of the file). These are fetched
@@ -1297,300 +1306,189 @@ static bool is_critical(torrentfs *t, int64_t idx) {
            idx > t->file_last_piece - t->crit_tail;
 }
 
-static int unreq_count(const aq_entry *a) {
-    if (!a) return 0;
-    int n = 0;
-    for (int i = 0; i < a->nblocks; i++)
-        if (!a->req[i] && !a->have[i]) n++;
-    return n;
+// Send one MSG_CANCEL for a single (piece, block) on a session's wire
+// (anacrolix postCancel: when a block arrives, its duplicate copies in
+// flight on other sessions are cancelled so they stop wasting bandwidth).
+static void send_cancel_one(torrentfs *t, sess *s, int ep, int eb) {
+    if (!s->nb.handshaked || s->connecting) return;
+    if (ep < 0 || ep >= t->meta.piece_count) return;
+    uint8_t pl[12];
+    uint32_t v;
+    v = htonl((uint32_t)ep);        memcpy(pl, &v, 4);
+    v = htonl((uint32_t)eb * BLOCK_LEN); memcpy(pl + 4, &v, 4);
+    v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
+    memcpy(pl + 8, &v, 4);
+    peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
 }
 
-static int missing_count(const aq_entry *a) {
-    if (!a) return 0;
-    return a->nblocks - a->have_cnt;
-}
-
-// Cancel a session's outstanding block requests on the wire. The stragglers
-// of a released/detached claim are pure waste: every block they deliver has
-// already been delivered by someone else and lands as duplicate traffic
-// (measured: the single biggest dup source, ~1/3 of all received bytes).
-// MSG_CANCEL stops the peer from sending them in the first place.
-static void cancel_outstanding(torrentfs *t, sess *s) {
-    if (s->req_n <= 0 || !s->nb.handshaked || s->connecting) return;
+// Drop a session's outstanding requests without cancelling them on the wire:
+// anacrolix never cancels on release -- the peer's copies, if any, land and
+// get deduplicated. The per-piece request counts are freed so other sessions
+// may re-request the blocks after the duplicate timer expires. Used when the
+// peer chokes us or when the session closes.
+static void sess_drop_requests(torrentfs *t, sess *s) {
     for (int i = 0; i < s->req_n; i++) {
         int ep = s->req_piece[i];
         int eb = s->req_block[i];
-        if (ep < 0 || ep >= t->meta.piece_count) continue;
-        uint8_t pl[12];
-        uint32_t v;
-        v = htonl((uint32_t)ep);        memcpy(pl, &v, 4);
-        v = htonl((uint32_t)eb * BLOCK_LEN); memcpy(pl + 4, &v, 4);
-        v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
-        memcpy(pl + 8, &v, 4);
-        peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
-    }
-    peer_nb_flush(&s->nb);
-}
-
-// Release one session's claim on a piece. Its outstanding request counts are
-// freed so other peers can re-request those blocks (only genuinely abandoned
-// requests are re-requested -- the per-session ring + counts are what stops
-// the duplicate-request storms). If no workers remain, park the partial
-// progress so other peers can adopt it.
-static void release_claim(torrentfs *t, sess *s) {
-    if (s->claim < 0) return;
-    aq_entry *a = aq_find(t, s->claim);
-            cancel_outstanding(t, s);
-    // Free every outstanding request's per-piece count (looked up by the
-    // piece each entry belongs to), then detach.
-    for (int i = 0; i < s->req_n; i++) {
-        int ep = s->req_piece[i];
-        int eb = s->req_block[i];
-        aq_entry *ea = (ep == s->claim) ? a : aq_find(t, ep);
-        if (ea && eb >= 0 && eb < ea->nblocks && ea->req[eb] > 0)
+        aq_entry *ea = aq_find(t, ep);
+        if (ea && eb >= 0 && eb < ea->nblocks &&
+            ea->req[eb] > 0 && ea->req[eb] < 255)
             ea->req[eb]--;
     }
-    if (a) {
-        if (a->owner == s - t->S) a->owner = -1;
-        if (a->workers > 0) a->workers--;
-        if (a->workers == 0) {
-            aq_park(t, a);
-        } else if (a->owner < 0) {
-            // Re-home the piece on a remaining worker so its pipeline stays
-            // the deep owner one instead of everyone degrading to helper caps.
-            for (int i = 0; i < MAX_SESS; i++)
-                if (t->S[i].claim == a->idx) { a->owner = i; break; }
-        }
-    }
     s->req_n = 0;
-    s->claim = -1;
 }
 
-// Can this session take piece idx? NEEDED needs a free buffer; an ACTIVE entry
-// can be joined by multiple sessions as long as there are blocks left to order.
-// endgame=true skips the "no duplicate requests" gate: the caller knows the
-// piece gates the reader, so extra workers (even duplicating requests) are
-// exactly what unblocks it.
-static bool try_claim(torrentfs *t, sess *s, int sid, int64_t idx, bool endgame) {
-    if (idx < t->file_first_piece || idx > t->file_last_piece) return false;
-    uint8_t st = t->status[idx];
-    if (st == PIECE_DONE || st == PIECE_WRITING) return false;
-    if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, idx)) {
-        if (idx == t->file_first_piece)
-            engine_log(ENGINE_LOG_DEBUG, "[claim] sess %d lacks piece %lld",
-                       sid, (long long)idx);
-        return false;
-    }
-
-    aq_entry *a;
-    if (st == PIECE_ACTIVE) {
-        a = aq_find(t, idx);
-        if (!a) return false;
-        // Join if there are still blocks nobody has requested. Once only missing
-        // blocks remain we stay cooperative: duplicates waste bandwidth, so a
-        // second peer joins only when endgame is close (missing blocks <= threshold)
-        // or when the reader is blocked on this very piece.
-        int eg_thresh = a->nblocks / 16;
-        if (eg_thresh < 6) eg_thresh = 6;
-        if (eg_thresh > 32) eg_thresh = 32;
-        if (!endgame && unreq_count(a) == 0 && missing_count(a) > eg_thresh) return false;
-    } else {
-        a = aq_alloc(t, idx);
-        if (!a) {
-            engine_log(ENGINE_LOG_DEBUG, "[claim] sess %d no aq buffer for %lld",
-                       sid, (long long)idx);
-            return false;
-        }
-        mutexLock(&t->lock);
-        t->status[idx] = PIECE_ACTIVE;
-        mutexUnlock(&t->lock);
-    }
-    if (a->owner < 0) a->owner = sid;
-    a->workers++;
-    s->claim = idx;
-    s->req_n = 0;
-    s->last_block = armGetSystemTick();
-    return true;
+// The effective request priority of a piece, cloned from torrserver's
+// setLoadPriority gradient: Now (the reader's piece) > Next > Readahead
+// (4 pieces) > High (5) > Normal (up to the 25-connection budget). Pieces
+// with no priority are not requested at all. The external scheduler assigns
+// the same gradient through piece zones; where it has not (startup, before
+// the first read), the playhead-relative fallback below takes over.
+static int piece_priority(torrentfs *t, int64_t idx) {
+    if (idx < t->file_first_piece || idx > t->file_last_piece) return 0;
+    int z = t->piece_zone[idx];
+    if (z != 0) return z;
+    if (is_critical(t, idx))
+        return idx < t->file_first_piece + t->crit_head ? 1 : 2;
+    int64_t ph = t->playhead_piece;
+    if (ph < t->file_first_piece) ph = t->file_first_piece;
+    if (ph > t->file_last_piece) ph = t->file_last_piece;
+    int64_t d = idx - ph;
+    if (d < 0 || d > 24) return 0;
+    if (d == 0) return 1;
+    if (d == 1) return 2;
+    if (d <= 5) return 3;
+    if (d <= 10) return 4;
+    return 5;
 }
 
-// Claim a piece without knowing that this peer has it.  Used as a last resort
-// for the playhead piece: if no currently-handshaked peer reports having it,
-// we still want a session to ask the next peer it connects to.  If that peer
-// also does not have it, fill_pipeline leaves req_n==0 and the session drops
-// the claim on the next service tick.
-static bool try_claim_blind(torrentfs *t, sess *s, int sid, int64_t idx) {
-    if (idx < t->file_first_piece || idx > t->file_last_piece) return false;
-    uint8_t st = t->status[idx];
-    if (st == PIECE_DONE || st == PIECE_WRITING) return false;
-
-    aq_entry *a;
-    if (st == PIECE_ACTIVE) {
-        a = aq_find(t, idx);
-        if (!a) return false;
-        int eg_thresh = a->nblocks / 16;
-        if (eg_thresh < 6) eg_thresh = 6;
-        if (eg_thresh > 32) eg_thresh = 32;
-        if (unreq_count(a) == 0 && missing_count(a) > eg_thresh) return false;
-    } else {
-        a = aq_alloc(t, idx);
-        if (!a) return false;
-        mutexLock(&t->lock);
-        t->status[idx] = PIECE_ACTIVE;
-        mutexUnlock(&t->lock);
-    }
-    if (a->owner < 0) a->owner = sid;
-    a->workers++;
-    s->claim = idx;
-    s->req_n = 0;
-    s->last_block = armGetSystemTick();
-    return true;
+// Per-session in-flight request budget (anacrolix nominalMaxRequests,
+// requestStrategy 3): ~0.5 s of this session's measured useful delivery,
+// clamped 2..250. A fresh session starts with 2 and grows as its blocks land.
+static int nominal_depth(torrentfs *t, sess *s) {
+    if (s->expect_ticks <= t->freq) return REQ_MIN;   // under a second of history
+    double blocks_per_sec =
+        (double)s->useful * (double)t->freq / (double)s->expect_ticks;
+    int d = (int)(blocks_per_sec * DUP_REQ_SECS / 2.0);
+    if (d < REQ_MIN) d = REQ_MIN;
+    if (d > MAX_REQ_PER_CONN) d = MAX_REQ_PER_CONN;
+    return d;
 }
 
-// Pick a piece for an idle unchoked session.  If the external scheduler has
-// assigned zones, honour them (Critical -> Urgent -> Prefetch -> Speculative
-// -> Tail).  Within a zone prefer pieces at or ahead of the playhead.  When no
-// scheduler zones are set, fall back to the internal window/critical logic.
-static void claim_piece(torrentfs *t, sess *s, int sid) {
-    int64_t ph, lo, hi;
-    calc_window(t, &ph, &lo, &hi);
-    int64_t fhi = t->file_last_piece;
-
-    // External 5-zone scheduler, clamped to the streaming window: the zones
-    // describe priority WITHIN the look-ahead, they must not drag sessions
-    // past it. Scanning the whole file here let Prefetch/Speculative claims
-    // live outside the window, where the seek-preemption pass then killed
-    // and re-made them every upkeep -- a churn that re-downloaded partials,
-    // inflated the byte counters, and starved the piece the reader gated on.
-    // The behind-playhead (Tail) scan is skipped for the same reason: a
-    // sequential installer never reads back, and the preemption pass drops
-    // those claims one upkeep later anyway, so each Tail claim was
-    // request-discard-request churn (measured: ~87% of received blocks were
-    // re-deliveries of that kind).
-    for (int zone = 1; zone <= 5; zone++) {
-        for (int64_t i = ph; i < hi; i++) {
-            if (t->piece_zone[i] == zone && try_claim(t, s, sid, i, false)) {
-                t->st_claim_ok++;
-                return;
-            }
-        }
-    }
-
-    // Internal fallback.
-    if (ph <= lo + t->crit_head) {   // startup: tail (moov) then head
-        for (int64_t i = fhi; i > fhi - t->crit_tail && i >= lo; i--)
-            if (try_claim(t, s, sid, i, false)) { t->st_claim_ok++; return; }
-        for (int64_t i = lo; i < lo + t->crit_head && i <= fhi; i++)
-            if (try_claim(t, s, sid, i, false)) { t->st_claim_ok++; return; }
-    }
-    for (int64_t i = ph; i < hi; i++)
-        if (try_claim(t, s, sid, i, false)) { t->st_claim_ok++; return; }
-    if (!t->ram_mode)
-        for (int64_t i = lo; i < ph; i++)
-            if (try_claim(t, s, sid, i, false)) { t->st_claim_ok++; return; }
-
-    // Last resort: the playhead piece itself.  If no currently known peer has
-    // it we still assign someone to ask the next peers that handshake.
-    if (t->status[ph] == PIECE_NEEDED && try_claim_blind(t, s, sid, ph)) {
-        engine_log(ENGINE_LOG_DEBUG, "[claim] blind playhead piece=%lld", (long long)ph);
-        t->st_claim_ok++;
-        return;
-    }
-
-    t->st_claim_fail++;
-}
-
-// Find the next block this session can order. Uses the shared cursor first,
-// then scans for holes, and finally allows a duplicate during true endgame
-// (<= 4 missing blocks, or the piece the reader is blocked on), BUDGETED:
-// the <=4-missing endgame used to let every worker re-request the same last
-// blocks without limit -- a fast worker's whole pipeline churned those four
-// blocks until the piece closed, and every delivery past the first was a
-// duplicate (measured: over half of all dup traffic was this). Two bounds
-// now: at most 2 outstanding requests per block (the original plus one
-// hedge), and at most HEDGE_BUDGET hedges ISSUED per piece.
-static int next_block_to_request(torrentfs *t, aq_entry *a) {
-    while (a->next_req < a->nblocks) {
+// Find the next block of piece idx this session may request: not received
+// yet, and either unrequested or last requested more than DUP_REQ_SECS ago
+// with fewer than MAX_DUP copies in flight (anacrolix's duplicate timer).
+// Returns -1 when the piece has nothing requestable right now.
+static int next_block_in(torrentfs *t, aq_entry *a, u64 now) {
+    for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
-        a->next_req++;
-        if (!a->req[b] && !a->have[b]) return b;
-    }
-    for (int b = 0; b < a->nblocks; b++)
-        if (!a->req[b] && !a->have[b]) return b;
-    // Endgame: duplicate one missing block so a slow peer does not stall us.
-    // Budgeted on ISSUED hedges, not delivered ones: gating on delivered dups
-    // let every worker hedge a whole pipeline before the counter caught up
-    // (up to 96 duplicate blocks in flight per read-blocked piece -- the
-    // dominant dup source). Each issued hedge costs one from the budget.
-    int eg_thresh = a->nblocks / 16;
-    if (eg_thresh < 6) eg_thresh = 6;
-    if (eg_thresh > 32) eg_thresh = 32;
-    if (missing_count(a) > 0 && a->hedge_budget > 0 &&
-        (missing_count(a) <= eg_thresh || a->idx == t->read_blocked_piece)) {
-        for (int b = 0; b < a->nblocks; b++)
-            if (!a->have[b] && a->req[b] < 2) {
-                a->hedge_budget--;
-                return b;
-            }
+        a->next_req = (b + 1) % a->nblocks;
+        if (a->have[b]) continue;
+        uint8_t r = a->req[b];
+        if (r == 0) return b;
+        if (r < MAX_DUP && now - a->req_ts[b] > (u64)DUP_REQ_SECS * t->freq)
+            return b;
     }
     return -1;
 }
 
-// Dynamic, per-session pipeline (the pipensx model): keep roughly two seconds
-// of this peer's measured delivery rate in flight, so a fast peer on a
-// high-latency wifi link carries hundreds of blocks while a trickle peer
-// carries few.
-#define PROBE_DEPTH_FEW_PEERS 64
-static int pipeline_depth(torrentfs *t, sess *s) {
-    if (t->st_live <= 3 && s->rate <= 0) return PROBE_DEPTH_FEW_PEERS;
-    double r = s->rate > 0 ? s->rate : (t->st_live <= 4 ? 512.0 * 1024.0 : 384.0 * 1024.0);
-    // During bootstrap, an unchoked peer has just let us in through its
-    // optimistic slot; with no rate history yet, assume it is fast so we fill
-    // the whole unchoke window with requests instead of trickling 32 blocks.
-    if (t->pieces_ever < BOOTSTRAP_THRESH && s->rate == 0)
-        r = 1.0 * 1024.0 * 1024.0;
-    int d = (int)(r * 2.0 / BLOCK_LEN);
-    if (d < 16) d = 16;
-    if (d > REQ_RING) d = REQ_RING;
-    return d;
+// Pick the next (piece, block) this session should request: scan every piece
+// the peer has, in priority order, and take the first requestable block.
+// This is anacrolix's iterUnbiasedPieceRequestOrder + iterUndirtiedChunks:
+// the highest-priority piece receives the whole swarm's in-flight capacity
+// before the next one gets any.
+static bool scan_next_block(torrentfs *t, sess *s, u64 now,
+                            int64_t *out_piece, int *out_block) {
+    int64_t fhi = t->file_last_piece;
+    int64_t flo = t->file_first_piece;
+    for (int zone = 1; zone <= 5; zone++) {
+        for (int64_t i = flo; i <= fhi; i++) {
+            if (piece_priority(t, i) != zone) continue;
+            if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) continue;
+            uint8_t st = t->status[i];
+            if (st == PIECE_DONE || st == PIECE_WRITING) continue;
+            aq_entry *a;
+            if (st == PIECE_ACTIVE) {
+                a = aq_find(t, i);
+                if (!a) continue;
+            } else {
+                a = aq_alloc(t, i);
+                if (!a) {
+                    engine_log(ENGINE_LOG_DEBUG,
+                               "[claim] no aq buffer for piece %lld",
+                               (long long)i);
+                    continue;
+                }
+                mutexLock(&t->lock);
+                t->status[i] = PIECE_ACTIVE;
+                mutexUnlock(&t->lock);
+            }
+            int b = next_block_in(t, a, now);
+            if (b < 0) continue;
+            *out_piece = i;
+            *out_block = b;
+            return true;
+        }
+    }
+    return false;
 }
 
-// Cap for sessions that join an already-owned piece.
-#define HELPER_PIPELINE_CAP 48
-
-// Keep the pipeline full for the session's claimed piece. Every request is
-// recorded in the session's ring and bumps the piece's per-block count, so
-// in-flight blocks are never blindly re-requested.
-static void fill_pipeline(torrentfs *t, sess *s, u64 now) {
-    if (s->claim < 0 || s->nb.choked) return;
-    aq_entry *a = aq_find(t, s->claim);
-    if (!a) { s->claim = -1; return; }
-    int64_t plen = torrent_piece_len(&t->meta, s->claim);
-    int depth = pipeline_depth(t, s);
-    if (s->req_n == 0)
-        engine_log(ENGINE_LOG_DEBUG, "[sess %d] fill claim=%lld depth=%d",
-                   (int)(s - t->S), (long long)s->claim, depth);
-    if (a->workers > 1 && a->owner != s - t->S) {
-        int helper_cap = (t->st_live <= 2) ? 64 : (t->st_live <= 4) ? 48 : HELPER_PIPELINE_CAP;
-        if (depth > helper_cap) depth = helper_cap;
-    }
+// Keep the session's outstanding-request ring full up to its nominal depth.
+// Called on every delivery burst and every upkeep tick for every unchoked
+// session, so the swarm's requests always reflect the current priority
+// gradient without any per-piece ownership state.
+static void request_scan(torrentfs *t, sess *s, u64 now) {
+    if (!s->nb.handshaked || s->connecting || s->nb.choked) return;
+    if (t->paused) return;
+    int depth = nominal_depth(t, s);
+    int was_empty = (s->req_n == 0);
+    if (was_empty)
+        engine_log(ENGINE_LOG_DEBUG, "[sess %d] scan depth=%d",
+                    (int)(s - t->S), depth);
     while (s->req_n < depth && s->req_n < REQ_RING) {
-        int b = next_block_to_request(t, a);
-        if (b < 0) break;
+        int64_t pi;
+        int b;
+        if (!scan_next_block(t, s, now, &pi, &b)) break;
         uint8_t pl[12];
         uint32_t v;
-        v = htonl((uint32_t)s->claim);        memcpy(pl, &v, 4);
+        v = htonl((uint32_t)pi);        memcpy(pl, &v, 4);
         v = htonl((uint32_t)b * BLOCK_LEN);   memcpy(pl + 4, &v, 4);
-        v = htonl(block_len_of(plen, b));     memcpy(pl + 8, &v, 4);
+        v = htonl(block_len_of(torrent_piece_len(&t->meta, pi), b));
+        memcpy(pl + 8, &v, 4);
         if (peer_nb_queue(&s->nb, MSG_REQUEST, pl, 12) != 0) break;
-        if (a->req[b] < 255) a->req[b]++;
-        s->req_piece[s->req_n] = (int)s->claim;
+        aq_entry *a = aq_find(t, pi);
+        if (a) {
+            if (a->req[b] < 255) a->req[b]++;
+            a->req_ts[b] = now;
+        }
+        s->req_piece[s->req_n] = (int)pi;
         s->req_block[s->req_n] = b;
         s->req_time[s->req_n]  = now;
         s->req_n++;
+        // Anchor the stall clock at the first request of a burst: the stall
+        // gate (STALL_SECS without a delivered block) must not fire on a
+        // freshly connected session whose first block is still on the wire
+        // (last_block was 0 for TCP dials and the check read a garbage age).
+        if (s->req_n == 1) s->last_block = now;
+        t->st_claim_ok++;
+    }
+    if (s->req_n == 0 && depth > 0) t->st_claim_fail++;
+    if (was_empty) {
+        if (s->req_n > 0)
+            engine_log(ENGINE_LOG_DEBUG, "[sess %d] first req piece=%lld block=%d",
+                       (int)(s - t->S),
+                       (long long)s->req_piece[0], s->req_block[0]);
+        else
+            engine_log(ENGINE_LOG_DEBUG, "[sess %d] scan found nothing", (int)(s - t->S));
     }
 }
 
 // All blocks landed: hand the buffer to the writer (which verifies + writes).
+// Duplicate copies of this piece's blocks may still be in flight on other
+// sessions; they land later, fail the have[] test, and count as duplicate
+// traffic (anacrolix behaves the same: stragglers are deduplicated, not
+// cancelled -- postCancel only fires when a block arrives while other
+// sessions still hold a pending copy of that same block).
 static void piece_full(torrentfs *t, aq_entry *a) {
     int64_t idx = a->idx;
     t->last_progress_tick = armGetSystemTick();
@@ -1609,21 +1507,7 @@ static void piece_full(torrentfs *t, aq_entry *a) {
     t->wq_n++;                 // can't overflow: each job holds one aq buffer
     a->idx = -1;               // slot reset inside the lock: the writer picks
     a->buf = NULL;             // its return slot by these very fields
-    a->owner = -1;
-    a->workers = 0;
     mutexUnlock(&t->lock);
-    // Every block landed, so every outstanding request was matched and its
-    // per-piece count already decremented; just detach the sessions. Their
-    // in-flight requests are now guaranteed duplicates: cancel them on the
-    // wire so the peers stop wasting bandwidth on deliveries we no longer
-    // need.
-    for (int i = 0; i < MAX_SESS; i++) {
-        if (t->S[i].claim == idx) {
-            cancel_outstanding(t, &t->S[i]);
-            t->S[i].claim = -1;
-            t->S[i].req_n = 0;
-        }
-    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1771,9 +1655,11 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             s->nb.choked = true;
             t->st_choked++;
             engine_log(ENGINE_LOG_DEBUG, "[sess] choke");
-            if (s->claim >= 0) {   // outstanding requests are void now
-                release_claim(t, s);
-            }
+            // Outstanding requests are void now. Drop them WITHOUT cancels
+            // (anacrolix does not cancel on choke either): their per-piece
+            // counts are freed so the swarm re-requests the blocks after the
+            // duplicate timer.
+            sess_drop_requests(t, s);
             break;
         case MSG_UNCHOKE:
             s->nb.choked = false;
@@ -1905,6 +1791,11 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             s->rx_total += dlen;
             if (s->pidx >= 0 && s->pidx < TFS_MAX_PEERS)
                 t->peer_ok[s->pidx] = 1;
+
+            {
+                aq_entry *da = aq_find(t, idx);
+                if (da) da->last_deliver = now;
+            }
             if (t->starve_round > 0) {
                 engine_log(ENGINE_LOG_INFO,
                            "[torrentfs] starvation recovered (delivered block after %d rounds)",
@@ -1912,10 +1803,9 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 t->starve_round = 0;
             }
 
-            // Exact-match against this session's outstanding requests: a
-            // delivery for an expired/abandoned request (or a duplicate from
-            // another session) never touches storage, so re-request churn
-            // cannot flood a piece with re-deliveries.
+            // Match against this session's outstanding requests. Even if the
+            // request was duplicated by another peer and this copy arrives
+            // second, we NEVER discard genuine, unreceived payload data.
             int r = -1;
             for (int i = 0; i < s->req_n; i++) {
                 if (s->req_piece[i] == (int)idx && s->req_block[i] == b) {
@@ -1923,20 +1813,24 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                     break;
                 }
             }
-            if (r < 0) { t->st_dup_bytes += dlen; t->st_dup_noring += dlen; break; }
-            s->req_piece[r] = s->req_piece[s->req_n - 1];
-            s->req_block[r] = s->req_block[s->req_n - 1];
-            s->req_time[r]  = s->req_time[s->req_n - 1];
-            s->req_n--;
+            if (r >= 0) {
+                s->req_piece[r] = s->req_piece[s->req_n - 1];
+                s->req_block[r] = s->req_block[s->req_n - 1];
+                s->req_time[r]  = s->req_time[s->req_n - 1];
+                s->req_n--;
+                s->useful++;          // expected delivery: feeds nominal_depth
+            } else {
+                t->st_dup_noring += dlen;
+            }
 
-            // Stored by piece, not by owner: a parked piece's stragglers (or
-            // an adopted piece's duplicates) still count.
             aq_entry *a = aq_find(t, idx);
             if (!a || b >= a->nblocks || a->have[b]) {
                 if (a && b < a->nblocks) {
-                    if (a->req[b] > 0) a->req[b]--;
+                    if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+                    t->st_dup_have += dlen;
+                } else {
+                    t->st_dup_gone += dlen;
                 }
-                if (!a) t->st_dup_gone += dlen; else t->st_dup_have += dlen;
                 t->st_dup_bytes += dlen;   // delivered twice: wasted traffic
                 break;
             }
@@ -1944,12 +1838,31 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             // Release so the streaming reader's acquire load of have[] (RAM
             // mode partial reads) can never observe the flag before the data.
             __atomic_store_n(&a->have[b], 1, __ATOMIC_RELEASE);
-            if (a->req[b] > 0) a->req[b]--;
+            if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
             a->have_cnt++;
-            mutexLock(&t->lock);
+
             t->st_blocks_have++;
-            mutexUnlock(&t->lock);
             t->last_progress_tick = now;
+            s->timeout_strikes = 0;
+
+            // Cancel duplicate copies of this block still in flight on other
+            // sessions (anacrolix postCancel): the block is here, the copies
+            // would only waste the swarm's bandwidth.
+            for (int j = 0; j < MAX_SESS; j++) {
+                sess *other = &t->S[j];
+                if (other == s || !other->active || other->connecting) continue;
+                for (int k = 0; k < other->req_n; k++) {
+                    if (other->req_piece[k] == (int)idx && other->req_block[k] == b) {
+                        send_cancel_one(t, other, (int)idx, b);
+                        other->req_piece[k] = other->req_piece[other->req_n - 1];
+                        other->req_block[k] = other->req_block[other->req_n - 1];
+                        other->req_time[k]  = other->req_time[other->req_n - 1];
+                        other->req_n--;
+                        break;
+                    }
+                }
+            }
+
             if (a->have_cnt == a->nblocks) piece_full(t, a);
             break;
         }
@@ -1995,7 +1908,7 @@ static void send_our_bitfield(torrentfs *t, sess *s) {
 }
 
 static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
-    for (int pump = 0; pump < 4; pump++) {
+    for (int pump = 0; pump < 8; pump++) {
         ssize_t got = peer_nb_pump_rx(&s->nb);
         if (got < 0) {
             t->st_fetch_fail++;
@@ -2020,6 +1933,7 @@ static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
             if (hs == 0) return;
             t->st_live++;
             if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
+            peer_nb_apply_speed_opts(&s->nb);
             engine_log(ENGINE_LOG_INFO, "[sess %d] handshake ok live=%d/%d",
                        sid, t->st_live, MAX_SESS);
             peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
@@ -2047,21 +1961,7 @@ static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
         if (got == 0 || msgs == 0) break;
     }
 
-    fill_pipeline(t, s, now);
-
-    // If we hold a piece but could not request any blocks (peer is unchoked and
-    // the piece is still incomplete), the peer does not have it.  Drop the claim
-    // so the session can try another peer / piece.  This is especially important
-    // for blind playhead claims that turn out to be on peers without the block.
-    if (s->claim >= 0 && !s->nb.choked && s->req_n == 0) {
-        aq_entry *a = aq_find(t, s->claim);
-        if (a && a->have_cnt < a->nblocks) {
-            engine_log(ENGINE_LOG_DEBUG,
-                       "[sess] peer lacks piece %lld, releasing claim",
-                       (long long)s->claim);
-            release_claim(t, s);
-        }
-    }
+    request_scan(t, s, now);
 
     if (peer_nb_flush(&s->nb) != 0) { sess_close(t, s, true); return; }
 }
@@ -2070,30 +1970,16 @@ static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
 // Netloop
 //-----------------------------------------------------------------------------
 
-// Calm budget: how many sessions may hold a claim, from the player's backlog.
-// The whole swarm bursting at wifi line rate on every window slide is what
-// freezes the console (bsd/wlan pay per packet on the OS core).
+// Calm budget: for game downloads/installations, allocate all MAX_SESS slots
+// to saturate available network bandwidth without artificial mpv video player throttling.
 static int calm_budget(torrentfs *t) {
-    int ms = t->backlog_ms;   // racy read, written by the app thread
-    int budget = ms >= 30000 ? 1 : ms >= 20000 ? 3 : ms >= 10000 ? 8 : MAX_SESS;
-
-    if (g_governor && ms >= 10000) {
-        // Rate above the backlog-tied target: pause claiming entirely.
-        double target = ms >= 25000
-                            ? 1.5e6
-                            : 6.0e6 - (ms - 10000) * (4.5e6 / 15000.0);
-        if (t->rate_bps > target) budget = 0;
-    }
-    return budget;
+    (void)t;
+    return MAX_SESS;
 }
 
-// Refresh every session's smoothed receive rate. Metered per session (so it is
-// piece-size independent) and only WHILE actively downloading: between claims or
-// while choked the rate is frozen, not decayed -- a fast peer that just finished
-// a piece must keep its measured rate, or the steerer sees it as slow the moment
-// it goes idle and never picks it to take over. rate_start (the grace anchor)
-// persists across those pauses; a fresh session is zeroed by sess_dial's memset.
-// Run once per upkeep tick.
+// Refresh every session's smoothed receive rate and the expect-time anchor
+// that nominal_depth() uses (anacrolix totalExpectingTime: the time the
+// session has spent with outstanding requests). Run once per upkeep tick.
 static void update_rates(torrentfs *t, u64 now) {
     for (int i = 0; i < MAX_SESS; i++) {
         sess *s = &t->S[i];
@@ -2108,7 +1994,7 @@ static void update_rates(torrentfs *t, u64 now) {
             s->up_rate_tick = now;
         } else {
             double udt = (double)(now - s->up_rate_tick) / (double)t->freq;
-            if (udt >= 0.4) {                    // at most one sample per upkeep
+            if (udt >= 0.2) {                    // at most one sample per upkeep
                 double uinst = (double)(s->tx_total - s->up_rate_prev) / udt;
                 if (uinst < 0) uinst = 0;
                 s->up_rate      = s->up_rate * 0.6 + uinst * 0.4;
@@ -2116,112 +2002,27 @@ static void update_rates(torrentfs *t, u64 now) {
                 s->up_rate_tick = now;
             }
         }
-        // Not downloading: pause the meter, keep rate + rate_start.
-        if (s->claim < 0 || s->nb.choked || s->req_n == 0) {
+        // Expect-time accumulation: count the ~125 ms upkeep interval while
+        // this session has requests outstanding and is not choked.
+        if (s->req_n > 0 && !s->nb.choked) s->expect_ticks += t->freq / 8;
+        // Download meter: sample only while actively receiving. Between
+        // bursts the rate is frozen, not decayed (choking round ranks by it).
+        if (s->nb.choked || s->req_n == 0) {
             s->rate_tick = 0;
             continue;
         }
-        if (s->rate_start == 0) s->rate_start = now;   // first download: start grace
         if (s->rate_tick == 0) {                        // (re)open the sample window
             s->rate_prev = s->rx_total;
             s->rate_tick = now;
             continue;
         }
         double dt = (double)(now - s->rate_tick) / (double)t->freq;
-        if (dt < 0.4) continue;    // at most one sample per upkeep
+        if (dt < 0.2) continue;    // at most one sample per upkeep
         double inst = (double)(s->rx_total - s->rate_prev) / dt;
         if (inst < 0) inst = 0;
         s->rate      = s->rate * 0.6 + inst * 0.4;
         s->rate_prev = s->rx_total;
         s->rate_tick = now;
-    }
-}
-
-// The single piece that most needs the fastest peer right now: at startup the
-// container's head/tail (the moov probe that gates the first frame), otherwise
-// the nearest not-yet-downloaded piece ahead of the playhead (what the player
-// will block on soonest). -1 if there is nothing to steer.
-static int64_t hot_piece(torrentfs *t) {
-    int64_t lo = t->file_first_piece, fhi = t->file_last_piece;
-    int64_t ph = t->playhead_piece;
-    if (ph < lo) ph = lo;
-    if (ph > fhi) ph = fhi;
-    if (ph <= lo + t->crit_head) {           // startup: head then tail
-        for (int64_t i = lo; i < lo + t->crit_head && i <= fhi; i++)
-            if (t->status[i] != PIECE_DONE && t->status[i] != PIECE_WRITING) return i;
-        for (int64_t i = fhi; i > fhi - t->crit_tail && i >= lo; i--)
-            if (t->status[i] != PIECE_DONE && t->status[i] != PIECE_WRITING) return i;
-    }
-    int64_t win = STREAM_WINDOW / t->meta.piece_len;
-    if (win < STREAM_MIN_PIECES) win = STREAM_MIN_PIECES;
-    for (int64_t i = ph; i <= ph + win && i <= fhi; i++)
-        if (t->status[i] != PIECE_DONE && t->status[i] != PIECE_WRITING) return i;
-    return -1;
-}
-
-// How urgent a piece is (lower = more urgent). At startup the head/tail moov
-// probe outranks everything (head before tail); otherwise it is the distance
-// ahead of the playhead. Index order is NOT urgency order -- the tail critical
-// has a high index but is needed before piece #1 -- so steering must compare by
-// this, not by raw index, to know which peer is on the more important piece.
-static int64_t piece_urgency(torrentfs *t, int64_t p) {
-    int64_t lo = t->file_first_piece, fhi = t->file_last_piece;
-    int64_t ph = t->playhead_piece;
-    if (ph < lo) ph = lo;
-    if (ph > fhi) ph = fhi;
-    if (ph <= lo + t->crit_head && is_critical(t, p)) {
-        if (p < lo + t->crit_head) return p - lo;   // head: 0, 1, ...
-        return t->crit_head + (fhi - p);            // tail: just after the head
-    }
-    if (p >= ph) return 1000 + (p - ph);            // ahead of the playhead
-    return 2000000 + (ph - p);                      // behind it: least urgent
-}
-
-// Put the fastest available peer on the most urgent piece, instead of banning
-// slow ones. A slow peer that grabbed the head/tail (or the piece the player is
-// about to need) first would otherwise hold up the start / the buffer while
-// faster peers work pieces further ahead. Demote-and-swap, never kill: the slow
-// peer keeps downloading, just on a less urgent piece it naturally re-claims
-// (the front is now taken by the fast peer). One swap per tick keeps it stable.
-static void steer_peers(torrentfs *t, u64 now) {
-    if (t->st_live <= 1) return;
-    int64_t hot = hot_piece(t);
-    if (hot < 0) return;
-
-    int64_t hot_u = piece_urgency(t, hot);
-    u64 grace = (u64)SLOW_MEASURE_SECS * t->freq;
-    sess *owner = NULL, *best = NULL;
-    for (int i = 0; i < MAX_SESS; i++) {
-        sess *s = &t->S[i];
-        if (!s->active || !s->nb.handshaked || s->nb.choked) continue;
-        if (s->claim == hot) { owner = s; continue; }
-        // Skip only a peer already on a MORE urgent piece -- by urgency, not by
-        // index: a peer on #1 must still be a candidate to take the tail moov.
-        if (s->claim >= 0 && piece_urgency(t, s->claim) < hot_u) continue;
-        if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, hot)) continue;
-        if (best == NULL || s->rate > best->rate) best = s;
-    }
-    if (!best) return;
-
-    if (owner) {
-        // Only take over on a clear win, and only once both are metered enough
-        // to trust the comparison -- otherwise leave the current owner alone.
-        // rate_start (not rate_tick) so an idle-but-fast challenger still counts:
-        // its meter is paused, but its measured rate and grace anchor persist.
-        if (best->rate_start == 0 || now - best->rate_start < grace) return;
-        if (owner->rate_start == 0 || now - owner->rate_start < grace) return;
-        if (best->rate <= owner->rate * SLOW_FACTOR_CRIT) return;
-        // Fast peer joins the hot piece; the slower owner keeps helping instead
-        // of being parked, so we do not lose in-flight blocks.
-    }
-    // best drops its colder piece, then takes hot (or joins it).
-    if (best->claim >= 0 && best->claim != hot) {
-        release_claim(t, best);
-    }
-    int bi = (int)(best - t->S);
-    if (try_claim(t, best, bi, hot, hot == t->read_blocked_piece)) {
-        fill_pipeline(t, best, now);
-        peer_nb_flush(&best->nb);
     }
 }
 
@@ -2355,7 +2156,6 @@ static void drain_incoming(torrentfs *t, u64 now) {
         }
         s->active     = true;
         s->pidx       = -1;   // not a pool peer: no backoff bookkeeping
-        s->claim      = -1;
         s->started    = now;
         s->last_rx    = now;
         s->last_block = now;
@@ -2377,6 +2177,7 @@ static void drain_incoming(torrentfs *t, u64 now) {
 
         t->st_live++;
         if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
+        peer_nb_apply_speed_opts(&s->nb);
         engine_log(ENGINE_LOG_INFO,
                    "[sess %d] incoming handshake ok from %u.%u.%u.%u live=%d/%d",
                    sid, s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
@@ -2403,12 +2204,8 @@ static void netloop_main(void *arg) {
         hb_beat(t, HB_NET);
         u64 now = armGetSystemTick();
 
-        // Upkeep every ~250 ms: dial, reap, keep-alives, rate EWMA, calm.
-        // 500 ms turned the 24-slot dial wave into 2/s, dragging out the
-        // swarm ramp (a fresh magnet needs a few dozen dials); 250 ms doubles
-        // the dial rate and halves stall/expiry reaction without any
-        // meaningful per-tick cost (the scans are all O(MAX_SESS)).
-        if (now - last_upkeep > t->freq / 4) {
+        // Upkeep every ~125 ms: dial, reap, keep-alives, rate EWMA, calm.
+        if (now - last_upkeep > t->freq / 8) {
             last_upkeep = now;
 
             // Download-rate EWMA (governor input).
@@ -2466,20 +2263,19 @@ static void netloop_main(void *arg) {
                 }
                 // A peer that keeps us choked forever without ever delivering
                 // is dead weight: with candidates waiting in the pool, drop it
-                // and dial a fresh one. 60 s is past the ~30 s optimistic
-                // unchoke rotation, so a seed that merely rotates slots still
-                // gets its chance; a peer that already proved useful
-                // (rx_total > 0) is never rotated out on this basis. During
-                // bootstrap a FULL seed gets triple the patience: it will
-                // optimistic-unchoke us eventually, and killing it early just
-                // throws away the slot we were waiting for.
+                // and dial a fresh one. A peer that already proved useful
+                // (rx_total > 0) is never rotated out on this basis. FULL
+                // seeds during bootstrap are exempt entirely (anacrolix/
+                // torrserver model): they optimistic-unchoke on a ~30 s cycle
+                // and are the only thing that can start the download -- killing
+                // the connection just re-dials the same seed over and over,
+                // which is exactly the reconnect loop we observed in the
+                // field (one live seed, handshake every ~30 s, zero blocks).
                 if (!s->connecting && s->nb.handshaked && s->nb.choked &&
                     s->rx_total == 0 &&
-                    t->peer_count > t->st_live + t->st_connecting) {
+                    t->peer_count > t->st_live + t->st_connecting &&
+                    !(t->pieces_ever < BOOTSTRAP_THRESH && peer_is_seed(t, s))) {
                     int rotate_secs = CHOKED_ROTATE_SECS;
-                    if (t->pieces_ever < BOOTSTRAP_THRESH &&
-                        peer_is_seed(t, s))
-                        rotate_secs = CHOKED_ROTATE_BOOTSTRAP_SECS;
                     if (now - s->started > (u64)rotate_secs * t->freq) {
                         engine_log(ENGINE_LOG_DEBUG,
                                    "[sess %d] rotate: peer choked us %ds without delivering",
@@ -2497,49 +2293,39 @@ static void netloop_main(void *arg) {
                     sess_close(t, s, true);
                     continue;
                 }
-                // Requested blocks and nothing came: the peer accepted work it
-                // will not deliver -- drop it, its claim gets adopted.
+                // Requested blocks and nothing came. Proven peers get
+                // strikes before disconnecting. A peer that NEVER delivered
+                // a single byte keeps its connection (anacrolix model: the
+                // duplicate timer in next_block_in() redistributes its
+                // blocks to other sessions); its outstanding requests are
+                // dropped so the per-block duplicate caps cannot saturate,
+                // and the next scan re-requests them fresh. Closing the
+                // connection here was one half of the observed ~30 s
+                // reconnect loop: with a flat backoff the same silent seed
+                // got re-dialed every half minute for 10+ minutes without a
+                // single block delivered.
                 if (s->req_n > 0 &&
                     now - s->last_block > (u64)STALL_SECS * t->freq) {
-                    t->st_fetch_fail++;
-                    set_err(t, "stall, piece %lld", (long long)s->claim);
-                    engine_log(ENGINE_LOG_DEBUG, "[sess] close stall piece=%lld", (long long)s->claim);
-                    sess_close(t, s, true);
-                    continue;
-                }
-                // Expire individual requests that were never answered: their
-                // per-piece counts are freed so another session (or this one)
-                // can re-request just those blocks -- instead of the whole
-                // piece being re-downloaded, or blindly duplicated. A session
-                // that has never delivered a block gets the short fuse (its
-                // deep probe should not hold hostage blocks for the full 15 s).
-                if (!s->connecting && s->req_n > 0) {
-                    u64 expire_after =
-                        (s->rx_total == 0 ? (u64)REQ_FIRST_EXPIRE_SECS
-                                          : (u64)REQ_EXPIRE_SECS) *
-                        t->freq;
-                    int kept = 0;
-                    for (int k = 0; k < s->req_n; k++) {
-                        if (now - s->req_time[k] > expire_after) {
-                            int ep = s->req_piece[k];
-                            int eb = s->req_block[k];
-                            aq_entry *ea = aq_find(t, ep);
-                            if (ea && eb >= 0 && eb < ea->nblocks &&
-                                ea->req[eb] > 0)
-                                ea->req[eb]--;
-                        } else {
-                            if (kept != k) {
-                                s->req_piece[kept] = s->req_piece[k];
-                                s->req_block[kept] = s->req_block[k];
-                                s->req_time[kept]  = s->req_time[k];
-                            }
-                            kept++;
-                        }
+                    if (s->rx_total > 0 && s->timeout_strikes < 3) {
+                        s->timeout_strikes++;
+                        s->last_block = now;
+                        engine_log(ENGINE_LOG_DEBUG, "[sess %d] stall strike %d/3",
+                                   i, s->timeout_strikes);
+                    } else if (s->rx_total > 0) {
+                        t->st_fetch_fail++;
+                        set_err(t, "stall", 0);
+                        engine_log(ENGINE_LOG_DEBUG, "[sess %d] close stall strikes=%d",
+                                   i, s->timeout_strikes);
+                        s->fail_kind = PEER_FAIL_TIMEOUT;
+                        sess_close(t, s, true);
+                        continue;
+                    } else {
+                        engine_log(ENGINE_LOG_DEBUG,
+                                   "[sess %d] stall (never delivered): drop requests, keep conn",
+                                   i);
+                        sess_drop_requests(t, s);
                     }
-                    s->req_n = kept;
                 }
-                // Rate metering + strength steering run as their own passes
-                // (update_rates / steer_peers) after this loop.
 
                 // Keep-alive: raw 4 zero bytes, only when the tx queue is
                 // empty (an atomic small send cannot interleave mid-message).
@@ -2567,8 +2353,7 @@ static void netloop_main(void *arg) {
                 }
             }
 
-            update_rates(t, now);   // per-session rate meter
-            steer_peers(t, now);    // fastest peer -> most urgent piece
+            update_rates(t, now);   // per-session rate meter + expect-time anchor
             // Reciprocation choking: 10 s round, 30 s optimistic rotation.
             if (now - t->last_choke > (u64)CHOKE_INTERVAL_SECS * t->freq) {
                 t->last_choke = now;
@@ -2620,24 +2405,20 @@ static void netloop_main(void *arg) {
                                 reset++;
                             }
                         }
-                    } else {
+                    } else if (t->st_live < 4) {
                         // Round 2+ (hard): condemn unproven peers that failed
-                        // repeatedly. 0xFF makes add_peers_src replace them with
+                        // repeatedly ONLY if live connections dropped below 4.
+                        // 0xFF makes add_peers_src replace them with
                         // fresh DHT/tracker peers; long next_try stops redials.
-                        // Tracker-reported peers are never condemned: they are
-                        // the swarm's registered seeds and get replaced by junk
-                        // if we drop them. Connect-timeout failures get a
-                        // higher bar than refusals (a slow seeder is not a
-                        // dead one).
-                        for (int i = 0; i < t->peer_count && condemned < 64; i++) {
+                        for (int i = 0; i < t->peer_count && condemned < 32; i++) {
                             if (t->peer_busy[i]) continue;
                             if (t->peer_src[i] == PEER_SRC_TRACKER) continue;
                             int threshold = (t->peer_fail_kind[i] == PEER_FAIL_TIMEOUT)
-                                                ? 6 : 4;
+                                                ? 8 : 6;
                             if (!t->peer_ok[i] && t->peer_fails[i] >= threshold &&
                                 t->peer_fails[i] < 0xFF) {
                                 t->peer_fails[i] = 0xFF;
-                                t->peer_next_try[i] = now + (u64)600 * t->freq;
+                                t->peer_next_try[i] = now + (u64)300 * t->freq;
                                 condemned++;
                                 t->st_peer_evicted++;
                             }
@@ -2661,7 +2442,7 @@ static void netloop_main(void *arg) {
             }
 
             // One uTP hole-punch retry per wave, ahead of the regular dials.
-            int dial_budget = DIAL_BUDGET_PER_TICK;
+            int dial_budget = (t->st_live < 12) ? (DIAL_BUDGET_PER_TICK * 2) : DIAL_BUDGET_PER_TICK;
             {
                 peer_addr rpa;
                 int rp = take_utp_retry_peer(t, &rpa);
@@ -2695,73 +2476,39 @@ static void netloop_main(void *arg) {
                 dial_budget--;
             }
 
-            // Seek preemption: if the playhead has moved so a session's piece is
-            // no longer in the streaming window, drop that claim so the session
-            // re-targets the new window instead of finishing a piece the player
-            // has moved away from. With multiple workers on one piece, the slot
-            // is only freed once the last worker leaves.
-            {
-                int64_t pph, plo, phi;
-                calc_window(t, &pph, &plo, &phi);
-                (void)plo;
-                for (int i = 0; i < MAX_SESS; i++) {
-                    sess *s = &t->S[i];
-                    if (!s->active || s->claim < 0) continue;
-                    int64_t cl = s->claim;
-                    if (cl >= pph && cl < phi) continue;   // still in the window
-                    if (is_critical(t, cl)) continue;      // moov probe: keep it
-                    aq_entry *a = aq_find(t, cl);
-                    if (a && a->workers <= 1) {
-                        mutexLock(&t->lock);
-                        if (t->status[cl] == PIECE_ACTIVE) {
-                            t->status[cl] = PIECE_NEEDED;  // discard partial, re-DL
-                            a->idx = -1;                   // release slot + buffer
-                        }
-                        mutexUnlock(&t->lock);
-                    }
-                    release_claim(t, s);
+            // Seek preemption: if the playhead has moved, a partially
+            // assembled piece that is no longer in the priority gradient AND
+            // has no outstanding requests will never be filled -- discard it
+            // so its assembly slot can serve the new position. Pieces with
+            // blocks still in flight are left alone: the deliveries land and
+            // the piece completes (anacrolix also lets stragglers finish).
+            for (int i = 0; i < t->n_aq; i++) {
+                aq_entry *a = &t->aq[i];
+                if (a->idx < 0) continue;
+                if (piece_priority(t, a->idx) > 0) continue;
+                bool inflight = false;
+                for (int b = 0; b < a->nblocks; b++)
+                    if (a->req[b] > 0) { inflight = true; break; }
+                if (inflight) continue;
+                mutexLock(&t->lock);
+                if (t->status[a->idx] == PIECE_ACTIVE) {
+                    t->status[a->idx] = PIECE_NEEDED;  // discard partial, re-DL
+                    a->idx = -1;                       // release slot + buffer
                 }
+                mutexUnlock(&t->lock);
             }
 
-            // Claims for idle unchoked sessions, within the calm budget.
-            // Nothing new while paused: existing pipelines are left to drain
-            // (their pieces may as well land) but no fresh work is started.
-            int claiming = 0;
-            for (int i = 0; i < MAX_SESS; i++)
-                if (t->S[i].active && t->S[i].claim >= 0) claiming++;
-            for (int i = 0; i < MAX_SESS && claiming < t->calm_now; i++) {
+            // Fill every unchoked session's request ring up to its nominal
+            // depth. This is the whole scheduler: each session scans the
+            // priority gradient and takes the next available block, so the
+            // reader's piece always gets the swarm's in-flight capacity
+            // first. Nothing new while paused.
+            for (int i = 0; i < MAX_SESS && !t->paused; i++) {
                 sess *s = &t->S[i];
                 if (!s->active || s->connecting || !s->nb.handshaked) continue;
-                if (s->nb.choked || s->claim >= 0) continue;
-                if (t->paused) break;
-                // The reader is blocked waiting on a piece: a free session
-                // that has it joins the existing claim before taking new work,
-                // so one slow peer cannot gate the whole sequential stream.
-                // Workers on it are capped at ~live/3 (clamped 2..6): in a
-                // small swarm the rest must keep filling the look-ahead window,
-                // or everyone just duplicates each other's requests on one
-                // piece and the stream starves on the next one.
-                int64_t rb = t->read_blocked_piece;   // racy read: benign
-                if (rb >= t->file_first_piece && rb <= t->file_last_piece) {
-                    aq_entry *ba = aq_find(t, rb);
-                    int wcap = t->st_live / 3;
-                    if (wcap < 2) wcap = 2;
-                    if (wcap > 6) wcap = 6;
-                    if (!ba || ba->workers < wcap) {
-                        if (try_claim(t, s, i, rb, true)) {
-                            claiming++;
-                            fill_pipeline(t, s, now);
-                            peer_nb_flush(&s->nb);
-                            continue;
-                        }
-                    }
-                }
-                claim_piece(t, s, i);
-                if (s->claim >= 0) {
-                    claiming++;
-                    fill_pipeline(t, s, now);
-                    peer_nb_flush(&s->nb);
-                }
+                if (s->nb.choked) continue;
+                request_scan(t, s, now);
+                if (peer_nb_tx_pending(&s->nb)) peer_nb_flush(&s->nb);
             }
         }
 
@@ -2796,7 +2543,7 @@ static void netloop_main(void *arg) {
         }
 
         u64 lt0 = armGetSystemTick();
-        int pr = poll(pfd, (nfds_t)n, 100);
+        int pr = poll(pfd, (nfds_t)n, 20);
         lat_add(t, LAT_POLL, lt0);
 
         now = armGetSystemTick();
@@ -2878,7 +2625,6 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     if (!t) { snprintf(err, errlen, "out of memory"); return NULL; }
 
     for (int i = 0; i < AQ_MAX; i++) t->aq[i].idx = -1;
-    for (int i = 0; i < MAX_SESS; i++) t->S[i].claim = -1;
     t->freq     = armGetSystemTickFreq();
     t->ram_mode = g_ram_stream != 0;   // latched for this torrent's lifetime
     t->last_progress_tick = armGetSystemTick();
@@ -2921,11 +2667,9 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     // covers the probed region, so we do not pre-fetch three of them.
     int64_t plen = t->meta.piece_len;
     t->crit_head = (int)((CRIT_HEAD_BYTES + plen - 1) / plen);
-    t->crit_tail = (int)((CRIT_TAIL_BYTES + plen - 1) / plen);
+    t->crit_tail = 0; // Sequential stream: do not waste bandwidth downloading tail pieces
     if (t->crit_head < 1) t->crit_head = 1;
     if (t->crit_head > CRIT_HEAD_MAX) t->crit_head = CRIT_HEAD_MAX;
-    if (t->crit_tail < 1) t->crit_tail = 1;
-    if (t->crit_tail > CRIT_TAIL_MAX) t->crit_tail = CRIT_TAIL_MAX;
 
     engine_log(ENGINE_LOG_INFO,
                "[torrentfs] open name=%s file=%d size=%lld pieces=%lld ram=%d",
@@ -2946,7 +2690,8 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     for (int i = 0; i < t->n_aq; i++) {
         t->aq[i].have = calloc(1, (size_t)t->blocks_per_piece);
         t->aq[i].req  = calloc(1, (size_t)t->blocks_per_piece);
-        if (!t->aq[i].have || !t->aq[i].req) aq_ok = false;
+        t->aq[i].req_ts = calloc(1, (size_t)t->blocks_per_piece * sizeof(uint64_t));
+        if (!t->aq[i].have || !t->aq[i].req || !t->aq[i].req_ts) aq_ok = false;
     }
 
     snprintf(t->cache_base, sizeof(t->cache_base), "%s", cache_path);
@@ -3225,7 +2970,9 @@ int torrentfs_get_peers(const torrentfs *tfs, torrentfs_peer_info *out, int max)
         out[n].connecting   = s->connecting;
         out[n].handshaked   = s->nb.handshaked;
         out[n].choked       = s->nb.choked;
-        out[n].claim_piece  = s->claim;
+        // The app's slow-peer isolation reads this: report the highest-priority
+        // piece this session is currently requesting (first ring entry).
+        out[n].claim_piece  = s->req_n > 0 ? s->req_piece[0] : -1;
         n++;
     }
     return n;
@@ -3243,8 +2990,8 @@ void torrentfs_claim_stats(const torrentfs *tfs, int *claiming, int *idle) {
     for (int i = 0; i < MAX_SESS; i++) {
         const sess *s = &tfs->S[i];
         if (!s->active || s->connecting || !s->nb.handshaked) continue;
-        if (s->claim >= 0) c++;
-        else if (!s->nb.choked) id++;
+        if (s->req_n > 0) c++;          // actively downloading
+        else if (!s->nb.choked) id++;   // unchoked but nothing outstanding
     }
     if (claiming) *claiming = c;
     if (idle) *idle = id;
@@ -3318,6 +3065,8 @@ bool torrentfs_set_piece_zone(torrentfs *tfs, int64_t first_piece,
     for (int64_t i = 0; i < piece_count; i++)
         tfs->piece_zone[first_piece + i] = (uint8_t)zone;
     mutexUnlock(&tfs->lock);
+    engine_log(ENGINE_LOG_DEBUG, "[zone] set first=%lld count=%lld zone=%d",
+               (long long)first_piece, (long long)piece_count, zone);
     return true;
 }
 
@@ -3359,9 +3108,11 @@ void torrentfs_lat_stats(const torrentfs *tfs, uint32_t count[5],
 
 void torrentfs_claim_debug(const torrentfs *tfs, int64_t *ph, int64_t *lo,
                            int64_t *hi, int *fail, int *ok, int *inflight) {
-    if (ph) *ph = tfs->st_win_ph;
-    if (lo) *lo = tfs->st_win_lo;
-    if (hi) *hi = tfs->st_win_hi;
+    int64_t p, l, h;
+    calc_window((torrentfs *)tfs, &p, &l, &h);
+    if (ph) *ph = p;
+    if (lo) *lo = l;
+    if (hi) *hi = h;
     if (fail) *fail = tfs->st_claim_fail;
     if (ok) *ok = tfs->st_claim_ok;
     if (inflight) {

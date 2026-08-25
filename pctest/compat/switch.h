@@ -129,6 +129,16 @@ static inline void svcSleepThread(u64 ns) {
 static inline u32 svcGetCurrentProcessorNumber(void) { return 0; }
 
 //-----------------------------------------------------------------------------
+// POSIX bits that mingw64's CRT lacks but the engine uses.
+//-----------------------------------------------------------------------------
+#ifndef SIGPIPE
+#define SIGPIPE 13
+#endif
+
+#include <direct.h>  // _mkdir
+#define mkdir(path, mode) _mkdir(path)
+
+//-----------------------------------------------------------------------------
 // Random
 //-----------------------------------------------------------------------------
 static inline void randomGet(void *buf, size_t len) {

@@ -14,15 +14,22 @@
 namespace datasource {
 
 struct CustomSchedulerConfig {
-    int critical_pieces    = 2;
-    int urgent_pieces      = 8;
-    int prefetch_pieces    = 10;
-    int speculative_pieces = 6;
-    int tail_pieces        = 2;
+    // torrserver's setLoadPriority gradient (anacrolix piece priorities):
+    // Now (the reader's piece) > Next (reader+1) > Readahead (4 pieces, like
+    // torrserver's readahead = pieceLength*4) > High (5) > Normal (the rest of
+    // the ConnectionsLimit=25 budget). Every unchoked connection scans this
+    // gradient top-down, so the reader's piece gets the whole swarm's
+    // in-flight capacity before the next piece gets any.
+    int critical_pieces    = 1;    // Now
+    int urgent_pieces      = 1;    // Next
+    int prefetch_pieces    = 4;    // Readahead
+    int speculative_pieces = 5;    // High
+    int normal_pieces      = 14;   // Normal (fills the 25-piece budget)
+    int tail_pieces        = 0;    // a sequential installer never reads back
 
     int stall_extra_critical   = 0;
-    int stall_extra_urgent     = -4;
-    int stall_extra_prefetch   = -12;
+    int stall_extra_urgent     = 1;
+    int stall_extra_prefetch   = 0;
 
     float slow_peer_speed_bps  = 100.0f * 1024.0f;
     int   slow_peer_count_max  = 3;
@@ -33,6 +40,7 @@ struct CustomSchedulerSnapshot {
     PieceRange urgent;
     PieceRange prefetch;
     PieceRange speculative;
+    PieceRange normal;
     PieceRange tail;
     bool       stall_mode = false;
     int        slow_peer_count = 0;
@@ -88,8 +96,12 @@ private:
     int file_first_piece_ = 0;
     int file_last_piece_ = 0;
     int last_current_piece_ = -1;
+    int last_log_piece_ = -1;
     int stall_level_ = 0;
+    int last_boosted_count_ = 0;
     std::chrono::steady_clock::time_point last_apply_at_;
+    std::chrono::steady_clock::time_point last_log_at_;
+    std::chrono::steady_clock::time_point last_boost_log_at_;
 
     struct PeerEwma {
         uint32_t key_ip;
@@ -98,6 +110,7 @@ private:
         bool  is_slow = false;
     };
     std::vector<PeerEwma> peer_ewma_;
+    std::vector<int> boosted_pieces_;
 
     mutable std::mutex mutex_;
     CustomSchedulerSnapshot last_snapshot_;

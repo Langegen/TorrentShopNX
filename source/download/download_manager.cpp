@@ -126,10 +126,18 @@ DownloadManager::DownloadManager() {
     progress_thread_running_.store(true);
     progress_thread_ = std::thread([this]() {
         while (progress_thread_running_.load()) {
-            trackProgress();
+            try {
+                trackProgress();
+            } catch (const std::exception& e) {
+                util::logLine("DownloadManager: exception in trackProgress: " + std::string(e.what()));
+            } catch (...) {
+                util::logLine("DownloadManager: unknown exception in trackProgress");
+            }
             
             if (progress_callback_) {
-                progress_callback_();
+                try {
+                    progress_callback_();
+                } catch (...) {}
             }
 
             std::unique_lock<std::mutex> lock(progress_cv_mutex_);
@@ -812,6 +820,12 @@ void DownloadManager::trackProgress() {
                     util::logLine("download: hybrid install failed: " + item.error_message);
                 } else {
                     item.state = DownloadState::Completed;
+                    item.progress = 1.0f;
+                    item.install_progress = 1.0f;
+                    if (item.install_total == 0) {
+                        item.install_total = item.hybrid_installer->totalBytes();
+                    }
+                    item.install_written = item.install_total;
                     copyDownloadedOtherFiles(item);
                     item.download_speed_kbps = 0.0f;
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
@@ -843,6 +857,7 @@ void DownloadManager::trackProgress() {
                     }
                     util::logLine("download: hybrid install completed: " + item.title);
                 }
+                item.hybrid_installer.reset();
                 if (item.stream_consumer_started && item.torrent_id >= 0) {
                     stopStreamConsumer(item.torrent_id);
                     item.stream_consumer_started = false;
@@ -1392,6 +1407,7 @@ bool DownloadManager::cancelDownload(size_t index) {
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
+        item.hybrid_installer.reset();
     }
 
     // Close the local engine's stream BEFORE joining the futures: the

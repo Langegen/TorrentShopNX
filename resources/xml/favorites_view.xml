@@ -10,7 +10,7 @@
 
     <!-- Header -->
     <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="10">
-        <brls:Label text="Избранное" fontSize="28" />
+        <brls:Label text="@i18n/app/favorites/title" fontSize="28" />
     </brls:Box>
 
     <!-- Recycler Grid -->

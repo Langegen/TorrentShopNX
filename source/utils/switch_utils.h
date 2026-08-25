@@ -17,4 +17,11 @@ bool getStorageFreeSpace(int storageId, int64_t& out_free_space);
 void cpuBoostBegin();
 void cpuBoostEnd();
 
+// Screen backlight control (OLED/LCD display power saving & burn-in protection).
+// off = true: turn screen backlight off (black screen).
+// off = false: turn screen backlight back on.
+// Safe, idempotent, and a no-op on non-Switch platforms.
+void setBacklightOff(bool off);
+bool isBacklightOff();
+
 } // namespace util

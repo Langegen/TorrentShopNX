@@ -138,9 +138,9 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
             
             // Toggle favorite on Y button press inside card
-            cards[i].card->registerAction("Убрать из избранного", brls::ControllerButton::BUTTON_Y, [this, game](brls::View* view) {
+            cards[i].card->registerAction("app/favorites/remove_action"_i18n, brls::ControllerButton::BUTTON_Y, [this, game](brls::View* view) {
                 catalog::FavoritesManager::instance().toggleFavorite(game);
-                brls::Application::notify("Удалено из избранного");
+                brls::Application::notify("app/favorites/removed"_i18n);
                 // Refresh list on next frame so current action loop completes safely
                 brls::sync([this]() {
                     if (parent_) parent_->filterFavorites();
