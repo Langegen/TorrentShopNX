@@ -49,7 +49,7 @@
         marginRight="15">
         
         <brls:Label
-            text="Установлена"
+            text="@i18n/app/library/installed"
             fontSize="11"
             textColor="#888888"
             marginBottom="4" />
@@ -70,7 +70,7 @@
         marginRight="15">
         
         <brls:Label
-            text="Доступна"
+            text="@i18n/app/library/available"
             fontSize="11"
             textColor="#888888"
             marginBottom="4" />

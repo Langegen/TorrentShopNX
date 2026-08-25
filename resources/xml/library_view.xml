@@ -1,0 +1,36 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="20"
+    paddingBottom="20"
+    paddingLeft="20">
+
+    <!-- Topbar -->
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="6">
+        <brls:Label text="@i18n/app/library/title" fontSize="28" />
+        
+        <brls:Box width="auto" height="auto" axis="row" alignItems="center">
+            <brls:Label id="statsHint" text="@i18n/app/library/searching" fontSize="16" textColor="#AAAAAA" />
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Free space bar -->
+    <brls:Box width="auto" height="26px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="6">
+        <brls:Label id="spaceHint" text="@i18n/app/library/space_unknown" fontSize="14" textColor="#88CC88" />
+    </brls:Box>
+
+    <!-- Recycler Grid -->
+    <brls:RecyclerFrame
+        id="recycler"
+        width="auto"
+        height="auto"
+        paddingTop="10"
+        paddingBottom="10"
+        paddingRight="30"
+        grow="1.0" />
+
+</brls:Box>
+</brls:AppletFrame>

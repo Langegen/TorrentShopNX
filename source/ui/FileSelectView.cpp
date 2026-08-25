@@ -47,6 +47,7 @@ struct SwitchServiceGuard {
     bool ns_ok = false;
     bool ncm_ok = false;
     NcmContentMetaDatabase db;
+    NcmStorageId db_storage = NcmStorageId_SdCard;
     bool db_open = false;
 
     SwitchServiceGuard() {
@@ -55,8 +56,10 @@ struct SwitchServiceGuard {
         ncm_ok = R_SUCCEEDED(ncmInitialize());
         if (ncm_ok) {
             Result rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
+            db_storage = NcmStorageId_SdCard;
             if (R_FAILED(rc)) {
                 rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
+                db_storage = NcmStorageId_BuiltInUser;
             }
             db_open = R_SUCCEEDED(rc);
         }
@@ -76,31 +79,48 @@ struct SwitchServiceGuard {
     }
 };
 
+// Returns true if any of the real content (Program/Data) referenced by the
+// content meta is actually present in the ContentStorage. Deleting a game via
+// the Switch home menu can leave a stale content meta / record behind, so a
+// bare meta lookup (or application record) is NOT enough — we must verify the
+// content file still exists on disk.
+static bool contentPresentForMeta(NcmContentMetaDatabase& db, NcmContentStorage& cs, const NcmContentMetaKey& key) {
+    NcmContentType types[] = { NcmContentType_Program, NcmContentType_Data };
+    for (NcmContentType ct : types) {
+        NcmContentId cid;
+        if (R_FAILED(ncmContentMetaDatabaseGetContentIdByType(&db, &cid, &key, ct))) continue;
+        bool has = false;
+        if (R_SUCCEEDED(ncmContentStorageHas(&cs, &has, &cid)) && has) return true;
+    }
+    return false;
+}
+
+static bool titleHasContentOnStorage(NcmContentMetaDatabase& db, NcmStorageId storage, uint64_t tid) {
+    NcmContentMetaKey key;
+    if (R_FAILED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, tid))) return false;
+
+    NcmContentStorage cs;
+    if (R_FAILED(ncmOpenContentStorage(&cs, storage))) return false;
+    bool present = contentPresentForMeta(db, cs, key);
+    ncmContentStorageClose(&cs);
+    return present;
+}
+
 static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
     if (tid == 0) return false;
-    bool installed = false;
-    if (guard.ns_ok) {
-        auto ctrl = std::make_unique<NsApplicationControlData>();
-        size_t ctrl_size = 0;
-        Result rc = nsGetApplicationControlData(
-            NsApplicationControlSource_Storage,
-            tid,
-            ctrl.get(),
-            sizeof(NsApplicationControlData),
-            &ctrl_size);
-        if (R_SUCCEEDED(rc)) {
-            installed = true;
-        }
+
+    // 1) The storage already opened by the guard (fast path)
+    if (guard.db_open && titleHasContentOnStorage(guard.db, guard.db_storage, tid)) return true;
+
+    // 2) The other storage (game may live on the other medium)
+    NcmStorageId other = (guard.db_storage == NcmStorageId_SdCard) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
+    NcmContentMetaDatabase db;
+    if (R_SUCCEEDED(ncmOpenContentMetaDatabase(&db, other))) {
+        bool found = titleHasContentOnStorage(db, other, tid);
+        ncmContentMetaDatabaseClose(&db);
+        if (found) return true;
     }
-    
-    if (!installed && guard.db_open) {
-        NcmContentMetaKey key;
-        Result rc = ncmContentMetaDatabaseGetLatestContentMetaKey(&guard.db, &key, tid);
-        if (R_SUCCEEDED(rc)) {
-            installed = true;
-        }
-    }
-    return installed;
+    return false;
 }
 #else
 struct SwitchServiceGuard {};

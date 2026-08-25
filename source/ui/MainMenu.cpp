@@ -2,7 +2,7 @@
 #include "DownloadUiManager.hpp"
 #include "CatalogView.hpp"
 #include "CollectionsView.hpp"
-#include "FavoritesView.hpp"
+#include "LibraryView.hpp"
 #include "DownloadsView.hpp"
 #include "SettingsTab.hpp"
 #include "RemoteAddView.hpp"
@@ -11,6 +11,7 @@
 #include "../GameData.hpp"
 #include "../config/config.h"
 #include "../utils/log.h"
+#include "../utils/string_utils.h"
 #include "../catalog/catalog_manager.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
@@ -37,8 +38,8 @@ void MainMenu::onContentAvailable() {
         return true;
     });
 
-    btnFavorites->registerClickAction([](brls::View* view) {
-        brls::Application::pushActivity(new ui::FavoritesView());
+    btnLibrary->registerClickAction([](brls::View* view) {
+        brls::Application::pushActivity(new ui::LibraryView());
         return true;
     });
 
@@ -202,13 +203,13 @@ void MainMenu::onContentAvailable() {
                         url = j.value("url", "");
                     }
                     
-                    std::string currentVersion = "2.3"; // Current app version
+                    std::string currentVersion = config::ConfigManager::APP_VERSION;
                     std::string cleanVersion = version;
                     if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) cleanVersion = cleanVersion.substr(1);
                     std::string cleanCurrent = currentVersion;
                     if (!cleanCurrent.empty() && (cleanCurrent[0] == 'v' || cleanCurrent[0] == 'V')) cleanCurrent = cleanCurrent.substr(1);
                     
-                    if (!version.empty() && !url.empty() && cleanVersion != cleanCurrent) {
+                    if (!version.empty() && !url.empty() && util::compareSemver(cleanVersion, cleanCurrent) > 0) {
                         brls::sync([url, version]() {
                             std::string msg = brls::getStr("app/settings/app_update_prompt", version);
                             brls::Dialog* dialog = new brls::Dialog(msg);

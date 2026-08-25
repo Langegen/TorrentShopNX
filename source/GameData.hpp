@@ -668,6 +668,28 @@ inline uint64_t parseTitleIdFromString(const std::string& text) {
     return 0;
 }
 
+// Resolve a game's title ID: prefer the explicit `title_id` field from the
+// catalog JSON (16-hex or 0x... form), fall back to parsing the [0100...]
+// bracket from the title.
+inline uint64_t parseTitleIdFromGame(const Game& g) {
+    std::string gid = g.title_id;
+    if (!gid.empty()) {
+        size_t start = 0;
+        if (gid.size() >= 2 && gid[0] == '0' && (gid[1] == 'x' || gid[1] == 'X')) start = 2;
+        std::string hex = gid.substr(start);
+        if (hex.size() == 16) {
+            bool isHex = true;
+            for (char c : hex) {
+                if (!std::isxdigit(static_cast<unsigned char>(c))) { isHex = false; break; }
+            }
+            if (isHex) {
+                try { return std::stoull(hex, nullptr, 16); } catch (...) {}
+            }
+        }
+    }
+    return parseTitleIdFromString(g.title);
+}
+
 inline std::string parseVersionFromTitle(const std::string& text) {
     size_t start = text.find('[');
     while (start != std::string::npos) {

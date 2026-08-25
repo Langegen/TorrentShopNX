@@ -2,7 +2,7 @@
   "menu": {
     "catalog": "Каталог",
     "remote_add": "Добавить",
-    "favorites": "Избранное",
+    "library": "Менеджер игр",
     "downloads": "Загрузки",
     "settings": "Инструменты",
     "footer": "TorrentShopNX v2.3 | Игр в каталоге: {0}",
@@ -50,6 +50,8 @@
     "subtitle": "Жанровые подборки из switch-game-collection",
     "all_catalog": "Весь каталог",
     "all_catalog_desc": "Полный каталог раздач RU_catalog.json",
+    "favorites": "Избранное",
+    "favorites_desc": "Ваши избранные игры",
     "games_count": "Игр: {0}",
     "collection_prefix": "Подборка: {0}",
     "search_hint": "Поиск в подборке",
@@ -182,15 +184,24 @@
     "user_upload_title": "Пользовательская раздача",
     "user_upload_desc": "Раздача добавлена по сети"
   },
-  "updates": {
-    "title": "Доступные обновления",
-    "searching": "Поиск установленных обновлений...",
-    "stats": "Доступно обновлений: {0} / Всего игр: {1}",
+  "library": {
+    "title": "Менеджер игр",
+    "searching": "Сканирование установленных игр...",
+    "stats": "Обновлений: {0} из {1}",
+    "space": "SD-карта: {0} свободно • Внутренняя память: {1} свободно",
+    "space_unknown": "Место на носителях неизвестно",
     "badge_update": "ОБНОВИТЬ",
     "badge_uptodate": "АКТУАЛЬНО",
+    "badge_unknown": "НЕТ ДАННЫХ",
     "loading_titledb": "Загрузка базы версий titledb...",
     "titledb_failed": "Ошибка: не удалось загрузить titledb. Подключите интернет.",
-    "scanning_games": "Сканирование установленных игр..."
+    "scanning_games": "Сканирование установленных игр...",
+    "installed": "Установлена",
+    "available": "Доступна",
+    "uninstall": "Удалить",
+    "uninstall_confirm": "Удалить «{0}»?\nИгра, все её обновления и DLC будут удалены.",
+    "uninstall_success": "«{0}» удалена",
+    "uninstall_failed": "Не удалось удалить игру."
   },
   "filter": {
     "title": "Фильтры и сортировка",
@@ -221,8 +232,8 @@
     "lang_changed_restart": "Язык сохранен!\nПерезапустить приложение для применения изменений?",
     "restart_btn": "Перезапустить",
     "later_btn": "Позже",
-    "updates_manager": "Менеджер обновлений",
-    "updates_manager_desc": "Проверить наличие и установить обновления",
+    "game_library": "Менеджер игр",
+    "game_library_desc": "Установленные игры: обновления, удаление, свободное место",
     "app_update": "Обновление приложения",
     "app_update_desc": "Проверить наличие новой версии TorrentShopNX",
     "checking_updates": "Проверка обновлений...",

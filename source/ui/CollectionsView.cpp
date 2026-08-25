@@ -1,6 +1,8 @@
 #include "CollectionsView.hpp"
 #include "CatalogView.hpp"
 #include "CollectionGamesView.hpp"
+#include "FavoritesView.hpp"
+#include "FavoritesManager.hpp"
 #include "../GameData.hpp"
 #include "../utils/log.h"
 
@@ -104,6 +106,50 @@ void CollectionsView::rebuildList() {
         listBox->addView(row);
     }
 
+    // Row 1: Favorites
+    {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(76);
+        row->setWidth(brls::View::AUTO);
+        row->setPadding(10, 12, 10, 12);
+        row->setMarginBottom(8);
+        row->setFocusable(true);
+
+        auto* col = new brls::Box();
+        col->setAxis(brls::Axis::COLUMN);
+        col->setGrow(1.0f);
+        col->setMarginRight(15);
+
+        auto* title = new brls::Label();
+        title->setFontSize(20);
+        title->setText("app/collections/favorites"_i18n);
+        col->addView(title);
+
+        auto* desc = new brls::Label();
+        desc->setFontSize(13);
+        desc->setTextColor(nvgRGB(158, 158, 158));
+        desc->setText("app/collections/favorites_desc"_i18n);
+        col->addView(desc);
+
+        row->addView(col);
+
+        auto* count = new brls::Label();
+        count->setFontSize(14);
+        count->setTextColor(nvgRGB(170, 170, 170));
+        count->setText(brls::getStr("app/collections/games_count",
+            std::to_string(catalog::FavoritesManager::instance().getFavorites().size())));
+        row->addView(count);
+
+        row->registerClickAction([](brls::View*) {
+            brls::Application::pushActivity(new FavoritesView());
+            return true;
+        });
+
+        listBox->addView(row);
+    }
+
     // Collection rows
     const auto& collections = catalog::CollectionsManager::instance().collections();
     for (const auto& info : collections) {
@@ -151,7 +197,7 @@ void CollectionsView::rebuildList() {
     }
 
     util::logLine("CollectionsView: built " +
-                  std::to_string(collections.size() + 1) + " rows");
+                  std::to_string(collections.size() + 2) + " rows");
 }
 
 } // namespace ui

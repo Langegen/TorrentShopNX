@@ -1,9 +1,10 @@
 #include "SettingsTab.hpp"
 #include "DownloadUiManager.hpp"
-#include "UpdatesView.hpp"
+#include "LibraryView.hpp"
 #include "../config/config.h"
 #include "../net/http_client.h"
 #include "../utils/log.h"
+#include "../utils/string_utils.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -46,6 +47,9 @@ static size_t curlWriteCallback(void* ptr, size_t size, size_t nmemb, void* user
 
 static int curlProgressCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
     auto* prog = static_cast<AppDownloadProgress*>(clientp);
+    if (prog->aborted.load()) {
+        return -1; // abort the transfer
+    }
     prog->total = dltotal;
     prog->downloaded = dlnow;
     return 0;
@@ -135,6 +139,10 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     
     auto progressObj = std::make_shared<AppDownloadProgress>();
     
+    progressDialog->addButton("app/common/cancel"_i18n, [progressObj]() {
+        progressObj->aborted.store(true);
+    });
+    
     brls::RepeatingTimer* timer = new brls::RepeatingTimer();
     timer->setPeriod(200);
     timer->setCallback([progressObj, statusLabel, timer, version]() {
@@ -202,10 +210,18 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
             curl_easy_cleanup(curl);
         }
         
+        bool userCancelled = progressObj->aborted.load();
         progressObj->aborted.store(true);
         
-        brls::sync([res, http_code, tmpPath, progressDialog]() {
-            progressDialog->close([res, http_code, tmpPath]() {
+        brls::sync([res, http_code, tmpPath, progressDialog, userCancelled]() {
+            progressDialog->close([res, http_code, tmpPath, userCancelled]() {
+                if (userCancelled) {
+                    std::error_code ec;
+                    std::filesystem::remove(tmpPath, ec);
+                    util::logLine("downloadAndInstallAppUpdate: cancelled by user");
+                    return;
+                }
+                
                 struct stat st;
                 bool validDownloadedFile = (stat(tmpPath.c_str(), &st) == 0 && st.st_size > 100 * 1024);
                 
@@ -306,11 +322,11 @@ void SettingsTab::onContentAvailable() {
         }
     });
 
-    // 0.1 Updates manager
-    updatesCell->setText("app/settings/updates_manager"_i18n);
-    updatesCell->setDetailText("app/settings/updates_manager_desc"_i18n);
+    // 0.1 Game Library (installed games: updates, uninstall, storage)
+    updatesCell->setText("app/settings/game_library"_i18n);
+    updatesCell->setDetailText("app/settings/game_library_desc"_i18n);
     updatesCell->registerClickAction([](brls::View* view) {
-        brls::Application::pushActivity(new ui::UpdatesView());
+        brls::Application::pushActivity(new ui::LibraryView());
         return true;
     });
 
@@ -371,7 +387,7 @@ void SettingsTab::onContentAvailable() {
                             url = j.value("url", "");
                         }
                         
-                        std::string currentVersion = "2.3"; // Current app version
+                        std::string currentVersion = config::ConfigManager::APP_VERSION;
                         
                         std::string cleanVersion = version;
                         if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) {
@@ -389,7 +405,7 @@ void SettingsTab::onContentAvailable() {
                             return;
                         }
                         
-                        if (cleanVersion == cleanCurrent) {
+                        if (util::compareSemver(cleanVersion, cleanCurrent) <= 0) {
                             brls::Dialog* dialog = new brls::Dialog(brls::getStr("app/settings/app_latest", version));
                             dialog->addButton("app/common/ok"_i18n, [dialog]() { dialog->close(); });
                             dialog->open();

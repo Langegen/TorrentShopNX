@@ -1,7 +1,8 @@
-#include "UpdatesView.hpp"
+#include "LibraryView.hpp"
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
 #include "../utils/log.h"
+#include "../utils/switch_utils.h"
 #include <exception>
 #include <memory>
 #include <fstream>
@@ -48,16 +49,26 @@ extern std::vector<Game> g_games;
 
 namespace ui {
 
-UpdateRowCell::UpdateRowCell() {
-    this->inflateFromXMLRes("xml/update_row_cell.xml");
+static std::string formatBytes(unsigned long long bytes) {
+    double size = static_cast<double>(bytes);
+    int unit = 0;
+    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
+    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.1f %s", size, units[unit]);
+    return std::string(buf);
 }
 
-UpdateRowCell::~UpdateRowCell() {
+LibraryRowCell::LibraryRowCell() {
+    this->inflateFromXMLRes("xml/library_row_cell.xml");
+}
+
+LibraryRowCell::~LibraryRowCell() {
     if (imageToken) *imageToken = false;
 }
 
-UpdateRowCell* UpdateRowCell::create() {
-    return new UpdateRowCell();
+LibraryRowCell* LibraryRowCell::create() {
+    return new LibraryRowCell();
 }
 
 static void replaceAll(std::string& str, const std::string& from, const std::string& to) {
@@ -302,46 +313,75 @@ static std::unordered_map<uint64_t, uint32_t> parseVersionsDatabase() {
     return database;
 }
 
-UpdatesView::UpdatesView() {
+LibraryView::LibraryView() {
     cancelToken_ = std::make_shared<bool>(false);
 }
 
-UpdatesView::~UpdatesView() {
+LibraryView::~LibraryView() {
     if (cancelToken_) {
         *cancelToken_ = true;
     }
 }
 
-void UpdatesView::onContentAvailable() {
+void LibraryView::onContentAvailable() {
     if (recycler) {
-        recycler->registerCell("Row", []() { return UpdateRowCell::create(); });
-        recycler->setDataSource(new UpdatesDataSource(this));
+        recycler->registerCell("Row", []() { return LibraryRowCell::create(); });
+        recycler->setDataSource(new LibraryDataSource(this));
     }
 
+    updateSpaceHint();
     scanForUpdates();
 }
 
-void UpdatesView::willAppear(bool resetState) {
+void LibraryView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     if (resetState && recycler && !displayItems_.empty()) {
         brls::Application::giveFocus(recycler);
     }
 }
 
-void UpdatesView::willDisappear(bool resetState) {
+void LibraryView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
     brls::Application::giveFocus(nullptr);
 }
 
-void UpdatesView::scanForUpdates() {
+void LibraryView::updateStatsAndSpace() {
+    int updateCount = 0;
+    for (const auto& item : displayItems_) {
+        if (item.status == GameUpdateStatus::UpdateAvailable) {
+            updateCount++;
+        }
+    }
+
+    if (statsHint) {
+        statsHint->setText(brls::getStr("app/library/stats", std::to_string(updateCount), std::to_string(displayItems_.size())));
+    }
+    updateSpaceHint();
+}
+
+void LibraryView::updateSpaceHint() {
+    if (!spaceHint) return;
+
+    int64_t sdFree = 0;
+    int64_t nandFree = 0;
+    bool sdOk = util::getStorageFreeSpace(1, sdFree);
+    bool nandOk = util::getStorageFreeSpace(0, nandFree);
+
+    std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
+    std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
+
+    spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
+}
+
+void LibraryView::scanForUpdates() {
     if (isScanning_) {
-        util::logLine("updates: scan already in progress");
+        util::logLine("library: scan already in progress");
         return;
     }
     isScanning_ = true;
     
     if (statsHint) {
-        statsHint->setText("app/updates/loading_titledb"_i18n);
+        statsHint->setText("app/library/loading_titledb"_i18n);
     }
     
     auto cancelToken = cancelToken_;
@@ -355,7 +395,7 @@ void UpdatesView::scanForUpdates() {
             brls::sync([this, cancelToken]() {
                 if (cancelToken && *cancelToken) return;
                 if (statsHint) {
-                    statsHint->setText("app/updates/titledb_failed"_i18n);
+                    statsHint->setText("app/library/titledb_failed"_i18n);
                 }
                 isScanning_ = false;
             });
@@ -365,7 +405,7 @@ void UpdatesView::scanForUpdates() {
         brls::sync([this, cancelToken]() {
             if (cancelToken && *cancelToken) return;
             if (statsHint) {
-                statsHint->setText("app/updates/scanning_games"_i18n);
+                statsHint->setText("app/library/scanning_games"_i18n);
             }
         });
         
@@ -442,7 +482,7 @@ void UpdatesView::scanForUpdates() {
 
         if (cancelToken && *cancelToken) return;
 
-        std::vector<UpdateItem> displayItems;
+        std::vector<LibraryItem> displayItems;
 
         // Match installed items with the catalog (g_games) using titledb
         for (const auto& inst : installedList) {
@@ -462,31 +502,33 @@ void UpdatesView::scanForUpdates() {
             currentVer = getInstalledUpdateVersion(baseTid);
 #endif
             
-            bool needsUpdate = false;
-            std::string latestVerStr = inst.currentVersionStr;
+            bool hasVersionInfo = (latestVer > 0);
+            GameUpdateStatus status = GameUpdateStatus::Unknown;
+            std::string latestVerStr = "—";
             
-            if (latestVer > 0) {
+            if (hasVersionInfo) {
                 std::string estLatestVerStr = formatNintendoVersion(latestVer, inst.currentVersionStr);
+                bool needsUpdate = false;
                 if (currentVer > 0) {
                     needsUpdate = (latestVer > currentVer);
                 } else {
                     needsUpdate = isSemverNewer(estLatestVerStr, inst.currentVersionStr);
                 }
-                if (needsUpdate) {
-                    latestVerStr = estLatestVerStr;
-                }
+                status = needsUpdate ? GameUpdateStatus::UpdateAvailable : GameUpdateStatus::UpToDate;
+                latestVerStr = estLatestVerStr;
             }
             
-            // Match strictly by Title ID parsed from catalog brackets
+            // Match by Title ID: prefer the explicit title_id field from the
+            // catalog JSON, fall back to the [0100...] bracket in the title.
             bool foundInCatalog = false;
             for (const auto& g : g_games) {
-                uint64_t catalogTid = parseTitleIdFromString(g.title);
+                uint64_t catalogTid = parseTitleIdFromGame(g);
                 if (catalogTid != 0 && (catalogTid == baseTid || catalogTid == patchTid)) {
-                    UpdateItem item;
+                    LibraryItem item;
                     item.game = g;
                     item.currentVersion = inst.currentVersionStr;
                     item.latestVersion = latestVerStr;
-                    item.needsUpdate = needsUpdate;
+                    item.status = status;
                     item.titleId = baseTid;
                     item.rawName = inst.name;
                     displayItems.push_back(item);
@@ -502,11 +544,11 @@ void UpdatesView::scanForUpdates() {
                     std::string catClean = cleanNameForMatching(g.title);
                     if (!instClean.empty() && !catClean.empty() && 
                         (instClean == catClean || catClean.find(instClean) != std::string::npos || instClean.find(catClean) != std::string::npos)) {
-                        UpdateItem item;
+                        LibraryItem item;
                         item.game = g;
                         item.currentVersion = inst.currentVersionStr;
                         item.latestVersion = latestVerStr;
-                        item.needsUpdate = needsUpdate;
+                        item.status = status;
                         item.titleId = baseTid;
                         item.rawName = inst.name;
                         displayItems.push_back(item);
@@ -518,13 +560,13 @@ void UpdatesView::scanForUpdates() {
             
             // If not found in catalog, create a dummy item
             if (!foundInCatalog) {
-                UpdateItem item;
+                LibraryItem item;
                 item.game.title = inst.name.empty() ? ("Unknown Game") : inst.name;
                 item.game.cover = "";
                 item.game.size = "";
                 item.currentVersion = inst.currentVersionStr;
                 item.latestVersion = latestVerStr;
-                item.needsUpdate = needsUpdate;
+                item.status = status;
                 item.titleId = baseTid;
                 item.rawName = inst.name;
                 displayItems.push_back(item);
@@ -533,10 +575,10 @@ void UpdatesView::scanForUpdates() {
         
         if (cancelToken && *cancelToken) return;
 
-        // Sort items: needsUpdate first, then alphabetically by title
-        std::sort(displayItems.begin(), displayItems.end(), [](const UpdateItem& a, const UpdateItem& b) {
-            if (a.needsUpdate != b.needsUpdate) {
-                return a.needsUpdate > b.needsUpdate; // true comes first
+        // Sort items: updates first, then alphabetically by title
+        std::sort(displayItems.begin(), displayItems.end(), [](const LibraryItem& a, const LibraryItem& b) {
+            if (a.status != b.status) {
+                return a.status == GameUpdateStatus::UpdateAvailable; // update-able first
             }
             return a.game.title < b.game.title;
         });
@@ -552,19 +594,11 @@ void UpdatesView::scanForUpdates() {
             
             displayItems_ = std::move(items);
             
-            int updateCount = 0;
-            for (const auto& item : displayItems_) {
-                if (item.needsUpdate) {
-                    updateCount++;
-                }
-            }
-            
-            if (statsHint) {
-                statsHint->setText(brls::getStr("app/updates/stats", std::to_string(updateCount), std::to_string(displayItems_.size())));
-            }
             if (recycler) {
                 recycler->reloadData();
             }
+            
+            updateStatsAndSpace();
             
             if (!displayItems_.empty() && recycler) {
                 brls::Application::giveFocus(recycler);
@@ -573,12 +607,67 @@ void UpdatesView::scanForUpdates() {
     });
 }
 
-int UpdatesView::UpdatesDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {
+void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName) {
+    std::string msg = brls::getStr("app/library/uninstall_confirm", displayName.empty() ? "?" : displayName);
+    
+    brls::Dialog* dialog = new brls::Dialog(msg);
+    dialog->addButton("app/common/yes"_i18n, [this, titleId, displayName, dialog]() {
+        dialog->close([this, titleId, displayName]() {
+            auto cancelToken = cancelToken_;
+            brls::async([this, titleId, displayName, cancelToken]() {
+                if (cancelToken && *cancelToken) return;
+
+                bool ok = false;
+#ifdef __SWITCH__
+                {
+                    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                    Result rc = nsInitialize();
+                    if (R_SUCCEEDED(rc)) {
+                        rc = nsDeleteApplicationCompletely(titleId);
+                        nsExit();
+                        ok = R_SUCCEEDED(rc);
+                        util::logLine("library: nsDeleteApplicationCompletely tid=" + std::to_string(titleId) + " rc=" + std::to_string(rc));
+                    } else {
+                        util::logLine("library: nsInitialize failed rc=" + std::to_string(rc));
+                    }
+                }
+#else
+                ok = true; // PC mock: allow uninstall
+#endif
+                brls::sync([this, titleId, displayName, ok, cancelToken]() {
+                    if (cancelToken && *cancelToken) return;
+
+                    if (ok) {
+                        for (auto it = displayItems_.begin(); it != displayItems_.end(); ++it) {
+                            if (it->titleId == titleId) {
+                                displayItems_.erase(it);
+                                break;
+                            }
+                        }
+                        if (recycler) {
+                            recycler->reloadData();
+                        }
+                        updateStatsAndSpace();
+                        brls::Application::notify(brls::getStr("app/library/uninstall_success", displayName));
+                    } else {
+                        brls::Dialog* errDialog = new brls::Dialog("app/library/uninstall_failed"_i18n);
+                        errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
+                        errDialog->open();
+                    }
+                });
+            });
+        });
+    });
+    dialog->addButton("app/common/no"_i18n, [dialog]() { dialog->close(); });
+    dialog->open();
+}
+
+int LibraryView::LibraryDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {
     return parent_->displayItems_.size();
 }
 
-brls::RecyclerCell* UpdatesView::UpdatesDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    UpdateRowCell* cell = dynamic_cast<UpdateRowCell*>(recycler->dequeueReusableCell("Row"));
+brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
+    LibraryRowCell* cell = dynamic_cast<LibraryRowCell*>(recycler->dequeueReusableCell("Row"));
     if (!cell) return nullptr;
 
     int row = index.row;
@@ -589,7 +678,7 @@ brls::RecyclerCell* UpdatesView::UpdatesDataSource::cellForRow(brls::RecyclerFra
     const auto& item = parent_->displayItems_[row];
 
     if (!cell->title || !cell->titleId || !cell->currentVersion || !cell->latestVersion || !cell->statusBadge || !cell->statusBox || !cell->cover) {
-        brls::Logger::error("UpdatesDataSource: one or more cell child views are NULL!");
+        brls::Logger::error("LibraryDataSource: one or more cell child views are NULL!");
         return cell;
     }
 
@@ -610,14 +699,18 @@ brls::RecyclerCell* UpdatesView::UpdatesDataSource::cellForRow(brls::RecyclerFra
         cell->latestVersion->setText(item.latestVersion);
 
         // Configure status badge dynamically
-        if (item.needsUpdate) {
-            cell->statusBadge->setText("app/updates/badge_update"_i18n);
+        if (item.status == GameUpdateStatus::UpdateAvailable) {
+            cell->statusBadge->setText("app/library/badge_update"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
             cell->statusBox->setBackgroundColor(nvgRGB(255, 87, 34)); // Orange/red
-        } else {
-            cell->statusBadge->setText("app/updates/badge_uptodate"_i18n);
+        } else if (item.status == GameUpdateStatus::UpToDate) {
+            cell->statusBadge->setText("app/library/badge_uptodate"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
             cell->statusBox->setBackgroundColor(nvgRGB(76, 175, 80)); // Green
+        } else {
+            cell->statusBadge->setText("app/library/badge_unknown"_i18n);
+            cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
+            cell->statusBox->setBackgroundColor(nvgRGB(120, 120, 120)); // Gray: no version data
         }
 
         // Fetch cover: use catalog cover URL if available, otherwise fallback to tinfoil.io and tinfoil.media CDN by Title ID
@@ -644,10 +737,19 @@ brls::RecyclerCell* UpdatesView::UpdatesDataSource::cellForRow(brls::RecyclerFra
             return true;
         });
 
+        // Uninstall action (Y button)
+        uint64_t tid = item.titleId;
+        std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+        cell->registerAction("app/library/uninstall"_i18n, brls::ControllerButton::BUTTON_Y,
+            [parent = parent_, tid, displayName](brls::View* view) {
+                parent->uninstallGame(tid, displayName);
+                return true;
+            });
+
     } catch (const std::exception& e) {
-        brls::Logger::error("UpdatesDataSource: EXCEPTION in card setup {}: {}", row, e.what());
+        brls::Logger::error("LibraryDataSource: EXCEPTION in card setup {}: {}", row, e.what());
     } catch (...) {
-        brls::Logger::error("UpdatesDataSource: UNKNOWN EXCEPTION in card setup {}", row);
+        brls::Logger::error("LibraryDataSource: UNKNOWN EXCEPTION in card setup {}", row);
     }
     
     return cell;

@@ -2,7 +2,7 @@
   "menu": {
     "catalog": "Catalog",
     "remote_add": "Add",
-    "favorites": "Favorites",
+    "library": "Game Library",
     "downloads": "Downloads",
     "settings": "Tools",
     "footer": "TorrentShopNX v2.3 | Games in catalog: {0}",
@@ -50,6 +50,8 @@
     "subtitle": "Curated collections from switch-game-collection",
     "all_catalog": "Full Catalog",
     "all_catalog_desc": "Complete catalog of releases from EN_catalog.json",
+    "favorites": "Favorites",
+    "favorites_desc": "Your favorite games",
     "games_count": "Games: {0}",
     "collection_prefix": "Collection: {0}",
     "search_hint": "Search in collection",
@@ -182,15 +184,24 @@
     "user_upload_title": "User Torrent",
     "user_upload_desc": "Added via local network"
   },
-  "updates": {
-    "title": "Available Updates",
+  "library": {
+    "title": "Game Library",
     "searching": "Scanning installed games...",
-    "stats": "Updates available: {0} / Total games: {1}",
+    "stats": "Updates: {0} of {1}",
+    "space": "SD card: {0} free • Internal storage: {1} free",
+    "space_unknown": "Storage space unknown",
     "badge_update": "UPDATE",
     "badge_uptodate": "UP TO DATE",
+    "badge_unknown": "NO DATA",
     "loading_titledb": "Loading titledb version database...",
     "titledb_failed": "Error: failed to load titledb. Check internet connection.",
-    "scanning_games": "Scanning installed games..."
+    "scanning_games": "Scanning installed games...",
+    "installed": "Installed",
+    "available": "Available",
+    "uninstall": "Uninstall",
+    "uninstall_confirm": "Uninstall {0}?\nThe game, all its updates and DLC will be removed.",
+    "uninstall_success": "{0} uninstalled",
+    "uninstall_failed": "Failed to uninstall the game."
   },
   "filter": {
     "title": "Filters & Sorting",
@@ -221,8 +232,8 @@
     "lang_changed_restart": "Language saved!\nRestart the application to apply changes?",
     "restart_btn": "Restart",
     "later_btn": "Later",
-    "updates_manager": "Updates Manager",
-    "updates_manager_desc": "Check and install game updates",
+    "game_library": "Game Library",
+    "game_library_desc": "Installed games: updates, uninstall, free space",
     "app_update": "App Update",
     "app_update_desc": "Check for new TorrentShopNX releases",
     "checking_updates": "Checking for updates...",
