@@ -215,6 +215,26 @@ static uint8_t s_bg_node_id[20];
 static dht_target s_targets[DHT_MAX_TARGETS];
 static u64 s_last_walk = 0;       // last random-id walk tick
 
+// Table-refresh sweep state (moved to file scope so a socket restart can
+// reset it together with the routing table).
+static u64 s_sweep_start = 0;
+static int s_sweep_pos = 0;
+
+// Network-flap recovery: how long the routing table has been completely
+// empty while bootstrap routers were pinged but never answered. A long
+// streak means the persistent UDP socket went stale (the interface dropped
+// and re-associated): TCP and fresh UDP sockets work, this one doesn't.
+static u64 s_dead_since = 0;
+static int s_restarts = 0;
+// Result of the last bootstrap attempt (0 = DNS could not resolve the
+// routers). Kept across iterations: the flap detector needs to know whether
+// recent bootstrap pings actually went out, not just whether this
+// particular iteration pinged anything.
+static int s_last_boot_count = 0;
+// Catastrophic path: dht_init failed during a restart. jech state is gone,
+// so the thread must stop touching dht_* entirely for this session.
+static bool s_dht_dead = false;
+
 // Hunger signal from torrentfs (st_live < STARVED_LIVE): the torrent is
 // starving for peers, so searches run on a short interval instead of the
 // normal 15 s one, and the first hungry search fires immediately.
@@ -253,6 +273,86 @@ static int bg_bootstrap(int s) {
         freeaddrinfo(res);
     }
     return booted;
+}
+
+// Re-ping the persisted node cache to warm a freshly initialised table.
+// Returns the number of cached nodes pinged (-1 = no cache).
+static int bg_ping_cache(void) {
+    uint8_t nodes[DHT_CACHE_MAX_NODES][6];
+    uint8_t id[20];
+    int n = dht_cache_read(s_dht_cache_path, id, nodes, DHT_CACHE_MAX_NODES);
+    for (int i = 0; i < n; i++) {
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        memcpy(&addr.sin_addr, nodes[i], 4);
+        memcpy(&addr.sin_port, nodes[i] + 4, 2);
+        dht_ping_node((struct sockaddr *)&addr, sizeof(addr));
+    }
+    return n;
+}
+
+// Recreate the persistent UDP socket and the jech state after a network flap.
+// The new socket is created and bound first: socket()/bind failures leave the
+// old state untouched. Only after that does the code tear down jech and swap
+// in the new socket (a dht_init failure after uninit disables DHT entirely --
+// see s_dht_dead).
+static int bg_restart(void) {
+    int ns = socket(AF_INET, SOCK_DGRAM, 0);
+    if (ns < 0) {
+        engine_log(ENGINE_LOG_WARN, "[dht] restart: socket() failed errno=%d",
+                   errno);
+        return -1;
+    }
+
+    struct sockaddr_in me = {0};
+    me.sin_family = AF_INET;
+    me.sin_addr.s_addr = INADDR_ANY;
+#ifdef __SWITCH__
+    me.sin_port = htons(51413);
+#else
+    me.sin_port = 0;
+#endif
+    if (bind(ns, (struct sockaddr *)&me, sizeof(me)) != 0) {
+        me.sin_port = 0;
+        if (bind(ns, (struct sockaddr *)&me, sizeof(me)) != 0) {
+            engine_log(ENGINE_LOG_WARN, "[dht] restart: bind failed errno=%d",
+                       errno);
+            close(ns);
+            return -1;
+        }
+    }
+
+    struct timeval rcvto = { 1, 0 };
+    setsockopt(ns, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
+
+    int old = s_bg_sock;
+    dht_uninit();
+    if (dht_init(ns, -1, s_bg_node_id, NULL) < 0) {
+        // Extremely unlikely (calloc failure), but without jech state every
+        // subsequent dht_* call is UB -- disable DHT for the session.
+        close(ns);
+        if (old >= 0) close(old);
+        s_bg_sock = -1;
+        s_dht_dead = true;
+        engine_log(ENGINE_LOG_ERROR,
+                   "[dht] restart: dht_init failed, DHT disabled for this session");
+        return -1;
+    }
+    s_bg_sock = ns;
+    if (old >= 0) close(old);
+
+#ifndef __SWITCH__
+    // Same as the startup path: jech marks the socket non-blocking; the loop
+    // needs a BLOCKING recvfrom with SO_RCVTIMEO (Switch keeps jech's setting).
+    {
+        int fl = fcntl(s_bg_sock, F_GETFL, 0);
+        if (fl >= 0) fcntl(s_bg_sock, F_SETFL, fl & ~O_NONBLOCK);
+    }
+#endif
+
+    s_bg_bootstrapped = false;
+    return 0;
 }
 
 // jech delivers DHT_EVENT_VALUES for the search registered with this closure;
@@ -379,6 +479,12 @@ static void dht_bg_main(void *arg) {
 
     while (!s_bg_stop) {
         tsnx_engine_wd_tick(0);
+        if (s_dht_dead) {
+            // dht_init failed during a restart: jech state is gone and must
+            // not be touched. Keep the thread (and watchdog) alive.
+            svcSleepThread(1000000000ULL);
+            continue;
+        }
         uint8_t buf[3072];
         struct sockaddr_in from;
         socklen_t fromlen = sizeof(from);
@@ -398,8 +504,9 @@ static void dht_bg_main(void *arg) {
         s_last_good = good;
         s_last_dubious = dubious;
 
+        int boot_count = 0;
         if (!s_bg_bootstrapped) {
-            int boot_count = bg_bootstrap(s_bg_sock);
+            boot_count = bg_bootstrap(s_bg_sock);
             if (boot_count > 0) {
                 s_bg_bootstrapped = true;
                 last_bootstrap = now;
@@ -412,12 +519,49 @@ static void dht_bg_main(void *arg) {
             // same idea here: the table can decay below usefulness (field:
             // 163 good nodes -> 12 in ~10 min) and then every search walks
             // dead addresses. Refill from the router set + cache.
-            int boot_count = bg_bootstrap(s_bg_sock);
+            boot_count = bg_bootstrap(s_bg_sock);
             last_bootstrap = now;
             engine_log(ENGINE_LOG_INFO,
                        "[dht] background re-bootstrap (good=%d): %d routers",
                        good, boot_count);
         }
+        if (boot_count > 0) s_last_boot_count = boot_count;
+
+        // Network-flap recovery: the table is empty AND the bootstrap
+        // routers were resolved and pinged recently (so DNS is fine) but
+        // never answered. That points at a stale UDP socket, not a dead
+        // network (TCP trackers and fresh UDP sockets work in that state) --
+        // pinging the same socket forever is pointless, so recreate it
+        // wholesale. First 3 attempts are 2 min apart, then the interval
+        // backs off to 10 min so a permanently blocked UDP path cannot
+        // churn the socket.
+        if (s_bg_bootstrapped && good == 0) {
+            if (s_dead_since == 0) s_dead_since = now;
+            u64 dead_iv = (u64)(s_restarts >= 3 ? 600 : 120) * freq;
+            if (now - s_dead_since > dead_iv && s_last_boot_count > 0) {
+                s_dead_since = 0;
+                s_restarts++;
+                engine_log(ENGINE_LOG_WARN,
+                           "[dht] no replies for %ds (%d routers pinged), "
+                           "restarting socket (attempt %d)",
+                           (int)(dead_iv / freq), s_last_boot_count, s_restarts);
+                if (bg_restart() == 0) {
+                    last_bootstrap = now;
+                    s_last_boot_count = 0;
+                    s_sweep_pos = 0;
+                    s_sweep_start = now;
+                    int cached = bg_ping_cache();
+                    if (cached > 0)
+                        engine_log(ENGINE_LOG_INFO,
+                                   "[dht] restart: re-pinged %d cached nodes",
+                                   cached);
+                }
+                continue;   // one fresh iteration on the new socket
+            }
+        } else {
+            s_dead_since = 0;
+        }
+        if (good > 0) s_restarts = 0;   // network recovered: reset the backoff
 
         if (s_bg_bootstrapped && (good + dubious) >= 1) {
             // Search every active target every ~15 s (5 s while the torrent is
@@ -459,26 +603,24 @@ static void dht_bg_main(void *arg) {
         // dubious and get replaced by the walk above. Rate-limited to a
         // handful of pings per loop iteration (~1/s) to avoid a UDP burst.
         {
-            static u64 sweep_start = 0;
-            static int sweep_pos = 0;
             u64 sweep_iv = (u64)600 * freq;
-            if (sweep_start == 0) sweep_start = now;
-            if (now - sweep_start > sweep_iv) {
+            if (s_sweep_start == 0) s_sweep_start = now;
+            if (now - s_sweep_start > sweep_iv) {
                 struct sockaddr_in sins_p[DHT_CACHE_MAX_NODES];
                 int num_p = DHT_CACHE_MAX_NODES, num6_p = 0;
                 dht_get_nodes(sins_p, &num_p, NULL, &num6_p);
                 int sent = 0;
-                while (sent < 8 && sweep_pos < num_p) {
-                    dht_ping_node((struct sockaddr *)&sins_p[sweep_pos],
-                                  sizeof(sins_p[sweep_pos]));
-                    sweep_pos++;
+                while (sent < 8 && s_sweep_pos < num_p) {
+                    dht_ping_node((struct sockaddr *)&sins_p[s_sweep_pos],
+                                  sizeof(sins_p[s_sweep_pos]));
+                    s_sweep_pos++;
                     sent++;
                 }
-                if (sweep_pos >= num_p) {
+                if (s_sweep_pos >= num_p) {
                     engine_log(ENGINE_LOG_INFO,
                                "[dht] table refresh sweep done (%d nodes)", num_p);
-                    sweep_pos = 0;
-                    sweep_start = now;
+                    s_sweep_pos = 0;
+                    s_sweep_start = now;
                 }
             }
         }
