@@ -15,6 +15,7 @@
 #include "magnet.h"
 #include "bt_peer.h"
 #include "dhtclient.h"
+#include "../utils/app_paths.h"
 
 static void set_err(char *err, size_t errlen, const char *msg) {
     if (err && errlen) snprintf(err, errlen, "%s", msg);
@@ -134,11 +135,7 @@ static void add_tracker(torrent_meta *t, const char *url, size_t len) {
 // session) loads it locally instead of re-running the network fetch.
 //-----------------------------------------------------------------------------
 
-#ifdef __SWITCH__
-#define META_CACHE_DIR_DEFAULT "sdmc:/switch/TorrentShopNX/meta"
-#else
-#define META_CACHE_DIR_DEFAULT "./meta_cache"
-#endif
+#define META_CACHE_DIR_DEFAULT TSNX_CACHE_META
 
 #define META_CACHE_MAX_SIZE (8 * 1024 * 1024)
 
@@ -161,7 +158,7 @@ static void info_hash_hex(const uint8_t info_hash[20], char out[41]) {
 static int meta_cache_save(const uint8_t info_hash[20],
                            const uint8_t *info, size_t len) {
     if (!info || len == 0 || len > META_CACHE_MAX_SIZE) return -1;
-    mkdir(s_meta_cache_dir, 0755);  // ignore EEXIST and friends
+    tsnx_ensure_parent_dirs(s_meta_cache_dir);
     char hex[41], path[320], tmp[324];
     info_hash_hex(info_hash, hex);
     snprintf(path, sizeof(path), "%s/%s.meta", s_meta_cache_dir, hex);

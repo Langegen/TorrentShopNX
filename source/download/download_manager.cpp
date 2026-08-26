@@ -12,6 +12,7 @@
 #include "../net/http_client.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/app_paths.h"
 
 #include <engine/engine.h>
 
@@ -102,11 +103,7 @@ static bool isTransferActive(download::DownloadState state) {
 
 // Корневая папка downloads/ (куда сохраняются не-игровые файлы).
 static std::filesystem::path downloadsBaseDir() {
-#ifdef __SWITCH__
-    return std::filesystem::path("sdmc:/switch/TorrentShopNX/downloads");
-#else
-    return std::filesystem::path("./downloads");
-#endif
+    return std::filesystem::path(TSNX_DOWNLOADS_DIR);
 }
 
 // Относительный путь файла из торрента -> безопасный относительный путь:
@@ -525,19 +522,9 @@ static bool isSwitchGameFile(const std::string& filename) {
 }
 
 static void copyDownloadedOtherFiles(const download::DownloadItem& item) {
-    std::filesystem::path srcDir;
-#ifndef __SWITCH__
-    srcDir = std::filesystem::path("./cache/local_engine") / item.torrent_hash;
-#else
-    srcDir = std::filesystem::path("sdmc:/switch/TorrentShopNX/cache/local_engine") / item.torrent_hash;
-#endif
+    std::filesystem::path srcDir = std::filesystem::path(TSNX_CACHE_LOCALENGINE) / item.torrent_hash;
 
-    std::filesystem::path destDir;
-#ifndef __SWITCH__
-    destDir = "./downloads";
-#else
-    destDir = "sdmc:/switch/TorrentShopNX/downloads";
-#endif
+    std::filesystem::path destDir = std::filesystem::path(TSNX_DOWNLOADS_DIR);
 
     std::error_code ec;
     std::filesystem::create_directories(destDir, ec);
@@ -550,12 +537,7 @@ static void copyDownloadedOtherFiles(const download::DownloadItem& item) {
 static void clearTorrentCache(const std::string& hash) {
     if (hash.empty()) return;
 
-    std::filesystem::path cachePath;
-#ifndef __SWITCH__
-    cachePath = std::filesystem::path("./cache/local_engine") / hash;
-#else
-    cachePath = std::filesystem::path("sdmc:/switch/TorrentShopNX/cache/local_engine") / hash;
-#endif
+    std::filesystem::path cachePath = std::filesystem::path(TSNX_CACHE_LOCALENGINE) / hash;
 
     std::error_code ec;
     if (std::filesystem::exists(cachePath)) {

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <borealis/extern/nlohmann/json.hpp>
 #include "../utils/log.h"
+#include "../utils/app_paths.h"
 #include "../config/config.h"
 
 #include <engine/engine.h>
@@ -161,8 +162,9 @@ void DownloadManager::saveDownloads() {
 }
 
 void DownloadManager::loadDownloads() {
-    // Clean up old downloads.json file if present
-    std::remove("sdmc:/switch/TorrentShopNX/downloads.json");
+    // Clean up old downloads.json file if present (pre-reorg layout)
+    std::remove(TSNX_BASE_DIR "/downloads.json");
+    std::remove(TSNX_DATA_DIR "/downloads.json");
 }
 
 } // namespace ui

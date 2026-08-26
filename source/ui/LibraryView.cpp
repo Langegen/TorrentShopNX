@@ -3,6 +3,7 @@
 #include "GameDetailView.hpp"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/app_paths.h"
 #include <exception>
 #include <memory>
 #include <fstream>
@@ -48,7 +49,7 @@ static std::unordered_map<uint64_t, uint32_t> getInstalledPatchVersions(const st
 static std::string iconCachePathFor(uint64_t tid) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
-    return std::string("sdmc:/switch/TorrentShopNX/icons/") + buf + ".jpg";
+    return std::string(TSNX_CACHE_ICONS) + "/" + buf + ".jpg";
 }
 
 // Extracts the system icon (JPEG embedded in the NACP control data, the same
@@ -81,7 +82,7 @@ static void saveInstalledIcon(uint64_t tid, const NsApplicationControlData& ctrl
     if (end <= start + 4) return;
 
     std::error_code ec;
-    std::filesystem::create_directories("sdmc:/switch/TorrentShopNX/icons", ec);
+    std::filesystem::create_directories(TSNX_CACHE_ICONS, ec);
     std::ofstream out(path, std::ios::binary);
     if (out) {
         out.write(reinterpret_cast<const char*>(&icon[start]), static_cast<std::streamsize>(end - start));
@@ -218,11 +219,7 @@ static std::string getFirstTwoWords(const std::string& str) {
 }
 
 static bool downloadVersionsDatabaseIfNeeded() {
-#ifndef __SWITCH__
-    std::string path = "./versions.txt";
-#else
-    std::string path = "sdmc:/switch/TorrentShopNX/versions.txt";
-#endif
+    std::string path = TSNX_VERSIONS_PATH;
     struct stat st;
     bool exists = (stat(path.c_str(), &st) == 0);
     
@@ -257,11 +254,7 @@ static bool downloadVersionsDatabaseIfNeeded() {
 }
 
 static std::unordered_map<uint64_t, uint32_t> parseVersionsDatabase() {
-#ifndef __SWITCH__
-    std::string path = "./versions.txt";
-#else
-    std::string path = "sdmc:/switch/TorrentShopNX/versions.txt";
-#endif
+    std::string path = TSNX_VERSIONS_PATH;
 
     // Reuse the parsed database in memory unless the file changed on disk
     // (versions.txt updates at most daily; reparsing 3+ MB on every library
@@ -766,8 +759,8 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         std::string localIconPath;
 #ifdef __SWITCH__
         {
-            char iconPath[96];
-            std::snprintf(iconPath, sizeof(iconPath), "sdmc:/switch/TorrentShopNX/icons/%016llX.jpg", (unsigned long long)item.titleId);
+            char iconPath[128];
+            std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
             struct stat st;
             if (stat(iconPath, &st) == 0 && st.st_size > 0) localIconPath = iconPath;
         }

@@ -26,6 +26,7 @@ bool boostAllowed() {
 struct SpaceCache {
     std::chrono::steady_clock::time_point last_query;
     s64 free_space = 0;
+    s64 total_space = 0;
     bool valid = false;
 };
 SpaceCache g_space_cache[2]; // 0: NAND (BuiltInUser), 1: SD (SdCard)
@@ -99,7 +100,7 @@ bool isBacklightOff() {
 }
 #endif
 
-bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
+bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space) {
 #ifdef __SWITCH__
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
     int cache_idx = (storageId == 1) ? 1 : 0;
@@ -107,53 +108,67 @@ bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
     if (g_space_cache[cache_idx].valid &&
         std::chrono::duration_cast<std::chrono::milliseconds>(now - g_space_cache[cache_idx].last_query).count() < 5000) {
         out_free_space = g_space_cache[cache_idx].free_space;
+        out_total_space = g_space_cache[cache_idx].total_space;
         return true;
     }
 
     NcmContentStorage cs = {};
     NcmStorageId target_id = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
-    
+
     Result rc = ncmInitialize();
     if (R_FAILED(rc)) {
         util::logLine("switch_utils: ncmInitialize failed, rc=" + std::to_string(rc));
         return false;
     }
-    
+
     rc = ncmOpenContentStorage(&cs, target_id);
     if (R_FAILED(rc)) {
         util::logLine("switch_utils: ncmOpenContentStorage failed for storage=" + std::to_string(storageId) + ", rc=" + std::to_string(rc));
         ncmExit();
         return false;
     }
-    
+
     s64 free_space = 0;
+    s64 total_space = 0;
     rc = ncmContentStorageGetFreeSpaceSize(&cs, &free_space);
-    if (R_FAILED(rc)) {
-        util::logLine("switch_utils: ncmContentStorageGetFreeSpaceSize failed, rc=" + std::to_string(rc));
+    if (R_SUCCEEDED(rc)) {
+        rc = ncmContentStorageGetTotalSpaceSize(&cs, &total_space);
     }
-    
+    if (R_FAILED(rc)) {
+        util::logLine("switch_utils: ncmContentStorage space query failed, rc=" + std::to_string(rc));
+    }
+
     ncmContentStorageClose(&cs);
     ncmExit();
-    
+
     if (R_FAILED(rc)) {
         return false;
     }
-    
+
     g_space_cache[cache_idx].free_space = free_space;
+    g_space_cache[cache_idx].total_space = total_space;
     g_space_cache[cache_idx].last_query = now;
     g_space_cache[cache_idx].valid = true;
 
     out_free_space = free_space;
+    out_total_space = total_space;
     return true;
 #else
     // Mock space on host system (PC)
     if (storageId == 1) { // SD
-        out_free_space = 32ULL * 1024 * 1024 * 1024; // 32 GB
+        out_total_space = 64ULL * 1024 * 1024 * 1024; // 64 GB
+        out_free_space  = 32ULL * 1024 * 1024 * 1024; // 32 GB free
     } else { // NAND
-        out_free_space = 16ULL * 1024 * 1024 * 1024; // 16 GB
+        out_total_space = 32ULL * 1024 * 1024 * 1024; // 32 GB
+        out_free_space  = 16ULL * 1024 * 1024 * 1024; // 16 GB free
     }
     return true;
 #endif
+}
+
+bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
+    int64_t total = 0;
+    return getStorageStats(storageId, out_free_space, total);
 }
 
 } // namespace util

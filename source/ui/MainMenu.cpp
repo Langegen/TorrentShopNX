@@ -12,6 +12,7 @@
 #include "../config/config.h"
 #include "../utils/log.h"
 #include "../utils/string_utils.h"
+#include "../utils/app_paths.h"
 #include "../catalog/catalog_manager.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
@@ -119,7 +120,7 @@ void MainMenu::onContentAvailable() {
             if (was_empty && !updated) {
                 util::logLine("catalog: running background fallback sources parser");
                 catalog::CatalogManager catalog_mgr;
-                bool sources_loaded = catalog_mgr.loadSourcesWithFallback("sdmc:/switch/TorrentShopNX/sources.json", "romfs:/sources.json");
+                bool sources_loaded = catalog_mgr.loadSourcesWithFallback(TSNX_SOURCES_PATH, "romfs:/sources.json");
                 if (sources_loaded) {
                     catalog_mgr.updateCatalogs();
                     catalog_mgr.mergeCatalogEntries();

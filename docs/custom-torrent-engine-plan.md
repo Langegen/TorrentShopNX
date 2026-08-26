@@ -238,7 +238,7 @@ LocalLibtorrentBackend / ExternalTorrServerBackend
    - Лимит одновременных active pieces.
    - Graceful eviction.
 5. **DHT persistence**:
-   - Сохранять routing table в `sdmc:/switch/TorrentShopNX/dht.state`.
+   - Сохранять routing table в `sdmc:/switch/TorrentShopNX/cache/dht/dht_cache.bin`.
 6. **No upload / leech-only**:
    - Не принимать incoming connections.
    - Не отвечать на `request`.

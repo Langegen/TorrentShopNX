@@ -5,6 +5,8 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <ctime>
 #include <thread>
 #include <filesystem>
 #include <sys/stat.h>
@@ -14,6 +16,7 @@
 #include "net/image_downloader.h"
 #include "config/config.h"
 #include "utils/log.h"
+#include "utils/app_paths.h"
 #include <borealis/extern/nlohmann/json.hpp>
 
 struct Game {
@@ -349,22 +352,22 @@ inline std::string getCatalogPath() {
     auto& cfg = config::ConfigManager::instance();
     std::string effUrl = cfg.getEffectiveCatalogSourceUrl();
     if (effUrl.find("EN_catalog") != std::string::npos) {
-        return "sdmc:/switch/TorrentShopNX/switch_games_en.json";
+        return TSNX_CATALOG_JSON_EN;
     }
-    return "sdmc:/switch/TorrentShopNX/switch_games_ru.json";
+    return TSNX_CATALOG_JSON_RU;
 }
 
 inline std::string getCatalogBinPath() {
     auto& cfg = config::ConfigManager::instance();
     std::string effUrl = cfg.getEffectiveCatalogSourceUrl();
     if (effUrl.find("EN_catalog") != std::string::npos) {
-        return "sdmc:/switch/TorrentShopNX/switch_games_en.bin";
+        return TSNX_CATALOG_BIN_EN;
     }
-    return "sdmc:/switch/TorrentShopNX/switch_games_ru.bin";
+    return TSNX_CATALOG_BIN_RU;
 }
 
-inline const char* kCatalogPath = "sdmc:/switch/TorrentShopNX/switch_games_ru.json";
-inline const char* kCatalogBinPath = "sdmc:/switch/TorrentShopNX/switch_games_ru.bin";
+inline const char* kCatalogPath = TSNX_CATALOG_JSON_RU;
+inline const char* kCatalogBinPath = TSNX_CATALOG_BIN_RU;
 
 // Cached loader: prefers instant binary cache if up-to-date, falls back to JSON + generates binary cache
 inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std::string& binPath) {
@@ -374,8 +377,8 @@ inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std:
 
     // Fallback to legacy switch_games.bin / switch_games.json for Russian catalog if new lang files don't exist yet
     if (!hasBin && !hasJson && binPath.find("switch_games_ru.bin") != std::string::npos) {
-        std::string legacyBin = "sdmc:/switch/TorrentShopNX/switch_games.bin";
-        std::string legacyJson = "sdmc:/switch/TorrentShopNX/switch_games.json";
+        std::string legacyBin = TSNX_OLD_CATALOG_BIN;
+        std::string legacyJson = TSNX_OLD_CATALOG_JSON;
         if (stat(legacyBin.c_str(), &stBin) == 0) {
             std::vector<Game> games;
             if (loadGamesFromBinaryFile(legacyBin, games) && !games.empty()) {
@@ -469,18 +472,13 @@ inline std::string extractBtihHashLocal(std::string magnet) {
 
 inline void clearCaches() {
     struct stat st;
-    if (stat("sdmc:/switch/TorrentShopNX", &st) != 0) {
-        mkdir("sdmc:/switch/TorrentShopNX", 0777);
+    if (stat(TSNX_BASE_DIR, &st) != 0) {
+        std::filesystem::create_directories(TSNX_BASE_DIR);
     }
 
     std::error_code ec;
-#ifndef __SWITCH__
-    std::filesystem::path localEngineCache = "./cache/local_engine";
-    std::filesystem::path tempDeletePath = "./cache/local_engine_old";
-#else
-    std::filesystem::path localEngineCache = "sdmc:/switch/TorrentShopNX/cache/local_engine";
-    std::filesystem::path tempDeletePath = "sdmc:/switch/TorrentShopNX/cache/local_engine_old";
-#endif
+    std::filesystem::path localEngineCache = TSNX_CACHE_LOCALENGINE;
+    std::filesystem::path tempDeletePath = TSNX_CACHE_LOCALENGINE_OLD;
 
     // Safely and instantly rename the directory to prevent any race conditions with TorrentEngine.
     // The directory will be deleted asynchronously later on the main loop.
@@ -501,17 +499,9 @@ inline void clearCaches() {
     }
 
     // Move duplicate TorrentShopNX folder cleanup to queue as well
-#ifndef __SWITCH__
-    std::filesystem::path duplicateFolder = "./TorrentShopNX";
-#else
-    std::filesystem::path duplicateFolder = "sdmc:/switch/TorrentShopNX/TorrentShopNX";
-#endif
+    std::filesystem::path duplicateFolder = std::string(TSNX_BASE_DIR) + "/TorrentShopNX";
     if (std::filesystem::exists(duplicateFolder, ec)) {
-#ifndef __SWITCH__
-        std::filesystem::path tempDuplicateDelete = "./TorrentShopNX_old";
-#else
-        std::filesystem::path tempDuplicateDelete = "sdmc:/switch/TorrentShopNX/TorrentShopNX_old";
-#endif
+        std::filesystem::path tempDuplicateDelete = std::string(TSNX_BASE_DIR) + "/TorrentShopNX_old";
         int suffix = 0;
         std::filesystem::path targetDelete = tempDuplicateDelete;
         while (std::filesystem::exists(targetDelete, ec)) {
@@ -525,6 +515,197 @@ inline void clearCaches() {
             util::logLine("GameData: removed duplicated TorrentShopNX folder synchronously (rename failed)");
         }
     }
+}
+
+// Creates every cache/ and data/ subfolder the app uses. Idempotent.
+inline void ensureAppDirs() {
+    std::error_code ec;
+    const char* dirs[] = {
+        TSNX_BASE_DIR,
+        TSNX_DATA_DIR,
+        TSNX_CACHE_DIR,
+        TSNX_CACHE_CATALOG,
+        TSNX_CACHE_THUMBNAILS,
+        TSNX_CACHE_COLLECTIONS,
+        TSNX_CACHE_META,
+        TSNX_CACHE_LOCALENGINE,
+        TSNX_CACHE_TORRENTFS,
+        TSNX_CACHE_DHT,
+        TSNX_CACHE_ICONS,
+        TSNX_CACHE_STREAM,
+        TSNX_CACHE_TMP,
+    };
+    for (const char* d : dirs) std::filesystem::create_directories(d, ec);
+}
+
+// Moves a single file to its new location. If both exist, keeps the newer one
+// (by mtime) and drops the other, so a partially-migrated SD card stays sane.
+inline void migrateFile(const std::string& oldPath, const std::string& newPath) {
+    std::error_code ec;
+    if (!std::filesystem::exists(oldPath, ec)) return;
+    std::filesystem::path np(newPath);
+    if (np.has_parent_path()) {
+        std::filesystem::create_directories(np.parent_path(), ec);
+    }
+    if (std::filesystem::exists(newPath, ec)) {
+        struct stat sOld, sNew;
+        bool o = stat(oldPath.c_str(), &sOld) == 0;
+        bool n = stat(newPath.c_str(), &sNew) == 0;
+        if (o && n && sOld.st_mtime > sNew.st_mtime) {
+            std::filesystem::remove(newPath, ec);
+        } else {
+            std::filesystem::remove(oldPath, ec);
+        }
+        return;
+    }
+    std::filesystem::rename(oldPath, newPath, ec);
+    if (ec) {
+        std::error_code ec2;
+        std::filesystem::copy(oldPath, newPath, std::filesystem::copy_options::overwrite_existing, ec2);
+        if (!ec2) {
+            std::filesystem::remove(oldPath, ec2);
+        } else {
+            util::logLine("GameData: migrate copy failed " + oldPath + " -> " + newPath);
+        }
+    }
+}
+
+// Moves the contents of an old directory into a new one (files win on conflict
+// by mtime), then removes the now-empty old directory.
+inline void migrateDirContents(const std::string& oldDir, const std::string& newDir) {
+    std::error_code ec;
+    if (!std::filesystem::exists(oldDir, ec)) return;
+    std::filesystem::create_directories(newDir, ec);
+    for (const auto& entry : std::filesystem::directory_iterator(
+             oldDir, std::filesystem::directory_options::skip_permission_denied, ec)) {
+        std::error_code ec2;
+        std::filesystem::path dest = std::filesystem::path(newDir) / entry.path().filename();
+        if (std::filesystem::exists(dest, ec2)) {
+            if (entry.is_directory(ec2)) continue; // keep existing subfolder
+            struct stat sOld, sNew;
+            bool o = stat(entry.path().string().c_str(), &sOld) == 0;
+            bool n = stat(dest.string().c_str(), &sNew) == 0;
+            if (o && n && sOld.st_mtime > sNew.st_mtime) {
+                std::filesystem::remove(dest, ec2);
+            } else {
+                continue;
+            }
+        }
+        std::filesystem::rename(entry.path(), dest, ec2);
+        if (ec2) {
+            std::error_code ec3;
+            std::filesystem::copy(entry.path(), dest,
+                                  std::filesystem::copy_options::recursive |
+                                      std::filesystem::copy_options::overwrite_existing,
+                                  ec3);
+            if (!ec3) std::filesystem::remove_all(entry.path(), ec3);
+        }
+    }
+    std::filesystem::remove(oldDir, ec);
+}
+
+// Old catalog HTTP caches lived as *.cache files directly in cache/ next to the
+// per-type subfolders; move only those flat files into cache/catalog/.
+inline void migrateFlatCatalogCache() {
+    std::error_code ec;
+    if (!std::filesystem::exists(TSNX_CACHE_DIR, ec)) return;
+    std::filesystem::create_directories(TSNX_CACHE_CATALOG, ec);
+    for (const auto& entry : std::filesystem::directory_iterator(
+             TSNX_CACHE_DIR, std::filesystem::directory_options::skip_permission_denied, ec)) {
+        std::error_code ec2;
+        if (entry.is_directory(ec2)) continue; // thumbnails/, local_engine/ ... stay
+        std::string name = entry.path().filename().string();
+        if (name.size() < 6 || name.compare(name.size() - 6, 6, ".cache") != 0) continue;
+        std::filesystem::path dest = std::filesystem::path(TSNX_CACHE_CATALOG) / entry.path().filename();
+        if (std::filesystem::exists(dest, ec2)) {
+            std::filesystem::remove(entry.path(), ec2);
+            continue;
+        }
+        std::filesystem::rename(entry.path(), dest, ec2);
+        if (ec2) {
+            std::error_code ec3;
+            std::filesystem::copy(entry.path(), dest, std::filesystem::copy_options::overwrite_existing, ec3);
+            if (!ec3) std::filesystem::remove(entry.path(), ec3);
+        }
+    }
+}
+
+// Deletes regular files in `dir` older than max_age_seconds (stale cache sweep).
+inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_seconds) {
+    std::error_code ec;
+    std::time_t now = std::time(nullptr);
+    if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
+    int removed = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(
+             dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
+        if (g_cleanupCancelled.load()) break;
+        std::error_code ec2;
+        if (!entry.is_regular_file(ec2)) continue;
+        struct stat st;
+        if (stat(entry.path().string().c_str(), &st) != 0) continue;
+        if ((now - st.st_mtime) > max_age_seconds) {
+            std::filesystem::remove(entry.path(), ec2);
+            if (!ec2) ++removed;
+        }
+    }
+    if (removed > 0) {
+        util::logLine("GameData: swept " + dir + ": removed " + std::to_string(removed) +
+                      " stale cache file(s)");
+    }
+}
+
+// One-time startup re-layout: moves everything written by older versions into
+// the cache/<type> + data/ layout and prunes stale cache entries by age.
+inline void migrateStorageLayout() {
+    ensureAppDirs();
+    util::logLine("GameData: storage layout migration start");
+
+    // Files -> data/
+    migrateFile(TSNX_OLD_CATALOG_JSON_RU, TSNX_CATALOG_JSON_RU);
+    migrateFile(TSNX_OLD_CATALOG_BIN_RU,  TSNX_CATALOG_BIN_RU);
+    migrateFile(TSNX_OLD_CATALOG_JSON_EN, TSNX_CATALOG_JSON_EN);
+    migrateFile(TSNX_OLD_CATALOG_BIN_EN,  TSNX_CATALOG_BIN_EN);
+    migrateFile(TSNX_OLD_CATALOG_JSON,    TSNX_CATALOG_JSON_RU); // legacy single-lang
+    migrateFile(TSNX_OLD_CATALOG_BIN,     TSNX_CATALOG_BIN_RU);
+    migrateFile(TSNX_OLD_VERSIONS,        TSNX_VERSIONS_PATH);
+    migrateFile(TSNX_OLD_FAVORITES,       TSNX_FAVORITES_PATH);
+    migrateFile(TSNX_OLD_SOURCES,         TSNX_SOURCES_PATH);
+
+    // Standalone cache files
+    migrateFile(TSNX_OLD_DHT_CACHE, TSNX_DHT_CACHE_FILE);
+    migrateFile(TSNX_OLD_TEMP_UPLOAD, TSNX_TEMP_UPLOAD);
+
+    // Cache directories (move contents, then drop the empty old dir)
+    migrateDirContents(TSNX_OLD_COLLECTIONS, TSNX_CACHE_COLLECTIONS);
+    migrateDirContents(TSNX_OLD_META,        TSNX_CACHE_META);
+    migrateDirContents(TSNX_OLD_ICONS,       TSNX_CACHE_ICONS);
+    migrateDirContents(TSNX_OLD_STREAM_INSTALL, TSNX_CACHE_STREAM);
+
+    // Old flat catalog caches in cache/ root
+    migrateFlatCatalogCache();
+
+    // Old torrentfs scratch chunks (cache.bin.*) are per-session dead weight
+    {
+        std::error_code ec;
+        for (int i = 0; i < 64; ++i) {
+            char p[300];
+            std::snprintf(p, sizeof(p), TSNX_OLD_TORRENTFS_CACHE ".%03d", i);
+            std::filesystem::remove(p, ec);
+        }
+        std::filesystem::remove(TSNX_OLD_TORRENTFS_CACHE, ec);
+    }
+    // Obsolete download-state file
+    std::error_code ecObsolete;
+    std::filesystem::remove(TSNX_BASE_DIR "/downloads.json", ecObsolete);
+
+    // Age-based stale-cache sweep
+    sweepExpiredFiles(TSNX_CACHE_CATALOG, 1800);           // catalog bodies (match read TTL: 30 min)
+    sweepExpiredFiles(TSNX_CACHE_COLLECTIONS, 7 * 86400);  // collections: 7 days
+    sweepExpiredFiles(TSNX_CACHE_THUMBNAILS, 30 * 86400);  // cover thumbnails: 30 days
+    sweepExpiredFiles(TSNX_CACHE_META, 30 * 86400);        // torrent metadata: 30 days
+    sweepExpiredFiles(TSNX_CACHE_ICONS, 90 * 86400);       // NACP icons: 90 days
+
+    util::logLine("GameData: storage layout migration done");
 }
 
 // Helper to normalize image URLs (e.g. FastPic migrated fastpic.ru to fastpic.org and storage servers fail on HTTPS)

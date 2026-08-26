@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <sys/stat.h>
 
+#include "../utils/app_paths.h"
+
 namespace installer {
 
 static unsigned int readU32(const unsigned char* p) {
@@ -56,7 +58,7 @@ StreamInstaller::StreamInstaller(size_t buffer_size_bytes)
 
 bool StreamInstaller::openStream(const std::string& name) {
     stream_name_ = name;
-    output_dir_ = "sdmc:/switch/TorrentShopNX/stream_install/" + stream_name_;
+    output_dir_ = std::string(TSNX_CACHE_STREAM) + "/" + stream_name_;
     buffer_.clear();
     stream_pos_ = 0;
     header_parsed_ = false;

@@ -9,6 +9,11 @@ namespace util {
 // On non-Switch platforms, returns simulated values.
 bool getStorageFreeSpace(int storageId, int64_t& out_free_space);
 
+// Returns both free and total space of a storage (SD or NAND).
+// storageId: 1 for SD card, 0 for NAND (built-in user storage).
+// On non-Switch platforms, returns simulated values.
+bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space);
+
 // CPU boost during heavy transfers: raises the CPU from 1020 MHz to 1785 MHz
 // (ApmCpuBoostMode_FastLoad) and disables auto-sleep while at least one
 // download/install is active. ~75% more CPU for SHA/zstd/bsd-IPC-bound work,

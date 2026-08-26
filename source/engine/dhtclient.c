@@ -7,9 +7,11 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "engine_log.h"
 #include "torrent_meta.h"   // torrent_announce_port(): our advertised listen port
+#include "../utils/app_paths.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -107,7 +109,7 @@ int dht_random_bytes(void *buf, size_t size) {
 
 #define DHT_CACHE_MAGIC   "TDX1"
 #define DHT_CACHE_MAX_NODES 256
-#define DHT_CACHE_PATH    "sdmc:/switch/TorrentShopNX/dht_cache.bin"
+#define DHT_CACHE_PATH    TSNX_DHT_CACHE_FILE
 
 static char s_dht_cache_path[256] = DHT_CACHE_PATH;
 
@@ -143,6 +145,7 @@ static int dht_cache_write(const char *path, const uint8_t node_id[20],
                            const uint8_t (*nodes)[6], int count) {
     if (count <= 0) return 0;
     if (count > DHT_CACHE_MAX_NODES) count = DHT_CACHE_MAX_NODES;
+    tsnx_ensure_parent_dirs(path);
     char tmp[512];
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
     FILE *f = fopen(tmp, "wb");

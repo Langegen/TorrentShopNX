@@ -17,6 +17,7 @@
 #include "listen.h"
 #include "upnp.h"
 #include "engine_log.h"
+#include "../utils/app_paths.h"
 
 #define MAX_TORRENTS 8
 
@@ -235,7 +236,7 @@ bool tsnx_engine_add_torrent_file(tsnx_engine *eng, const char *path,
     bin_to_hex(slot->meta.info_hash, slot->hash, 40);
     free(slot->source);
     slot->source = strdup(path);
-    slot->fs = torrentfs_open_file(path, "sdmc:/switch/TorrentShopNX/cache.bin",
+    slot->fs = torrentfs_open_file(path, TSNX_TORRENTFS_CACHE,
                                    -1, err, sizeof(err));
     if (!slot->fs) {
         torrent_unload(&slot->meta);
@@ -291,7 +292,7 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
     slot->file_index = file_index;
     if (!meta_only) {
         slot->fs = torrentfs_open_file_cancel(magnet_uri,
-                                              "sdmc:/switch/TorrentShopNX/cache.bin",
+                                              TSNX_TORRENTFS_CACHE,
                                               file_index, cancel, err, sizeof(err));
         if (!slot->fs) {
             torrent_unload(&slot->meta);
@@ -490,7 +491,7 @@ bool tsnx_engine_prepare_stream(tsnx_engine *eng, const char *hash,
     /* Close previous stream and reopen the requested file. */
     if (t->fs) torrentfs_close(t->fs);
     t->fs = torrentfs_open_file_cancel(t->source ? t->source : t->hash,
-                                       "sdmc:/switch/TorrentShopNX/cache.bin",
+                                       TSNX_TORRENTFS_CACHE,
                                        file_index, t->cancel, err, sizeof(err));
     if (!t->fs) return false;
     if (t->paused) torrentfs_pause(t->fs, 1);

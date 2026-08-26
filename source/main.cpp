@@ -239,6 +239,7 @@ int main(int argc, char** argv) {
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
                   " mem_size=" + std::to_string(g_socket_mem_size_used) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
+    migrateStorageLayout();
     clearCaches();
 
     // Load configurations before UI init to set desired locale
@@ -280,7 +281,7 @@ int main(int argc, char** argv) {
         brls::Application::pushActivity(new ui::AppletWarningView());
     } else {
         // Initialize managers for Title Mode
-        catalog::FavoritesManager::instance().init("sdmc:/switch/TorrentShopNX/favorites.json");
+        catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.

@@ -2,6 +2,7 @@
 #include "FileSelectView.hpp"
 #include "../GameData.hpp"
 #include "../utils/log.h"
+#include "../utils/app_paths.h"
 #include "../engine/torrent_meta.h"
 #include <switch.h>
 #include <arpa/inet.h>
@@ -100,7 +101,7 @@ void RemoteAddView::startServer() {
             const auto& file = req.form.get_file("file");
 
             // Save temporary torrent file
-            std::string tempPath = "sdmc:/switch/TorrentShopNX/temp_upload.torrent";
+            std::string tempPath = TSNX_TEMP_UPLOAD;
             FILE* f = fopen(tempPath.c_str(), "wb");
             if (f) {
                 fwrite(file.content.data(), 1, file.content.size(), f);

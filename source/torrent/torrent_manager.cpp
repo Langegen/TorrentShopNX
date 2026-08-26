@@ -11,6 +11,7 @@
 
 #include "../net/http_client.h"
 #include "../utils/log.h"
+#include "../utils/app_paths.h"
 
 namespace torrent {
 
@@ -121,8 +122,8 @@ static std::string extractBtihHash(const std::string& magnet) {
 }
 
 TorrentManager::TorrentManager() {
-    config_dir_ = "sdmc:/switch/TorrentShopNX";
-    download_dir_ = "sdmc:/switch/TorrentShopNX/downloads";
+    config_dir_ = TSNX_BASE_DIR;
+    download_dir_ = TSNX_DOWNLOADS_DIR;
     config_file_ = config_dir_ + "/torrserver.conf";
     torrserver_url_ = "http://127.0.0.1:8090";
 
