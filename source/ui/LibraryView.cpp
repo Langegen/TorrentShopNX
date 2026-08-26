@@ -18,30 +18,75 @@
 
 std::recursive_mutex g_switch_service_mutex;
 
-static uint32_t getInstalledUpdateVersion(uint64_t baseTitleId) {
-    if (baseTitleId == 0) return 0;
+// Returns the raw installed patch version (Nintendo units) for each base title
+// id, using a single ncm service session instead of one init/exit per game.
+static std::unordered_map<uint64_t, uint32_t> getInstalledPatchVersions(const std::vector<uint64_t>& baseTids) {
+    std::unordered_map<uint64_t, uint32_t> result;
+    if (baseTids.empty()) return result;
+
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
-    uint32_t version = 0;
-    NcmContentMetaDatabase db;
-    uint64_t patchTitleId = baseTitleId | 0x800ULL;
-    
     Result rc = ncmInitialize();
+    if (R_FAILED(rc)) return result;
+
+    NcmContentMetaDatabase db;
+    rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
+    if (R_FAILED(rc)) rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
     if (R_SUCCEEDED(rc)) {
-        rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
-        if (R_FAILED(rc)) {
-            rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
-        }
-        if (R_SUCCEEDED(rc)) {
+        for (uint64_t baseTid : baseTids) {
+            uint64_t patchTid = baseTid | 0x800ULL;
             NcmContentMetaKey key;
-            rc = ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, patchTitleId);
-            if (R_SUCCEEDED(rc)) {
-                version = key.version;
+            if (R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, patchTid))) {
+                result[baseTid] = key.version;
             }
-            ncmContentMetaDatabaseClose(&db);
         }
-        ncmExit();
+        ncmContentMetaDatabaseClose(&db);
     }
-    return version;
+    ncmExit();
+    return result;
+}
+
+static std::string iconCachePathFor(uint64_t tid) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+    return std::string("sdmc:/switch/TorrentShopNX/icons/") + buf + ".jpg";
+}
+
+// Extracts the system icon (JPEG embedded in the NACP control data, the same
+// icon the Switch home menu shows) and caches it to the SD card.
+static void saveInstalledIcon(uint64_t tid, const NsApplicationControlData& ctrl, size_t ctrlSize) {
+    std::string path = iconCachePathFor(tid);
+    struct stat st;
+    if (stat(path.c_str(), &st) == 0 && st.st_size > 0) return; // already cached
+
+    size_t nacpSize = sizeof(NacpStruct);
+    if (ctrlSize <= nacpSize + 4) return;
+
+    const u8* icon = ctrl.icon;
+    size_t iconAvail = sizeof(ctrl.icon);
+    if (iconAvail > ctrlSize - nacpSize) iconAvail = ctrlSize - nacpSize;
+
+    // Locate the JPEG SOI marker (FF D8)
+    size_t start = 0;
+    bool foundStart = false;
+    for (size_t i = 0; i + 1 < iconAvail; ++i) {
+        if (icon[i] == 0xFF && icon[i + 1] == 0xD8) { start = i; foundStart = true; break; }
+    }
+    if (!foundStart) return;
+
+    // Locate the JPEG EOI marker (FF D9)
+    size_t end = start;
+    for (size_t i = start; i + 1 < iconAvail; ++i) {
+        if (icon[i] == 0xFF && icon[i + 1] == 0xD9) { end = i + 2; }
+    }
+    if (end <= start + 4) return;
+
+    std::error_code ec;
+    std::filesystem::create_directories("sdmc:/switch/TorrentShopNX/icons", ec);
+    std::ofstream out(path, std::ios::binary);
+    if (out) {
+        out.write(reinterpret_cast<const char*>(&icon[start]), static_cast<std::streamsize>(end - start));
+        util::logLine("library: cached system icon for " + path);
+    }
 }
 #endif
 
@@ -172,68 +217,6 @@ static std::string getFirstTwoWords(const std::string& str) {
     return "";
 }
 
-static std::string formatNintendoVersion(uint32_t versionNum, const std::string& currentSemver) {
-    if (versionNum < 65536) {
-        return "1.0.0";
-    }
-    if (versionNum % 65536 != 0) {
-        return std::to_string(versionNum >> 16) + "." + 
-               std::to_string((versionNum >> 8) & 0xFF) + "." + 
-               std::to_string(versionNum & 0xFF);
-    }
-    
-    uint32_t idx = versionNum / 65536;
-    uint32_t major = 1;
-    
-    std::stringstream ss(currentSemver);
-    std::string part;
-    if (std::getline(ss, part, '.')) {
-        try { major = std::stoul(part); } catch (...) {}
-    }
-    
-    uint32_t minor = 0;
-    uint32_t patch = 0;
-    if (idx == 0) {
-        minor = 0; patch = 0;
-    } else if (idx == 1) {
-        minor = 1; patch = 0;
-    } else if (idx == 2) {
-        minor = 1; patch = 1;
-    } else if (idx == 3) {
-        minor = 1; patch = 2;
-    } else if (idx == 4) {
-        minor = 2; patch = 0;
-    } else if (idx == 5) {
-        minor = 2; patch = 1;
-    } else {
-        minor = idx / 2;
-        patch = idx % 2;
-    }
-    
-    return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
-}
-
-static bool isSemverNewer(const std::string& latest, const std::string& current) {
-    std::vector<int> lParts, cParts;
-    std::stringstream lss(latest), css(current);
-    std::string part;
-    while (std::getline(lss, part, '.')) {
-        try { lParts.push_back(std::stoi(part)); } catch (...) { lParts.push_back(0); }
-    }
-    while (std::getline(css, part, '.')) {
-        try { cParts.push_back(std::stoi(part)); } catch (...) { cParts.push_back(0); }
-    }
-    while (lParts.size() < 3) lParts.push_back(0);
-    while (cParts.size() < 3) cParts.push_back(0);
-    
-    for (size_t i = 0; i < 3; ++i) {
-        if (lParts[i] != cParts[i]) {
-            return lParts[i] > cParts[i];
-        }
-    }
-    return false;
-}
-
 static bool downloadVersionsDatabaseIfNeeded() {
 #ifndef __SWITCH__
     std::string path = "./versions.txt";
@@ -274,12 +257,26 @@ static bool downloadVersionsDatabaseIfNeeded() {
 }
 
 static std::unordered_map<uint64_t, uint32_t> parseVersionsDatabase() {
-    std::unordered_map<uint64_t, uint32_t> database;
 #ifndef __SWITCH__
     std::string path = "./versions.txt";
 #else
     std::string path = "sdmc:/switch/TorrentShopNX/versions.txt";
 #endif
+
+    // Reuse the parsed database in memory unless the file changed on disk
+    // (versions.txt updates at most daily; reparsing 3+ MB on every library
+    // open is wasted work).
+    static std::unordered_map<uint64_t, uint32_t> cached;
+    static time_t cachedMtime = 0;
+    struct stat st;
+    time_t mtime = 0;
+    if (stat(path.c_str(), &st) == 0) mtime = st.st_mtime;
+    if (!cached.empty() && mtime == cachedMtime) {
+        util::logLine("versions: using in-memory cache (" + std::to_string(cached.size()) + " entries)");
+        return cached;
+    }
+
+    std::unordered_map<uint64_t, uint32_t> database;
     std::ifstream in(path);
     if (!in) {
         util::logLine("versions: cannot open versions.txt");
@@ -310,6 +307,9 @@ static std::unordered_map<uint64_t, uint32_t> parseVersionsDatabase() {
         } catch (...) {}
     }
     util::logLine("versions: parsed " + std::to_string(database.size()) + " entries");
+
+    cached = database;
+    cachedMtime = mtime;
     return database;
 }
 
@@ -418,6 +418,7 @@ void LibraryView::scanForUpdates() {
             std::string currentVersionStr;
         };
         std::vector<InstalledItem> installedList;
+        std::vector<uint64_t> baseTids;
 
 #ifdef __SWITCH__
         std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
@@ -468,19 +469,64 @@ void LibraryView::scanForUpdates() {
                             name = lang->name;
                         }
                     }
+
+                    // Cache the system icon (the one the home menu shows)
+                    saveInstalledIcon(tid, *ctrl, ctrl_size);
                 }
                 installedList.push_back({tid, name, curVer});
+                baseTids.push_back(tid);
             }
             nsExit();
         }
+
+        // Query installed patch versions in one ncm session (instead of one
+        // init/exit per game — the old code was the main library slow-down).
+        std::unordered_map<uint64_t, uint32_t> installedPatchVersions = getInstalledPatchVersions(baseTids);
 #else
         // Mock data for PC testing
         installedList.push_back({0x0100000000010000ULL, "Super Mario Odyssey", "1.0.0"});
         installedList.push_back({0x01007ef00011e000ULL, "The Legend of Zelda: Breath of the Wild", "1.0.0"});
         installedList.push_back({0x0100000000020000ULL, "Unmatched Dummy Game", "1.1.0"});
+        std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
 #endif
 
         if (cancelToken && *cancelToken) return;
+
+        // Build a catalog index once per scan: exact title id lookup + a
+        // pre-normalized name list, so per-game matching is O(1) instead of
+        // re-running the expensive normalization for every catalog entry.
+        struct CatalogIndex {
+            std::unordered_map<uint64_t, const Game*> byTid;
+            std::vector<std::pair<std::string, const Game*>> byCleanName;
+        };
+        CatalogIndex catIndex;
+        catIndex.byTid.reserve(g_games.size());
+        catIndex.byCleanName.reserve(g_games.size());
+        for (const auto& g : g_games) {
+            uint64_t tid = parseTitleIdFromGame(g);
+            if (tid != 0) {
+                if (catIndex.byTid.find(tid) == catIndex.byTid.end()) catIndex.byTid.emplace(tid, &g);
+                uint64_t patchTid = tid | 0x800ULL;
+                if (patchTid != tid && catIndex.byTid.find(patchTid) == catIndex.byTid.end()) {
+                    catIndex.byTid.emplace(patchTid, &g);
+                }
+            }
+            std::string cn = cleanNameForMatching(g.title);
+            if (!cn.empty()) catIndex.byCleanName.emplace_back(std::move(cn), &g);
+        }
+
+        auto makeItem = [](const Game& g, const std::string& currentVer,
+                           const std::string& latestVer, GameUpdateStatus status,
+                           uint64_t baseTid, const std::string& rawName) {
+            LibraryItem item;
+            item.game = g;
+            item.currentVersion = currentVer;
+            item.latestVersion = latestVer;
+            item.status = status;
+            item.titleId = baseTid;
+            item.rawName = rawName;
+            return item;
+        };
 
         std::vector<LibraryItem> displayItems;
 
@@ -498,78 +544,67 @@ void LibraryView::scanForUpdates() {
             }
             
             uint32_t currentVer = 0;
-#ifdef __SWITCH__
-            currentVer = getInstalledUpdateVersion(baseTid);
-#endif
+            auto iv = installedPatchVersions.find(baseTid);
+            if (iv != installedPatchVersions.end()) {
+                currentVer = iv->second;
+            }
             
+            // The raw titledb value (e.g. 196608) is a Nintendo "update number"
+            // that cannot be reliably converted to real semver (1.2.0 style),
+            // so display it honestly as v<number> — same convention tinfoil uses.
             bool hasVersionInfo = (latestVer > 0);
             GameUpdateStatus status = GameUpdateStatus::Unknown;
             std::string latestVerStr = "—";
+            std::string currentVerStr = inst.currentVersionStr;
+            if (currentVer > 0) {
+                currentVerStr = "v" + std::to_string(currentVer);
+            }
             
             if (hasVersionInfo) {
-                std::string estLatestVerStr = formatNintendoVersion(latestVer, inst.currentVersionStr);
+                latestVerStr = "v" + std::to_string(latestVer);
                 bool needsUpdate = false;
                 if (currentVer > 0) {
                     needsUpdate = (latestVer > currentVer);
                 } else {
-                    needsUpdate = isSemverNewer(estLatestVerStr, inst.currentVersionStr);
+                    needsUpdate = true; // an update exists and none is installed
                 }
                 status = needsUpdate ? GameUpdateStatus::UpdateAvailable : GameUpdateStatus::UpToDate;
-                latestVerStr = estLatestVerStr;
             }
             
-            // Match by Title ID: prefer the explicit title_id field from the
-            // catalog JSON, fall back to the [0100...] bracket in the title.
+            // Match by Title ID (indexed): the explicit title_id field from the
+            // catalog JSON, or the [0100...] bracket in the title.
             bool foundInCatalog = false;
-            for (const auto& g : g_games) {
-                uint64_t catalogTid = parseTitleIdFromGame(g);
-                if (catalogTid != 0 && (catalogTid == baseTid || catalogTid == patchTid)) {
-                    LibraryItem item;
-                    item.game = g;
-                    item.currentVersion = inst.currentVersionStr;
-                    item.latestVersion = latestVerStr;
-                    item.status = status;
-                    item.titleId = baseTid;
-                    item.rawName = inst.name;
-                    displayItems.push_back(item);
+            {
+                auto mit = catIndex.byTid.find(baseTid);
+                if (mit == catIndex.byTid.end()) mit = catIndex.byTid.find(patchTid);
+                if (mit != catIndex.byTid.end()) {
+                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name));
                     foundInCatalog = true;
-                    break;
                 }
             }
             
             // Fallback to name matching if Title ID match failed
             if (!foundInCatalog) {
                 std::string instClean = cleanNameForMatching(inst.name);
-                for (const auto& g : g_games) {
-                    std::string catClean = cleanNameForMatching(g.title);
-                    if (!instClean.empty() && !catClean.empty() && 
-                        (instClean == catClean || catClean.find(instClean) != std::string::npos || instClean.find(catClean) != std::string::npos)) {
-                        LibraryItem item;
-                        item.game = g;
-                        item.currentVersion = inst.currentVersionStr;
-                        item.latestVersion = latestVerStr;
-                        item.status = status;
-                        item.titleId = baseTid;
-                        item.rawName = inst.name;
-                        displayItems.push_back(item);
-                        foundInCatalog = true;
-                        break;
+                if (!instClean.empty()) {
+                    for (const auto& entry : catIndex.byCleanName) {
+                        const std::string& catClean = entry.first;
+                        if (catClean == instClean || catClean.find(instClean) != std::string::npos || instClean.find(catClean) != std::string::npos) {
+                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name));
+                            foundInCatalog = true;
+                            break;
+                        }
                     }
                 }
             }
             
             // If not found in catalog, create a dummy item
             if (!foundInCatalog) {
-                LibraryItem item;
-                item.game.title = inst.name.empty() ? ("Unknown Game") : inst.name;
-                item.game.cover = "";
-                item.game.size = "";
-                item.currentVersion = inst.currentVersionStr;
-                item.latestVersion = latestVerStr;
-                item.status = status;
-                item.titleId = baseTid;
-                item.rawName = inst.name;
-                displayItems.push_back(item);
+                Game dummy;
+                dummy.title = inst.name.empty() ? ("Unknown Game") : inst.name;
+                dummy.cover = "";
+                dummy.size = "";
+                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name));
             }
         }
         
@@ -638,16 +673,28 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
                     if (cancelToken && *cancelToken) return;
 
                     if (ok) {
-                        for (auto it = displayItems_.begin(); it != displayItems_.end(); ++it) {
-                            if (it->titleId == titleId) {
-                                displayItems_.erase(it);
-                                break;
+                        // The whole UI update is guarded: an exception here
+                        // would otherwise escape to the main loop handler,
+                        // which exits the app back to the homebrew menu.
+                        try {
+                            for (auto it = displayItems_.begin(); it != displayItems_.end(); ++it) {
+                                if (it->titleId == titleId) {
+                                    displayItems_.erase(it);
+                                    break;
+                                }
                             }
+                            if (recycler) {
+                                recycler->reloadData();
+                                // The deleted row was focused; re-establish a
+                                // valid focus so the next input can't crash.
+                                if (!displayItems_.empty()) {
+                                    brls::Application::giveFocus(recycler);
+                                }
+                            }
+                            updateStatsAndSpace();
+                        } catch (const std::exception& e) {
+                            util::logLine(std::string("library: uninstall UI update exception: ") + e.what());
                         }
-                        if (recycler) {
-                            recycler->reloadData();
-                        }
-                        updateStatsAndSpace();
                         brls::Application::notify(brls::getStr("app/library/uninstall_success", displayName));
                     } else {
                         brls::Dialog* errDialog = new brls::Dialog("app/library/uninstall_failed"_i18n);
@@ -713,16 +760,31 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
             cell->statusBox->setBackgroundColor(nvgRGB(120, 120, 120)); // Gray: no version data
         }
 
-        // Fetch cover: use catalog cover URL if available, otherwise fallback to tinfoil.io and tinfoil.media CDN by Title ID
-        std::string coverUrl = item.game.cover;
-        std::string fallbackUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
-        
-        if (coverUrl.empty()) {
-            coverUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
-            fallbackUrl = "https://tinfoil.media/resources/images/icon/" + tidStrLower + ".png";
+        // Prefer the system icon cached from the installed game's NACP (the one
+        // the Switch home menu shows); fall back to the catalog cover, then to
+        // the tinfoil CDN by Title ID.
+        std::string localIconPath;
+#ifdef __SWITCH__
+        {
+            char iconPath[96];
+            std::snprintf(iconPath, sizeof(iconPath), "sdmc:/switch/TorrentShopNX/icons/%016llX.jpg", (unsigned long long)item.titleId);
+            struct stat st;
+            if (stat(iconPath, &st) == 0 && st.st_size > 0) localIconPath = iconPath;
         }
-        
-        setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken, "romfs:/img/demo_icon.jpg", false, fallbackUrl);
+#endif
+        if (!localIconPath.empty()) {
+            cell->cover->setImageFromFile(localIconPath);
+        } else {
+            std::string coverUrl = item.game.cover;
+            std::string fallbackUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
+            
+            if (coverUrl.empty()) {
+                coverUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
+                fallbackUrl = "https://tinfoil.media/resources/images/icon/" + tidStrLower + ".png";
+            }
+            
+            setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken, "romfs:/img/demo_icon.jpg", false, fallbackUrl);
+        }
 
         Game game = item.game;
         std::string rawName = item.rawName;
