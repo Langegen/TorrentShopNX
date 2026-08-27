@@ -75,10 +75,10 @@ StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
             for (uint64_t sz : lastSizes_) total += sz;
             brls::Dialog* dlg = new brls::Dialog(
                 brls::getStr("app/settings/storage_confirm_clear_all", formatBytes(total)));
-            dlg->addButton("app/common/yes"_i18n, [this, dlg]() {
-                dlg->close([this]() { runClearAll(); });
+            dlg->addButton("app/common/yes"_i18n, [this]() {
+                runClearAll();
             });
-            dlg->addButton("app/common/no"_i18n, [dlg]() { dlg->close(); });
+            dlg->addButton("app/common/no"_i18n, []() {});
             dlg->open();
             return true;
         });
@@ -189,10 +189,10 @@ void StorageTabView::addCacheCell(brls::Box* parent, size_t index) {
         uint64_t size = (index < lastSizes_.size()) ? lastSizes_[index] : 0;
         brls::Dialog* dlg = new brls::Dialog(
             brls::getStr("app/settings/storage_confirm_clear", rows_[index].title, formatBytes(size)));
-        dlg->addButton("app/common/yes"_i18n, [this, index, dlg]() {
-            dlg->close([this, index]() { runClear(index); });
+        dlg->addButton("app/common/yes"_i18n, [this, index]() {
+            runClear(index);
         });
-        dlg->addButton("app/common/no"_i18n, [dlg]() { dlg->close(); });
+        dlg->addButton("app/common/no"_i18n, []() {});
         dlg->open();
         return true;
     });
@@ -210,23 +210,23 @@ void StorageTabView::addPlaceholderCell(brls::Box* parent) {
         if (busy_) return true;
         if (ui::DownloadManager::instance().getImpl().hasActiveTransfers()) {
             brls::Dialog* dlg = new brls::Dialog("app/settings/storage_placeholder_busy"_i18n);
-            dlg->addButton("app/common/ok"_i18n, [dlg]() { dlg->close(); });
+            dlg->addButton("app/common/ok"_i18n, []() {});
             dlg->open();
             return true;
         }
         if (placeholderCount_ == 0) {
             brls::Dialog* dlg = new brls::Dialog("app/settings/storage_placeholder_none"_i18n);
-            dlg->addButton("app/common/ok"_i18n, [dlg]() { dlg->close(); });
+            dlg->addButton("app/common/ok"_i18n, []() {});
             dlg->open();
             return true;
         }
         brls::Dialog* dlg = new brls::Dialog(brls::getStr(
             "app/settings/storage_confirm_placeholders",
             std::to_string(placeholderCount_), formatBytes(placeholderSize_)));
-        dlg->addButton("app/common/yes"_i18n, [this, dlg]() {
-            dlg->close([this]() { runCleanupPlaceholders(); });
+        dlg->addButton("app/common/yes"_i18n, [this]() {
+            runCleanupPlaceholders();
         });
-        dlg->addButton("app/common/no"_i18n, [dlg]() { dlg->close(); });
+        dlg->addButton("app/common/no"_i18n, []() {});
         dlg->open();
         return true;
     });

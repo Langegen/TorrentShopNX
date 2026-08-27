@@ -1,6 +1,6 @@
 <brls:Box
     width="auto"
-    height="90px"
+    height="76px"
     focusable="true"
     paddingTop="10"
     paddingBottom="10"
@@ -9,12 +9,13 @@
     axis="row"
     alignItems="center">
 
-    <!-- Cover -->
+    <!-- Cover (square — system icons are 256x256, stretched by the old 45x70 slot) -->
     <brls:Image
         id="cover"
-        width="45px"
-        height="70px"
-        marginRight="20" />
+        width="56px"
+        height="56px"
+        cornerRadius="8"
+        marginRight="16" />
 
     <!-- Details Column (Title & TitleID) -->
     <brls:Box
@@ -35,68 +36,46 @@
             id="titleId"
             fontSize="13"
             textColor="#888888"
-            marginTop="4"
+            marginTop="3"
             singleLine="true" />
 
     </brls:Box>
 
     <!-- Current Version -->
-    <brls:Box
+    <brls:Label
+        id="currentVersion"
         width="150px"
         height="auto"
-        axis="column"
-        alignItems="center"
-        marginRight="15">
-        
-        <brls:Label
-            text="@i18n/app/library/installed"
-            fontSize="11"
-            textColor="#888888"
-            marginBottom="4" />
-            
-        <brls:Label
-            id="currentVersion"
-            fontSize="15"
-            textColor="#FFFFFF" />
-            
-    </brls:Box>
+        fontSize="16"
+        textColor="#FFFFFF"
+        horizontalAlign="center"
+        marginRight="15" />
 
     <!-- Latest Version -->
-    <brls:Box
+    <brls:Label
+        id="latestVersion"
         width="150px"
         height="auto"
-        axis="column"
-        alignItems="center"
-        marginRight="15">
-        
-        <brls:Label
-            text="@i18n/app/library/available"
-            fontSize="11"
-            textColor="#888888"
-            marginBottom="4" />
-            
-        <brls:Label
-            id="latestVersion"
-            fontSize="15"
-            textColor="#FFFFFF" />
-            
-    </brls:Box>
+        fontSize="16"
+        textColor="#FFFFFF"
+        horizontalAlign="center"
+        marginRight="15" />
 
     <!-- Status / Action -->
     <brls:Box
         id="statusBox"
-        width="160px"
-        height="32px"
+        width="150px"
+        height="30px"
         justifyContent="center"
         alignItems="center"
-        cornerRadius="4">
-        
+        cornerRadius="8">
+
         <brls:Label
             id="statusBadge"
             fontSize="13"
             textColor="#FFFFFF"
             horizontalAlign="center" />
-            
+
     </brls:Box>
 
 </brls:Box>

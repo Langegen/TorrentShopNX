@@ -214,12 +214,12 @@ void MainMenu::onContentAvailable() {
                         brls::sync([url, version]() {
                             std::string msg = brls::getStr("app/settings/app_update_prompt", version);
                             brls::Dialog* dialog = new brls::Dialog(msg);
-                            dialog->addButton("app/common/yes"_i18n, [url, version, dialog]() {
-                                dialog->close([url, version]() {
-                                    ui::downloadAndInstallAppUpdate(url, version);
-                                });
+                            // The dialog closes itself via Dialog::buttonClick;
+                            // calling dialog->close() here would pop the activity below.
+                            dialog->addButton("app/common/yes"_i18n, [url, version]() {
+                                ui::downloadAndInstallAppUpdate(url, version);
                             });
-                            dialog->addButton("app/common/no"_i18n, [dialog]() { dialog->close(); });
+                            dialog->addButton("app/common/no"_i18n, []() {});
                             dialog->open();
                         });
                     }

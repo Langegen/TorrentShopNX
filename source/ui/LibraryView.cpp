@@ -639,10 +639,14 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
     std::string msg = brls::getStr("app/library/uninstall_confirm", displayName.empty() ? "?" : displayName);
     
     brls::Dialog* dialog = new brls::Dialog(msg);
-    dialog->addButton("app/common/yes"_i18n, [this, titleId, displayName, dialog]() {
-        dialog->close([this, titleId, displayName]() {
-            auto cancelToken = cancelToken_;
-            brls::async([this, titleId, displayName, cancelToken]() {
+    // NOTE: dialog buttons must NOT call dialog->close() themselves.
+    // Dialog::buttonClick already dismisses the dialog (pops its activity);
+    // closing it again would pop ANOTHER activity (this LibraryView) and
+    // silently kick the user back to the main menu.
+    dialog->addButton("app/common/yes"_i18n, [this, titleId, displayName]() {
+        auto cancelToken = cancelToken_;
+        brls::async([this, titleId, displayName, cancelToken]() {
+            try {
                 if (cancelToken && *cancelToken) return;
 
                 bool ok = false;
@@ -691,14 +695,18 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
                         brls::Application::notify(brls::getStr("app/library/uninstall_success", displayName));
                     } else {
                         brls::Dialog* errDialog = new brls::Dialog("app/library/uninstall_failed"_i18n);
-                        errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
+                        errDialog->addButton("app/common/ok"_i18n, []() {});
                         errDialog->open();
                     }
                 });
-            });
+            } catch (const std::exception& e) {
+                util::logLine(std::string("library: uninstall async exception: ") + e.what());
+            } catch (...) {
+                util::logLine("library: uninstall async unknown exception");
+            }
         });
     });
-    dialog->addButton("app/common/no"_i18n, [dialog]() { dialog->close(); });
+    dialog->addButton("app/common/no"_i18n, []() {});
     dialog->open();
 }
 

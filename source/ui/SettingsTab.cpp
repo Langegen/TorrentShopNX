@@ -241,16 +241,16 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
 #endif
                                 brls::Application::quit();
                             });
-                            pendingDialog->addButton("app/settings/later_btn"_i18n, [pendingDialog]() { pendingDialog->close(); });
+                            pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
                             pendingDialog->open();
                         } else {
                             brls::Dialog* errDialog = new brls::Dialog("app/settings/update_save_error"_i18n);
-                            errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
+                            errDialog->addButton("app/common/ok"_i18n, []() {});
                             errDialog->open();
                         }
                     } catch (const std::exception& e) {
                         brls::Dialog* errDialog = new brls::Dialog(brls::getStr("app/settings/update_replace_exception", std::string(e.what())));
-                        errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
+                        errDialog->addButton("app/common/ok"_i18n, []() {});
                         errDialog->open();
                     }
                 } else {
@@ -266,7 +266,7 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                         errMsg += brls::getStr("app/settings/update_file_corrupted", (stat(tmpPath.c_str(), &st) == 0 ? std::to_string(st.st_size) : "0"));
                     }
                     brls::Dialog* errDialog = new brls::Dialog(errMsg);
-                    errDialog->addButton("app/common/ok"_i18n, [errDialog]() { errDialog->close(); });
+                    errDialog->addButton("app/common/ok"_i18n, []() {});
                     errDialog->open();
                 }
             });
@@ -343,9 +343,7 @@ brls::View* SettingsTab::buildGeneralTab() {
 #endif
                 brls::Application::quit();
             });
-            restartDialog->addButton("app/settings/later_btn"_i18n, [restartDialog]() {
-                restartDialog->close();
-            });
+            restartDialog->addButton("app/settings/later_btn"_i18n, []() {});
             restartDialog->open();
         }
     });

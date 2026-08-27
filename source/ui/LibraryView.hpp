@@ -70,7 +70,7 @@ private:
         int numberOfSections(brls::RecyclerFrame* recycler) override { return 1; }
         int numberOfRows(brls::RecyclerFrame* recycler, int section) override;
         brls::RecyclerCell* cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
-        float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override { return 90; }
+        float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override { return 76; }
 
     private:
         LibraryView* parent_;

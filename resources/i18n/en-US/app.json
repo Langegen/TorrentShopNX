@@ -190,6 +190,8 @@
     "stats": "Updates: {0} of {1}",
     "space": "SD card: {0} free • Internal storage: {1} free",
     "space_unknown": "Storage space unknown",
+    "col_title": "Game",
+    "col_status": "Status",
     "badge_update": "UPDATE",
     "badge_uptodate": "UP TO DATE",
     "badge_unknown": "NO DATA",

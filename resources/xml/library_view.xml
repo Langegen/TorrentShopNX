@@ -9,7 +9,7 @@
     paddingLeft="20">
 
     <!-- Topbar -->
-    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="6">
+    <brls:Box width="auto" height="54px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="6">
         <brls:Label text="@i18n/app/library/title" fontSize="28" />
         
         <brls:Box width="auto" height="auto" axis="row" alignItems="center">
@@ -18,8 +18,53 @@
     </brls:Box>
 
     <!-- Free space bar -->
-    <brls:Box width="auto" height="26px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="6">
+    <brls:Box width="auto" height="24px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="8">
         <brls:Label id="spaceHint" text="@i18n/app/library/space_unknown" fontSize="14" textColor="#88CC88" />
+    </brls:Box>
+
+    <!-- Table header (aligned with the row columns) -->
+    <brls:Box
+        width="auto"
+        height="26px"
+        axis="row"
+        alignItems="center"
+        marginBottom="4"
+        paddingLeft="92"
+        paddingRight="20"
+        lineBottom="1px"
+        lineColor="#444444">
+
+        <brls:Label
+            text="@i18n/app/library/col_title"
+            fontSize="12"
+            textColor="#777777"
+            grow="1.0"
+            marginRight="20"
+            singleLine="true" />
+
+        <brls:Label
+            text="@i18n/app/library/installed"
+            width="150px"
+            fontSize="12"
+            textColor="#777777"
+            horizontalAlign="center"
+            marginRight="15" />
+
+        <brls:Label
+            text="@i18n/app/library/available"
+            width="150px"
+            fontSize="12"
+            textColor="#777777"
+            horizontalAlign="center"
+            marginRight="15" />
+
+        <brls:Label
+            text="@i18n/app/library/col_status"
+            width="150px"
+            fontSize="12"
+            textColor="#777777"
+            horizontalAlign="center" />
+
     </brls:Box>
 
     <!-- Recycler Grid -->
@@ -27,7 +72,7 @@
         id="recycler"
         width="auto"
         height="auto"
-        paddingTop="10"
+        paddingTop="6"
         paddingBottom="10"
         paddingRight="30"
         grow="1.0" />

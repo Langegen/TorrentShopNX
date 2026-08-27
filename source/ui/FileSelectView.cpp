@@ -598,14 +598,12 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         std::string msg = brls::getStr("app/fileselect/low_space_prompt", targetStorageName, formatBytes(totalNeededSize), formatBytes(freeSpace));
         
         brls::Dialog* dialog = new brls::Dialog(msg);
-        dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName, dialog]() {
-            dialog->close([this, selectedIndices, forcedIndex, forcedName]() {
-                this->executeDownloads(selectedIndices, forcedIndex, forcedName);
-            });
+        // Dialog closes itself via Dialog::buttonClick; do NOT call close() here
+        // (it would pop this FileSelectView too).
+        dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName]() {
+            this->executeDownloads(selectedIndices, forcedIndex, forcedName);
         });
-        dialog->addButton("app/common/cancel"_i18n, [dialog]() {
-            dialog->close();
-        });
+        dialog->addButton("app/common/cancel"_i18n, []() {});
         dialog->open();
         return;
     }
