@@ -2,6 +2,7 @@
 #include "FileSelectView.hpp"
 #include "FavoritesManager.hpp"
 #include "ScreenshotViewer.hpp"
+#include "QrCodeView.hpp"
 #include <sstream>
 
 namespace ui {
@@ -158,6 +159,49 @@ void GameDetailView::onContentAvailable() {
     btnFavorite->registerClickAction([this](brls::View* view) {
         catalog::FavoritesManager::instance().toggleFavorite(game_);
         updateFavoriteButton();
+        return true;
+    });
+    
+    btnQr->registerClickAction([this](brls::View* view) {
+        if (game_.url.empty()) {
+            brls::Application::notify("app/detail/qr_no_url"_i18n);
+            return true;
+        }
+
+        brls::Box* content = new brls::Box();
+        content->setAxis(brls::Axis::COLUMN);
+        content->setAlignItems(brls::AlignItems::CENTER);
+        content->setWidth(360);
+        content->setHeight(480);
+
+        QrCodeView* qrView = new QrCodeView();
+        qrView->setContent(game_.url);
+        content->addView(qrView);
+
+        brls::Label* hint = new brls::Label();
+        hint->setText("app/detail/qr_hint"_i18n);
+        hint->setFontSize(16);
+        hint->setTextColor(nvgRGB(170, 170, 170));
+        hint->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        hint->setWidth(340);
+        hint->setIsWrapping(true);
+        hint->setMarginTop(20);
+        content->addView(hint);
+
+        brls::Label* urlLabel = new brls::Label();
+        urlLabel->setText(game_.url);
+        urlLabel->setFontSize(14);
+        urlLabel->setTextColor(nvgRGB(140, 140, 140));
+        urlLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        urlLabel->setWidth(340);
+        urlLabel->setIsWrapping(true);
+        urlLabel->setMarginTop(10);
+        content->addView(urlLabel);
+
+        brls::Dialog* dialog = new brls::Dialog(content);
+        dialog->setCancelable(true);
+        dialog->addButton("app/common/ok"_i18n, []() {});
+        dialog->open();
         return true;
     });
     

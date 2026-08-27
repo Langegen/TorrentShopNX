@@ -39,6 +39,7 @@
                 <!-- Action Buttons -->
                 <brls:Box width="auto" height="auto" axis="row" justifyContent="flexStart" marginTop="10" marginBottom="40">
                     <brls:Button id="btnDownload" text="@i18n/app/detail/download_btn" width="220px" height="50px" marginRight="20" style="primary" />
+                    <brls:Button id="btnQr" text="@i18n/app/detail/torrent_link_btn" width="220px" height="50px" marginRight="20" />
                     <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="220px" height="50px" />
                 </brls:Box>
 

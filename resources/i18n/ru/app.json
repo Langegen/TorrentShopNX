@@ -136,7 +136,10 @@
     "screenshots_header": "Скриншоты",
     "download_btn": "Скачать",
     "add_favorite_btn": "В избранное",
-    "remove_favorite_btn": "Из избранного"
+    "remove_favorite_btn": "Из избранного",
+    "torrent_link_btn": "Ссылка на раздачу",
+    "qr_hint": "Отсканируйте QR-код телефоном, чтобы открыть страницу раздачи",
+    "qr_no_url": "Для этой игры нет ссылки на раздачу"
   },
   "fileselect": {
     "title": "Выбор файлов",
