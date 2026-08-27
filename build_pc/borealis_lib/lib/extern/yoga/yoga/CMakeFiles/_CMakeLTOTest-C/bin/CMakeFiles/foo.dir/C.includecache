@@ -1,0 +1,10 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/d/TorrentShopNX/build_pc/borealis_lib/lib/extern/yoga/yoga/CMakeFiles/_CMakeLTOTest-C/src/foo.c
+

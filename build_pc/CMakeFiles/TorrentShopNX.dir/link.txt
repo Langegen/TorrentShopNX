@@ -1,0 +1,3 @@
+/opt/devkitpro/msys2/usr/bin/cmake.exe -E rm -f CMakeFiles/TorrentShopNX.dir/objects.a
+/opt/devkitpro/msys2/usr/bin/ar.exe qc CMakeFiles/TorrentShopNX.dir/objects.a @CMakeFiles/TorrentShopNX.dir/objects1.rsp
+/opt/devkitpro/msys2/usr/bin/c++.exe  -O0 -g2 -ggdb -Wall -Wl,--whole-archive CMakeFiles/TorrentShopNX.dir/objects.a -Wl,--no-whole-archive -o TorrentShopNX.exe -Wl,--out-implib,libTorrentShopNX.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles/TorrentShopNX.dir/linkLibs.rsp

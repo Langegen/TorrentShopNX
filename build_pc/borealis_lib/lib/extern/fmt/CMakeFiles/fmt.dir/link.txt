@@ -1,0 +1,2 @@
+/opt/devkitpro/msys2/usr/bin/ar.exe qc libfmtd.a CMakeFiles/fmt.dir/src/format.cc.obj CMakeFiles/fmt.dir/src/os.cc.obj
+/opt/devkitpro/msys2/usr/bin/ranlib.exe libfmtd.a

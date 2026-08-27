@@ -1,0 +1,2 @@
+/opt/devkitpro/msys2/usr/bin/ar.exe qc libtweeny-dummy.a
+/opt/devkitpro/msys2/usr/bin/ranlib.exe libtweeny-dummy.a

@@ -1,0 +1,54 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+
+    <brls:Box
+        width="auto"
+        height="auto"
+        axis="column"
+        padding="40"
+        grow="1.0">
+
+        <!-- Header -->
+        <brls:Label id="title" text="@i18n/app/fileselect/title" fontSize="26" marginBottom="10" />
+        <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="#AAAAAA" marginBottom="20" />
+
+        <!-- Scrollable file list -->
+        <brls:ScrollingFrame
+            id="fileListScroll"
+            width="auto"
+            height="auto"
+            grow="1.0"
+            marginBottom="20">
+
+            <brls:Box
+                id="fileListBox"
+                width="auto"
+                height="auto"
+                axis="column"
+                paddingRight="30" />
+
+        </brls:ScrollingFrame>
+
+        <!-- Bottom Summary & Storage Selector -->
+        <brls:Box width="auto" axis="column" padding="15" backgroundColor="#2C2C2C" cornerRadius="5">
+            <!-- Row 1: Selected files size & Free space -->
+            <brls:Box width="auto" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+                <brls:Box axis="row" alignItems="center">
+                    <brls:Label text="@i18n/app/fileselect/total_selected" fontSize="16" />
+                    <brls:Label id="totalSizeText" text="0 MB" fontSize="16" textColor="#00FF00" />
+                </brls:Box>
+                <brls:Box axis="column" alignItems="flexEnd">
+                    <brls:Label id="freeSpaceSdText" text="---" fontSize="13" textColor="#AAAAAA" />
+                    <brls:Label id="freeSpaceNandText" text="---" fontSize="13" textColor="#AAAAAA" />
+                </brls:Box>
+            </brls:Box>
+            
+            <!-- Row 2: Install location selector (clickable & focusable) -->
+            <brls:Box id="installLocationBox" width="auto" height="50px" axis="row" alignItems="center" justifyContent="spaceBetween" paddingLeft="10" paddingRight="10" backgroundColor="#3C3C3C" cornerRadius="5" focusable="true">
+                <brls:Label text="@i18n/app/fileselect/install_location_lbl" fontSize="16" />
+                <brls:Label id="installLocationText" text="" fontSize="16" textColor="#3498db" />
+            </brls:Box>
+        </brls:Box>
+
+    </brls:Box>
+
+</brls:AppletFrame>

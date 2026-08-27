@@ -1,0 +1,13 @@
+{
+	"InstallScripts" : 
+	[
+		"/d/TorrentShopNX/build_pc/cmake_install.cmake",
+		"/d/TorrentShopNX/build_pc/borealis_lib/cmake_install.cmake",
+		"/d/TorrentShopNX/build_pc/borealis_lib/lib/extern/fmt/cmake_install.cmake",
+		"/d/TorrentShopNX/build_pc/borealis_lib/lib/extern/tweeny/cmake_install.cmake",
+		"/d/TorrentShopNX/build_pc/borealis_lib/lib/extern/yoga/yoga/cmake_install.cmake",
+		"/d/TorrentShopNX/build_pc/borealis_lib/lib/extern/glfw/cmake_install.cmake",
+		"/d/TorrentShopNX/build_pc/borealis_lib/lib/extern/glfw/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

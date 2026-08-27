@@ -1,0 +1,18 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="20"
+    paddingBottom="20"
+    paddingLeft="20">
+
+    <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="20">
+        <brls:Label text="@i18n/app/settings/title" fontSize="28" />
+    </brls:Box>
+
+    <brls:TabFrame id="tabFrame" width="auto" height="auto" grow="1.0" />
+
+</brls:Box>
+</brls:AppletFrame>

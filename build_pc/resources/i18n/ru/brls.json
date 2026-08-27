@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "ОК",
+        "back": "Назад",
+        "exit": "Выход",
+        "cancel": "Отмена",
+        "on": "Вкл.",
+        "off": "Выкл."
+    },
+    "crash_frame": {
+        "button": "ОК"
+    },
+    "thumbnail_sidebar": {
+        "save": "Сохранить"
+    }
+}

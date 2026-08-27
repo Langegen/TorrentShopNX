@@ -1,0 +1,81 @@
+<brls:Box
+    width="auto"
+    height="76px"
+    focusable="true"
+    paddingTop="10"
+    paddingBottom="10"
+    paddingLeft="20"
+    paddingRight="20"
+    axis="row"
+    alignItems="center">
+
+    <!-- Cover (square — system icons are 256x256, stretched by the old 45x70 slot) -->
+    <brls:Image
+        id="cover"
+        width="56px"
+        height="56px"
+        cornerRadius="8"
+        marginRight="16" />
+
+    <!-- Details Column (Title & TitleID) -->
+    <brls:Box
+        width="auto"
+        height="auto"
+        grow="1.0"
+        axis="column"
+        marginRight="20">
+
+        <!-- Title -->
+        <brls:Label
+            id="title"
+            fontSize="18"
+            singleLine="true" />
+
+        <!-- Title ID -->
+        <brls:Label
+            id="titleId"
+            fontSize="13"
+            textColor="#888888"
+            marginTop="3"
+            singleLine="true" />
+
+    </brls:Box>
+
+    <!-- Current Version -->
+    <brls:Label
+        id="currentVersion"
+        width="150px"
+        height="auto"
+        fontSize="16"
+        textColor="#FFFFFF"
+        horizontalAlign="center"
+        marginRight="15" />
+
+    <!-- Latest Version -->
+    <brls:Label
+        id="latestVersion"
+        width="150px"
+        height="auto"
+        fontSize="16"
+        textColor="#FFFFFF"
+        horizontalAlign="center"
+        marginRight="15" />
+
+    <!-- Status / Action -->
+    <brls:Box
+        id="statusBox"
+        width="150px"
+        height="30px"
+        justifyContent="center"
+        alignItems="center"
+        cornerRadius="8">
+
+        <brls:Label
+            id="statusBadge"
+            fontSize="13"
+            textColor="#FFFFFF"
+            horizontalAlign="center" />
+
+    </brls:Box>
+
+</brls:Box>

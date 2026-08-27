@@ -1,0 +1,72 @@
+<brls:Box
+    width="100%"
+    height="100%"
+    axis="column"
+    alignItems="center"
+    justifyContent="center"
+    paddingLeft="60px"
+    paddingRight="60px"
+    paddingTop="40px"
+    paddingBottom="40px">
+
+    <brls:Label
+        id="lblTitle"
+        text="@i18n/app/applet/title"
+        fontSize="28px"
+        textColor="#FF5722"
+        marginBottom="16px" />
+
+    <brls:Label
+        id="lblDesc"
+        text="@i18n/app/applet/desc"
+        fontSize="18px"
+        textColor="#DCDCDC"
+        marginBottom="24px" />
+
+    <brls:Box
+        width="800px"
+        axis="column"
+        backgroundColor="#2C2C2C"
+        cornerRadius="8px"
+        padding="20px"
+        marginBottom="28px">
+
+        <brls:Label
+            text="@i18n/app/applet/steps_header"
+            fontSize="18px"
+            textColor="#4CAF50"
+            marginBottom="12px" />
+
+        <brls:Label
+            text="@i18n/app/applet/step1"
+            fontSize="16px"
+            marginBottom="6px" />
+
+        <brls:Label
+            text="@i18n/app/applet/step2"
+            fontSize="16px"
+            marginBottom="6px" />
+
+        <brls:Label
+            text="@i18n/app/applet/step3"
+            fontSize="16px"
+            marginBottom="6px" />
+
+        <brls:Label
+            text="@i18n/app/applet/step4"
+            fontSize="16px"
+            marginBottom="6px" />
+
+        <brls:Label
+            text="@i18n/app/applet/step5"
+            fontSize="16px" />
+
+    </brls:Box>
+
+    <brls:Button
+        id="btnExit"
+        text="@i18n/app/applet/exit_btn"
+        width="260px"
+        height="48px" />
+
+</brls:Box>

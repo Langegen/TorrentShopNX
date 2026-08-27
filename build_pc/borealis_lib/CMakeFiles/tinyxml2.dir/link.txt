@@ -1,0 +1,2 @@
+/opt/devkitpro/msys2/usr/bin/ar.exe qc libtinyxml2.a CMakeFiles/tinyxml2.dir/lib/extern/tinyxml2/tinyxml2.cpp.obj
+/opt/devkitpro/msys2/usr/bin/ranlib.exe libtinyxml2.a
