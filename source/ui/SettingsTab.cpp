@@ -299,6 +299,13 @@ static brls::ScrollingFrame* makeTabBox(brls::Box** out_box) {
 } // namespace
 
 SettingsTab::SettingsTab() {
+    // Компактный сайдбар категорий: шире 410px по умолчанию выглядит громоздко.
+    // Метрики применяются до создания контента (TabFrame читает их при inflate).
+    brls::getStyle().addMetric("brls/tab_frame/sidebar_width", 270.0f);
+    brls::getStyle().addMetric("brls/sidebar/padding_left", 36.0f);
+    brls::getStyle().addMetric("brls/sidebar/padding_right", 24.0f);
+    brls::getStyle().addMetric("brls/sidebar/item_height", 58.0f);
+    brls::getStyle().addMetric("brls/sidebar/item_font_size", 20.0f);
 }
 
 void SettingsTab::onContentAvailable() {
@@ -504,7 +511,11 @@ brls::View* SettingsTab::buildDownloadsTab() {
 }
 
 brls::View* SettingsTab::buildStorageTab() {
-    return new StorageTabView();
+    auto* scroll = new brls::ScrollingFrame();
+    scroll->setWidth(brls::View::AUTO);
+    scroll->setHeight(brls::View::AUTO);
+    scroll->setContentView(new StorageTabView());
+    return scroll;
 }
 
 void SettingsTab::willAppear(bool resetState) {

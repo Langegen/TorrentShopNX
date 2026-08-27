@@ -26,7 +26,7 @@ constexpr float kBarHeight = 16.0f;
 } // namespace
 
 StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
-    this->setWidth(10000);
+    this->setWidth(brls::View::AUTO);
     this->setHeight(brls::View::AUTO);
     this->setPaddingTop(30);
     this->setPaddingRight(40);
@@ -116,14 +116,14 @@ void StorageTabView::addStorageRow(brls::Box* parent, const std::string& title,
                                    brls::Box** out_track, brls::Rectangle** out_fill,
                                    brls::Label** out_info) {
     auto* row = new brls::Box(brls::Axis::ROW);
-    row->setWidth(10000);
+    row->setWidth(brls::View::AUTO);
     row->setAlignItems(brls::AlignItems::CENTER);
     row->setMarginBottom(14);
 
     auto* titleLabel = new brls::Label();
     titleLabel->setFontSize(18);
     titleLabel->setText(title);
-    titleLabel->setWidth(190);
+    titleLabel->setWidth(180);
     row->addView(titleLabel);
 
     auto* track = new brls::Box(brls::Axis::ROW);
@@ -148,7 +148,7 @@ void StorageTabView::addStorageRow(brls::Box* parent, const std::string& title,
     auto* info = new brls::Label();
     info->setFontSize(15);
     info->setText("app/settings/storage_unknown"_i18n);
-    info->setWidth(240);
+    info->setWidth(250);
     info->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
     row->addView(info);
 

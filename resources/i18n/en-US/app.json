@@ -284,7 +284,7 @@
     "storage_unknown": "—",
     "storage_empty": "Empty",
     "storage_calculating": "Calculating...",
-    "cache_section": "Cache",
+    "cache_section": "Cache cleanup",
     "cache_clear_all": "Clear all cache",
     "cache_thumbnails": "Cover thumbnails",
     "cache_catalog": "Torrent catalog",
