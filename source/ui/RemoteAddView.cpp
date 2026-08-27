@@ -4,8 +4,18 @@
 #include "../utils/log.h"
 #include "../utils/app_paths.h"
 #include "../engine/torrent_meta.h"
+#ifdef __SWITCH__
 #include <switch.h>
 #include <arpa/inet.h>
+#include <unistd.h>
+#elif defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <netdb.h>
+#endif
 #include <cstdio>
 
 namespace ui {
@@ -42,12 +52,27 @@ void RemoteAddView::willDisappear(bool resetState) {
 }
 
 std::string RemoteAddView::getLocalIpAddress() {
+#ifdef __SWITCH__
     struct in_addr addr;
     addr.s_addr = gethostid();
     if (addr.s_addr == 0) {
         return "127.0.0.1"; // Fallback or not connected
     }
     return std::string(inet_ntoa(addr));
+#elif defined(_WIN32)
+    char hostname[256];
+    if (gethostname(hostname, sizeof(hostname)) == 0) {
+        struct hostent* host = gethostbyname(hostname);
+        if (host && host->h_addr_list && host->h_addr_list[0]) {
+            struct in_addr addr;
+            memcpy(&addr, host->h_addr_list[0], sizeof(struct in_addr));
+            return std::string(inet_ntoa(addr));
+        }
+    }
+    return "127.0.0.1";
+#else
+    return "127.0.0.1";
+#endif
 }
 
 void RemoteAddView::startServer() {

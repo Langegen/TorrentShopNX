@@ -11,6 +11,10 @@ enum {
     ENGINE_LOG_DEBUG = 3
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Open the diagnostic log.  path == NULL (or a path that cannot be opened)
 // falls back to stderr so PC tests still see output.
 void engine_log_init(const char *path);
@@ -28,5 +32,9 @@ void engine_log(int level, const char *fmt, ...);
 // Indices: 0=dht 1=discovery 2=listener 3=upnp 4=netloop 5=writer 6=reader 7=watchdog
 void tsnx_engine_wd_tick(int idx);
 uint64_t tsnx_engine_wd_last(int idx);   // last tick of thread idx (0 = never)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

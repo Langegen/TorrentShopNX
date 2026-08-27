@@ -1,4 +1,5 @@
 #include "switch_utils.h"
+#include "log.h"
 #include <string>
 #include <chrono>
 
@@ -6,7 +7,6 @@
 #include <switch.h>
 #include <atomic>
 #include <mutex>
-#include "../utils/log.h"
 extern std::recursive_mutex g_switch_service_mutex;
 #endif
 

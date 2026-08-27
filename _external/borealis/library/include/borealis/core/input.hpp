@@ -333,12 +333,12 @@ class InputManager
     /**
      * Calls to update gamepad's rumble state.
      */
-    virtual void sendRumble(unsigned short controller, unsigned short lowFreqMotor, unsigned short highFreqMotor) = 0;
+    virtual void sendRumble(unsigned short controller, unsigned short lowFreqMotor, unsigned short highFreqMotor) {}
 
     /**
      * Calls to update gamepad's rumble state.
      */
-    virtual void sendRumble(unsigned short controller, unsigned short lowFreqMotor, unsigned short highFreqMotor, unsigned short leftTriggerFreqMotor, unsigned short rightTriggerFreqMotor) = 0;
+    virtual void sendRumble(unsigned short controller, unsigned short lowFreqMotor, unsigned short highFreqMotor, unsigned short leftTriggerFreqMotor, unsigned short rightTriggerFreqMotor) {}
 
     /**
      * Called once every runloop cycle to perform some cleanup before new one.

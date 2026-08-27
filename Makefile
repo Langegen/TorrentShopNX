@@ -21,7 +21,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 TARGET      :=  TorrentShopNX
 APP_TITLE   :=  TorrentShopNX
 APP_AUTHOR  :=  Langegen
-APP_VERSION :=  2.3
+APP_VERSION :=  2.4
 BUILD       :=  build
 SOURCES     :=  source source/ui source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
 DATA        :=

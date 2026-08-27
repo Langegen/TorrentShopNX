@@ -1,5 +1,16 @@
+#ifdef __SWITCH__
 #include <switch.h>
 #include <unistd.h>  // for _exit()
+#elif defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <io.h>
+#define usleep(us) Sleep((us) / 1000)
+#else
+#include <unistd.h>
+#endif
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -42,8 +53,7 @@ static bool checkAppletMode() {
 #endif
 }
 
-
-
+#ifdef __SWITCH__
 extern "C" {
     u32 __nx_socket_mem_size = 0x02000000; // Default to 32MB for Title Mode
     size_t __nx_socket_tcp_tx_buf_size = 0x10000; // Default to 64KB TCP send buffer
@@ -132,6 +142,8 @@ extern "C" {
         socketExit();
     }
 }
+#endif
+
 
 std::string g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
 
@@ -223,6 +235,11 @@ static bool checkAndApplyPendingUpdate() {
 }
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
+
     if (argc > 0 && argv[0] && std::string(argv[0]).find(".nro") != std::string::npos) {
         g_nroPath = argv[0];
     }
@@ -230,15 +247,19 @@ int main(int argc, char** argv) {
     util::logInit();
     util::logLine("main: start g_nroPath=" + g_nroPath);
 
+#ifdef __SWITCH__
     if (checkAndApplyPendingUpdate()) {
         util::logLine("main: exiting for update relaunch");
         util::logClose();
         return 0;
     }
+#endif
 
+#ifdef __SWITCH__
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
                   " mem_size=" + std::to_string(g_socket_mem_size_used) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
+#endif
     migrateStorageLayout();
     clearCaches();
 
@@ -357,8 +378,16 @@ int main(int argc, char** argv) {
     //
     // svcExitProcess() was killing the ENTIRE HBMenu process because NROs share
     // HBMenu's address space. _exit() is the correct way to return to HBMenu.
+#ifdef __SWITCH__
     util::logLine("main: closing log and returning 0 to HBMenu. Goodbye!");
     util::logClose();  // close log file before __appExit calls fsExit
-
     return 0;
+#else
+    util::logLine("main: closing log and exiting. Goodbye!");
+    util::logClose();
+#if defined(_WIN32)
+    WSACleanup();
+#endif
+    return 0;
+#endif
 }

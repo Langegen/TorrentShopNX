@@ -159,8 +159,13 @@ ConfigManager& ConfigManager::instance() {
 }
 
 ConfigManager::ConfigManager() {
+#ifdef __SWITCH__
     config_path_ = "sdmc:/switch/TorrentShopNX/config.ini";
     legacy_config_path_ = "sdmc:/switch/TorrentShopNX/config.txt";
+#else
+    config_path_ = "config.ini";
+    legacy_config_path_ = "config.txt";
+#endif
     // PC tests override the path with an env var (the sdmc: path is unusable
     // outside the console).
     if (const char* p = std::getenv("TSNX_CONFIG_PATH")) {

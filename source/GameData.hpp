@@ -498,9 +498,10 @@ inline void clearCaches() {
         }
     }
 
-    // Move duplicate TorrentShopNX folder cleanup to queue as well
+#ifdef __SWITCH__
+    // Move duplicate TorrentShopNX folder cleanup to queue as well (Switch SD card unzipping fix)
     std::filesystem::path duplicateFolder = std::string(TSNX_BASE_DIR) + "/TorrentShopNX";
-    if (std::filesystem::exists(duplicateFolder, ec)) {
+    if (std::filesystem::is_directory(duplicateFolder, ec)) {
         std::filesystem::path tempDuplicateDelete = std::string(TSNX_BASE_DIR) + "/TorrentShopNX_old";
         int suffix = 0;
         std::filesystem::path targetDelete = tempDuplicateDelete;
@@ -515,6 +516,7 @@ inline void clearCaches() {
             util::logLine("GameData: removed duplicated TorrentShopNX folder synchronously (rename failed)");
         }
     }
+#endif
 }
 
 // Creates every cache/ and data/ subfolder the app uses. Idempotent.

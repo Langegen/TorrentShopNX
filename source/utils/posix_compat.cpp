@@ -1,3 +1,5 @@
+#ifdef __SWITCH__
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
@@ -217,3 +219,6 @@ extern "C" int pthread_sigmask(int how, const sigset_t* set, sigset_t* oldset) {
     (void)oldset;
     return 0;
 }
+
+#endif // __SWITCH__
+

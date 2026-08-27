@@ -480,4 +480,12 @@ size_t NczDecompressor::read(void* buffer, size_t size) {
 }
 
 } // namespace installer
+#else
+namespace installer {
+NczDecompressor::NczDecompressor(FetchCallback fetch_cb) {}
+NczDecompressor::~NczDecompressor() {}
+bool NczDecompressor::init() { return true; }
+size_t NczDecompressor::read(void* buffer, size_t size) { return 0; }
+} // namespace installer
 #endif
+
