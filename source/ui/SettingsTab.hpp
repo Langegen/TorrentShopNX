@@ -16,16 +16,11 @@ public:
     void willDisappear(bool resetState = false) override;
 
 private:
-    BRLS_BIND(brls::SelectorCell, languageCell, "languageCell");
-    BRLS_BIND(brls::DetailCell, updatesCell, "updatesCell");
-    BRLS_BIND(brls::DetailCell, appUpdateCell, "appUpdateCell");
-    BRLS_BIND(brls::BooleanCell, autoAppUpdateCell, "autoAppUpdateCell");
-    BRLS_BIND(brls::BooleanCell, cacheThumbnailsCell, "cacheThumbnailsCell");
-    BRLS_BIND(brls::BooleanCell, keepAwakeCell, "keepAwakeCell");
-    BRLS_BIND(brls::SelectorCell, backlightTimeoutCell, "backlightTimeoutCell");
-    BRLS_BIND(brls::SelectorCell, modeCell, "modeCell");
-    BRLS_BIND(brls::DetailCell, remoteUrlCell, "remoteUrlCell");
-    BRLS_BIND(brls::DetailCell, catalogUrlCell, "catalogUrlCell");
+    BRLS_BIND(brls::TabFrame, tabFrame, "tabFrame");
+
+    brls::View* buildGeneralTab();
+    brls::View* buildDownloadsTab();
+    brls::View* buildStorageTab();
 };
 
 } // namespace ui

@@ -36,6 +36,7 @@ private:
     BRLS_BIND(brls::Box, screenshotsBox, "screenshotsBox");
     BRLS_BIND(brls::HScrollingFrame, screenshotsScroll, "screenshotsScroll");
     BRLS_BIND(brls::Button, btnDownload, "btnDownload");
+    BRLS_BIND(brls::Button, btnQr, "btnQr");
     BRLS_BIND(brls::Button, btnFavorite, "btnFavorite");
 };
 

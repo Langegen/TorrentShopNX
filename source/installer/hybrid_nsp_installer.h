@@ -208,7 +208,7 @@ private:
     
     // Speed calculation
     uint64_t last_bytes_ = 0;
-    u64      last_time_  = 0;
+    uint64_t last_time_  = 0;
     double   current_speed_kbps_ = 0;
 
     // Данные CNMT (парсятся из CNMT NCA)

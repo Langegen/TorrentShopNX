@@ -12,6 +12,7 @@
 #include "../net/http_client.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/app_paths.h"
 
 #include <engine/engine.h>
 
@@ -90,11 +91,174 @@ void customEngineGetTorrentList(std::vector<torrent::TorrentInfo>& out) {
 
 namespace download {
 
+static std::string normalizeTorrentLink(std::string link);
+static std::string extractBtihHash(std::string magnet);
+
 static bool isTransferActive(download::DownloadState state) {
     return state == download::DownloadState::Downloading ||
            state == download::DownloadState::StreamPreparing ||
            state == download::DownloadState::StreamInstalling ||
            state == download::DownloadState::Installing;
+}
+
+// Корневая папка downloads/ (куда сохраняются не-игровые файлы).
+static std::filesystem::path downloadsBaseDir() {
+    return std::filesystem::path(TSNX_DOWNLOADS_DIR);
+}
+
+// Относительный путь файла из торрента -> безопасный относительный путь:
+// сохраняем иерархию раздачи, но выкидываем "..", пустые сегменты, абсолютные
+// сегменты (диски) и управляющие символы, чтобы не уйти за пределы downloads/.
+static std::filesystem::path sanitizeTorrentPath(const std::string& raw) {
+    std::string path = raw;
+    for (char& c : path) {
+        if (c == '\\') c = '/';
+    }
+    std::vector<std::string> segs;
+    size_t pos = 0;
+    while (pos < path.size()) {
+        size_t next = path.find('/', pos);
+        std::string seg = (next == std::string::npos) ? path.substr(pos) : path.substr(pos, next - pos);
+        pos = (next == std::string::npos) ? path.size() : next + 1;
+        if (seg.empty() || seg == "." || seg == "..") continue;
+        bool bad = false;
+        for (unsigned char u : seg) {
+            if (u < 0x20 || u == ':') { bad = true; break; }
+        }
+        if (bad) continue;
+        segs.push_back(std::move(seg));
+    }
+    std::filesystem::path out;
+    for (const auto& s : segs) out /= s;
+    return out;
+}
+
+// Гарантирует, что торрент зарегистрирован в движке (при необходимости добавляет
+// его meta-only из magnet'а) и возвращает путь/размер файла. Безопасно вызывать
+// из фонового воркера: регистрация без meta_only не запускает потоки загрузки.
+static bool resolveEngineFile(const std::string& hash, const std::string& magnet,
+                              int file_index, std::string& out_path,
+                              uint64_t& out_size,
+                              const std::shared_ptr<std::atomic<bool>>& cancel) {
+    tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
+    if (!eng || hash.empty() || file_index < 0) return false;
+    if (!tsnx_engine_has_torrent(eng, hash.c_str())) {
+        char out_hash[TSNX_MAX_HASH_LEN + 1] = {0};
+        if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
+                                       reinterpret_cast<const volatile bool*>(cancel.get()),
+                                       out_hash, sizeof(out_hash))) {
+            return false;
+        }
+    }
+    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
+    int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), TSNX_MAX_FILES);
+    if (file_index >= n) return false;
+    out_path = files[file_index].path;
+    out_size = (uint64_t)files[file_index].size;
+    return true;
+}
+
+// Фоновое копирование не-игрового файла: открывает стрим через источник данных,
+// последовательно читает и пишет в downloads/ с сохранением иерархии раздачи.
+static void fileCopyWorker(datasource::IDataSource* source,
+                           const std::string& hash,
+                           const std::string& magnet,
+                           int file_index,
+                           const std::shared_ptr<std::atomic<bool>>& cancel,
+                           const std::shared_ptr<FileDownloadState>& st) {
+    if (!source || hash.empty() || file_index < 0) {
+        st->failed = true;
+        st->error = "invalid file download request";
+        return;
+    }
+
+    source->setCancelFlag(cancel.get());
+    if (cancel->load() || !source->open(hash, file_index)) {
+        st->failed = true;
+        st->error = "failed to open stream";
+        return;
+    }
+
+    std::string rel_path;
+    uint64_t file_size = 0;
+    if (!resolveEngineFile(hash, magnet, file_index, rel_path, file_size, cancel) ||
+        file_size == 0) {
+        st->failed = true;
+        st->error = "cannot resolve file info";
+        source->notifyStreamingComplete(false);
+        return;
+    }
+
+    st->dest = (downloadsBaseDir() / sanitizeTorrentPath(rel_path)).string();
+    st->size = file_size;
+    st->total.store(file_size);
+
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(st->dest).parent_path(), ec);
+    FILE* f = std::fopen(st->dest.c_str(), "wb");
+    if (!f) {
+        st->failed = true;
+        st->error = "cannot create destination file";
+        source->notifyStreamingComplete(false);
+        return;
+    }
+
+    static constexpr size_t kChunk = 1024 * 1024;
+    std::vector<unsigned char> buf(kChunk);
+    uint64_t offset = 0;
+    bool ok = true;
+    while (offset < file_size && !cancel->load()) {
+        size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
+        size_t got = source->read(offset, buf.data(), want);
+        if (got == 0) {
+            // Данные ещё не прибыли (или источник закрыт при отмене) — ждём.
+            if (cancel->load()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            continue;
+        }
+        if (std::fwrite(buf.data(), 1, got, f) != got) {
+            ok = false;
+            st->error = "disk write failed";
+            break;
+        }
+        offset += got;
+        st->written.store(offset);
+    }
+    std::fclose(f);
+
+    if (ok && offset >= file_size) {
+        st->done = true;
+        st->written.store(file_size);
+        source->notifyStreamingComplete(true);
+    } else {
+        st->failed = true;
+        if (st->error.empty()) st->error = "download cancelled";
+        std::error_code e2;
+        std::filesystem::remove(st->dest, e2);
+        source->notifyStreamingComplete(false);
+    }
+}
+
+// Нужен ли ещё этот торрент другим элементам очереди (чтобы не чистить кеш).
+static bool torrentStillNeeded(const std::vector<download::DownloadItem>& queue,
+                               size_t self_index, const std::string& hash) {
+    if (hash.empty()) return false;
+    for (size_t j = 0; j < queue.size(); ++j) {
+        if (j == self_index) continue;
+        const auto& other = queue[j];
+        std::string other_hash = other.torrent_hash;
+        if (other_hash.empty() && !other.magnet.empty()) {
+            other_hash = extractBtihHash(normalizeTorrentLink(other.magnet));
+        }
+        if (other_hash == hash &&
+            (other.state == download::DownloadState::Queued ||
+             other.state == download::DownloadState::Downloading ||
+             other.state == download::DownloadState::StreamPreparing ||
+             other.state == download::DownloadState::StreamInstalling)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool DownloadManager::isLocalBackend() const {
@@ -169,6 +333,9 @@ void DownloadManager::shutdown() {
         if (item.cancel_flag) {
             item.cancel_flag->store(true);
         }
+        if (item.file_dl_cancel) {
+            item.file_dl_cancel->store(true);
+        }
         if (item.hybrid_installer) {
             item.hybrid_installer->cancel();
             item.hybrid_installer.reset();
@@ -188,6 +355,17 @@ void DownloadManager::shutdown() {
     datasource::IDataSource* source = ds_manager_.getSource();
     if (source) {
         source->close();
+    }
+
+    // source->close() выше разблокирует заблокированные в source->read() воркеры
+    // (torrentfs teardown); только после этого join'им их фьючерсы, чтобы
+    // завершение не повисло.
+    for (auto& item : queue_) {
+        if (item.file_dl_worker) {
+            item.file_dl_worker.reset();
+        }
+        item.file_dl_dispatched = false;
+        item.file_dl_state.reset();
     }
 }
 
@@ -344,19 +522,9 @@ static bool isSwitchGameFile(const std::string& filename) {
 }
 
 static void copyDownloadedOtherFiles(const download::DownloadItem& item) {
-    std::filesystem::path srcDir;
-#ifndef __SWITCH__
-    srcDir = std::filesystem::path("./cache/local_engine") / item.torrent_hash;
-#else
-    srcDir = std::filesystem::path("sdmc:/switch/TorrentShopNX/cache/local_engine") / item.torrent_hash;
-#endif
+    std::filesystem::path srcDir = std::filesystem::path(TSNX_CACHE_LOCALENGINE) / item.torrent_hash;
 
-    std::filesystem::path destDir;
-#ifndef __SWITCH__
-    destDir = "./downloads";
-#else
-    destDir = "sdmc:/switch/TorrentShopNX/downloads";
-#endif
+    std::filesystem::path destDir = std::filesystem::path(TSNX_DOWNLOADS_DIR);
 
     std::error_code ec;
     std::filesystem::create_directories(destDir, ec);
@@ -369,12 +537,7 @@ static void copyDownloadedOtherFiles(const download::DownloadItem& item) {
 static void clearTorrentCache(const std::string& hash) {
     if (hash.empty()) return;
 
-    std::filesystem::path cachePath;
-#ifndef __SWITCH__
-    cachePath = std::filesystem::path("./cache/local_engine") / hash;
-#else
-    cachePath = std::filesystem::path("sdmc:/switch/TorrentShopNX/cache/local_engine") / hash;
-#endif
+    std::filesystem::path cachePath = std::filesystem::path(TSNX_CACHE_LOCALENGINE) / hash;
 
     std::error_code ec;
     if (std::filesystem::exists(cachePath)) {
@@ -647,6 +810,107 @@ void DownloadManager::stopAllStreamConsumers() {
     }
 }
 
+void DownloadManager::handleFileDownload(size_t index,
+                                         const std::vector<torrent::TorrentInfo>& list,
+                                         std::chrono::steady_clock::time_point now) {
+    if (index >= queue_.size()) return;
+    auto& item = queue_[index];
+    if (item.state == DownloadState::Paused || item.state == DownloadState::Failed) return;
+
+    // Живая сетевая статистика из списка торрентов движка (тот же сглаживатель,
+    // что и в обычном пути), чтобы UI показывал скорость/пиров и для файла.
+    if (!item.torrent_hash.empty()) {
+        for (const auto& t : list) {
+            if (!equalsIgnoreCase(item.torrent_hash, t.hash)) continue;
+            item.seeds = t.seeds;
+            item.peers = t.peers;
+            item.known_peers = t.known_peers;
+            item.dht = t.dht;
+            if (t.download_speed_kbps >= 0.0f) {
+                item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
+                                                                   t.download_speed_kbps,
+                                                                   item.speed_sample_at, now);
+            }
+            item.speed_sample_at = now;
+            break;
+        }
+    }
+
+    if (!item.file_dl_dispatched) {
+        auto* source = ds_manager_.getSource();
+        if (!source) {
+            item.state = DownloadState::Failed;
+            item.error_message = "Data source is unavailable";
+            return;
+        }
+        if (item.cancel_flag) item.cancel_flag->store(false);
+        if (item.file_dl_cancel) item.file_dl_cancel->store(false);
+
+        source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
+        auto cancel = item.file_dl_cancel;
+        auto st = item.file_dl_state = std::make_shared<FileDownloadState>();
+        const std::string hash = item.torrent_hash;
+        const std::string magnet = normalizeTorrentLink(item.magnet);
+        const int idx = item.forced_file_index;
+
+        item.file_dl_worker = std::make_shared<std::future<void>>(
+            std::async(std::launch::async, [source, hash, magnet, idx, cancel, st]() {
+                fileCopyWorker(source, hash, magnet, idx, cancel, st);
+            }));
+        item.file_dl_dispatched = true;
+        util::logLine("download: file download started hash=" + hash +
+                      " index=" + std::to_string(idx));
+        return;
+    }
+
+    if (!item.file_dl_worker ||
+        item.file_dl_worker->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        // Воркер ещё копирует: показываем прогресс.
+        if (item.file_dl_state) {
+            item.install_written = item.file_dl_state->written.load();
+            item.install_total = item.file_dl_state->total.load();
+            if (item.install_total > 0) {
+                item.progress = static_cast<float>(
+                    (double)item.install_written / (double)item.install_total);
+                item.install_progress = item.progress;
+            }
+        }
+        return;
+    }
+
+    item.file_dl_worker->get();
+    item.file_dl_worker.reset();
+    item.file_dl_dispatched = false;
+
+    if (item.file_dl_state && item.file_dl_state->failed.load()) {
+        item.state = DownloadState::Failed;
+        item.error_message = item.file_dl_state->error.empty()
+            ? "Failed to download file" : item.file_dl_state->error;
+        if (!item.file_dl_state->dest.empty()) {
+            std::error_code ec;
+            std::filesystem::remove(item.file_dl_state->dest, ec);
+        }
+        item.install_written = item.file_dl_state->written.load();
+        item.install_total = item.file_dl_state->total.load();
+        util::logLine("download: file download failed: " + item.error_message);
+        return;
+    }
+
+    item.state = DownloadState::Completed;
+    item.progress = 1.0f;
+    item.install_progress = 1.0f;
+    if (item.file_dl_state) {
+        item.install_total = item.file_dl_state->total.load();
+        item.install_written = item.install_total;
+        if (!item.file_dl_state->dest.empty()) item.file_dl_dest = item.file_dl_state->dest;
+    }
+    util::logLine("download: file download completed: " + item.file_dl_dest);
+
+    if (!torrentStillNeeded(queue_, index, item.torrent_hash)) {
+        clearTorrentCache(item.torrent_hash);
+    }
+}
+
 bool DownloadManager::startDownload(size_t index) {
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
@@ -706,6 +970,12 @@ bool DownloadManager::startDownload(size_t index) {
     item.start_time = std::chrono::steady_clock::now();
     item.error_message.clear();
     item.torrent_hash.clear();
+
+    item.file_dl_dispatched = false;
+    item.file_dl_worker.reset();
+    if (item.file_dl_cancel) item.file_dl_cancel->store(false);
+    item.file_dl_state.reset();
+    item.file_dl_dest.clear();
 
     if (local_mode_only) {
         item.torrent_hash = local_hash;
@@ -884,6 +1154,15 @@ void DownloadManager::trackProgress() {
                           item.torrent_hash +
                           " file_index=" + std::to_string(item.preload_file_index));
             startHybridInstall(i);
+            continue;
+        }
+
+        // Не-игровые файлы (не NSP/NSZ/XCI/XCZ): скачиваем как файл в downloads/.
+        if (isLocalBackend() &&
+            item.state == DownloadState::Downloading &&
+            item.forced_file_index >= 0 &&
+            !isSwitchGameFile(item.forced_stream_name)) {
+            handleFileDownload(i, list, now);
             continue;
         }
 
@@ -1404,6 +1683,9 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.cancel_flag) {
         item.cancel_flag->store(true);
     }
+    if (item.file_dl_cancel) {
+        item.file_dl_cancel->store(true);
+    }
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
@@ -1429,6 +1711,15 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.start_future) {
         item.start_future.reset();
     }
+
+    // The file-copy worker polls file_dl_cancel and is unblocked by the
+    // source->close() above; reset its future only now so the join cannot hang.
+    if (item.file_dl_worker) {
+        item.file_dl_worker.reset();
+    }
+    item.file_dl_dispatched = false;
+    item.file_dl_state.reset();
+    item.file_dl_dest.clear();
 
     has_open_pending_.store(false);
 

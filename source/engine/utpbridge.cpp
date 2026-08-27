@@ -11,6 +11,8 @@
 #include <sys/time.h>
 
 #include <switch.h>
+#include <cerrno>
+#include <errno.h>
 
 #include "engine_log.h"
 #include "utp.h"

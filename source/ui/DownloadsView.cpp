@@ -263,6 +263,23 @@ static std::string formatBytes(unsigned long long bytes) {
     }
 }
 
+static std::string formatElapsed(std::chrono::steady_clock::time_point start) {
+    if (start.time_since_epoch().count() == 0) return "--:--";
+    auto secs = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - start).count();
+    if (secs < 0) secs = 0;
+    int h = (int)(secs / 3600);
+    int m = (int)((secs % 3600) / 60);
+    int s = (int)(secs % 60);
+    char buf[24];
+    if (h > 0) {
+        std::snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
+    } else {
+        std::snprintf(buf, sizeof(buf), "%02d:%02d", m, s);
+    }
+    return std::string(buf);
+}
+
 static std::string formatProgressBytes(unsigned long long written, unsigned long long total) {
     return formatBytes(written) + " / " + formatBytes(total);
 }
@@ -416,13 +433,34 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         cell->statsText->setText(stats);
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (item.state == download::DownloadState::Completed) {
-        cell->statsText->setText(brls::getStr("app/downloads/saved_to", item.topic_id));
+        // Не-игровые файлы сохраняются в downloads/ по реальному пути; игры
+        // устанавливаются в систему, поэтому путь downloads/ им не показываем.
+        if (!item.file_dl_dest.empty()) {
+            cell->statsText->setText(brls::getStr("app/downloads/saved_to", item.file_dl_dest));
+        } else {
+            cell->statsText->setText("app/downloads/installed"_i18n);
+        }
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (item.state == download::DownloadState::Failed) {
         cell->statsText->setText(item.error_message.empty() ? "app/downloads/unknown_error"_i18n : item.error_message);
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else {
         cell->statsText->setVisibility(brls::Visibility::GONE);
+    }
+
+    // Таймер затраченного времени: показываем во время скачивания/установки
+    // и после завершения (общее время).
+    const bool showsElapsed =
+        item.state == download::DownloadState::Downloading ||
+        item.state == download::DownloadState::StreamPreparing ||
+        item.state == download::DownloadState::StreamInstalling ||
+        item.state == download::DownloadState::Installing ||
+        item.state == download::DownloadState::Completed;
+    if (showsElapsed) {
+        cell->elapsedText->setText(brls::getStr("app/downloads/elapsed", formatElapsed(item.start_time)));
+        cell->elapsedText->setVisibility(brls::Visibility::VISIBLE);
+    } else {
+        cell->elapsedText->setVisibility(brls::Visibility::GONE);
     }
 
     // Seeders and Peers count text

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <cstdint>
 
 struct Game;
 

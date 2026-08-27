@@ -13,6 +13,7 @@
 #include "../net/http_client.h"
 #include "../rss/rss_parser.h"
 #include "../utils/log.h"
+#include "../utils/app_paths.h"
 
 namespace catalog {
 
@@ -327,12 +328,12 @@ std::string CatalogManager::cachePathFor(const CatalogSource& s) const {
     std::hash<std::string> h;
     size_t v = h(s.type + ":" + s.url);
     std::ostringstream ss;
-    ss << "sdmc:/switch/TorrentShopNX/cache/" << std::hex << v << ".cache";
+    ss << TSNX_CACHE_CATALOG << "/" << std::hex << v << ".cache";
     return ss.str();
 }
 
 bool CatalogManager::ensureCacheDir() const {
-    return ensureDirRecursive("sdmc:/switch/TorrentShopNX/cache");
+    return ensureDirRecursive(TSNX_CACHE_CATALOG);
 }
 
 bool CatalogManager::loadCachedBody(const CatalogSource& s, std::string& out_body) const {

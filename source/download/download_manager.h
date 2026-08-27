@@ -30,6 +30,19 @@ enum class DownloadState {
     Paused
 };
 
+// Прогресс/результат фонового копирования не-игрового файла в downloads/.
+// Поля, кроме written/total/failed/done, пишутся воркером ДО store() в атомарный
+// флаг, поэтому их чтение из progress-треда корректно (happens-before).
+struct FileDownloadState {
+    std::atomic<unsigned long long> written{0};
+    std::atomic<unsigned long long> total{0};
+    std::atomic<bool> done{false};
+    std::atomic<bool> failed{false};
+    std::string error;
+    std::string dest;              // итоговый путь на диске
+    unsigned long long size = 0;   // размер исходного файла
+};
+
 struct DownloadItem {
     std::string title;
     std::string magnet;
@@ -89,6 +102,15 @@ struct DownloadItem {
     std::string topic_id;
     std::vector<int> selected_files;
     bool priorities_set = false;
+
+    // Скачивание не-игрового файла (простое копирование файла в downloads/,
+    // только локальный движок). Состояние живёт в фоновом воркере; progress-тред
+    // только опрашивает будущее и атомарный прогресс.
+    bool file_dl_dispatched = false;
+    std::shared_ptr<std::future<void>> file_dl_worker;
+    std::shared_ptr<std::atomic<bool>> file_dl_cancel = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<FileDownloadState> file_dl_state;
+    std::string file_dl_dest;   // итоговый путь (для логов/UI)
 };
 
 class DownloadManager {
@@ -133,6 +155,10 @@ private:
     void ensureStreamConsumer(DownloadItem& item);
     void stopStreamConsumer(int torrent_id);
     void stopAllStreamConsumers();
+
+    // Не-игровые файлы: скачивание в downloads/ через локальный движок.
+    void handleFileDownload(size_t index, const std::vector<torrent::TorrentInfo>& list,
+                            std::chrono::steady_clock::time_point now);
 
     std::vector<DownloadItem> queue_;
     std::unique_ptr<torrent::TorrentManager> torrent_;

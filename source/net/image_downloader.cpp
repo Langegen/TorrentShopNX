@@ -2,6 +2,7 @@
 #include "http_client.h"
 #include "../config/config.h"
 #include "../utils/log.h"
+#include "../utils/app_paths.h"
 #include <borealis/core/cache_helper.hpp>
 #include <algorithm>
 #include <cmath>
@@ -35,11 +36,7 @@ std::string getThumbnailCachePath(const std::string& url) {
     char hex[17];
     std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(hash));
 
-#ifndef __SWITCH__
-    return "./cache/thumbnails/" + std::string(hex) + ".jpg";
-#else
-    return "sdmc:/switch/TorrentShopNX/cache/thumbnails/" + std::string(hex) + ".jpg";
-#endif
+    return std::string(TSNX_CACHE_THUMBNAILS) + "/" + std::string(hex) + ".jpg";
 }
 
 bool readWholeFileLocal(const std::string& path, std::string& out) {

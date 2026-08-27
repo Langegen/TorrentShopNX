@@ -61,6 +61,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #ifdef __SWITCH__
 #include <switch/crypto/sha1.h>
 #else
@@ -73,6 +74,7 @@
 #include "utp_nb.h"
 #include "listen.h"
 #include "engine_log.h"
+#include "../utils/app_paths.h"
 
 //-----------------------------------------------------------------------------
 // Tuning
@@ -2695,6 +2697,7 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     }
 
     snprintf(t->cache_base, sizeof(t->cache_base), "%s", cache_path);
+    tsnx_ensure_parent_dirs(t->cache_base);
     mutexInit(&t->cache_lock);
     mutexInit(&t->lock);
     mutexInit(&t->inc_q.lock);

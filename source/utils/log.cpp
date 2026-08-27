@@ -1,4 +1,4 @@
-﻿#include "log.h"
+#include "log.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -14,7 +14,11 @@
 
 namespace util {
 
+#ifdef __SWITCH__
 static const char* kLogPath = "sdmc:/switch/TorrentShopNX/log.txt";
+#else
+static const char* kLogPath = "log.txt";
+#endif
 static std::mutex g_log_mutex;
 
 // PC tests set TSNX_LOG_PATH so the same log lines the app writes to the SD
@@ -60,7 +64,9 @@ static void ensureDirRecursive(const std::string& path) {
 }
 
 void logInit() {
+#ifdef __SWITCH__
     ensureDirRecursive("sdmc:/switch/TorrentShopNX");
+#endif
     std::lock_guard<std::mutex> lock(g_log_mutex);
     std::ofstream file(logPath(), std::ios::trunc);
     if (file.is_open()) {

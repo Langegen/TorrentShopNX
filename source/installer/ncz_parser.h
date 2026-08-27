@@ -34,6 +34,7 @@ public:
     uint64_t getDecompressedSize() const { return decompressed_size_; }
 
 private:
+    uint64_t decompressed_size_ = 0;
 #ifdef __SWITCH__
     FetchCallback fetch_cb_;
     
@@ -49,7 +50,6 @@ private:
 
     bool use_block_compression_ = false;
     bool failed_ = false;
-    uint64_t decompressed_size_ = 0;
     uint64_t decompressed_body_size_ = 0;
     
     // Zstd state

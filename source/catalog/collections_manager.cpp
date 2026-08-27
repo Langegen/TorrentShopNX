@@ -3,6 +3,7 @@
 #include "../GameData.hpp"
 #include "../net/http_client.h"
 #include "../utils/log.h"
+#include "../utils/app_paths.h"
 
 #include <borealis.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
@@ -91,11 +92,7 @@ CollectionsManager::CollectionsManager() : collections_(kCollections) {
 }
 
 std::string CollectionsManager::cachePathFor(const std::string& id) {
-#ifndef __SWITCH__
-    return "./collections_cache/" + id + ".json";
-#else
-    return "sdmc:/switch/TorrentShopNX/collections/" + id + ".json";
-#endif
+    return std::string(TSNX_CACHE_COLLECTIONS) + "/" + id + ".json";
 }
 
 bool CollectionsManager::isCacheFresh(const std::string& path, int max_age_seconds) {

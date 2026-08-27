@@ -1,4 +1,6 @@
 #pragma once
+
+#ifdef __SWITCH__
 #include <sys/types.h>
 
 typedef unsigned long rlim_t;
@@ -30,4 +32,8 @@ inline int getrlimit(int resource, struct rlimit *rl) {
 
 #ifdef __cplusplus
 }
+#endif
+
+#else
+#include_next <sys/resource.h>
 #endif

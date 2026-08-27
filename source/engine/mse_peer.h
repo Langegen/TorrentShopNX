@@ -29,6 +29,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MSE_DH_LEN 96   // 768-bit DH public key / shared secret, big-endian
 

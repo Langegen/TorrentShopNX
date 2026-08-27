@@ -54,6 +54,12 @@
                 marginRight="20" />
 
             <brls:Label
+                id="elapsedText"
+                fontSize="12"
+                textColor="#AAAAAA"
+                marginRight="20" />
+
+            <brls:Label
                 id="peersText"
                 fontSize="12"
                 textColor="#AAAAAA" />

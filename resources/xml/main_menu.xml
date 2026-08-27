@@ -24,10 +24,10 @@
                     <brls:Label id="lblRemoteAdd" text="@i18n/app/menu/remote_add" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
  
-                <!-- Favorites -->
-                <brls:Box id="btnFavorites" width="200px" height="300px" focusable="true" marginRight="20">
+                <!-- Game Library (installed games, updates, uninstall) -->
+                <brls:Box id="btnLibrary" width="200px" height="300px" focusable="true" marginRight="20">
                     <brls:Image image="@res/img/icon_favorites.png" width="200px" height="300px" positionType="absolute" positionLeft="0" positionTop="0" />
-                    <brls:Label id="lblFavorites" text="@i18n/app/menu/favorites" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
+                    <brls:Label id="lblLibrary" text="@i18n/app/menu/library" width="200px" height="auto" fontSize="22" horizontalAlign="center" marginTop="220px" textColor="#FFFFFF" />
                 </brls:Box>
  
                 <!-- Downloads -->
