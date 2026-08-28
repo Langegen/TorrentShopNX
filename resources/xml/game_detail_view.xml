@@ -18,7 +18,7 @@
                 <brls:Box id="badgesBox" width="auto" height="auto" axis="row" marginBottom="20" />
 
                 <!-- Metadata Block -->
-                <brls:Box width="auto" height="auto" axis="column" marginBottom="20" padding="15" backgroundColor="#2C2C2C" cornerRadius="8">
+                <brls:Box width="auto" height="auto" axis="column" marginBottom="20" padding="15" backgroundColor="#1E2A3A88" cornerRadius="8">
                     <brls:Label id="metaDeveloper" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
                     <brls:Label id="metaPublisher" fontSize="15" textColor="#AAAAAA" marginBottom="4" />
                     <brls:Label id="metaYear" fontSize="15" textColor="#AAAAAA" marginBottom="4" />

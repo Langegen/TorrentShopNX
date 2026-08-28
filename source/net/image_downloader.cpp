@@ -355,21 +355,44 @@ void ImageDownloader::processTask(const ImageTask& task) {
                 &srcW, &srcH, &comp, 3
             );
             if (decoded) {
+                // If it's a 3D box mock-up with side spine, crop the front artwork
+                stbi_uc* sourcePixels = decoded;
+                std::vector<uint8_t> croppedBuffer;
+                int activeW = srcW;
+                int activeH = srcH;
+
+                if (srcW == 393 && srcH == 640) {
+                    int cropX = 22;
+                    int cropY = 24;
+                    int cropW = 342;
+                    int cropH = 594;
+
+                    croppedBuffer.resize(cropW * cropH * 3);
+                    for (int y = 0; y < cropH; ++y) {
+                        const uint8_t* srcRow = decoded + ((cropY + y) * srcW + cropX) * 3;
+                        uint8_t* dstRow = croppedBuffer.data() + (y * cropW) * 3;
+                        std::memcpy(dstRow, srcRow, cropW * 3);
+                    }
+                    sourcePixels = croppedBuffer.data();
+                    activeW = cropW;
+                    activeH = cropH;
+                }
+
                 const int maxW = 160;
                 const int maxH = 245;
-                float scale = std::min(static_cast<float>(maxW) / static_cast<float>(srcW),
-                                       static_cast<float>(maxH) / static_cast<float>(srcH));
-                int dstW = (scale < 1.0f) ? std::max(1, static_cast<int>(srcW * scale + 0.5f)) : srcW;
-                int dstH = (scale < 1.0f) ? std::max(1, static_cast<int>(srcH * scale + 0.5f)) : srcH;
+                float scale = std::min(static_cast<float>(maxW) / static_cast<float>(activeW),
+                                       static_cast<float>(maxH) / static_cast<float>(activeH));
+                int dstW = (scale < 1.0f) ? std::max(1, static_cast<int>(activeW * scale + 0.5f)) : activeW;
+                int dstH = (scale < 1.0f) ? std::max(1, static_cast<int>(activeH * scale + 0.5f)) : activeH;
 
                 std::vector<uint8_t> resizedData;
                 const uint8_t* pixelData = nullptr;
 
-                if (dstW < srcW || dstH < srcH) {
-                    resizedData = resizeImageAreaAverage(decoded, srcW, srcH, 3, dstW, dstH);
+                if (dstW < activeW || dstH < activeH) {
+                    resizedData = resizeImageAreaAverage(sourcePixels, activeW, activeH, 3, dstW, dstH);
                     pixelData = resizedData.data();
                 } else {
-                    pixelData = decoded;
+                    pixelData = sourcePixels;
                 }
 
                 std::vector<uint8_t> thumbJpeg;

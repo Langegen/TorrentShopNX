@@ -7,66 +7,66 @@
     paddingBottom="10">
 
     <!-- Card 0 -->
-    <brls:Box id="card0" width="160px" height="300px" axis="column" focusable="true" padding="5">
-        <brls:Box width="150px" height="245px">
-            <brls:Image id="cover0" width="150px" height="245px" />
+    <brls:Box id="card0" width="160px" height="300px" axis="column" focusable="true" padding="5" cornerRadius="10">
+        <brls:Box width="150px" height="245px" cornerRadius="8">
+            <brls:Image id="cover0" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta0" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="16" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="8" />
-            <brls:Label id="lang0" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" />
+            <brls:Label id="lang0" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
         </brls:Box>
         <brls:Label id="title0" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size0" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
     </brls:Box>
 
     <!-- Card 1 -->
-    <brls:Box id="card1" width="160px" height="300px" axis="column" focusable="true" padding="5">
-        <brls:Box width="150px" height="245px">
-            <brls:Image id="cover1" width="150px" height="245px" />
+    <brls:Box id="card1" width="160px" height="300px" axis="column" focusable="true" padding="5" cornerRadius="10">
+        <brls:Box width="150px" height="245px" cornerRadius="8">
+            <brls:Image id="cover1" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta1" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="16" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="8" />
-            <brls:Label id="lang1" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" />
+            <brls:Label id="lang1" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
         </brls:Box>
         <brls:Label id="title1" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size1" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
     </brls:Box>
 
     <!-- Card 2 -->
-    <brls:Box id="card2" width="160px" height="300px" axis="column" focusable="true" padding="5">
-        <brls:Box width="150px" height="245px">
-            <brls:Image id="cover2" width="150px" height="245px" />
+    <brls:Box id="card2" width="160px" height="300px" axis="column" focusable="true" padding="5" cornerRadius="10">
+        <brls:Box width="150px" height="245px" cornerRadius="8">
+            <brls:Image id="cover2" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta2" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="16" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="8" />
-            <brls:Label id="lang2" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" />
+            <brls:Label id="lang2" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
         </brls:Box>
         <brls:Label id="title2" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size2" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
     </brls:Box>
 
     <!-- Card 3 -->
-    <brls:Box id="card3" width="160px" height="300px" axis="column" focusable="true" padding="5">
-        <brls:Box width="150px" height="245px">
-            <brls:Image id="cover3" width="150px" height="245px" />
+    <brls:Box id="card3" width="160px" height="300px" axis="column" focusable="true" padding="5" cornerRadius="10">
+        <brls:Box width="150px" height="245px" cornerRadius="8">
+            <brls:Image id="cover3" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta3" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="16" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="8" />
-            <brls:Label id="lang3" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" />
+            <brls:Label id="lang3" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
         </brls:Box>
         <brls:Label id="title3" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size3" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
     </brls:Box>
 
     <!-- Card 4 -->
-    <brls:Box id="card4" width="160px" height="300px" axis="column" focusable="true" padding="5">
-        <brls:Box width="150px" height="245px">
-            <brls:Image id="cover4" width="150px" height="245px" />
+    <brls:Box id="card4" width="160px" height="300px" axis="column" focusable="true" padding="5" cornerRadius="10">
+        <brls:Box width="150px" height="245px" cornerRadius="8">
+            <brls:Image id="cover4" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta4" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="16" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="8" />
-            <brls:Label id="lang4" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" />
+            <brls:Label id="lang4" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
         </brls:Box>
         <brls:Label id="title4" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size4" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
     </brls:Box>
 
     <!-- Card 5 -->
-    <brls:Box id="card5" width="160px" height="300px" axis="column" focusable="true" padding="5">
-        <brls:Box width="150px" height="245px">
-            <brls:Image id="cover5" width="150px" height="245px" />
+    <brls:Box id="card5" width="160px" height="300px" axis="column" focusable="true" padding="5" cornerRadius="10">
+        <brls:Box width="150px" height="245px" cornerRadius="8">
+            <brls:Image id="cover5" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta5" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="16" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="8" />
-            <brls:Label id="lang5" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" />
+            <brls:Label id="lang5" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
         </brls:Box>
         <brls:Label id="title5" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size5" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />

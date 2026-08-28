@@ -4,6 +4,8 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <unordered_map>
+#include "CollectionCard.hpp"
 #include "../catalog/collections_manager.h"
 
 namespace ui {
@@ -17,10 +19,11 @@ public:
     void onContentAvailable() override;
 
 private:
-    void rebuildList();
+    void rebuildGrid();
 
-    std::vector<brls::Label*> countLabels_;
     std::shared_ptr<std::atomic<bool>> alive_flag_;
+    std::unordered_map<std::string, CollectionCard*> collection_cards_;
+    std::vector<std::vector<CollectionCard*>> grid_;
 
     BRLS_BIND(brls::ScrollingFrame, scroll, "scroll");
     BRLS_BIND(brls::Box, listBox, "listBox");

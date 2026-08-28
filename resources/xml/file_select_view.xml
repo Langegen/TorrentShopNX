@@ -29,7 +29,7 @@
         </brls:ScrollingFrame>
 
         <!-- Bottom Summary & Storage Selector -->
-        <brls:Box width="auto" axis="column" padding="15" backgroundColor="#2C2C2C" cornerRadius="5">
+        <brls:Box width="auto" axis="column" padding="15" backgroundColor="#1E2A3A88" cornerRadius="5">
             <!-- Row 1: Selected files size & Free space -->
             <brls:Box width="auto" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
                 <brls:Box axis="row" alignItems="center">

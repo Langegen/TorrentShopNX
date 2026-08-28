@@ -762,6 +762,19 @@ void Application::frame()
     nvgBeginFrame(frameContext.vg, Application::windowWidth, Application::windowHeight, scaleFactor);
     nvgScale(frameContext.vg, Application::windowScale, Application::windowScale);
 
+    // Global Wallpaper background for all activities and windows
+    static int globalBgImage = 0;
+    if (globalBgImage == 0) {
+        globalBgImage = nvgCreateImage(frameContext.vg, (std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg").c_str(), 0);
+    }
+    if (globalBgImage > 0) {
+        NVGpaint bgPaint = nvgImagePattern(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f, 0.0f, globalBgImage, 1.0f);
+        nvgBeginPath(frameContext.vg);
+        nvgRect(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f);
+        nvgFillPaint(frameContext.vg, bgPaint);
+        nvgFill(frameContext.vg);
+    }
+
     std::vector<View*> viewsToDraw;
 
     // Draw all activities in the stack

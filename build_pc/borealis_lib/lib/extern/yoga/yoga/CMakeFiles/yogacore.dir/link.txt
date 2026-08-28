@@ -1,2 +1,0 @@
-/opt/devkitpro/msys2/usr/bin/ar.exe qc libyogacore.a CMakeFiles/yogacore.dir/Utils.cpp.obj CMakeFiles/yogacore.dir/YGConfig.cpp.obj CMakeFiles/yogacore.dir/YGEnums.cpp.obj CMakeFiles/yogacore.dir/YGLayout.cpp.obj CMakeFiles/yogacore.dir/YGNode.cpp.obj CMakeFiles/yogacore.dir/YGNodePrint.cpp.obj CMakeFiles/yogacore.dir/YGStyle.cpp.obj CMakeFiles/yogacore.dir/YGValue.cpp.obj CMakeFiles/yogacore.dir/Yoga.cpp.obj CMakeFiles/yogacore.dir/event/event.cpp.obj CMakeFiles/yogacore.dir/log.cpp.obj
-/opt/devkitpro/msys2/usr/bin/ranlib.exe libyogacore.a

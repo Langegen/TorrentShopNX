@@ -42,5 +42,9 @@ Thumbs.db
 *.opendb
 .vs/
 
-
-build_pc/TorrentShopNX.exe
+build_pc/
+cache/
+scratch/
+data/
+config.ini
+log.txt

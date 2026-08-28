@@ -1,2 +1,0 @@
-"/opt/devkitpro/msys2/usr/bin/gcc-ar.exe" qc libfoo.a CMakeFiles/foo.dir/foo.cpp.obj
-"/opt/devkitpro/msys2/usr/bin/gcc-ranlib.exe" libfoo.a
