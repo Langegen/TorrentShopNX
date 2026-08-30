@@ -16,6 +16,8 @@
 #include <sstream>
 #include <sys/stat.h>
 
+extern std::vector<Game> g_games;
+
 namespace catalog {
 
 std::string CollectionInfo::getName() const {
@@ -35,6 +37,7 @@ namespace {
 const std::vector<CollectionInfo> kCollections = {
     {"new_release",         "Новые релизы",          "Автоматически обновляемые свежие релизы"},
     {"top_100",             "Топ-100",               "Топ-100 лучших игр всех времён по версии Metacritic"},
+    {"ports_homebrew",      "Порты и Homebrew",      "Портированные и homebrew игры"},
     {"action_adventure",    "Экшены и приключения",  "Приключенческие экшены (Action & Adventure)"},
     {"arcade",              "Аркады",                "Классические и современные аркады"},
     {"horror",              "Хорроры",               "Сурвайвал и психологические хорроры"},
@@ -106,6 +109,22 @@ bool CollectionsManager::isCacheFresh(const std::string& path, int max_age_secon
 bool CollectionsManager::loadCollection(const CollectionInfo& info,
                                         std::vector<CollectionEntry>& out_entries,
                                         bool& from_cache) {
+    if (info.id == "ports_homebrew") {
+        out_entries.clear();
+        for (const auto& g : g_games) {
+            if (isHomebrewGame(g)) {
+                CollectionEntry e;
+                e.title = g.title;
+                e.title_id = g.title_id;
+                out_entries.push_back(std::move(e));
+            }
+        }
+        from_cache = true;
+        util::logLine("collections: ports_homebrew loaded " +
+                      std::to_string(out_entries.size()) + " entries from catalog");
+        return true;
+    }
+
     const std::string cache_path = cachePathFor(info.id);
     const std::string url = std::string(kCollectionsBaseUrl) + info.id + ".json";
 

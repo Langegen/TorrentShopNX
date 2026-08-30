@@ -299,16 +299,25 @@ static brls::ScrollingFrame* makeTabBox(brls::Box** out_box) {
 } // namespace
 
 SettingsTab::SettingsTab() {
-    // Компактный сайдбар категорий: шире 410px по умолчанию выглядит громоздко.
-    // Метрики применяются до создания контента (TabFrame читает их при inflate).
-    brls::getStyle().addMetric("brls/tab_frame/sidebar_width", 270.0f);
-    brls::getStyle().addMetric("brls/sidebar/padding_left", 36.0f);
-    brls::getStyle().addMetric("brls/sidebar/padding_right", 24.0f);
-    brls::getStyle().addMetric("brls/sidebar/item_height", 58.0f);
-    brls::getStyle().addMetric("brls/sidebar/item_font_size", 20.0f);
+    // Компактный сайдбар категорий в виде стеклянной рамки дашборда
+    brls::getStyle().addMetric("brls/tab_frame/sidebar_width", 260.0f);
+    brls::getStyle().addMetric("brls/sidebar/padding_top", 16.0f);
+    brls::getStyle().addMetric("brls/sidebar/padding_bottom", 16.0f);
+    brls::getStyle().addMetric("brls/sidebar/padding_left", 20.0f);
+    brls::getStyle().addMetric("brls/sidebar/padding_right", 20.0f);
+    brls::getStyle().addMetric("brls/sidebar/item_height", 56.0f);
+    brls::getStyle().addMetric("brls/sidebar/item_font_size", 19.0f);
+    brls::getStyle().addMetric("brls/sidebar/item_accent_margin_sides", 10.0f);
 }
 
 void SettingsTab::onContentAvailable() {
+    brls::View* sidebar = tabFrame->getView("brls/tab_frame/sidebar");
+    if (sidebar) {
+        sidebar->setBackground(brls::ViewBackground::SIDEBAR);
+        sidebar->setMarginRight(24.0f);
+        sidebar->setCornerRadius(14.0f);
+    }
+
     tabFrame->addTab("app/settings/cat_general"_i18n, [this]() { return buildGeneralTab(); });
     tabFrame->addTab("app/settings/cat_downloads"_i18n, [this]() { return buildDownloadsTab(); });
     tabFrame->addTab("app/settings/cat_storage"_i18n, [this]() { return buildStorageTab(); });

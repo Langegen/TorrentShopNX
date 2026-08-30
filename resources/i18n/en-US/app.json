@@ -28,7 +28,8 @@
     "reset_all": "Reset All",
     "toggle_favorite": "Add/Remove Favorite",
     "toggle_all": "Select/Deselect All",
-    "start_download": "Start Download"
+    "start_download": "Start Download",
+    "refresh": "Refresh"
   },
   "catalog": {
     "title": "Catalog",
@@ -63,6 +64,8 @@
     "item_new_release_desc": "Automatically updated fresh releases",
     "item_top_100_name": "Top 100",
     "item_top_100_desc": "Top 100 best games of all time according to Metacritic",
+    "item_ports_homebrew_name": "Ports & Homebrew",
+    "item_ports_homebrew_desc": "Ported and homebrew\ngames for Switch",
     "item_action_adventure_name": "Action & Adventure",
     "item_action_adventure_desc": "Action and adventure games",
     "item_arcade_name": "Arcade",

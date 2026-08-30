@@ -17,6 +17,13 @@ namespace ui {
 namespace {
 
 int cachedCount(const catalog::CollectionInfo& info) {
+    if (info.id == "ports_homebrew") {
+        int count = 0;
+        for (const auto& g : g_games) {
+            if (isHomebrewGame(g)) ++count;
+        }
+        return count;
+    }
     std::string body;
     if (!readFileFast(catalog::CollectionsManager::cachePathFor(info.id), body)) return -1;
     try {
@@ -57,6 +64,7 @@ NVGcolor getGenreColor(const std::string& id) {
     if (id == "favorites")           return nvgRGBA(255, 193, 7, 255);   // Gold
     if (id == "new_release")         return nvgRGBA(0, 229, 255, 255);   // Cyan
     if (id == "top_100")             return nvgRGBA(255, 215, 0, 255);   // Golden Trophy
+    if (id == "ports_homebrew")      return nvgRGBA(0, 188, 212, 255);   // Cyan-Teal
     if (id == "action_adventure")    return nvgRGBA(255, 87, 34, 255);   // Orange-Red
     if (id == "arcade")              return nvgRGBA(171, 71, 188, 255);  // Purple
     if (id == "horror")              return nvgRGBA(239, 83, 80, 255);   // Crimson
@@ -145,7 +153,11 @@ void CollectionsView::rebuildGrid() {
 
     // 1.1 Весь каталог
     {
-        std::string totalCount = std::to_string(g_games.size()) + " игр";
+        size_t officialCount = 0;
+        for (const auto& g : g_games) {
+            if (!isHomebrewGame(g)) ++officialCount;
+        }
+        std::string totalCount = std::to_string(officialCount) + " игр";
         CollectionCard* cardAll = new CollectionCard(
             "all_catalog",
             "Весь каталог",
@@ -262,6 +274,36 @@ void CollectionsView::rebuildGrid() {
     // Handle last row if it has fewer than 4 items
     if (!currentGridRow.empty() && currentRow) {
         grid_.push_back(currentGridRow);
+    }
+
+    // Configure directional navigation routes for each card in the grid
+    for (size_t r = 0; r < grid_.size(); ++r) {
+        for (size_t c = 0; c < grid_[r].size(); ++c) {
+            CollectionCard* card = grid_[r][c];
+            if (!card) continue;
+
+            // Move UP
+            if (r > 0) {
+                size_t targetCol = std::min(c, grid_[r - 1].size() - 1);
+                card->setCustomNavigationRoute(brls::FocusDirection::UP, grid_[r - 1][targetCol]);
+            }
+
+            // Move DOWN
+            if (r + 1 < grid_.size()) {
+                size_t targetCol = std::min(c, grid_[r + 1].size() - 1);
+                card->setCustomNavigationRoute(brls::FocusDirection::DOWN, grid_[r + 1][targetCol]);
+            }
+
+            // Move LEFT
+            if (c > 0) {
+                card->setCustomNavigationRoute(brls::FocusDirection::LEFT, grid_[r][c - 1]);
+            }
+
+            // Move RIGHT
+            if (c + 1 < grid_[r].size()) {
+                card->setCustomNavigationRoute(brls::FocusDirection::RIGHT, grid_[r][c + 1]);
+            }
+        }
     }
 
     util::logLine("CollectionsView: successfully built 4xN grid with " +

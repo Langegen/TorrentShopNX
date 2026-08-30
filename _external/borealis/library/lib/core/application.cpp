@@ -215,6 +215,14 @@ bool Application::internalMainLoop()
     }
     Application::deletionPool = undeletedViews;
 
+    // Free activities deletion pool
+    if (!Application::activityDeletionPool.empty())
+    {
+        for (auto activity : Application::activityDeletionPool)
+            delete activity;
+        Application::activityDeletionPool.clear();
+    }
+
     if (Application::limitedFrameTime > 0)
     {
         Time deltaTime = getCPUTimeUsec() - frameStartTime;
@@ -732,6 +740,7 @@ bool Application::handleAction(const ActionType type, const int button, const bo
                     getAudioPlayer()->play(action->getSound());
 
                     consumedButtons.insert(action->getButton());
+                    return true;
                 }
             }
         }
@@ -838,6 +847,11 @@ void Application::exit()
         delete view;
 
     Application::deletionPool.clear();
+
+    for (auto activity : Application::activityDeletionPool)
+        delete activity;
+
+    Application::activityDeletionPool.clear();
 
     ThreadPool::shutdownGlobal();
     Threading::stop();
@@ -969,8 +983,8 @@ bool Application::popActivity(TransitionAnimation animation, std::function<void(
         }
         cb();
         brls::Logger::debug("Start delete top activity");
-        if(free) delete last;
-        brls::Logger::debug("Top activity deleted");
+        if(free) Application::addToActivityFreeQueue(last);
+        brls::Logger::debug("Top activity deferred for deletion");
 
         Application::unblockInputs(); },
         fade, last->getShowAnimationDuration(animation));
@@ -1042,6 +1056,10 @@ void Application::clear()
     }
 
     Application::activitiesStack.clear();
+
+    for (auto activity : Application::activityDeletionPool)
+        delete activity;
+    Application::activityDeletionPool.clear();
 }
 
 Theme Application::getTheme()
@@ -1075,6 +1093,19 @@ void Application::addToFreeQueue(View* view)
     brls::Logger::verbose("Application::addToFreeQueue {}", view->describe());
 
     Application::deletionPool.push_back(view);
+}
+
+void Application::addToActivityFreeQueue(Activity* activity)
+{
+    if (!activity)
+        return;
+
+    if (std::find(activityDeletionPool.begin(), activityDeletionPool.end(), activity) != activityDeletionPool.end())
+        return;
+
+    brls::Logger::verbose("Application::addToActivityFreeQueue {}", (void*)activity);
+
+    Application::activityDeletionPool.push_back(activity);
 }
 
 void Application::tryDeinitFirstResponder(View* view)

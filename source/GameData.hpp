@@ -745,7 +745,9 @@ inline std::string getOriginalImageUrl(const std::string& url) {
     
     // ImageBan
     size_t ibThumb = original.find("/thumbs/");
-    if (ibThumb != std::string::npos && (original.find("imageban.ru") != std::string::npos || original.find("imageban.co") != std::string::npos)) {
+    if (ibThumb != std::string::npos && (original.find("imageban.ru") != std::string::npos ||
+                                         original.find("imageban.co") != std::string::npos ||
+                                         original.find("imageban.net") != std::string::npos)) {
         original.replace(ibThumb, 8, "/out/");
         return original;
     }
@@ -757,6 +759,17 @@ inline std::string getOriginalImageUrl(const std::string& url) {
         size_t tPos = original.rfind("_t.");
         if (tPos != std::string::npos) {
             original.replace(tPos, 3, "_o.");
+        }
+        return original;
+    }
+    if (original.find("://t") != std::string::npos && original.find(".imgbox.com") != std::string::npos) {
+        size_t tPos = original.find("://t");
+        if (tPos != std::string::npos) {
+            original.replace(tPos + 3, 1, "images");
+        }
+        size_t sPos = original.rfind("_t.");
+        if (sPos != std::string::npos) {
+            original.replace(sPos, 3, "_o.");
         }
         return original;
     }
@@ -779,6 +792,13 @@ inline std::string getOriginalImageUrl(const std::string& url) {
         original.replace(hostPos, 18, "i.postimg.org");
         return original;
     }
+    if (original.find("://t") != std::string::npos && original.find(".postimg.cc") != std::string::npos) {
+        size_t tPos = original.find("://t");
+        if (tPos != std::string::npos) {
+            original.replace(tPos + 3, 1, "i");
+        }
+        return original;
+    }
 
     // PixHost
     if (original.find("pixhost.to/thumbs/") != std::string::npos) {
@@ -792,8 +812,46 @@ inline std::string getOriginalImageUrl(const std::string& url) {
         }
         return original;
     }
+
+    // Radikal
+    if (original.find("radikal.host/t/") != std::string::npos) {
+        size_t rPos = original.find("radikal.host/t/");
+        original.replace(rPos, 15, "radikal.host/i/");
+        return original;
+    }
+    if (original.find("radikal.cloud/t/") != std::string::npos) {
+        size_t rPos = original.find("radikal.cloud/t/");
+        original.replace(rPos, 16, "radikal.cloud/i/");
+        return original;
+    }
     
     return original;
+}
+
+// Check if a game belongs to Homebrew / Ports category
+inline bool isHomebrewGame(const Game& g) {
+    if (!g.genre.empty()) {
+        std::string lowerGenre = g.genre;
+        std::transform(lowerGenre.begin(), lowerGenre.end(), lowerGenre.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowerGenre.find("homebrew") != std::string::npos) {
+            return true;
+        }
+    }
+    if (g.image_format == "NRO" || g.image_format == "nro") {
+        return true;
+    }
+    if (!g.title.empty()) {
+        std::string lowerTitle = g.title;
+        std::transform(lowerTitle.begin(), lowerTitle.end(), lowerTitle.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowerTitle.find("[nro]") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download

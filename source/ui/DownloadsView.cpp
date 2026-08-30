@@ -127,6 +127,7 @@ void DownloadsView::willDisappear(bool resetState) {
     if (util::isBacklightOff()) {
         util::setBacklightOff(false);
     }
+    ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
 void DownloadsView::toggleBacklight() {

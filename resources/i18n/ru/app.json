@@ -28,7 +28,8 @@
     "reset_all": "Сбросить всё",
     "toggle_favorite": "В избранное / Убрать",
     "toggle_all": "Выбрать/Снять все",
-    "start_download": "Начать загрузку"
+    "start_download": "Начать загрузку",
+    "refresh": "Обновить"
   },
   "catalog": {
     "title": "Каталог",
@@ -63,6 +64,8 @@
     "item_new_release_desc": "Автоматически обновляемые\nсвежие релизы",
     "item_top_100_name": "Топ-100",
     "item_top_100_desc": "100 лучших игр всех времён\nпо версии Metacritic",
+    "item_ports_homebrew_name": "Порты и Homebrew",
+    "item_ports_homebrew_desc": "Портированные и homebrew\nигры для консоли",
     "item_action_adventure_name": "Экшены и приключения",
     "item_action_adventure_desc": "Приключенческие экшены\nи динамичные игры",
     "item_arcade_name": "Аркады",
@@ -257,7 +260,7 @@
     "update_invalid_response": "Неверный формат ответа обновлений.",
     "update_parse_error": "Ошибка парсинга обновления:\n{0}",
     "auto_app_update": "Авто-проверка обновлений",
-    "cache_thumbnails": "Кешировать миниатюры обложек",
+    "cache_thumbnails": "Кеш миниатюр обложек",
     "keep_awake": "Предотвращать сон при скачивании",
     "backlight_timeout": "Отключать подсветку во время загрузки",
     "backlight_manual": "Вручную",

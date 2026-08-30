@@ -30,7 +30,6 @@ private:
     brls::Box* tilesBox_ = nullptr;
     std::vector<ui::DashboardTile*> tiles_;
     ui::DashboardSummaryView* summaryView_ = nullptr;
-
     brls::RepeatingTimer* refreshTimer_ = nullptr;
     int current_focused_index_ = 0;
 };

@@ -124,7 +124,7 @@ class Application
      *
      * The first activity to be pushed cannot be popped.
      */
-    static void pushActivity(Activity* view, TransitionAnimation animation = TransitionAnimation::FADE);
+    static void pushActivity(Activity* view, TransitionAnimation animation = TransitionAnimation::NONE);
 
     /**
      * Pops the last pushed activity from the stack
@@ -133,7 +133,7 @@ class Application
      * return false if no actifity to pop.
      */
     static bool popActivity(
-        TransitionAnimation animation = TransitionAnimation::FADE, std::function<void(void)> cb = [] {}, bool free = true);
+        TransitionAnimation animation = TransitionAnimation::NONE, std::function<void(void)> cb = [] {}, bool free = true);
 
     /**
      * Gives the focus to the given view
@@ -396,6 +396,9 @@ class Application
     inline static std::vector<Activity*> activitiesStack;
     inline static std::vector<View*> focusStack;
     inline static std::deque<View*> deletionPool;
+    inline static std::vector<Activity*> activityDeletionPool;
+
+    static void addToActivityFreeQueue(Activity* activity);
 
     inline static View* currentFocus = nullptr;
     inline static MouseState currentMouseState;

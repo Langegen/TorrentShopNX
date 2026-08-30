@@ -14,6 +14,7 @@
 #include "../utils/string_utils.h"
 #include "../utils/app_paths.h"
 #include "../utils/switch_utils.h"
+#include "../utils/storage_utils.h"
 #include "../catalog/catalog_manager.h"
 #include "../net/http_client.h"
 #include <borealis/views/hint.hpp>
@@ -26,6 +27,7 @@
 using namespace brls::literals;
 
 extern std::vector<Game> g_games;
+extern std::recursive_mutex g_switch_service_mutex;
 
 static std::string formatBytesLocal(unsigned long long bytes) {
     double size = static_cast<double>(bytes);
@@ -162,14 +164,162 @@ void MainMenu::setupLayout() {
     });
 }
 
+static int s_cachedInstalledCount = 0;
+static int s_cachedUpdatesCount = 0;
+static bool s_installedCountCalculated = false;
+static std::atomic<bool> s_calculatingInstalledCount{false};
+
+static uint64_t s_totalCacheSize = 0;
+static uint64_t s_totalLeftoverSize = 0;
+static bool s_settingsStatsCalculated = false;
+static std::atomic<bool> s_calculatingSettingsStats{false};
+
 void MainMenu::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
+    s_installedCountCalculated = false;
+    s_settingsStatsCalculated = false;
     refreshDashboardState();
 }
 
 void MainMenu::onTileFocused(int index) {
     current_focused_index_ = index;
     if (summaryView_) {
+        if (index == 2) {
+            // Instantly display cached installed count and updates count (0ms, 60 FPS)
+            summaryView_->setLibraryStats(s_cachedInstalledCount, s_cachedUpdatesCount);
+
+            // Asynchronously query installed count and available updates in background
+            if (!s_installedCountCalculated && !s_calculatingInstalledCount.exchange(true)) {
+                brls::async([this]() {
+                    int installedCount = 0;
+                    int updatesCount = 0;
+                    std::vector<uint64_t> baseTids;
+#ifdef __SWITCH__
+                    {
+                        std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                        if (R_SUCCEEDED(nsInitialize())) {
+                            s32 offset = 0;
+                            s32 entry_count = 0;
+                            do {
+                                std::vector<NsApplicationRecord> batch(50);
+                                if (R_FAILED(nsListApplicationRecord(batch.data(), 50, offset, &entry_count))) break;
+                                for (s32 i = 0; i < entry_count; ++i) {
+                                    baseTids.push_back(batch[i].application_id);
+                                }
+                                installedCount += entry_count;
+                                offset += entry_count;
+                            } while (entry_count == 50);
+                            nsExit();
+                        }
+                    }
+
+                    // Parse available versions database from versions.txt
+                    std::unordered_map<uint64_t, uint32_t> availableVersions;
+                    std::ifstream in(TSNX_VERSIONS_PATH);
+                    if (in.is_open()) {
+                        std::string line;
+                        while (std::getline(in, line)) {
+                            if (line.empty()) continue;
+                            size_t firstPipe = line.find('|');
+                            size_t lastPipe = line.rfind('|');
+                            if (firstPipe != std::string::npos && lastPipe != std::string::npos) {
+                                std::string tidStr = line.substr(0, firstPipe);
+                                std::string verStr = line.substr(lastPipe + 1);
+                                while (!verStr.empty() && (verStr.back() == '\r' || std::isspace(static_cast<unsigned char>(verStr.back())))) {
+                                    verStr.pop_back();
+                                }
+                                try {
+                                    uint64_t tid = std::stoull(tidStr, nullptr, 16);
+                                    uint32_t ver = static_cast<uint32_t>(std::stoul(verStr));
+                                    availableVersions[tid] = ver;
+                                } catch (...) {}
+                            }
+                        }
+                    }
+
+                    // Query installed patch versions using ncm
+                    std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
+                    if (!baseTids.empty()) {
+                        std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                        Result rc = ncmInitialize();
+                        if (R_SUCCEEDED(rc)) {
+                            NcmContentMetaDatabase db;
+                            rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
+                            if (R_FAILED(rc)) rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
+                            if (R_SUCCEEDED(rc)) {
+                                for (uint64_t baseTid : baseTids) {
+                                    uint64_t patchTid = baseTid | 0x800ULL;
+                                    NcmContentMetaKey key;
+                                    if (R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, patchTid))) {
+                                        installedPatchVersions[baseTid] = key.version;
+                                    }
+                                }
+                                ncmContentMetaDatabaseClose(&db);
+                            }
+                            ncmExit();
+                        }
+                    }
+
+                    // Count updates
+                    for (uint64_t baseTid : baseTids) {
+                        uint64_t patchTid = baseTid | 0x800ULL;
+                        auto it = availableVersions.find(patchTid);
+                        if (it != availableVersions.end() && it->second > 0) {
+                            uint32_t latestVer = it->second;
+                            uint32_t currentVer = 0;
+                            auto iv = installedPatchVersions.find(baseTid);
+                            if (iv != installedPatchVersions.end()) currentVer = iv->second;
+                            if (latestVer > currentVer) {
+                                updatesCount++;
+                            }
+                        }
+                    }
+#else
+                    installedCount = 4;
+                    updatesCount = 2;
+#endif
+                    s_cachedInstalledCount = installedCount;
+                    s_cachedUpdatesCount = updatesCount;
+                    s_installedCountCalculated = true;
+                    s_calculatingInstalledCount = false;
+
+                    brls::sync([this, installedCount, updatesCount]() {
+                        if (summaryView_) {
+                            summaryView_->setLibraryStats(installedCount, updatesCount);
+                        }
+                    });
+                });
+            }
+        } else if (index == 4) {
+            auto& cfg = config::ConfigManager::instance();
+            std::string modeStr = (cfg.getDataMode() == "local_client") ? "Custom Engine" : "TorrServer";
+
+            // Instantly display cached total cache size (0ms, 60 FPS, no freezing)
+            summaryView_->setSettingsStats(modeStr, s_totalCacheSize, s_totalLeftoverSize);
+
+            // Asynchronously compute total application cache (sum of all caches) in background
+            if (!s_settingsStatsCalculated && !s_calculatingSettingsStats.exchange(true)) {
+                brls::async([this, modeStr]() {
+                    uint64_t totalCache = util::dirSizeRecursive(TSNX_CACHE_DIR);
+                    uint64_t tempSize = util::dirSizeRecursive(TSNX_CACHE_TMP);
+                    int leftoverCount = 0;
+                    int64_t leftoverSize = 0;
+                    util::getLeftoverPlaceholders(1, leftoverCount, leftoverSize);
+                    uint64_t totalLeftover = (leftoverSize > 0 ? static_cast<uint64_t>(leftoverSize) : 0) + tempSize;
+
+                    s_totalCacheSize = totalCache;
+                    s_totalLeftoverSize = totalLeftover;
+                    s_settingsStatsCalculated = true;
+                    s_calculatingSettingsStats = false;
+
+                    brls::sync([this, modeStr, totalCache, totalLeftover]() {
+                        if (summaryView_) {
+                            summaryView_->setSettingsStats(modeStr, totalCache, totalLeftover);
+                        }
+                    });
+                });
+            }
+        }
         summaryView_->setFocusedIndex(index);
     }
 }
@@ -203,7 +353,7 @@ void MainMenu::updateDownloadsBadge(int count) {
 }
 
 void MainMenu::refreshDashboardState() {
-    // 1. Calculate active downloads count
+    // 1. Calculate active downloads count (fast, in-memory)
     auto& dlMgr = ui::DownloadManager::instance();
     const auto& items = dlMgr.getImpl().queue();
 

@@ -10,6 +10,7 @@ public:
     SpeedSparklineView();
 
     void addSpeedSample(float speed_bytes_per_sec);
+    void setSamples(const std::deque<float>& samples);
     void clear();
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
@@ -17,7 +18,7 @@ public:
 
 private:
     std::deque<float> samples_;
-    size_t max_samples_ = 36;
+    size_t max_samples_ = 45;
     float max_val_ = 1024.0f * 1024.0f; // 1 MB/s min baseline
 };
 

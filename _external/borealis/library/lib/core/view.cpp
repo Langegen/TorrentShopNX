@@ -641,29 +641,39 @@ void View::drawBackground(NVGcontext* vg, FrameContext* ctx, Style style, Rect f
     {
         case ViewBackground::SIDEBAR:
         {
-            float backdropHeight  = style["brls/sidebar/border_height"];
-            NVGcolor sidebarColor = theme["brls/sidebar/background"];
+            float radius = (this->cornerRadius > 0.0f) ? this->cornerRadius : 14.0f;
 
-            // Solid color
+            // 1. True Translucent Frosted Glass Base
             nvgBeginPath(vg);
-            nvgFillColor(vg, a(sidebarColor));
-            nvgRect(vg, x, y + backdropHeight, width, height - backdropHeight * 2);
+            nvgRoundedRect(vg, x, y, width, height, radius);
+            NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height,
+                                                 nvgRGBA(140, 180, 230, 45),
+                                                 nvgRGBA(12, 22, 36, 85));
+            nvgFillPaint(vg, bgPaint);
             nvgFill(vg);
 
-            //Borders gradient
-            // Top
-            NVGpaint topGradient = nvgLinearGradient(vg, x, y + backdropHeight, x, y, a(sidebarColor), TRANSPARENT);
+            // 2. Specular Top Glass Highlight Sheen
             nvgBeginPath(vg);
-            nvgFillPaint(vg, topGradient);
-            nvgRect(vg, x, y, width, backdropHeight);
+            nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, radius > 1.0f ? radius - 1.0f : 0.0f);
+            NVGpaint glossPaint = nvgLinearGradient(
+                vg, x, y, x, y + height * 0.45f,
+                nvgRGBA(255, 255, 255, 38),
+                nvgRGBA(255, 255, 255, 0)
+            );
+            nvgFillPaint(vg, glossPaint);
             nvgFill(vg);
 
-            // Bottom
-            NVGpaint bottomGradient = nvgLinearGradient(vg, x, y + height - backdropHeight, x, y + height, a(sidebarColor), TRANSPARENT);
+            // 3. Subtle Glass Beveled Border Stroke in Emerald-Teal tone
             nvgBeginPath(vg);
-            nvgFillPaint(vg, bottomGradient);
-            nvgRect(vg, x, y + height - backdropHeight, width, backdropHeight);
-            nvgFill(vg);
+            nvgRoundedRect(vg, x, y, width, height, radius);
+            NVGpaint borderPaint = nvgLinearGradient(
+                vg, x, y, x, y + height,
+                nvgRGBA(180, 225, 215, 120),
+                nvgRGBA(40, 85, 95, 40)
+            );
+            nvgStrokePaint(vg, borderPaint);
+            nvgStrokeWidth(vg, 1.2f);
+            nvgStroke(vg);
             break;
         }
         case ViewBackground::VERTICAL_LINEAR:

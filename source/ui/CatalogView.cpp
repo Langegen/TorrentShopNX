@@ -114,7 +114,16 @@ CatalogView::CatalogView(const std::string& searchQuery) {
 void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: onContentAvailable start");
 
-    std::string countStr = "Игр: " + std::to_string(g_games.size());
+    // Pre-populate filteredGames_ with non-homebrew games
+    filteredGames_.clear();
+    filteredGames_.reserve(g_games.size());
+    for (const auto& g : g_games) {
+        if (!isHomebrewGame(g)) {
+            filteredGames_.push_back(g);
+        }
+    }
+
+    std::string countStr = "Игр: " + std::to_string(filteredGames_.size());
     statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
 
     // Register search/filter action keys
@@ -126,7 +135,12 @@ void CatalogView::onContentAvailable() {
     });
 
     this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
-        FilterSortDialog::show(filterState_, g_games, [this](const catalog::FilterSortState& newState) {
+        std::vector<Game> officialGames;
+        officialGames.reserve(g_games.size());
+        for (const auto& g : g_games) {
+            if (!isHomebrewGame(g)) officialGames.push_back(g);
+        }
+        FilterSortDialog::show(filterState_, officialGames, [this](const catalog::FilterSortState& newState) {
             filterState_ = newState;
             filterCatalog();
         }, [this]() {
@@ -144,9 +158,6 @@ void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: registering recycler cell");
     recycler->registerCell("Row", []() { return GameRowCell::create(); });
     brls::Logger::info("CatalogView: cell registered");
-    // Pre-populate filteredGames_ so data is ready when RecyclerFrame does onLayout()
-    brls::Logger::info("CatalogView: about to assign filteredGames_, g_games size=%d", (int)g_games.size());
-    filteredGames_.assign(g_games.begin(), g_games.end());
     brls::Logger::info("CatalogView: filteredGames_ populated, count=%d", (int)filteredGames_.size());
     brls::Logger::info("CatalogView: recycler layouted? creating DataSource...");
     auto* ds = new CatalogDataSource(this);
@@ -164,8 +175,11 @@ void CatalogView::onContentAvailable() {
 void CatalogView::filterCatalog() {
     filteredGames_.clear();
     auto& fm = catalog::FavoritesManager::instance();
+    size_t totalNonHomebrew = 0;
 
     for (const auto& game : g_games) {
+        if (isHomebrewGame(game)) continue;
+        ++totalNonHomebrew;
         bool isFav = filterState_.onlyFavorites ? fm.isFavorite(game) : false;
         if (catalog::matchesGameFilter(game, filterState_, isFav)) {
             filteredGames_.push_back(game);
@@ -180,8 +194,8 @@ void CatalogView::filterCatalog() {
 
     if (statsHint) {
         std::string countStr = "Игр: " + std::to_string(filteredGames_.size());
-        if (filteredGames_.size() != g_games.size()) {
-            countStr += " из " + std::to_string(g_games.size());
+        if (filteredGames_.size() != totalNonHomebrew) {
+            countStr += " из " + std::to_string(totalNonHomebrew);
         }
         statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
     }
