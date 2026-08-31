@@ -16,6 +16,7 @@
 #include "../utils/switch_utils.h"
 #include "../utils/storage_utils.h"
 #include "../catalog/catalog_manager.h"
+#include "../catalog/IgnoredUpdatesManager.hpp"
 #include "../net/http_client.h"
 #include <borealis/views/hint.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
@@ -262,6 +263,9 @@ void MainMenu::onTileFocused(int index) {
 
                     // Count updates
                     for (uint64_t baseTid : baseTids) {
+                        if (catalog::IgnoredUpdatesManager::instance().isIgnored(baseTid)) {
+                            continue;
+                        }
                         uint64_t patchTid = baseTid | 0x800ULL;
                         auto it = availableVersions.find(patchTid);
                         if (it != availableVersions.end() && it->second > 0) {
@@ -275,8 +279,14 @@ void MainMenu::onTileFocused(int index) {
                         }
                     }
 #else
-                    installedCount = 4;
-                    updatesCount = 2;
+                    installedCount = 3;
+                    updatesCount = 0;
+                    std::vector<uint64_t> mockTids = {0x0100000000010000ULL, 0x01007ef00011e000ULL, 0x0100000000020000ULL};
+                    for (uint64_t tid : mockTids) {
+                        if (tid != 0x0100000000020000ULL && !catalog::IgnoredUpdatesManager::instance().isIgnored(tid)) {
+                            updatesCount++;
+                        }
+                    }
 #endif
                     s_cachedInstalledCount = installedCount;
                     s_cachedUpdatesCount = updatesCount;

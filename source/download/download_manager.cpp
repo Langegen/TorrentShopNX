@@ -133,109 +133,166 @@ static std::filesystem::path sanitizeTorrentPath(const std::string& raw) {
     return out;
 }
 
-// Гарантирует, что торрент зарегистрирован в движке (при необходимости добавляет
-// его meta-only из magnet'а) и возвращает путь/размер файла. Безопасно вызывать
-// из фонового воркера: регистрация без meta_only не запускает потоки загрузки.
-static bool resolveEngineFile(const std::string& hash, const std::string& magnet,
-                              int file_index, std::string& out_path,
-                              uint64_t& out_size,
-                              const std::shared_ptr<std::atomic<bool>>& cancel) {
-    tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
-    if (!eng || hash.empty() || file_index < 0) return false;
-    if (!tsnx_engine_has_torrent(eng, hash.c_str())) {
-        char out_hash[TSNX_MAX_HASH_LEN + 1] = {0};
-        if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
-                                       reinterpret_cast<const volatile bool*>(cancel.get()),
-                                       out_hash, sizeof(out_hash))) {
-            return false;
-        }
-    }
-    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
-    int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), TSNX_MAX_FILES);
-    if (file_index >= n) return false;
-    out_path = files[file_index].path;
-    out_size = (uint64_t)files[file_index].size;
-    return true;
-}
 
-// Фоновое копирование не-игрового файла: открывает стрим через источник данных,
+
+// Фоновое копирование не-игровых файлов и Homebrew/портов: открывает стрим через источник данных,
 // последовательно читает и пишет в downloads/ с сохранением иерархии раздачи.
 static void fileCopyWorker(datasource::IDataSource* source,
                            const std::string& hash,
                            const std::string& magnet,
                            int file_index,
+                           const std::vector<int>& selected_files,
+                           bool is_homebrew,
                            const std::shared_ptr<std::atomic<bool>>& cancel,
                            const std::shared_ptr<FileDownloadState>& st) {
-    if (!source || hash.empty() || file_index < 0) {
+    if (!source || hash.empty()) {
         st->failed = true;
         st->error = "invalid file download request";
         return;
     }
 
-    source->setCancelFlag(cancel.get());
-    if (cancel->load() || !source->open(hash, file_index)) {
+    tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
+    if (!eng) {
         st->failed = true;
-        st->error = "failed to open stream";
+        st->error = "custom engine not available";
         return;
     }
 
-    std::string rel_path;
-    uint64_t file_size = 0;
-    if (!resolveEngineFile(hash, magnet, file_index, rel_path, file_size, cancel) ||
-        file_size == 0) {
-        st->failed = true;
-        st->error = "cannot resolve file info";
-        source->notifyStreamingComplete(false);
-        return;
-    }
-
-    st->dest = (downloadsBaseDir() / sanitizeTorrentPath(rel_path)).string();
-    st->size = file_size;
-    st->total.store(file_size);
-
-    std::error_code ec;
-    std::filesystem::create_directories(std::filesystem::path(st->dest).parent_path(), ec);
-    FILE* f = std::fopen(st->dest.c_str(), "wb");
-    if (!f) {
-        st->failed = true;
-        st->error = "cannot create destination file";
-        source->notifyStreamingComplete(false);
-        return;
-    }
-
-    static constexpr size_t kChunk = 1024 * 1024;
-    std::vector<unsigned char> buf(kChunk);
-    uint64_t offset = 0;
-    bool ok = true;
-    while (offset < file_size && !cancel->load()) {
-        size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
-        size_t got = source->read(offset, buf.data(), want);
-        if (got == 0) {
-            // Данные ещё не прибыли (или источник закрыт при отмене) — ждём.
-            if (cancel->load()) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            continue;
+    if (!tsnx_engine_has_torrent(eng, hash.c_str())) {
+        char out_hash[TSNX_MAX_HASH_LEN + 1] = {0};
+        if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
+                                       reinterpret_cast<const volatile bool*>(cancel.get()),
+                                       out_hash, sizeof(out_hash))) {
+            st->failed = true;
+            st->error = "failed to add torrent";
+            return;
         }
-        if (std::fwrite(buf.data(), 1, got, f) != got) {
-            ok = false;
-            st->error = "disk write failed";
+    }
+
+    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
+    int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), TSNX_MAX_FILES);
+    if (n <= 0) {
+        st->failed = true;
+        st->error = "cannot resolve torrent file info";
+        return;
+    }
+
+    // Определяем список индексов файлов для скачивания
+    std::vector<int> target_indices;
+    if (!selected_files.empty()) {
+        target_indices = selected_files;
+    } else if (file_index >= 0 && !is_homebrew) {
+        target_indices.push_back(file_index);
+    } else {
+        // Все файлы раздачи
+        target_indices.reserve(n);
+        for (int i = 0; i < n; ++i) {
+            target_indices.push_back(files[i].index);
+        }
+    }
+
+    if (target_indices.empty()) {
+        st->failed = true;
+        st->error = "no target files to download";
+        return;
+    }
+
+    uint64_t total_size = 0;
+    for (int idx : target_indices) {
+        if (idx >= 0 && idx < n) {
+            total_size += static_cast<uint64_t>(files[idx].size);
+        }
+    }
+    st->size = total_size;
+    st->total.store(total_size);
+
+    uint64_t cumulative_written = 0;
+    std::string first_dest;
+    bool all_ok = true;
+
+    for (int idx : target_indices) {
+        if (cancel->load()) {
+            all_ok = false;
             break;
         }
-        offset += got;
-        st->written.store(offset);
-    }
-    std::fclose(f);
+        if (idx < 0 || idx >= n) continue;
 
-    if (ok && offset >= file_size) {
+        uint64_t file_size = static_cast<uint64_t>(files[idx].size);
+        std::string rel_path = files[idx].path;
+        std::string file_dest = (downloadsBaseDir() / sanitizeTorrentPath(rel_path)).string();
+        if (first_dest.empty()) first_dest = file_dest;
+
+        if (file_size == 0) {
+            std::error_code ec;
+            std::filesystem::create_directories(std::filesystem::path(file_dest).parent_path(), ec);
+            FILE* empty_f = std::fopen(file_dest.c_str(), "wb");
+            if (empty_f) std::fclose(empty_f);
+            continue;
+        }
+
+        source->setCancelFlag(cancel.get());
+        if (cancel->load() || !source->open(hash, idx)) {
+            st->failed = true;
+            st->error = "failed to open stream for " + rel_path;
+            all_ok = false;
+            break;
+        }
+
+        std::error_code ec;
+        std::filesystem::create_directories(std::filesystem::path(file_dest).parent_path(), ec);
+        FILE* f = std::fopen(file_dest.c_str(), "wb");
+        if (!f) {
+            st->failed = true;
+            st->error = "cannot create destination file: " + file_dest;
+            source->notifyStreamingComplete(false);
+            all_ok = false;
+            break;
+        }
+
+        static constexpr size_t kChunk = 1024 * 1024;
+        std::vector<unsigned char> buf(kChunk);
+        uint64_t offset = 0;
+        bool file_ok = true;
+
+        while (offset < file_size && !cancel->load()) {
+            size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
+            size_t got = source->read(offset, buf.data(), want);
+            if (got == 0) {
+                if (cancel->load()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                continue;
+            }
+            if (std::fwrite(buf.data(), 1, got, f) != got) {
+                file_ok = false;
+                st->error = "disk write failed";
+                break;
+            }
+            offset += got;
+            cumulative_written += got;
+            st->written.store(cumulative_written);
+        }
+        std::fclose(f);
+
+        if (file_ok && offset >= file_size) {
+            source->notifyStreamingComplete(true);
+        } else {
+            all_ok = false;
+            st->failed = true;
+            if (st->error.empty()) st->error = "download cancelled";
+            std::error_code e2;
+            std::filesystem::remove(file_dest, e2);
+            source->notifyStreamingComplete(false);
+            break;
+        }
+    }
+
+    if (all_ok && !cancel->load()) {
+        st->dest = (target_indices.size() > 1) ? (downloadsBaseDir().string()) : first_dest;
         st->done = true;
-        st->written.store(file_size);
-        source->notifyStreamingComplete(true);
+        st->written.store(total_size);
     } else {
         st->failed = true;
         if (st->error.empty()) st->error = "download cancelled";
-        std::error_code e2;
-        std::filesystem::remove(st->dest, e2);
-        source->notifyStreamingComplete(false);
     }
 }
 
@@ -372,12 +429,14 @@ void DownloadManager::shutdown() {
 size_t DownloadManager::addToQueue(const std::string& title,
                                    const std::string& magnet,
                                    int forced_file_index,
-                                   const std::string& forced_stream_name) {
+                                   const std::string& forced_stream_name,
+                                   bool is_homebrew) {
     DownloadItem item;
     item.title = title;
     item.magnet = magnet;
     item.forced_file_index = forced_file_index;
     item.forced_stream_name = forced_stream_name;
+    item.is_homebrew = is_homebrew;
     item.state = DownloadState::Queued;
     item.installer = installer::StreamInstaller(64 * 1024 * 1024);
     queue_.push_back(std::move(item));
@@ -852,14 +911,16 @@ void DownloadManager::handleFileDownload(size_t index,
         const std::string hash = item.torrent_hash;
         const std::string magnet = normalizeTorrentLink(item.magnet);
         const int idx = item.forced_file_index;
+        const auto sel_files = item.selected_files;
+        const bool is_hb = item.is_homebrew;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, idx, cancel, st]() {
-                fileCopyWorker(source, hash, magnet, idx, cancel, st);
+            std::async(std::launch::async, [source, hash, magnet, idx, sel_files, is_hb, cancel, st]() {
+                fileCopyWorker(source, hash, magnet, idx, sel_files, is_hb, cancel, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +
-                      " index=" + std::to_string(idx));
+                      " index=" + std::to_string(idx) + " is_homebrew=" + (is_hb ? "true" : "false"));
         return;
     }
 
@@ -1141,8 +1202,18 @@ void DownloadManager::trackProgress() {
             continue;
         }
 
+        // Homebrew/ports or non-game files: download directly to downloads/ without installation
         if (isLocalBackend() &&
             item.state == DownloadState::Downloading &&
+            (item.is_homebrew ||
+             (item.forced_file_index >= 0 && !isSwitchGameFile(item.forced_stream_name)))) {
+            handleFileDownload(i, list, now);
+            continue;
+        }
+
+        if (isLocalBackend() &&
+            item.state == DownloadState::Downloading &&
+            !item.is_homebrew &&
             item.forced_file_index >= 0 &&
             isSwitchGameFile(item.forced_stream_name) &&
             !item.auto_hybrid_started &&
@@ -1154,15 +1225,6 @@ void DownloadManager::trackProgress() {
                           item.torrent_hash +
                           " file_index=" + std::to_string(item.preload_file_index));
             startHybridInstall(i);
-            continue;
-        }
-
-        // Не-игровые файлы (не NSP/NSZ/XCI/XCZ): скачиваем как файл в downloads/.
-        if (isLocalBackend() &&
-            item.state == DownloadState::Downloading &&
-            item.forced_file_index >= 0 &&
-            !isSwitchGameFile(item.forced_stream_name)) {
-            handleFileDownload(i, list, now);
             continue;
         }
 
@@ -1380,6 +1442,7 @@ void DownloadManager::trackProgress() {
 
             if (!matched &&
                 item.state == DownloadState::Downloading &&
+                !item.is_homebrew &&
                 !item.auto_hybrid_started &&
                 !item.hybrid_installer &&
                 ds_manager_.mode() != datasource::DataSourceMode::LocalClient) {
@@ -1467,6 +1530,9 @@ bool DownloadManager::hasActiveTransfers() const {
 bool DownloadManager::startHybridInstall(size_t index) {
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
+    if (item.is_homebrew) {
+        return false;
+    }
 
     if (item.state == DownloadState::Queued) {
         if (!startDownload(index)) {

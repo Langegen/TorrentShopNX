@@ -62,20 +62,14 @@ public:
         coverImg->setScalingType(brls::ImageScalingType::FILL);
 
         if (!game.cover.empty()) {
-            net::ImageDownloader::instance().enqueue(
+            setImageFromHTTPS(
                 coverImg,
                 game.cover,
-                game.title_id.empty() ? game.title : game.title_id,
                 imageToken_,
-                std::string(BRLS_RESOURCES) + "img/tile_catalog.png",
-                false,
-                "",
-                0,
-                0,
-                100
+                "romfs:/img/borealis_96.png"
             );
         } else {
-            coverImg->setImageFromFile(std::string(BRLS_RESOURCES) + "img/tile_catalog.png");
+            coverImg->setImageFromFile("romfs:/img/borealis_96.png");
         }
         imgBox->addView(coverImg);
         this->addView(imgBox);
@@ -296,24 +290,76 @@ void DashboardSummaryView::updateDownloads(const std::vector<download::DownloadI
         speed_history_.clear();
     }
 
-    bool changed = false;
-    if (cached_downloads_.size() != items.size()) {
-        changed = true;
-    } else {
-        for (size_t i = 0; i < items.size(); ++i) {
-            if (cached_downloads_[i].state != items[i].state ||
-                cached_downloads_[i].title != items[i].title ||
-                std::abs(cached_downloads_[i].progress - items[i].progress) > 0.005f ||
-                std::abs(cached_downloads_[i].download_speed_kbps - items[i].download_speed_kbps) > 20.0f) {
-                changed = true;
-                break;
-            }
-        }
-    }
-
     cached_downloads_ = items;
-    if (active_index_ == 3 && changed) {
-        rebuildContent();
+
+    if (active_index_ == 3) {
+        if (activeItem != nullptr && dl_active_mode_ && dl_coverImg_ != nullptr &&
+            activeItem->topic_id == dl_active_topic_id_ && activeItem->title == dl_active_title_) {
+
+            // In-place dynamic updates without tearing down the UI hierarchy or cancelling imageToken_
+            if (dl_titleLbl_) dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
+
+            std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
+                                 ? "Установка..." : "Загрузка...";
+            if (dl_stLbl_) dl_stLbl_->setText(stText);
+
+            if (dl_barFill_) dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
+
+            char pctBuf[16];
+            std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", activeItem->progress * 100.0f);
+            if (dl_pctLbl_) dl_pctLbl_->setText(pctBuf);
+
+            char spdBuf[32];
+            std::snprintf(spdBuf, sizeof(spdBuf), "↓ %.1f MB/s", activeItem->download_speed_kbps / 1024.0f);
+            if (dl_spdLbl_) dl_spdLbl_->setText(spdBuf);
+
+            unsigned long long inst_written = activeItem->install_written;
+            unsigned long long inst_total = activeItem->install_total;
+            if (inst_total == 0 && activeItem->hybrid_installer) {
+                inst_total = activeItem->hybrid_installer->totalBytes();
+            }
+            std::string szStr = formatBytes(inst_written) + " / " + formatBytes(inst_total);
+            if (dl_szLbl_) dl_szLbl_->setText(szStr);
+
+            std::string peersStr = "Пиры: " + std::to_string(activeItem->peers) + " / Сиды: " + std::to_string(activeItem->seeds);
+            if (dl_peersLbl_) dl_peersLbl_->setText(peersStr);
+
+            std::string etaStr = "В процессе";
+            if (activeItem->download_speed_kbps > 10.0f && inst_total > inst_written) {
+                unsigned long long remBytes = inst_total - inst_written;
+                unsigned long long rate = static_cast<unsigned long long>(activeItem->download_speed_kbps * 1024.0f);
+                unsigned long long sec = remBytes / rate;
+                char etaBuf[32];
+                std::snprintf(etaBuf, sizeof(etaBuf), "~%llu мин", (sec / 60) + 1);
+                etaStr = std::string(etaBuf);
+            }
+            if (dl_etaLbl_) dl_etaLbl_->setText("Осталось: " + etaStr);
+
+            if (dl_qCountLbl_) dl_qCountLbl_->setText("В очереди: " + std::to_string(items.size()));
+            if (dl_sparkline_) dl_sparkline_->setSamples(speed_history_);
+
+            // If cover URL was not resolved initially (e.g. catalog loaded asynchronously), try to resolve and set it now
+            if (dl_loaded_cover_url_.empty()) {
+                std::string coverUrl = findCoverForDownload(*activeItem, catalog_sample_);
+                if (!coverUrl.empty()) {
+                    dl_loaded_cover_url_ = coverUrl;
+                    setImageFromHTTPS(
+                        dl_coverImg_,
+                        coverUrl,
+                        imageToken_,
+                        "romfs:/img/borealis_96.png",
+                        false,
+                        "",
+                        -1,
+                        -1,
+                        1000000
+                    );
+                }
+            }
+        } else {
+            // Mode changed (active <-> idle or active download item changed)
+            rebuildContent();
+        }
     }
 }
 
@@ -338,6 +384,35 @@ void DashboardSummaryView::setCatalogSample(const std::vector<Game>& games) {
     }
     if (active_index_ == 0 || (active_index_ == 3 && cached_downloads_.empty())) {
         rebuildContent();
+    } else if (active_index_ == 3 && dl_active_mode_ && dl_loaded_cover_url_.empty() && dl_coverImg_) {
+        // Try to resolve cover now that catalog sample is available
+        const download::DownloadItem* activeItem = nullptr;
+        for (const auto& it : cached_downloads_) {
+            if (it.state == download::DownloadState::Downloading || 
+                it.state == download::DownloadState::StreamPreparing ||
+                it.state == download::DownloadState::StreamInstalling ||
+                it.state == download::DownloadState::Installing) {
+                activeItem = &it;
+                break;
+            }
+        }
+        if (activeItem) {
+            std::string coverUrl = findCoverForDownload(*activeItem, catalog_sample_);
+            if (!coverUrl.empty()) {
+                dl_loaded_cover_url_ = coverUrl;
+                setImageFromHTTPS(
+                    dl_coverImg_,
+                    coverUrl,
+                    imageToken_,
+                    "romfs:/img/borealis_96.png",
+                    false,
+                    "",
+                    -1,
+                    -1,
+                    1000000
+                );
+            }
+        }
     }
 }
 
@@ -370,6 +445,22 @@ void DashboardSummaryView::setSettingsStats(const std::string& engine_mode, uint
 }
 
 void DashboardSummaryView::rebuildContent() {
+    dl_active_mode_ = false;
+    dl_active_topic_id_.clear();
+    dl_active_title_.clear();
+    dl_loaded_cover_url_.clear();
+    dl_coverImg_ = nullptr;
+    dl_titleLbl_ = nullptr;
+    dl_stLbl_ = nullptr;
+    dl_barFill_ = nullptr;
+    dl_pctLbl_ = nullptr;
+    dl_spdLbl_ = nullptr;
+    dl_szLbl_ = nullptr;
+    dl_peersLbl_ = nullptr;
+    dl_etaLbl_ = nullptr;
+    dl_qCountLbl_ = nullptr;
+    dl_sparkline_ = nullptr;
+
     if (imageToken_) {
         *imageToken_ = false;
         imageToken_.reset();
@@ -755,6 +846,10 @@ void DashboardSummaryView::buildDownloadsSection() {
     }
 
     if (activeItem) {
+        dl_active_mode_ = true;
+        dl_active_topic_id_ = activeItem->topic_id;
+        dl_active_title_ = activeItem->title;
+
         // Active Download Display
         brls::Box* headerRow = new brls::Box();
         headerRow->setAxis(brls::Axis::ROW);
@@ -800,55 +895,31 @@ void DashboardSummaryView::buildDownloadsSection() {
         coverBox->setJustifyContent(brls::JustifyContent::CENTER);
         coverBox->setMarginRight(14.0f);
 
-        brls::Image* coverImg = new brls::Image();
-        coverImg->setWidth(68.0f);
-        coverImg->setHeight(108.0f);
-        coverImg->setCornerRadius(6.0f);
-        coverImg->setScalingType(brls::ImageScalingType::FILL);
+        dl_coverImg_ = new brls::Image();
+        dl_coverImg_->setWidth(68.0f);
+        dl_coverImg_->setHeight(108.0f);
+        dl_coverImg_->setCornerRadius(6.0f);
+        dl_coverImg_->setScalingType(brls::ImageScalingType::FILL);
 
-        std::string coverUrl;
-        std::string gameTitleKey = activeItem->title;
-
-        for (const auto& g : g_games) {
-            if (g.cover.empty()) continue;
-            if (!g.title.empty() && (activeItem->title.find(g.title) != std::string::npos || g.title.find(activeItem->title) != std::string::npos)) {
-                coverUrl = g.cover;
-                gameTitleKey = g.title_id.empty() ? g.title : g.title_id;
-                break;
-            }
-            if (!g.topic_id.empty() && !activeItem->magnet.empty() && activeItem->magnet.find(g.topic_id) != std::string::npos) {
-                coverUrl = g.cover;
-                gameTitleKey = g.title_id.empty() ? g.title : g.title_id;
-                break;
-            }
-        }
-        if (coverUrl.empty()) {
-            for (const auto& g : catalog_sample_) {
-                if (!g.cover.empty() && (activeItem->title.find(g.title) != std::string::npos || g.title.find(activeItem->title) != std::string::npos)) {
-                    coverUrl = g.cover;
-                    gameTitleKey = g.title_id.empty() ? g.title : g.title_id;
-                    break;
-                }
-            }
-        }
+        std::string coverUrl = findCoverForDownload(*activeItem, catalog_sample_);
+        dl_loaded_cover_url_ = coverUrl;
 
         if (!coverUrl.empty()) {
-            net::ImageDownloader::instance().enqueue(
-                coverImg,
+            setImageFromHTTPS(
+                dl_coverImg_,
                 coverUrl,
-                gameTitleKey,
                 imageToken_,
-                std::string(BRLS_RESOURCES) + "img/tile_downloads.png",
+                "romfs:/img/borealis_96.png",
                 false,
                 "",
-                0,
-                0,
-                100
+                -1,
+                -1,
+                1000000
             );
         } else {
-            coverImg->setImageFromFile(std::string(BRLS_RESOURCES) + "img/tile_downloads.png");
+            dl_coverImg_->setImageFromFile("romfs:/img/borealis_96.png");
         }
-        coverBox->addView(coverImg);
+        coverBox->addView(dl_coverImg_);
         mainCard->addView(coverBox);
 
         // Details column
@@ -864,20 +935,20 @@ void DashboardSummaryView::buildDownloadsSection() {
         topRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         topRow->setAlignItems(brls::AlignItems::CENTER);
 
-        brls::Label* dTitle = new brls::Label();
-        dTitle->setText(truncateStr(activeItem->title, 34));
-        dTitle->setFontSize(15.0f);
-        dTitle->setTextColor(nvgRGBA(255, 255, 255, 255));
-        dTitle->setSingleLine(true);
-        topRow->addView(dTitle);
+        dl_titleLbl_ = new brls::Label();
+        dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
+        dl_titleLbl_->setFontSize(15.0f);
+        dl_titleLbl_->setTextColor(nvgRGBA(255, 255, 255, 255));
+        dl_titleLbl_->setSingleLine(true);
+        topRow->addView(dl_titleLbl_);
 
         std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
                              ? "Установка..." : "Загрузка...";
-        brls::Label* stLbl = new brls::Label();
-        stLbl->setText(stText);
-        stLbl->setFontSize(12.0f);
-        stLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
-        topRow->addView(stLbl);
+        dl_stLbl_ = new brls::Label();
+        dl_stLbl_->setText(stText);
+        dl_stLbl_->setFontSize(12.0f);
+        dl_stLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        topRow->addView(dl_stLbl_);
         detailsCol->addView(topRow);
 
         // Progress Bar with Percentage
@@ -892,21 +963,21 @@ void DashboardSummaryView::buildDownloadsSection() {
         barBg->setBackgroundColor(nvgRGBA(18, 32, 50, 180));
         barBg->setMarginRight(10.0f);
 
-        brls::Box* barFill = new brls::Box();
-        barFill->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
-        barFill->setHeight(6.0f);
-        barFill->setCornerRadius(3.0f);
-        barFill->setBackgroundColor(nvgRGBA(0, 224, 165, 255));
-        barBg->addView(barFill);
+        dl_barFill_ = new brls::Box();
+        dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
+        dl_barFill_->setHeight(6.0f);
+        dl_barFill_->setCornerRadius(3.0f);
+        dl_barFill_->setBackgroundColor(nvgRGBA(0, 224, 165, 255));
+        barBg->addView(dl_barFill_);
         barRow->addView(barBg);
 
         char pctBuf[16];
         std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", activeItem->progress * 100.0f);
-        brls::Label* pctLbl = new brls::Label();
-        pctLbl->setText(pctBuf);
-        pctLbl->setFontSize(13.0f);
-        pctLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
-        barRow->addView(pctLbl);
+        dl_pctLbl_ = new brls::Label();
+        dl_pctLbl_->setText(pctBuf);
+        dl_pctLbl_->setFontSize(13.0f);
+        dl_pctLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        barRow->addView(dl_pctLbl_);
         detailsCol->addView(barRow);
 
         // Metrics row
@@ -916,11 +987,11 @@ void DashboardSummaryView::buildDownloadsSection() {
 
         char spdBuf[32];
         std::snprintf(spdBuf, sizeof(spdBuf), "↓ %.1f MB/s", activeItem->download_speed_kbps / 1024.0f);
-        brls::Label* spdLbl = new brls::Label();
-        spdLbl->setText(spdBuf);
-        spdLbl->setFontSize(12.0f);
-        spdLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
-        metricsRow->addView(spdLbl);
+        dl_spdLbl_ = new brls::Label();
+        dl_spdLbl_->setText(spdBuf);
+        dl_spdLbl_->setFontSize(12.0f);
+        dl_spdLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        metricsRow->addView(dl_spdLbl_);
 
         unsigned long long inst_written = activeItem->install_written;
         unsigned long long inst_total = activeItem->install_total;
@@ -929,18 +1000,18 @@ void DashboardSummaryView::buildDownloadsSection() {
         }
 
         std::string szStr = formatBytes(inst_written) + " / " + formatBytes(inst_total);
-        brls::Label* szLbl = new brls::Label();
-        szLbl->setText(szStr);
-        szLbl->setFontSize(11.5f);
-        szLbl->setTextColor(nvgRGBA(180, 205, 230, 220));
-        metricsRow->addView(szLbl);
+        dl_szLbl_ = new brls::Label();
+        dl_szLbl_->setText(szStr);
+        dl_szLbl_->setFontSize(11.5f);
+        dl_szLbl_->setTextColor(nvgRGBA(180, 205, 230, 220));
+        metricsRow->addView(dl_szLbl_);
 
         std::string peersStr = "Пиры: " + std::to_string(activeItem->peers) + " / Сиды: " + std::to_string(activeItem->seeds);
-        brls::Label* peersLbl = new brls::Label();
-        peersLbl->setText(peersStr);
-        peersLbl->setFontSize(11.5f);
-        peersLbl->setTextColor(nvgRGBA(150, 175, 205, 200));
-        metricsRow->addView(peersLbl);
+        dl_peersLbl_ = new brls::Label();
+        dl_peersLbl_->setText(peersStr);
+        dl_peersLbl_->setFontSize(11.5f);
+        dl_peersLbl_->setTextColor(nvgRGBA(150, 175, 205, 200));
+        metricsRow->addView(dl_peersLbl_);
 
         std::string etaStr = "В процессе";
         if (activeItem->download_speed_kbps > 10.0f && inst_total > inst_written) {
@@ -951,11 +1022,11 @@ void DashboardSummaryView::buildDownloadsSection() {
             std::snprintf(etaBuf, sizeof(etaBuf), "~%llu мин", (sec / 60) + 1);
             etaStr = std::string(etaBuf);
         }
-        brls::Label* etaLbl = new brls::Label();
-        etaLbl->setText("Осталось: " + etaStr);
-        etaLbl->setFontSize(11.5f);
-        etaLbl->setTextColor(nvgRGBA(150, 175, 205, 200));
-        metricsRow->addView(etaLbl);
+        dl_etaLbl_ = new brls::Label();
+        dl_etaLbl_->setText("Осталось: " + etaStr);
+        dl_etaLbl_->setFontSize(11.5f);
+        dl_etaLbl_->setTextColor(nvgRGBA(150, 175, 205, 200));
+        metricsRow->addView(dl_etaLbl_);
 
         detailsCol->addView(metricsRow);
         mainCard->addView(detailsCol);
@@ -981,18 +1052,18 @@ void DashboardSummaryView::buildDownloadsSection() {
         gLbl->setTextColor(nvgRGBA(160, 185, 215, 220));
         gHeader->addView(gLbl);
 
-        brls::Label* qCountLbl = new brls::Label();
-        qCountLbl->setText("В очереди: " + std::to_string(cached_downloads_.size()));
-        qCountLbl->setFontSize(11.5f);
-        qCountLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
-        gHeader->addView(qCountLbl);
+        dl_qCountLbl_ = new brls::Label();
+        dl_qCountLbl_->setText("В очереди: " + std::to_string(cached_downloads_.size()));
+        dl_qCountLbl_->setFontSize(11.5f);
+        dl_qCountLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        gHeader->addView(dl_qCountLbl_);
         graphCard->addView(gHeader);
 
-        SpeedSparklineView* sparkline = new SpeedSparklineView();
-        sparkline->setWidthPercentage(100.0f);
-        sparkline->setHeight(56.0f);
-        sparkline->setSamples(speed_history_);
-        graphCard->addView(sparkline);
+        dl_sparkline_ = new SpeedSparklineView();
+        dl_sparkline_->setWidthPercentage(100.0f);
+        dl_sparkline_->setHeight(56.0f);
+        dl_sparkline_->setSamples(speed_history_);
+        graphCard->addView(dl_sparkline_);
 
         brls::Label* gFooter = new brls::Label();
         gFooter->setText("Прямая запись на носитель NAND / SD");
@@ -1003,6 +1074,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         bodyRow->addView(graphCard);
         content_container_->addView(bodyRow);
     } else {
+        dl_active_mode_ = false;
         // Idle State: Recommendations from Catalog / Top 100
         brls::Box* headerRow = new brls::Box();
         headerRow->setAxis(brls::Axis::ROW);

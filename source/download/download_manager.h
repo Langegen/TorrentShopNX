@@ -102,6 +102,7 @@ struct DownloadItem {
     std::string topic_id;
     std::vector<int> selected_files;
     bool priorities_set = false;
+    std::string cover_url;
 
     // Скачивание не-игрового файла (простое копирование файла в downloads/,
     // только локальный движок). Состояние живёт в фоновом воркере; progress-тред
@@ -111,6 +112,7 @@ struct DownloadItem {
     std::shared_ptr<std::atomic<bool>> file_dl_cancel = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<FileDownloadState> file_dl_state;
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
+    bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
 };
 
 class DownloadManager {
@@ -121,7 +123,8 @@ public:
     size_t addToQueue(const std::string& title,
                       const std::string& magnet,
                       int forced_file_index = -1,
-                      const std::string& forced_stream_name = "");
+                      const std::string& forced_stream_name = "",
+                      bool is_homebrew = false);
     bool startDownload(size_t index);
     void startNextDownload();
     void trackProgress();

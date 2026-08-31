@@ -49,6 +49,24 @@ private:
     brls::Box* content_container_ = nullptr;
     std::shared_ptr<bool> imageToken_;
     std::deque<float> speed_history_;
+
+    // Dynamic active download widgets (for in-place metrics updates without rebuilding)
+    bool dl_active_mode_ = false;
+    std::string dl_active_topic_id_;
+    std::string dl_active_title_;
+    std::string dl_loaded_cover_url_;
+
+    brls::Image* dl_coverImg_ = nullptr;
+    brls::Label* dl_titleLbl_ = nullptr;
+    brls::Label* dl_stLbl_ = nullptr;
+    brls::Box* dl_barFill_ = nullptr;
+    brls::Label* dl_pctLbl_ = nullptr;
+    brls::Label* dl_spdLbl_ = nullptr;
+    brls::Label* dl_szLbl_ = nullptr;
+    brls::Label* dl_peersLbl_ = nullptr;
+    brls::Label* dl_etaLbl_ = nullptr;
+    brls::Label* dl_qCountLbl_ = nullptr;
+    class SpeedSparklineView* dl_sparkline_ = nullptr;
 };
 
 } // namespace ui

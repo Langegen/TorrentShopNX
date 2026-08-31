@@ -37,7 +37,6 @@ namespace {
 const std::vector<CollectionInfo> kCollections = {
     {"new_release",         "Новые релизы",          "Автоматически обновляемые свежие релизы"},
     {"top_100",             "Топ-100",               "Топ-100 лучших игр всех времён по версии Metacritic"},
-    {"ports_homebrew",      "Порты и Homebrew",      "Портированные и homebrew игры"},
     {"action_adventure",    "Экшены и приключения",  "Приключенческие экшены (Action & Adventure)"},
     {"arcade",              "Аркады",                "Классические и современные аркады"},
     {"horror",              "Хорроры",               "Сурвайвал и психологические хорроры"},
@@ -51,6 +50,7 @@ const std::vector<CollectionInfo> kCollections = {
     {"simulation_cozy",     "Симуляторы и уютные",   "Симуляторы и уютные/фермерские игры"},
     {"strategy_tactics",    "Стратегии и тактика",   "Пошаговая тактика и стратегии"},
     {"visual_novels",       "Визуальные новеллы",    "Визуальные новеллы и сюжетные адвенчуры"},
+    {"ports_homebrew",      "Порты и Homebrew",      "Портированные и homebrew игры"},
 };
 
 bool readWholeFileLocal(const std::string& path, std::string& out) {
@@ -266,6 +266,7 @@ const Game* matchCollectionEntry(const std::vector<Game>& games, const Collectio
 CollectionMatchIndex buildMatchIndex(const std::vector<Game>& games) {
     CollectionMatchIndex index;
     index.by_title_id.reserve(games.size() * 2);
+    index.by_norm_title.reserve(games.size() * 2);
     index.norm_titles.reserve(games.size());
 
     for (const auto& g : games) {
@@ -295,6 +296,9 @@ CollectionMatchIndex buildMatchIndex(const std::vector<Game>& games) {
 
         std::string nc = normalizeForMatch(cleanTitle(g.title));
         if (!nc.empty()) {
+            if (index.by_norm_title.find(nc) == index.by_norm_title.end()) {
+                index.by_norm_title.emplace(nc, &g);
+            }
             index.norm_titles.emplace_back(std::move(nc), &g);
         }
     }
@@ -321,33 +325,45 @@ const Game* matchWithIndex(const CollectionMatchIndex& index, const CollectionEn
         } catch (...) {}
     }
 
-    // 2. По нормализованному названию
+    // 2. Быстрое точное совпадение по нормализованному названию O(1)
     std::string nt = normalizeForMatch(entry.title);
     if (nt.empty()) return nullptr;
 
+    auto itNorm = index.by_norm_title.find(nt);
+    if (itNorm != index.by_norm_title.end()) {
+        return itNorm->second;
+    }
+
+    // Также пробуем нормализовать очищенное название
+    std::string ntClean = normalizeForMatch(cleanTitle(entry.title));
+    if (!ntClean.empty() && ntClean != nt) {
+        auto itClean = index.by_norm_title.find(ntClean);
+        if (itClean != index.by_norm_title.end()) {
+            return itClean->second;
+        }
+    }
+
+    // 3. Нечёткое совпадение по токенам (только если точное не найдено)
     const Game* best = nullptr;
     size_t bestScore = 0;
+    const auto tokens = splitWords(nt);
 
     for (const auto& [nc, game] : index.norm_titles) {
         size_t score = 0;
-        if (nc == nt) {
-            score = 1000 + nc.size();
-        } else if (nt.size() >= 6 && nc.find(nt) != std::string::npos) {
+        if (nt.size() >= 6 && nc.find(nt) != std::string::npos) {
             score = 500 + nt.size();
         } else if (nc.size() >= 6 && nt.find(nc) != std::string::npos) {
             score = 300 + nc.size();
-        } else {
-            const auto tokens = splitWords(nt);
-            if (tokens.size() >= 2) {
-                size_t matched = 0;
-                for (const auto& t : tokens) {
-                    if (t.size() >= 3 && nc.find(t) != std::string::npos) ++matched;
-                }
-                if (matched >= 2 && matched * 2 >= tokens.size()) {
-                    score = matched * 100;
-                }
+        } else if (tokens.size() >= 2) {
+            size_t matched = 0;
+            for (const auto& t : tokens) {
+                if (t.size() >= 3 && nc.find(t) != std::string::npos) ++matched;
+            }
+            if (matched >= 2 && matched * 2 >= tokens.size()) {
+                score = matched * 100;
             }
         }
+
         if (score > bestScore) {
             bestScore = score;
             best = game;

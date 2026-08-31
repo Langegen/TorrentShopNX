@@ -835,7 +835,9 @@ inline bool isHomebrewGame(const Game& g) {
         std::transform(lowerGenre.begin(), lowerGenre.end(), lowerGenre.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
-        if (lowerGenre.find("homebrew") != std::string::npos) {
+        if (lowerGenre.find("homebrew") != std::string::npos ||
+            lowerGenre.find("порт") != std::string::npos ||
+            lowerGenre.find("port") != std::string::npos) {
             return true;
         }
     }
@@ -847,7 +849,8 @@ inline bool isHomebrewGame(const Game& g) {
         std::transform(lowerTitle.begin(), lowerTitle.end(), lowerTitle.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
-        if (lowerTitle.find("[nro]") != std::string::npos) {
+        if (lowerTitle.find("[nro]") != std::string::npos ||
+            lowerTitle.find("[port]") != std::string::npos) {
             return true;
         }
     }
@@ -980,5 +983,89 @@ inline bool compareVersions(const std::string& current, const std::string& avail
     uint32_t curNum = convertVersionStringToNumber(current);
     uint32_t availNum = convertVersionStringToNumber(available);
     return availNum > curNum;
+}
+
+#include "download/download_manager.h"
+
+extern std::vector<Game> g_games;
+
+inline std::string findCoverForDownload(const download::DownloadItem& item, const std::vector<Game>& fallbackSample = {}) {
+    if (!item.cover_url.empty()) {
+        return item.cover_url;
+    }
+
+    // 1. Match by topic_id (strip _fileIndex if present, e.g. "12345_0" -> "12345")
+    std::string origTopicId = item.topic_id;
+    size_t underscorePos = origTopicId.find('_');
+    if (underscorePos != std::string::npos) {
+        origTopicId = origTopicId.substr(0, underscorePos);
+    }
+    if (!origTopicId.empty()) {
+        for (const auto& g : g_games) {
+            if (g.topic_id == origTopicId && !g.cover.empty()) {
+                return g.cover;
+            }
+        }
+        for (const auto& g : fallbackSample) {
+            if (g.topic_id == origTopicId && !g.cover.empty()) {
+                return g.cover;
+            }
+        }
+    }
+
+    // 2. Match by parsed Title ID from item title / stream name
+    uint64_t tid = parseTitleIdFromString(item.title);
+    if (tid == 0 && !item.forced_stream_name.empty()) {
+        tid = parseTitleIdFromString(item.forced_stream_name);
+    }
+    if (tid != 0) {
+        for (const auto& g : g_games) {
+            if (g.cover.empty()) continue;
+            uint64_t gTid = parseTitleIdFromGame(g);
+            if (gTid == tid) {
+                return g.cover;
+            }
+        }
+        for (const auto& g : fallbackSample) {
+            if (g.cover.empty()) continue;
+            uint64_t gTid = parseTitleIdFromGame(g);
+            if (gTid == tid) {
+                return g.cover;
+            }
+        }
+    }
+
+    // 3. Match by cleaned title
+    std::string cTitle = cleanTitle(item.title);
+    size_t parenPos = cTitle.rfind(" (");
+    if (parenPos != std::string::npos) {
+        cTitle = cTitle.substr(0, parenPos);
+    }
+    while (!cTitle.empty() && (cTitle.back() == ' ' || cTitle.back() == '\t')) {
+        cTitle.pop_back();
+    }
+
+    if (!cTitle.empty()) {
+        for (const auto& g : g_games) {
+            if (g.cover.empty()) continue;
+            std::string gClean = cleanTitle(g.title);
+            if (gClean == cTitle ||
+                (gClean.size() > 3 && cTitle.find(gClean) != std::string::npos) ||
+                (cTitle.size() > 3 && gClean.find(cTitle) != std::string::npos)) {
+                return g.cover;
+            }
+        }
+        for (const auto& g : fallbackSample) {
+            if (g.cover.empty()) continue;
+            std::string gClean = cleanTitle(g.title);
+            if (gClean == cTitle ||
+                (gClean.size() > 3 && cTitle.find(gClean) != std::string::npos) ||
+                (cTitle.size() > 3 && gClean.find(cTitle) != std::string::npos)) {
+                return g.cover;
+            }
+        }
+    }
+
+    return "";
 }
 

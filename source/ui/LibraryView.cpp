@@ -4,6 +4,8 @@
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
 #include "../utils/app_paths.h"
+#include "../utils/mod_utils.h"
+#include "../catalog/IgnoredUpdatesManager.hpp"
 #include <exception>
 #include <memory>
 #include <fstream>
@@ -328,7 +330,7 @@ void LibraryView::onContentAvailable() {
 
 void LibraryView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
-    if (resetState && recycler && !displayItems_.empty()) {
+    if (resetState && recycler && !sections_.empty()) {
         brls::Application::giveFocus(recycler);
     }
 }
@@ -338,16 +340,141 @@ void LibraryView::willDisappear(bool resetState) {
     brls::Application::giveFocus(nullptr);
 }
 
+void LibraryView::rebuildSections() {
+    sections_.clear();
+
+    std::vector<LibraryItem> modsUpdates;
+    std::vector<LibraryItem> normalUpdates;
+    std::vector<LibraryItem> ignoredItems;
+    std::vector<LibraryItem> upToDateItems;
+    std::vector<LibraryItem> otherItems;
+
+    auto& ignoredMgr = catalog::IgnoredUpdatesManager::instance();
+
+    for (auto item : rawItems_) {
+        item.updateIgnored = ignoredMgr.isIgnored(item.titleId);
+        if (item.updateIgnored) {
+            item.status = GameUpdateStatus::UpdateIgnored;
+            ignoredItems.push_back(item);
+        } else if (item.status == GameUpdateStatus::UpdateAvailable) {
+            if (item.hasMods) {
+                modsUpdates.push_back(item);
+            } else {
+                normalUpdates.push_back(item);
+            }
+        } else if (item.status == GameUpdateStatus::UpToDate) {
+            upToDateItems.push_back(item);
+        } else {
+            otherItems.push_back(item);
+        }
+    }
+
+    auto sortAlpha = [](std::vector<LibraryItem>& list) {
+        std::sort(list.begin(), list.end(), [](const LibraryItem& a, const LibraryItem& b) {
+            return cleanTitle(a.game.title) < cleanTitle(b.game.title);
+        });
+    };
+
+    sortAlpha(modsUpdates);
+    sortAlpha(normalUpdates);
+    sortAlpha(ignoredItems);
+    sortAlpha(upToDateItems);
+    sortAlpha(otherItems);
+
+    if (!modsUpdates.empty()) {
+        std::string title = brls::getStr("app/library/section_mods_updates", std::to_string(modsUpdates.size()));
+        sections_.push_back({title, std::move(modsUpdates)});
+    }
+    if (!normalUpdates.empty()) {
+        std::string title = brls::getStr("app/library/section_updates", std::to_string(normalUpdates.size()));
+        sections_.push_back({title, std::move(normalUpdates)});
+    }
+    if (!ignoredItems.empty()) {
+        std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
+        sections_.push_back({title, std::move(ignoredItems)});
+    }
+    if (!upToDateItems.empty()) {
+        std::string title = brls::getStr("app/library/section_uptodate", std::to_string(upToDateItems.size()));
+        sections_.push_back({title, std::move(upToDateItems)});
+    }
+    if (!otherItems.empty()) {
+        std::string title = brls::getStr("app/library/section_other", std::to_string(otherItems.size()));
+        sections_.push_back({title, std::move(otherItems)});
+    }
+
+    if (recycler) {
+        recycler->reloadData();
+    }
+    updateStatsAndSpace();
+}
+
+void LibraryView::toggleUpdateIgnored(uint64_t titleId, const std::string& displayName) {
+    bool nowIgnored = catalog::IgnoredUpdatesManager::instance().toggleIgnored(titleId);
+    rebuildSections();
+    if (recycler && !sections_.empty()) {
+        brls::Application::giveFocus(recycler);
+    }
+    std::string name = displayName.empty() ? "?" : displayName;
+    if (nowIgnored) {
+        brls::Application::notify(brls::getStr("app/library/notify_update_disabled", name));
+    } else {
+        brls::Application::notify(brls::getStr("app/library/notify_update_enabled", name));
+    }
+}
+
+void LibraryView::showModWarningDialog(const LibraryItem& item) {
+    std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+    std::string modStr = item.modDetails.empty() ? "RomFS" : item.modDetails;
+    std::string msg = brls::getStr("app/library/mod_warn_dialog_msg", displayName, modStr);
+
+    brls::Dialog* dialog = new brls::Dialog(msg);
+    Game game = item.game;
+    std::string rawName = item.rawName;
+    uint64_t tid = item.titleId;
+
+    dialog->addButton("app/library/mod_warn_btn_proceed"_i18n, [game, rawName]() {
+        if (!game.magnet.empty()) {
+            brls::Application::pushActivity(new GameDetailView(game));
+        } else {
+            std::string query = getFirstTwoWords(rawName);
+            if (query.empty()) query = rawName;
+            brls::Application::pushActivity(new CatalogView(query));
+        }
+    });
+
+    dialog->addButton("app/library/mod_warn_btn_freeze"_i18n, [this, tid, displayName]() {
+        toggleUpdateIgnored(tid, displayName);
+    });
+
+    dialog->addButton("app/common/cancel"_i18n, []() {});
+    dialog->open();
+}
+
 void LibraryView::updateStatsAndSpace() {
     int updateCount = 0;
-    for (const auto& item : displayItems_) {
-        if (item.status == GameUpdateStatus::UpdateAvailable) {
+    int modsCount = 0;
+    int ignoredCount = 0;
+    int totalCount = 0;
+
+    for (const auto& item : rawItems_) {
+        totalCount++;
+        if (item.hasMods) modsCount++;
+        if (item.updateIgnored) {
+            ignoredCount++;
+        } else if (item.status == GameUpdateStatus::UpdateAvailable) {
             updateCount++;
         }
     }
 
     if (statsHint) {
-        statsHint->setText(brls::getStr("app/library/stats", std::to_string(updateCount), std::to_string(displayItems_.size())));
+        std::string s = brls::getStr("app/library/stats", std::to_string(updateCount), std::to_string(totalCount));
+        if (modsCount > 0) {
+            s += " • " + brls::getStr("app/library/stats_mods", std::to_string(modsCount));
+        }
+        if (ignoredCount > 0) {
+            s += " • " + brls::getStr("app/library/stats_ignored", std::to_string(ignoredCount));
+        }
+        statsHint->setText(s);
     }
     updateSpaceHint();
 }
@@ -510,7 +637,8 @@ void LibraryView::scanForUpdates() {
 
         auto makeItem = [](const Game& g, const std::string& currentVer,
                            const std::string& latestVer, GameUpdateStatus status,
-                           uint64_t baseTid, const std::string& rawName) {
+                           uint64_t baseTid, const std::string& rawName,
+                           bool hasMods, bool updateIgnored, const std::string& modDetails) {
             LibraryItem item;
             item.game = g;
             item.currentVersion = currentVer;
@@ -518,6 +646,9 @@ void LibraryView::scanForUpdates() {
             item.status = status;
             item.titleId = baseTid;
             item.rawName = rawName;
+            item.hasMods = hasMods;
+            item.updateIgnored = updateIgnored;
+            item.modDetails = modDetails;
             return item;
         };
 
@@ -563,6 +694,13 @@ void LibraryView::scanForUpdates() {
                 }
                 status = needsUpdate ? GameUpdateStatus::UpdateAvailable : GameUpdateStatus::UpToDate;
             }
+
+            // Check if game has mods and if update check is ignored
+            auto modInfo = util::detectGameMods(baseTid);
+            bool isIgnored = catalog::IgnoredUpdatesManager::instance().isIgnored(baseTid);
+            if (isIgnored) {
+                status = GameUpdateStatus::UpdateIgnored;
+            }
             
             // Match by Title ID (indexed): the explicit title_id field from the
             // catalog JSON, or the [0100...] bracket in the title.
@@ -571,7 +709,7 @@ void LibraryView::scanForUpdates() {
                 auto mit = catIndex.byTid.find(baseTid);
                 if (mit == catIndex.byTid.end()) mit = catIndex.byTid.find(patchTid);
                 if (mit != catIndex.byTid.end()) {
-                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name));
+                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
                     foundInCatalog = true;
                 }
             }
@@ -583,7 +721,7 @@ void LibraryView::scanForUpdates() {
                     for (const auto& entry : catIndex.byCleanName) {
                         const std::string& catClean = entry.first;
                         if (catClean == instClean || catClean.find(instClean) != std::string::npos || instClean.find(catClean) != std::string::npos) {
-                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name));
+                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
                             foundInCatalog = true;
                             break;
                         }
@@ -597,38 +735,23 @@ void LibraryView::scanForUpdates() {
                 dummy.title = inst.name.empty() ? ("Unknown Game") : inst.name;
                 dummy.cover = "";
                 dummy.size = "";
-                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name));
+                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
             }
         }
         
         if (cancelToken && *cancelToken) return;
 
-        // Sort items: updates first, then alphabetically by title
-        std::sort(displayItems.begin(), displayItems.end(), [](const LibraryItem& a, const LibraryItem& b) {
-            if (a.status != b.status) {
-                return a.status == GameUpdateStatus::UpdateAvailable; // update-able first
-            }
-            return a.game.title < b.game.title;
-        });
-        
-        if (cancelToken && *cancelToken) return;
-
         // Sync with UI thread
-        brls::sync([this, cancelToken, items = std::move(displayItems)]() {
+        brls::sync([this, cancelToken, items = std::move(displayItems)]() mutable {
             if (cancelToken && *cancelToken) return;
 
             isScanning_ = false;
             if (!this->getContentView()) return;
             
-            displayItems_ = std::move(items);
+            rawItems_ = std::move(items);
+            rebuildSections();
             
-            if (recycler) {
-                recycler->reloadData();
-            }
-            
-            updateStatsAndSpace();
-            
-            if (!displayItems_.empty() && recycler) {
+            if (!sections_.empty() && recycler) {
                 brls::Application::giveFocus(recycler);
             }
         });
@@ -639,10 +762,6 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
     std::string msg = brls::getStr("app/library/uninstall_confirm", displayName.empty() ? "?" : displayName);
     
     brls::Dialog* dialog = new brls::Dialog(msg);
-    // NOTE: dialog buttons must NOT call dialog->close() themselves.
-    // Dialog::buttonClick already dismisses the dialog (pops its activity);
-    // closing it again would pop ANOTHER activity (this LibraryView) and
-    // silently kick the user back to the main menu.
     dialog->addButton("app/common/yes"_i18n, [this, titleId, displayName]() {
         auto cancelToken = cancelToken_;
         brls::async([this, titleId, displayName, cancelToken]() {
@@ -670,25 +789,17 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
                     if (cancelToken && *cancelToken) return;
 
                     if (ok) {
-                        // The whole UI update is guarded: an exception here
-                        // would otherwise escape to the main loop handler,
-                        // which exits the app back to the homebrew menu.
                         try {
-                            for (auto it = displayItems_.begin(); it != displayItems_.end(); ++it) {
+                            for (auto it = rawItems_.begin(); it != rawItems_.end(); ++it) {
                                 if (it->titleId == titleId) {
-                                    displayItems_.erase(it);
+                                    rawItems_.erase(it);
                                     break;
                                 }
                             }
-                            if (recycler) {
-                                recycler->reloadData();
-                                // The deleted row was focused; re-establish a
-                                // valid focus so the next input can't crash.
-                                if (!displayItems_.empty()) {
-                                    brls::Application::giveFocus(recycler);
-                                }
+                            rebuildSections();
+                            if (recycler && !sections_.empty()) {
+                                brls::Application::giveFocus(recycler);
                             }
-                            updateStatsAndSpace();
                         } catch (const std::exception& e) {
                             util::logLine(std::string("library: uninstall UI update exception: ") + e.what());
                         }
@@ -710,20 +821,42 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
     dialog->open();
 }
 
+int LibraryView::LibraryDataSource::numberOfSections(brls::RecyclerFrame* recycler) {
+    return parent_->sections_.size();
+}
+
 int LibraryView::LibraryDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {
-    return parent_->displayItems_.size();
+    if (section >= 0 && section < static_cast<int>(parent_->sections_.size())) {
+        return parent_->sections_[section].items.size();
+    }
+    return 0;
+}
+
+float LibraryView::LibraryDataSource::heightForHeader(brls::RecyclerFrame* recycler, int section) {
+    if (section >= 0 && section < static_cast<int>(parent_->sections_.size())) {
+        return parent_->sections_[section].title.empty() ? 0.0f : 42.0f;
+    }
+    return 0.0f;
+}
+
+std::string LibraryView::LibraryDataSource::titleForHeader(brls::RecyclerFrame* recycler, int section) {
+    if (section >= 0 && section < static_cast<int>(parent_->sections_.size())) {
+        return parent_->sections_[section].title;
+    }
+    return "";
 }
 
 brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
     LibraryRowCell* cell = dynamic_cast<LibraryRowCell*>(recycler->dequeueReusableCell("Row"));
-    if (!cell) return nullptr;
+    if (index.section >= parent_->sections_.size() || index.row < 0 ||
+        static_cast<size_t>(index.row) >= parent_->sections_[index.section].items.size()) {
+        return cell;
+    }
 
-    int row = index.row;
-    
     if (cell->imageToken) *(cell->imageToken) = false;
     cell->imageToken = std::make_shared<bool>(true);
 
-    const auto& item = parent_->displayItems_[row];
+    const auto& item = parent_->sections_[index.section].items[index.row];
 
     if (!cell->title || !cell->titleId || !cell->currentVersion || !cell->latestVersion || !cell->statusBadge || !cell->statusBox || !cell->cover) {
         brls::Logger::error("LibraryDataSource: one or more cell child views are NULL!");
@@ -743,14 +876,33 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
 
         cell->titleId->setText("ID: " + tidStrUpper);
 
+        if (cell->modBadgeBox && cell->modBadge) {
+            if (item.hasMods) {
+                cell->modBadgeBox->setVisibility(brls::Visibility::VISIBLE);
+                cell->modBadge->setText(item.modDetails.empty() ? "app/library/badge_mods"_i18n : item.modDetails);
+            } else {
+                cell->modBadgeBox->setVisibility(brls::Visibility::GONE);
+            }
+        }
+
         cell->currentVersion->setText(item.currentVersion);
         cell->latestVersion->setText(item.latestVersion);
 
         // Configure status badge dynamically
-        if (item.status == GameUpdateStatus::UpdateAvailable) {
-            cell->statusBadge->setText("app/library/badge_update"_i18n);
-            cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
-            cell->statusBox->setBackgroundColor(nvgRGB(255, 87, 34)); // Orange/red
+        if (item.updateIgnored) {
+            cell->statusBadge->setText("app/library/badge_ignored"_i18n);
+            cell->statusBadge->setTextColor(nvgRGB(220, 220, 220));
+            cell->statusBox->setBackgroundColor(nvgRGB(75, 85, 99)); // Slate
+        } else if (item.status == GameUpdateStatus::UpdateAvailable) {
+            if (item.hasMods) {
+                cell->statusBadge->setText("app/library/badge_update_mod_warn"_i18n);
+                cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
+                cell->statusBox->setBackgroundColor(nvgRGB(230, 81, 0)); // Dark warning orange
+            } else {
+                cell->statusBadge->setText("app/library/badge_update"_i18n);
+                cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
+                cell->statusBox->setBackgroundColor(nvgRGB(255, 87, 34)); // Orange/red
+            }
         } else if (item.status == GameUpdateStatus::UpToDate) {
             cell->statusBadge->setText("app/library/badge_uptodate"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
@@ -761,9 +913,7 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
             cell->statusBox->setBackgroundColor(nvgRGB(120, 120, 120)); // Gray: no version data
         }
 
-        // Prefer the system icon cached from the installed game's NACP (the one
-        // the Switch home menu shows); fall back to the catalog cover, then to
-        // the tinfoil CDN by Title ID.
+        // Prefer the system icon cached from the installed game's NACP
         std::string localIconPath;
 #ifdef __SWITCH__
         {
@@ -789,20 +939,44 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
 
         Game game = item.game;
         std::string rawName = item.rawName;
-        cell->registerClickAction([game, rawName](brls::View* view) {
-            if (!game.magnet.empty()) {
-                brls::Application::pushActivity(new GameDetailView(game));
-            } else {
-                std::string query = getFirstTwoWords(rawName);
-                if (query.empty()) query = rawName;
-                brls::Application::pushActivity(new CatalogView(query));
-            }
-            return true;
-        });
-
-        // Uninstall action (Y button)
         uint64_t tid = item.titleId;
         std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+
+        // Click action (A button)
+        if (item.hasMods && !item.updateIgnored && item.status == GameUpdateStatus::UpdateAvailable) {
+            cell->registerClickAction([parent = parent_, item](brls::View* view) {
+                parent->showModWarningDialog(item);
+                return true;
+            });
+        } else {
+            cell->registerClickAction([game, rawName](brls::View* view) {
+                if (!game.magnet.empty()) {
+                    brls::Application::pushActivity(new GameDetailView(game));
+                } else {
+                    std::string query = getFirstTwoWords(rawName);
+                    if (query.empty()) query = rawName;
+                    brls::Application::pushActivity(new CatalogView(query));
+                }
+                return true;
+            });
+        }
+
+        // Toggle update ignore action (X button)
+        if (item.updateIgnored) {
+            cell->registerAction("app/library/action_enable_update"_i18n, brls::ControllerButton::BUTTON_X,
+                [parent = parent_, tid, displayName](brls::View* view) {
+                    parent->toggleUpdateIgnored(tid, displayName);
+                    return true;
+                });
+        } else {
+            cell->registerAction("app/library/action_disable_update"_i18n, brls::ControllerButton::BUTTON_X,
+                [parent = parent_, tid, displayName](brls::View* view) {
+                    parent->toggleUpdateIgnored(tid, displayName);
+                    return true;
+                });
+        }
+
+        // Uninstall action (Y button)
         cell->registerAction("app/library/uninstall"_i18n, brls::ControllerButton::BUTTON_Y,
             [parent = parent_, tid, displayName](brls::View* view) {
                 parent->uninstallGame(tid, displayName);
@@ -810,9 +984,9 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
             });
 
     } catch (const std::exception& e) {
-        brls::Logger::error("LibraryDataSource: EXCEPTION in card setup {}: {}", row, e.what());
+        brls::Logger::error("LibraryDataSource: EXCEPTION in card setup [{}, {}]: {}", index.section, index.row, e.what());
     } catch (...) {
-        brls::Logger::error("LibraryDataSource: UNKNOWN EXCEPTION in card setup {}", row);
+        brls::Logger::error("LibraryDataSource: UNKNOWN EXCEPTION in card setup [{}, {}]", index.section, index.row);
     }
     
     return cell;

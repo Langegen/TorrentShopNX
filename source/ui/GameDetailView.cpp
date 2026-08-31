@@ -1,5 +1,7 @@
 #include "GameDetailView.hpp"
 #include "FileSelectView.hpp"
+#include "DownloadUiManager.hpp"
+#include "DownloadsView.hpp"
 #include "FavoritesManager.hpp"
 #include "ScreenshotViewer.hpp"
 #include "QrCodeView.hpp"
@@ -152,6 +154,15 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     btnDownload->registerClickAction([this](brls::View* view) {
+        if (isHomebrewGame(game_)) {
+            ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+            brls::sync([]() {
+                while (brls::Application::getActivitiesStack().size() > 1)
+                    brls::Application::popActivity(brls::TransitionAnimation::NONE);
+                brls::Application::pushActivity(new ui::DownloadsView());
+            });
+            return true;
+        }
         brls::Application::pushActivity(new FileSelectView(game_));
         return true;
     });

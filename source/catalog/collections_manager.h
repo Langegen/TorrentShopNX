@@ -29,6 +29,7 @@ struct CollectionInfo {
 // Предсобранный индекс по каталогу для быстрого матчинга без полных проходов.
 struct CollectionMatchIndex {
     std::unordered_map<uint64_t, const Game*> by_title_id;
+    std::unordered_map<std::string, const Game*> by_norm_title;
     std::vector<std::pair<std::string, const Game*>> norm_titles;
 };
 

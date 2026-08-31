@@ -56,6 +56,7 @@
 #define TSNX_VERSIONS_PATH       TSNX_DATA_DIR "/versions.txt"
 #define TSNX_FAVORITES_PATH      TSNX_DATA_DIR "/favorites.json"
 #define TSNX_SOURCES_PATH        TSNX_DATA_DIR "/sources.json"
+#define TSNX_IGNORED_UPDATES_PATH TSNX_DATA_DIR "/ignored_updates.json"
 
 #define TSNX_DHT_CACHE_FILE      TSNX_CACHE_DHT "/dht_cache.bin"
 #define TSNX_TORRENTFS_CACHE     TSNX_CACHE_TORRENTFS "/cache.bin"
