@@ -243,6 +243,14 @@ static bool downloadVersionsDatabaseIfNeeded() {
     }
     
     if (res.status_code == 200 && !res.body.empty()) {
+        try {
+            std::filesystem::path p(path);
+            if (p.has_parent_path()) {
+                std::error_code ec;
+                std::filesystem::create_directories(p.parent_path(), ec);
+            }
+        } catch (...) {}
+
         std::ofstream out(path, std::ios::binary);
         if (out) {
             out.write(res.body.data(), res.body.size());

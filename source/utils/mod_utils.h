@@ -5,7 +5,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <sys/stat.h>
-#include <filesystem>
+#include <dirent.h>
+#include <cstring>
 
 namespace util {
 
@@ -18,6 +19,7 @@ struct GameModInfo {
     std::string summary; // e.g. "RomFS", "ExeFS", "RomFS + ExeFS", "Cheats"
 };
 
+// Detect installed LayeredFS mods (RomFS translations/voiceovers, ExeFS patches, cheats)
 inline GameModInfo detectGameMods(uint64_t titleId) {
     GameModInfo info;
     if (titleId == 0) return info;
@@ -30,10 +32,10 @@ inline GameModInfo detectGameMods(uint64_t titleId) {
     std::vector<std::string> candidateDirs;
 
 #ifdef __SWITCH__
-    candidateDirs.push_back(std::string("sdmc:/atmosphere/contents/") + tidUpper);
     candidateDirs.push_back(std::string("sdmc:/atmosphere/contents/") + tidLower);
-    candidateDirs.push_back(std::string("sdmc:/atmosphere/titles/") + tidUpper);
+    candidateDirs.push_back(std::string("sdmc:/atmosphere/contents/") + tidUpper);
     candidateDirs.push_back(std::string("sdmc:/atmosphere/titles/") + tidLower);
+    candidateDirs.push_back(std::string("sdmc:/atmosphere/titles/") + tidUpper);
     candidateDirs.push_back(std::string("sdmc:/sxos/titles/") + tidUpper);
     candidateDirs.push_back(std::string("sdmc:/sxos/titles/") + tidLower);
     candidateDirs.push_back(std::string("sdmc:/ReNX/contents/") + tidUpper);
@@ -74,9 +76,18 @@ inline GameModInfo detectGameMods(uint64_t titleId) {
                 info.hasCheats = true;
             }
 
-            std::error_code ec;
-            auto it = std::filesystem::directory_iterator(dir, ec);
-            bool hasAnyEntries = (!ec && it != std::filesystem::directory_iterator());
+            bool hasAnyEntries = false;
+            DIR* dp = opendir(dir.c_str());
+            if (dp) {
+                struct dirent* ep;
+                while ((ep = readdir(dp)) != nullptr) {
+                    if (std::strcmp(ep->d_name, ".") != 0 && std::strcmp(ep->d_name, "..") != 0) {
+                        hasAnyEntries = true;
+                        break;
+                    }
+                }
+                closedir(dp);
+            }
 
             if (info.hasRomfs || info.hasExefs || info.hasCheats || hasAnyEntries) {
                 info.hasMods = true;

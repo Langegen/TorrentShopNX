@@ -180,6 +180,9 @@ void MainMenu::willAppear(bool resetState) {
     s_installedCountCalculated = false;
     s_settingsStatsCalculated = false;
     refreshDashboardState();
+    if (summaryView_) {
+        onTileFocused(current_focused_index_);
+    }
 }
 
 void MainMenu::onTileFocused(int index) {
@@ -307,15 +310,20 @@ void MainMenu::onTileFocused(int index) {
             // Instantly display cached total cache size (0ms, 60 FPS, no freezing)
             summaryView_->setSettingsStats(modeStr, s_totalCacheSize, s_totalLeftoverSize);
 
-            // Asynchronously compute total application cache (sum of all caches) in background
+            // Asynchronously compute total application cache (sum of all caches) and leftovers in background
             if (!s_settingsStatsCalculated && !s_calculatingSettingsStats.exchange(true)) {
                 brls::async([this, modeStr]() {
-                    uint64_t totalCache = util::dirSizeRecursive(TSNX_CACHE_DIR);
-                    uint64_t tempSize = util::dirSizeRecursive(TSNX_CACHE_TMP);
-                    int leftoverCount = 0;
-                    int64_t leftoverSize = 0;
-                    util::getLeftoverPlaceholders(1, leftoverCount, leftoverSize);
-                    uint64_t totalLeftover = (leftoverSize > 0 ? static_cast<uint64_t>(leftoverSize) : 0) + tempSize;
+                    uint64_t totalCache = util::dirSizeRecursive(TSNX_CACHE_DIR) + util::pathSize(TSNX_VERSIONS_PATH);
+                    uint64_t tempSize = util::dirSizeRecursive(TSNX_CACHE_STREAM) +
+                                        util::dirSizeRecursive(TSNX_CACHE_TMP) +
+                                        util::dirSizeRecursive(TSNX_CACHE_LOCALENGINE);
+                    int phCountSd = 0, phCountNand = 0;
+                    int64_t phSizeSd = 0, phSizeNand = 0;
+                    util::getLeftoverPlaceholders(1, phCountSd, phSizeSd);
+                    util::getLeftoverPlaceholders(0, phCountNand, phSizeNand);
+                    uint64_t placeholderSize = (phSizeSd > 0 ? static_cast<uint64_t>(phSizeSd) : 0) +
+                                               (phSizeNand > 0 ? static_cast<uint64_t>(phSizeNand) : 0);
+                    uint64_t totalLeftover = placeholderSize + tempSize;
 
                     s_totalCacheSize = totalCache;
                     s_totalLeftoverSize = totalLeftover;

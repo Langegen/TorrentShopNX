@@ -101,14 +101,69 @@ static bool isTransferActive(download::DownloadState state) {
            state == download::DownloadState::Installing;
 }
 
-// Корневая папка downloads/ (куда сохраняются не-игровые файлы).
+// Корневая папка downloads/ (куда сохраняются не-игровые файлы и Homebrew).
 static std::filesystem::path downloadsBaseDir() {
     return std::filesystem::path(TSNX_DOWNLOADS_DIR);
 }
 
+// Очистка компонента пути (имени файла или папки) от недопустимых символов ФС
+static std::string sanitizePathComponent(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (size_t i = 0; i < raw.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(raw[i]);
+        if (c < 0x20) continue; // control characters
+        if (c == ':' || c == '/') {
+            out.push_back(' ');
+            out.push_back('-');
+            out.push_back(' ');
+        } else if (c == '\\' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+            out.push_back('_');
+        } else {
+            out.push_back(static_cast<char>(c));
+        }
+    }
+    // Collapse multiple consecutive spaces
+    std::string collapsed;
+    collapsed.reserve(out.size());
+    bool in_space = false;
+    for (char c : out) {
+        if (c == ' ' || c == '\t') {
+            if (!in_space) {
+                collapsed.push_back(' ');
+                in_space = true;
+            }
+        } else {
+            collapsed.push_back(c);
+            in_space = false;
+        }
+    }
+    // Trim spaces and dots from start and end
+    while (!collapsed.empty() && (collapsed.front() == ' ' || collapsed.front() == '.')) {
+        collapsed.erase(collapsed.begin());
+    }
+    while (!collapsed.empty() && (collapsed.back() == ' ' || collapsed.back() == '.')) {
+        collapsed.pop_back();
+    }
+    if (collapsed.empty()) {
+        return "download";
+    }
+    return collapsed;
+}
+
+// Извлечение безопасного имени папки раздачи из названия
+static std::string extractReleaseFolderName(const std::string& title) {
+    std::string name = title;
+    // Если в конце названия указано "(имя_файла)" из FileSelectView, убираем его
+    size_t lastParen = name.rfind(" (");
+    if (lastParen != std::string::npos && !name.empty() && name.back() == ')') {
+        name = name.substr(0, lastParen);
+    }
+    return sanitizePathComponent(name);
+}
+
 // Относительный путь файла из торрента -> безопасный относительный путь:
-// сохраняем иерархию раздачи, но выкидываем "..", пустые сегменты, абсолютные
-// сегменты (диски) и управляющие символы, чтобы не уйти за пределы downloads/.
+// сохраняем иерархию раздачи, но очищаем сегменты от недопустимых символов.
 static std::filesystem::path sanitizeTorrentPath(const std::string& raw) {
     std::string path = raw;
     for (char& c : path) {
@@ -121,25 +176,22 @@ static std::filesystem::path sanitizeTorrentPath(const std::string& raw) {
         std::string seg = (next == std::string::npos) ? path.substr(pos) : path.substr(pos, next - pos);
         pos = (next == std::string::npos) ? path.size() : next + 1;
         if (seg.empty() || seg == "." || seg == "..") continue;
-        bool bad = false;
-        for (unsigned char u : seg) {
-            if (u < 0x20 || u == ':') { bad = true; break; }
+        std::string safe_seg = sanitizePathComponent(seg);
+        if (!safe_seg.empty() && safe_seg != "." && safe_seg != "..") {
+            segs.push_back(std::move(safe_seg));
         }
-        if (bad) continue;
-        segs.push_back(std::move(seg));
     }
     std::filesystem::path out;
     for (const auto& s : segs) out /= s;
     return out;
 }
 
-
-
 // Фоновое копирование не-игровых файлов и Homebrew/портов: открывает стрим через источник данных,
-// последовательно читает и пишет в downloads/ с сохранением иерархии раздачи.
+// последовательно читает и пишет в downloads/<имя_раздачи>/ с сохранением иерархии раздачи.
 static void fileCopyWorker(datasource::IDataSource* source,
                            const std::string& hash,
                            const std::string& magnet,
+                           const std::string& release_title,
                            int file_index,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
@@ -176,6 +228,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
         st->error = "cannot resolve torrent file info";
         return;
     }
+
+    // Папка конкретной раздачи внутри downloads/
+    std::string release_folder = extractReleaseFolderName(release_title);
+    std::filesystem::path release_base = downloadsBaseDir() / release_folder;
 
     // Определяем список индексов файлов для скачивания
     std::vector<int> target_indices;
@@ -219,7 +275,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
 
         uint64_t file_size = static_cast<uint64_t>(files[idx].size);
         std::string rel_path = files[idx].path;
-        std::string file_dest = (downloadsBaseDir() / sanitizeTorrentPath(rel_path)).string();
+        std::string file_dest = (release_base / sanitizeTorrentPath(rel_path)).string();
         if (first_dest.empty()) first_dest = file_dest;
 
         if (file_size == 0) {
@@ -287,7 +343,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
     }
 
     if (all_ok && !cancel->load()) {
-        st->dest = (target_indices.size() > 1) ? (downloadsBaseDir().string()) : first_dest;
+        st->dest = release_base.string();
         st->done = true;
         st->written.store(total_size);
     } else {
@@ -910,17 +966,19 @@ void DownloadManager::handleFileDownload(size_t index,
         auto st = item.file_dl_state = std::make_shared<FileDownloadState>();
         const std::string hash = item.torrent_hash;
         const std::string magnet = normalizeTorrentLink(item.magnet);
+        const std::string title = item.title;
         const int idx = item.forced_file_index;
         const auto sel_files = item.selected_files;
         const bool is_hb = item.is_homebrew;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, idx, sel_files, is_hb, cancel, st]() {
-                fileCopyWorker(source, hash, magnet, idx, sel_files, is_hb, cancel, st);
+            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, cancel, st]() {
+                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, cancel, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +
-                      " index=" + std::to_string(idx) + " is_homebrew=" + (is_hb ? "true" : "false"));
+                      " title='" + title + "' index=" + std::to_string(idx) +
+                      " is_homebrew=" + (is_hb ? "true" : "false"));
         return;
     }
 

@@ -322,28 +322,38 @@ RecyclerCell* RecyclerFrame::dequeueReusableCell(std::string identifier)
 // TODO: Implement it normally
 void RecyclerFrame::selectRowAt(IndexPath indexPath, bool animated)
 {
+    if (this->cacheFramesData.empty() || !dataSource)
+        return;
+
     size_t count    = 0;
     float offset = 0;
 
-    for (size_t j = 0; j < indexPath.section; j++)
+    for (size_t j = 0; j < indexPath.section && j < (size_t)dataSource->numberOfSections(this); j++)
         for (int i = -1; i < (dataSource->numberOfRows(this, j)); i++)
         {
-            offset += this->cacheFramesData[count++].height;
+            if (count < this->cacheFramesData.size())
+                offset += this->cacheFramesData[count++].height;
         }
 
-    for (int i = -1; i <= indexPath.row; i++)
-        offset += this->cacheFramesData[count++].height;
+    for (int i = -1; i <= (int)indexPath.row; i++)
+    {
+        if (count < this->cacheFramesData.size())
+            offset += this->cacheFramesData[count++].height;
+    }
 
     offset -= this->getHeight() / 2;
     this->setContentOffsetY(offset, animated);
     this->cellsRecyclingLoop();
 
-    for (View* view : contentBox->getChildren())
+    if (count > 0)
     {
-        if (*((size_t*)view->getParentUserData()) == count - 1)
+        for (View* view : contentBox->getChildren())
         {
-            contentBox->setLastFocusedView(view);
-            break;
+            if (view->getParentUserData() && *((size_t*)view->getParentUserData()) == count - 1)
+            {
+                contentBox->setLastFocusedView(view);
+                break;
+            }
         }
     }
 }
@@ -396,13 +406,16 @@ bool RecyclerFrame::checkWidth()
 
 void RecyclerFrame::cellsRecyclingLoop()
 {
+    if (this->cacheFramesData.empty() || this->cacheIndexPathData.empty())
+        return;
+
     Rect visibleFrame = getVisibleFrame();
 
     while (true)
     {
         RecyclerCell* minCell = nullptr;
         for (auto it : contentBox->getChildren())
-            if (*((size_t*)it->getParentUserData()) == visibleMin)
+            if (it->getParentUserData() && *((size_t*)it->getParentUserData()) == visibleMin)
                 minCell = (RecyclerCell*)it;
 
         if (!minCell || minCell->getDetachedPosition().y + minCell->getHeight() >= visibleFrame.getMinY() - 720.0f)
@@ -424,7 +437,7 @@ void RecyclerFrame::cellsRecyclingLoop()
     {
         RecyclerCell* maxCell = nullptr;
         for (auto it : contentBox->getChildren())
-            if (*((size_t*)it->getParentUserData()) == visibleMax)
+            if (it->getParentUserData() && *((size_t*)it->getParentUserData()) == visibleMax)
                 maxCell = (RecyclerCell*)it;
 
         if (!maxCell || maxCell->getDetachedPosition().y <= visibleFrame.getMaxY() + 720.0f)
@@ -441,7 +454,7 @@ void RecyclerFrame::cellsRecyclingLoop()
         visibleMax--;
     }
 
-    while (visibleMin - 1 < cacheFramesData.size() && renderedFrame.getMinY() + paddingTop > visibleFrame.getMinY() - 720.0f)
+    while (visibleMin > 0 && visibleMin - 1 < cacheFramesData.size() && renderedFrame.getMinY() + paddingTop > visibleFrame.getMinY() - 720.0f)
     {
         int i = visibleMin - 1;
         addCellAt(i, false);
