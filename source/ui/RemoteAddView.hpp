@@ -20,11 +20,12 @@ public:
     void willAppear(bool resetState = false) override;
     void willDisappear(bool resetState = false) override;
 
+    static std::string getLocalIpAddress();
+
 private:
     BRLS_BIND(brls::Label, lblUrl, "lblUrl");
     BRLS_BIND(QrCodeView, qrView, "qrView");
 
-    std::string getLocalIpAddress();
     void startServer();
     void stopServer();
 

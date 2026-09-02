@@ -33,7 +33,7 @@ void DownloadManager::shutdown() {
 }
 
 void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name) {
-    size_t idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name);
+    size_t idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game));
 
     // Access the item directly to set custom metadata
     auto& queue = const_cast<std::vector<download::DownloadItem>&>(impl_.queue());
@@ -41,13 +41,15 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
     item.topic_id = game.topic_id;
     item.selected_files = selected_files;
     item.priorities_set = false;
+    item.cover_url = game.cover;
+    item.is_homebrew = isHomebrewGame(game);
 
     // Start the download immediately if no transfers are active
     if (!impl_.hasActiveTransfers()) {
         impl_.startDownload(idx);
     }
 
-    util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue");
+    util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue, is_homebrew=" + (item.is_homebrew ? "true" : "false"));
     saveDownloads();
 }
 

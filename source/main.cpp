@@ -29,6 +29,7 @@
 #include "ui/DownloadsView.hpp"
 #include "ui/SettingsTab.hpp"
 #include "ui/FavoritesManager.hpp"
+#include "catalog/IgnoredUpdatesManager.hpp"
 #include "ui/DownloadUiManager.hpp"
 #include "ui/AppletWarningView.hpp"
 #include "ui/QrCodeView.hpp"
@@ -303,6 +304,7 @@ int main(int argc, char** argv) {
     } else {
         // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
+        catalog::IgnoredUpdatesManager::instance().init(TSNX_IGNORED_UPDATES_PATH);
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.

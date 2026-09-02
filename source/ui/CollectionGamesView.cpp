@@ -159,7 +159,36 @@ void CollectionGamesView::loadAndShow() {
 
         if (!flag->load()) return;
 
-        brls::sync([this, flag, ok, entries, from_cache]() {
+        std::vector<Game> matchedGames(entries.size());
+        catalog::CollectionMatchIndex matchIndex;
+
+        if (ok && !entries.empty()) {
+            if (info.id == "ports_homebrew") {
+                // Direct O(1) matching from g_games (where isHomebrewGame is true)
+                size_t entryIdx = 0;
+                for (const auto& g : g_games) {
+                    if (isHomebrewGame(g) && entryIdx < entries.size()) {
+                        matchedGames[entryIdx] = g;
+                        entryIdx++;
+                    }
+                }
+            } else {
+                matchIndex = catalog::buildMatchIndex(g_games);
+                for (size_t i = 0; i < entries.size(); ++i) {
+                    if (!flag->load()) return;
+                    const Game* matched = catalog::matchWithIndex(matchIndex, entries[i]);
+                    if (matched) {
+                        matchedGames[i] = *matched;
+                    }
+                }
+            }
+        }
+
+        if (!flag->load()) return;
+
+        brls::sync([this, flag, ok, entries = std::move(entries),
+                    matchedGames = std::move(matchedGames),
+                    matchIndex = std::move(matchIndex), from_cache]() mutable {
             if (!flag->load()) return;
             loading_ = false;
 
@@ -170,12 +199,10 @@ void CollectionGamesView::loadAndShow() {
                 return;
             }
 
-            entries_ = entries;
-            matchedGames_.assign(entries_.size(), Game());
-            matchedComputed_.assign(entries_.size(), false);
-
-            // One-time heavy index build (single pass over the catalog)
-            matchIndex_ = catalog::buildMatchIndex(g_games);
+            entries_ = std::move(entries);
+            matchedGames_ = std::move(matchedGames);
+            matchedComputed_.assign(entries_.size(), true);
+            matchIndex_ = std::move(matchIndex);
 
             if (entries_.empty()) {
                 loadingLabel->setText("app/collections/empty"_i18n);

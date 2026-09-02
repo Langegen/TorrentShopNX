@@ -1,12 +1,14 @@
 #pragma once
 #include <borealis.hpp>
 #include <unistd.h>
+#include <memory>
 
 namespace ui {
 
 class CatalogProgressNotification : public brls::Box {
 public:
     CatalogProgressNotification() {
+        aliveToken_ = std::make_shared<bool>(true);
         this->setAxis(brls::Axis::COLUMN);
         this->setWidth(300);
         this->setPadding(12);
@@ -48,6 +50,12 @@ public:
         this->addView(statusLabel);
     }
 
+    ~CatalogProgressNotification() override {
+        if (aliveToken_) {
+            *aliveToken_ = false;
+        }
+    }
+
     void updateProgress(float percent, const std::string& statusText) {
         if (percent < 0.0f) percent = 0.0f;
         if (percent > 100.0f) percent = 100.0f;
@@ -63,11 +71,16 @@ public:
         headerLabel->setText("app/catalog/db_updated"_i18n);
         statusLabel->setText(msg);
 
-        // Auto dismiss after 3 seconds
-        brls::async([this]() {
-            usleep(3000000); // 3 seconds
-            brls::sync([this]() {
-                if (this->getParent()) {
+        // Auto dismiss after 3 seconds with cancellation token
+        auto token = aliveToken_;
+        brls::async([this, token]() {
+            for (int i = 0; i < 30; ++i) {
+                usleep(100000); // 100ms chunks
+                if (!token || !*token) return;
+            }
+            brls::sync([this, token]() {
+                if (!token || !*token) return;
+                if (this->hasParent()) {
                     this->getParent()->removeView(this);
                 }
             });
@@ -79,11 +92,16 @@ public:
         headerLabel->setText("app/catalog/update_error"_i18n);
         statusLabel->setText(msg);
 
-        // Auto dismiss after 4 seconds
-        brls::async([this]() {
-            usleep(4000000); // 4 seconds
-            brls::sync([this]() {
-                if (this->getParent()) {
+        // Auto dismiss after 4 seconds with cancellation token
+        auto token = aliveToken_;
+        brls::async([this, token]() {
+            for (int i = 0; i < 40; ++i) {
+                usleep(100000); // 100ms chunks
+                if (!token || !*token) return;
+            }
+            brls::sync([this, token]() {
+                if (!token || !*token) return;
+                if (this->hasParent()) {
                     this->getParent()->removeView(this);
                 }
             });
@@ -91,6 +109,7 @@ public:
     }
 
 private:
+    std::shared_ptr<bool> aliveToken_;
     brls::Label* headerLabel = nullptr;
     brls::Box* progressBg = nullptr;
     brls::Box* progressFill = nullptr;

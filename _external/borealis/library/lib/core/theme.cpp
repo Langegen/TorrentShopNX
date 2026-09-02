@@ -29,13 +29,13 @@ static ThemeValues lightThemeValues = {
     { "brls/text", nvgRGB(45, 45, 45) },
     { "brls/text_disabled", nvgRGB(140, 140, 140) },
     { "brls/backdrop", nvgRGBA(0, 0, 0, 178) },
-    { "brls/click_pulse", nvgRGBA(13, 182, 213, 38) }, // same as highlight color1 with different opacity
-    { "brls/accent", nvgRGB(49, 79, 235) },
+    { "brls/click_pulse", nvgRGBA(0, 224, 165, 38) }, // same as highlight color1 with different opacity
+    { "brls/accent", nvgRGB(0, 224, 165) },
 
     // Highlight
-    { "brls/highlight/background", nvgRGB(252, 255, 248) },
-    { "brls/highlight/color1", nvgRGB(13, 182, 213) },
-    { "brls/highlight/color2", nvgRGB(80, 239, 217) },
+    { "brls/highlight/background", nvgRGBA(18, 34, 52, 140) },
+    { "brls/highlight/color1", nvgRGB(0, 224, 165) },
+    { "brls/highlight/color2", nvgRGB(16, 231, 176) },
 
     // AppletFrame
     { "brls/applet_frame/separator", nvgRGB(45, 45, 45) },
@@ -88,20 +88,20 @@ static ThemeValues darkThemeValues = {
     { "brls/text", nvgRGB(255, 255, 255) },
     { "brls/text_disabled", nvgRGB(80, 80, 80) },
     { "brls/backdrop", nvgRGBA(0, 0, 0, 178) },
-    { "brls/click_pulse", nvgRGBA(25, 138, 198, 38) }, // same as highlight color1 with different opacity
-    { "brls/accent", nvgRGB(0, 255, 204) },
+    { "brls/click_pulse", nvgRGBA(0, 224, 165, 38) }, // same as highlight color1 with different opacity
+    { "brls/accent", nvgRGB(0, 224, 165) },
 
     // Highlight
-    { "brls/highlight/background", nvgRGB(31, 34, 39) },
-    { "brls/highlight/color1", nvgRGB(25, 138, 198) },
-    { "brls/highlight/color2", nvgRGB(137, 241, 242) },
+    { "brls/highlight/background", nvgRGBA(18, 34, 52, 140) },
+    { "brls/highlight/color1", nvgRGB(0, 224, 165) },
+    { "brls/highlight/color2", nvgRGB(16, 231, 176) },
 
     // AppletFrame
     { "brls/applet_frame/separator", nvgRGB(255, 255, 255) },
 
     // Sidebar
     { "brls/sidebar/background", nvgRGB(50, 50, 50) },
-    { "brls/sidebar/active_item", nvgRGB(0, 255, 204) },
+    { "brls/sidebar/active_item", nvgRGB(0, 224, 165) },
     { "brls/sidebar/separator", nvgRGB(81, 81, 81) },
 
     // Header
@@ -110,7 +110,7 @@ static ThemeValues darkThemeValues = {
     { "brls/header/subtitle", nvgRGB(163, 163, 163) },
 
     // Button
-    { "brls/button/primary_enabled_background", nvgRGB(1, 255, 201) },
+    { "brls/button/primary_enabled_background", nvgRGB(0, 224, 165) },
     { "brls/button/primary_disabled_background", nvgRGB(83, 87, 86) },
     { "brls/button/primary_enabled_text", nvgRGB(52, 41, 55) },
     { "brls/button/primary_disabled_text", nvgRGB(71, 75, 74) },

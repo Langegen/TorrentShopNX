@@ -21,9 +21,9 @@ include $(DEVKITPRO)/libnx/switch_rules
 TARGET      :=  TorrentShopNX
 APP_TITLE   :=  TorrentShopNX
 APP_AUTHOR  :=  Langegen
-APP_VERSION :=  2.4
+APP_VERSION :=  2.5
 BUILD       :=  build
-SOURCES     :=  source source/ui source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
+SOURCES     :=  source source/ui source/ui/dashboard source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config
 DATA        :=
 INCLUDES    :=  include include/engine _external/borealis/library/include _external/borealis/library/include/borealis/extern _external/borealis/library/include/borealis/extern/nanovg _external/borealis/library/lib/extern/fmt/include _external/borealis/library/lib/extern/tweeny/include _external/borealis/library/lib/extern/yoga
 ROMFS       :=  resources

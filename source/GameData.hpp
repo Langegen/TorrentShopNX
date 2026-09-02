@@ -745,7 +745,9 @@ inline std::string getOriginalImageUrl(const std::string& url) {
     
     // ImageBan
     size_t ibThumb = original.find("/thumbs/");
-    if (ibThumb != std::string::npos && (original.find("imageban.ru") != std::string::npos || original.find("imageban.co") != std::string::npos)) {
+    if (ibThumb != std::string::npos && (original.find("imageban.ru") != std::string::npos ||
+                                         original.find("imageban.co") != std::string::npos ||
+                                         original.find("imageban.net") != std::string::npos)) {
         original.replace(ibThumb, 8, "/out/");
         return original;
     }
@@ -757,6 +759,17 @@ inline std::string getOriginalImageUrl(const std::string& url) {
         size_t tPos = original.rfind("_t.");
         if (tPos != std::string::npos) {
             original.replace(tPos, 3, "_o.");
+        }
+        return original;
+    }
+    if (original.find("://t") != std::string::npos && original.find(".imgbox.com") != std::string::npos) {
+        size_t tPos = original.find("://t");
+        if (tPos != std::string::npos) {
+            original.replace(tPos + 3, 1, "images");
+        }
+        size_t sPos = original.rfind("_t.");
+        if (sPos != std::string::npos) {
+            original.replace(sPos, 3, "_o.");
         }
         return original;
     }
@@ -779,6 +792,13 @@ inline std::string getOriginalImageUrl(const std::string& url) {
         original.replace(hostPos, 18, "i.postimg.org");
         return original;
     }
+    if (original.find("://t") != std::string::npos && original.find(".postimg.cc") != std::string::npos) {
+        size_t tPos = original.find("://t");
+        if (tPos != std::string::npos) {
+            original.replace(tPos + 3, 1, "i");
+        }
+        return original;
+    }
 
     // PixHost
     if (original.find("pixhost.to/thumbs/") != std::string::npos) {
@@ -792,8 +812,49 @@ inline std::string getOriginalImageUrl(const std::string& url) {
         }
         return original;
     }
+
+    // Radikal
+    if (original.find("radikal.host/t/") != std::string::npos) {
+        size_t rPos = original.find("radikal.host/t/");
+        original.replace(rPos, 15, "radikal.host/i/");
+        return original;
+    }
+    if (original.find("radikal.cloud/t/") != std::string::npos) {
+        size_t rPos = original.find("radikal.cloud/t/");
+        original.replace(rPos, 16, "radikal.cloud/i/");
+        return original;
+    }
     
     return original;
+}
+
+// Check if a game belongs to Homebrew / Ports category
+inline bool isHomebrewGame(const Game& g) {
+    if (!g.genre.empty()) {
+        std::string lowerGenre = g.genre;
+        std::transform(lowerGenre.begin(), lowerGenre.end(), lowerGenre.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowerGenre.find("homebrew") != std::string::npos ||
+            lowerGenre.find("порт") != std::string::npos ||
+            lowerGenre.find("port") != std::string::npos) {
+            return true;
+        }
+    }
+    if (g.image_format == "NRO" || g.image_format == "nro") {
+        return true;
+    }
+    if (!g.title.empty()) {
+        std::string lowerTitle = g.title;
+        std::transform(lowerTitle.begin(), lowerTitle.end(), lowerTitle.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowerTitle.find("[nro]") != std::string::npos ||
+            lowerTitle.find("[port]") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download
@@ -922,5 +983,89 @@ inline bool compareVersions(const std::string& current, const std::string& avail
     uint32_t curNum = convertVersionStringToNumber(current);
     uint32_t availNum = convertVersionStringToNumber(available);
     return availNum > curNum;
+}
+
+#include "download/download_manager.h"
+
+extern std::vector<Game> g_games;
+
+inline std::string findCoverForDownload(const download::DownloadItem& item, const std::vector<Game>& fallbackSample = {}) {
+    if (!item.cover_url.empty()) {
+        return item.cover_url;
+    }
+
+    // 1. Match by topic_id (strip _fileIndex if present, e.g. "12345_0" -> "12345")
+    std::string origTopicId = item.topic_id;
+    size_t underscorePos = origTopicId.find('_');
+    if (underscorePos != std::string::npos) {
+        origTopicId = origTopicId.substr(0, underscorePos);
+    }
+    if (!origTopicId.empty()) {
+        for (const auto& g : g_games) {
+            if (g.topic_id == origTopicId && !g.cover.empty()) {
+                return g.cover;
+            }
+        }
+        for (const auto& g : fallbackSample) {
+            if (g.topic_id == origTopicId && !g.cover.empty()) {
+                return g.cover;
+            }
+        }
+    }
+
+    // 2. Match by parsed Title ID from item title / stream name
+    uint64_t tid = parseTitleIdFromString(item.title);
+    if (tid == 0 && !item.forced_stream_name.empty()) {
+        tid = parseTitleIdFromString(item.forced_stream_name);
+    }
+    if (tid != 0) {
+        for (const auto& g : g_games) {
+            if (g.cover.empty()) continue;
+            uint64_t gTid = parseTitleIdFromGame(g);
+            if (gTid == tid) {
+                return g.cover;
+            }
+        }
+        for (const auto& g : fallbackSample) {
+            if (g.cover.empty()) continue;
+            uint64_t gTid = parseTitleIdFromGame(g);
+            if (gTid == tid) {
+                return g.cover;
+            }
+        }
+    }
+
+    // 3. Match by cleaned title
+    std::string cTitle = cleanTitle(item.title);
+    size_t parenPos = cTitle.rfind(" (");
+    if (parenPos != std::string::npos) {
+        cTitle = cTitle.substr(0, parenPos);
+    }
+    while (!cTitle.empty() && (cTitle.back() == ' ' || cTitle.back() == '\t')) {
+        cTitle.pop_back();
+    }
+
+    if (!cTitle.empty()) {
+        for (const auto& g : g_games) {
+            if (g.cover.empty()) continue;
+            std::string gClean = cleanTitle(g.title);
+            if (gClean == cTitle ||
+                (gClean.size() > 3 && cTitle.find(gClean) != std::string::npos) ||
+                (cTitle.size() > 3 && gClean.find(cTitle) != std::string::npos)) {
+                return g.cover;
+            }
+        }
+        for (const auto& g : fallbackSample) {
+            if (g.cover.empty()) continue;
+            std::string gClean = cleanTitle(g.title);
+            if (gClean == cTitle ||
+                (gClean.size() > 3 && cTitle.find(gClean) != std::string::npos) ||
+                (cTitle.size() > 3 && gClean.find(cTitle) != std::string::npos)) {
+                return g.cover;
+            }
+        }
+    }
+
+    return "";
 }
 

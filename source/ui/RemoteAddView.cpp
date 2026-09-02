@@ -25,10 +25,6 @@ RemoteAddView::RemoteAddView() {
 
 RemoteAddView::~RemoteAddView() {
     stopServer();
-    if (pollTimer) {
-        pollTimer->stop();
-        delete pollTimer;
-    }
 }
 
 void RemoteAddView::onContentAvailable() {
@@ -166,6 +162,12 @@ void RemoteAddView::startServer() {
         util::logLine("RemoteAddView: server thread stopped");
     });
     
+    if (pollTimer) {
+        pollTimer->stop();
+        delete pollTimer;
+        pollTimer = nullptr;
+    }
+
     pollTimer = new brls::RepeatingTimer();
     pollTimer->setPeriod(500);
     pollTimer->setCallback([this]() {
@@ -186,6 +188,11 @@ void RemoteAddView::startServer() {
 }
 
 void RemoteAddView::stopServer() {
+    if (pollTimer) {
+        pollTimer->stop();
+        delete pollTimer;
+        pollTimer = nullptr;
+    }
     if (serverRunning) {
         svr.stop();
         if (serverThread.joinable()) {

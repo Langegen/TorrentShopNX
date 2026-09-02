@@ -580,84 +580,44 @@ void View::drawHighlight(NVGcontext* vg, Theme theme, float alpha, Style style, 
     // Draw
     if (background)
     {
-        // Background
-        NVGcolor highlightBackgroundColor = theme["brls/highlight/background"];
-        nvgFillColor(vg, RGBAf(highlightBackgroundColor.r, highlightBackgroundColor.g, highlightBackgroundColor.b, this->highlightAlpha));
+        // 1. Soft Emerald Outer Glow
+        NVGpaint glowPaint = nvgBoxGradient(vg, x - 2.0f, y - 2.0f, width + 4.0f, height + 4.0f,
+                                            cornerRadius, 8.0f,
+                                            nvgRGBA(0, 224, 165, static_cast<unsigned char>(65.0f * this->highlightAlpha)),
+                                            nvgRGBA(0, 224, 165, 0));
+        nvgBeginPath(vg);
+        nvgRect(vg, x - 10.0f, y - 10.0f, width + 20.0f, height + 20.0f);
+        nvgFillPaint(vg, glowPaint);
+        nvgFill(vg);
+
+        // 2. Frosted Glass Base Gradient
+        NVGcolor topColor = nvgRGBA(0, 180, 140, static_cast<unsigned char>(55.0f * this->highlightAlpha));
+        NVGcolor botColor = nvgRGBA(10, 28, 45, static_cast<unsigned char>(205.0f * this->highlightAlpha));
+        NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height, topColor, botColor);
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x, y, width, height, cornerRadius);
+        nvgFillPaint(vg, bgPaint);
+        nvgFill(vg);
+
+        // 3. Top Gloss Sheen
+        NVGpaint glossPaint = nvgLinearGradient(
+            vg, x, y, x, y + height * 0.45f,
+            nvgRGBA(255, 255, 255, static_cast<unsigned char>(38.0f * this->highlightAlpha)),
+            nvgRGBA(255, 255, 255, 0)
+        );
+        nvgBeginPath(vg);
+        nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, std::max(0.0f, cornerRadius - 1.0f));
+        nvgFillPaint(vg, glossPaint);
         nvgFill(vg);
     }
     else
     {
-#ifdef SIMPLE_HIGHLIGHT
-        // Border
+        // 4. Delicate Beveled Emerald Border
         nvgBeginPath(vg);
-        nvgStrokeColor(vg, a(theme["brls/highlight/color1"]));
-        nvgStrokeWidth(vg, style["brls/highlight/stroke_width"]);
+        nvgStrokeColor(vg, nvgRGBA(0, 230, 175, static_cast<unsigned char>(240.0f * this->highlightAlpha)));
+        nvgStrokeWidth(vg, 1.8f);
         nvgRoundedRect(vg, x, y, width, height, cornerRadius);
         nvgStroke(vg);
-#else
-        float shadowOffset = style["brls/highlight/shadow_offset"];
-
-        // Shadow
-        NVGpaint shadowPaint = nvgBoxGradient(vg,
-            x, y + style["brls/highlight/shadow_width"],
-            width, height,
-            cornerRadius * 2, style["brls/highlight/shadow_feather"],
-            RGBA(0, 0, 0, style["brls/highlight/shadow_opacity"] * alpha), TRANSPARENT);
-
-        nvgBeginPath(vg);
-        nvgRect(vg, x - shadowOffset, y - shadowOffset,
-            width + shadowOffset * 2, height + shadowOffset * 3);
-        nvgRoundedRect(vg, x, y, width, height, cornerRadius);
-        nvgPathWinding(vg, NVG_HOLE);
-        nvgFillPaint(vg, shadowPaint);
-        nvgFill(vg);
-
-        // Border
-        float gradientX, gradientY, color;
-        getHighlightAnimation(&gradientX, &gradientY, &color);
-
-        NVGcolor highlightColor1 = theme["brls/highlight/color1"];
-
-        NVGcolor pulsationColor = RGBAf((color * highlightColor1.r) + (1 - color) * highlightColor1.r,
-            (color * highlightColor1.g) + (1 - color) * highlightColor1.g,
-            (color * highlightColor1.b) + (1 - color) * highlightColor1.b,
-            alpha);
-
-        NVGcolor borderColor = theme["brls/highlight/color2"];
-        borderColor.a        = 0.5f * alpha * this->getAlpha();
-
-        float strokeWidth = style["brls/highlight/stroke_width"];
-
-        NVGpaint border1Paint = nvgRadialGradient(vg,
-            x + gradientX * width, y + gradientY * height,
-            strokeWidth * 10, strokeWidth * 40,
-            borderColor, TRANSPARENT);
-
-        NVGpaint border2Paint = nvgRadialGradient(vg,
-            x + (1 - gradientX) * width, y + (1 - gradientY) * height,
-            strokeWidth * 10, strokeWidth * 40,
-            borderColor, TRANSPARENT);
-
-        nvgBeginPath(vg);
-        nvgStrokeColor(vg, pulsationColor);
-        nvgStrokeWidth(vg, strokeWidth);
-        nvgRoundedRect(vg, x, y, width, height, cornerRadius);
-        nvgStroke(vg);
-
-        nvgBeginPath(vg);
-        nvgStrokePaint(vg, border1Paint);
-        nvgStrokeWidth(vg, strokeWidth);
-        nvgRoundedRect(vg, x, y, width, height, cornerRadius);
-        nvgStroke(vg);
-
-        nvgBeginPath(vg);
-        nvgStrokePaint(vg, border2Paint);
-        nvgStrokeWidth(vg, strokeWidth);
-        nvgRoundedRect(vg, x, y, width, height, cornerRadius);
-        nvgStroke(vg);
-#endif
     }
 
     nvgRestore(vg);
@@ -681,29 +641,39 @@ void View::drawBackground(NVGcontext* vg, FrameContext* ctx, Style style, Rect f
     {
         case ViewBackground::SIDEBAR:
         {
-            float backdropHeight  = style["brls/sidebar/border_height"];
-            NVGcolor sidebarColor = theme["brls/sidebar/background"];
+            float radius = (this->cornerRadius > 0.0f) ? this->cornerRadius : 14.0f;
 
-            // Solid color
+            // 1. True Translucent Frosted Glass Base
             nvgBeginPath(vg);
-            nvgFillColor(vg, a(sidebarColor));
-            nvgRect(vg, x, y + backdropHeight, width, height - backdropHeight * 2);
+            nvgRoundedRect(vg, x, y, width, height, radius);
+            NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height,
+                                                 nvgRGBA(140, 180, 230, 45),
+                                                 nvgRGBA(12, 22, 36, 85));
+            nvgFillPaint(vg, bgPaint);
             nvgFill(vg);
 
-            //Borders gradient
-            // Top
-            NVGpaint topGradient = nvgLinearGradient(vg, x, y + backdropHeight, x, y, a(sidebarColor), TRANSPARENT);
+            // 2. Specular Top Glass Highlight Sheen
             nvgBeginPath(vg);
-            nvgFillPaint(vg, topGradient);
-            nvgRect(vg, x, y, width, backdropHeight);
+            nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, radius > 1.0f ? radius - 1.0f : 0.0f);
+            NVGpaint glossPaint = nvgLinearGradient(
+                vg, x, y, x, y + height * 0.45f,
+                nvgRGBA(255, 255, 255, 38),
+                nvgRGBA(255, 255, 255, 0)
+            );
+            nvgFillPaint(vg, glossPaint);
             nvgFill(vg);
 
-            // Bottom
-            NVGpaint bottomGradient = nvgLinearGradient(vg, x, y + height - backdropHeight, x, y + height, a(sidebarColor), TRANSPARENT);
+            // 3. Subtle Glass Beveled Border Stroke in Emerald-Teal tone
             nvgBeginPath(vg);
-            nvgFillPaint(vg, bottomGradient);
-            nvgRect(vg, x, y + height - backdropHeight, width, backdropHeight);
-            nvgFill(vg);
+            nvgRoundedRect(vg, x, y, width, height, radius);
+            NVGpaint borderPaint = nvgLinearGradient(
+                vg, x, y, x, y + height,
+                nvgRGBA(180, 225, 215, 120),
+                nvgRGBA(40, 85, 95, 40)
+            );
+            nvgStrokePaint(vg, borderPaint);
+            nvgStrokeWidth(vg, 1.2f);
+            nvgStroke(vg);
             break;
         }
         case ViewBackground::VERTICAL_LINEAR:

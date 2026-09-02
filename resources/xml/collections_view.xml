@@ -3,15 +3,14 @@
     width="auto"
     height="auto"
     axis="column"
-    paddingTop="20"
-    paddingRight="20"
-    paddingBottom="20"
-    paddingLeft="20">
+    paddingTop="16"
+    paddingRight="36"
+    paddingBottom="10"
+    paddingLeft="36">
 
     <!-- Topbar -->
-    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+    <brls:Box width="auto" height="48px" axis="row" alignItems="center" marginBottom="10">
         <brls:Label text="@i18n/app/collections/title" fontSize="28" />
-        <brls:Label id="statsHint" text="@i18n/app/collections/subtitle" fontSize="14" textColor="#AAAAAA" />
     </brls:Box>
 
     <!-- Collection list -->
@@ -20,8 +19,8 @@
         width="auto"
         height="auto"
         grow="1.0"
-        marginBottom="20">
-        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingRight="30" />
+        marginBottom="10">
+        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingLeft="14" paddingRight="24" />
     </brls:ScrollingFrame>
 
 </brls:Box>

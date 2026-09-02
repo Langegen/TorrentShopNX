@@ -70,6 +70,9 @@ ScreenshotViewer::~ScreenshotViewer() {
     if (imageToken_) {
         *imageToken_ = false;
     }
+    if (image_) {
+        image_->clear();
+    }
 }
 
 void ScreenshotViewer::onContentAvailable() {
@@ -81,17 +84,23 @@ void ScreenshotViewer::loadCurrent() {
     if (urls_.empty() || currentIndex_ >= urls_.size()) return;
     
     // Cancel previous image loading if any
-    *imageToken_ = false;
+    if (imageToken_) {
+        *imageToken_ = false;
+    }
     imageToken_ = std::make_shared<bool>(true);
     
-    // Using a clear transparent image temporarily while loading
-    image_->setImageFromRes("img/borealis_96.png"); 
+    // Clear previous texture safely to prevent memory leak
+    if (image_) {
+        image_->clear();
+        image_->setImageFromFile("romfs:/img/borealis_96.png");
+        image_->setFreeTexture(true);
+    }
     
     std::string rawUrl = urls_[currentIndex_];
     std::string fallbackUrl = normalizeImageUrl(rawUrl);
     std::string url = getOriginalImageUrl(fallbackUrl);
 
-    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/borealis_96.png", false, fallbackUrl, -1, -1, 3000000);
+    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/borealis_96.png", true, fallbackUrl, -1, -1, 3000000);
 }
 
 } // namespace ui

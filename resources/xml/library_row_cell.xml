@@ -31,13 +31,31 @@
             fontSize="18"
             singleLine="true" />
 
-        <!-- Title ID -->
-        <brls:Label
-            id="titleId"
-            fontSize="13"
-            textColor="#888888"
-            marginTop="3"
-            singleLine="true" />
+        <!-- Title ID & Mod Badge -->
+        <brls:Box width="auto" height="auto" axis="row" alignItems="center" marginTop="3">
+            <brls:Label
+                id="titleId"
+                fontSize="13"
+                textColor="#888888"
+                marginRight="10"
+                singleLine="true" />
+
+            <brls:Box
+                id="modBadgeBox"
+                paddingTop="2"
+                paddingBottom="2"
+                paddingLeft="6"
+                paddingRight="6"
+                cornerRadius="4"
+                backgroundColor="#7C4DFF"
+                visibility="gone">
+                <brls:Label
+                    id="modBadge"
+                    text="MODS"
+                    fontSize="11"
+                    textColor="#FFFFFF" />
+            </brls:Box>
+        </brls:Box>
 
     </brls:Box>
 

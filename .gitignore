@@ -42,4 +42,10 @@ Thumbs.db
 *.opendb
 .vs/
 
-
+build_pc/
+cache/
+scratch/
+data/
+config.ini
+log.txt
+/build_pc

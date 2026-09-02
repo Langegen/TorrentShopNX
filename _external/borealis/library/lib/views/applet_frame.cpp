@@ -35,7 +35,7 @@ const std::string appletFrameXML = R"xml(
         height="auto"
         axis="column"
         justifyContent="spaceBetween"
-        backgroundColor="@theme/brls/background">
+        backgroundColor="#00000000">
 
         <!-- Header -->
         <brls:Box
@@ -171,7 +171,7 @@ void AppletFrame::popContentView(std::function<void(void)> cb)
 {
     if (contentViewStack.size() <= 1)
     {
-        if (!Application::popActivity(TransitionAnimation::FADE, cb))
+        if (!Application::popActivity(TransitionAnimation::NONE, cb))
         {
 #ifndef IOS // Do not close the app in iOS
             Application::quit();

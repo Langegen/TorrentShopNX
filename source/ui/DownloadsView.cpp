@@ -127,6 +127,7 @@ void DownloadsView::willDisappear(bool resetState) {
     if (util::isBacklightOff()) {
         util::setBacklightOff(false);
     }
+    ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
 void DownloadsView::toggleBacklight() {
@@ -292,20 +293,7 @@ int DownloadsView::DownloadsDataSource::numberOfRows(brls::RecyclerFrame* recycl
 void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem& item) {
     cell->title->setText(cleanTitle(item.title));
     
-    // Find game cover from global catalog list (strip index suffix from topic_id if present)
-    std::string origTopicId = item.topic_id;
-    size_t underscorePos = origTopicId.find('_');
-    if (underscorePos != std::string::npos) {
-        origTopicId = origTopicId.substr(0, underscorePos);
-    }
-
-    std::string coverUrl;
-    for (const auto& g : g_games) {
-        if (g.topic_id == origTopicId) {
-            coverUrl = g.cover;
-            break;
-        }
-    }
+    std::string coverUrl = findCoverForDownload(item);
     if (!coverUrl.empty()) {
         setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken);
     } else {

@@ -20,4 +20,18 @@ private:
     bool needsUpdate = true;
 };
 
+class QrDialog : public brls::Box {
+public:
+    QrDialog(const std::string& title, const std::string& url, const std::string& hint = "");
+
+    static void open(const std::string& title, const std::string& url, const std::string& hint = "");
+
+    void dismissDialog();
+
+    brls::Button* getOkButton() const { return btnOk_; }
+
+private:
+    brls::Button* btnOk_ = nullptr;
+};
+
 } // namespace ui
