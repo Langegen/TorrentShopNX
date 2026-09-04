@@ -77,7 +77,7 @@ CFLAGS      +=  $(INCLUDE) -D__SWITCH__
 CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions -Wno-deprecated
 ASFLAGS     :=  -g $(ARCH)
 LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -flto -Wl,-Map,$(notdir $*.map)
-LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lzstd -lnx -lm
+LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -larchive -llzma -lbz2 -llz4 -lexpat -lz -lzstd -lnx -lm
 
 #---------------------------------------------------------------------------------
 # Pass-through/recursive rules

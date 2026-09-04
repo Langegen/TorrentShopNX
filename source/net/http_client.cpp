@@ -14,6 +14,9 @@
 #include <sstream>
 #include <algorithm>
 #include <mutex>
+#include <fstream>
+#include <filesystem>
+#include <cstdio>
 
 #if __has_include(<curl/curl.h>)
 #define TSNX_HAVE_CURL 1
@@ -210,6 +213,20 @@ static size_t curlWriteStream(void* ptr, size_t size, size_t nmemb, void* userda
     }
     return bytes;
 }
+
+struct FileWriteCtx {
+    FILE* fp = nullptr;
+    size_t written = 0;
+};
+
+static size_t curlWriteToFile(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    auto* ctx = static_cast<FileWriteCtx*>(userdata);
+    if (!ctx || !ctx->fp) return 0;
+    size_t bytes = size * nmemb;
+    size_t w = std::fwrite(ptr, 1, bytes, ctx->fp);
+    ctx->written += w;
+    return w;
+}
 #endif
 
 // =============================================================================
@@ -252,6 +269,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec_));
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout_sec_, 10)));
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);
         curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
         curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
@@ -497,6 +516,93 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
         cb(resp.body.data(), resp.body.size());
     }
     return resp.status_code;
+#endif
+}
+
+// =============================================================================
+// downloadToFile — потоковая загрузка прямо в файл на диске
+// =============================================================================
+bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_path,
+                                const std::atomic<bool>* cancel_flag, int timeout_sec) {
+    std::filesystem::path p(dest_path);
+    if (p.has_parent_path()) {
+        std::error_code ec;
+        std::filesystem::create_directories(p.parent_path(), ec);
+    }
+
+    FILE* fp = std::fopen(dest_path.c_str(), "wb");
+    if (!fp) {
+        util::logLine("HttpClient: failed to open dest file for writing: " + dest_path);
+        return false;
+    }
+
+#if TSNX_HAVE_CURL
+    CURL* curl = getReusableCurl(curl_handle_);
+    if (!curl) {
+        std::fclose(fp);
+        std::remove(dest_path.c_str());
+        return false;
+    }
+
+    curl_easy_reset(curl);
+
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.5)");
+
+    FileWriteCtx file_ctx{fp, 0};
+    CurlXferContext xfer_ctx{cancel_flag ? cancel_flag : cancel_flag_, progress_cb_};
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteToFile);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file_ctx);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec > 0 ? timeout_sec : 180));
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);  // 1 KB/s
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);    // 15 seconds stall timeout
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");    // automatic gzip/deflate decompression!
+    curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
+    curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &xfer_ctx);
+
+    CURLcode res = curl_easy_perform(curl);
+    long http_code = 0;
+    if (res == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    }
+
+    curl_slist_free_all(headers);
+    std::fflush(fp);
+    std::fclose(fp);
+
+    if (res == CURLE_OK && http_code == 200 && file_ctx.written > 0) {
+        util::logLine("HttpClient: downloadToFile succeeded for " + url + " bytes=" + std::to_string(file_ctx.written));
+        return true;
+    }
+
+    util::logLine("HttpClient: downloadToFile failed for " + url + " res=" + std::to_string(res) +
+                  " (" + curl_easy_strerror(res) + ") http_code=" + std::to_string(http_code) +
+                  " written=" + std::to_string(file_ctx.written));
+    std::remove(dest_path.c_str());
+    return false;
+#else
+    std::fclose(fp);
+    auto resp = httpGet(url);
+    if (resp.status_code == 200 && !resp.body.empty()) {
+        std::ofstream out(dest_path, std::ios::binary | std::ios::trunc);
+        if (out.is_open()) {
+            out.write(resp.body.data(), resp.body.size());
+            return true;
+        }
+    }
+    std::remove(dest_path.c_str());
+    return false;
 #endif
 }
 

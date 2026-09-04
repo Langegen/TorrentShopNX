@@ -114,10 +114,12 @@ CatalogView::CatalogView(const std::string& searchQuery) {
 void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: onContentAvailable start");
 
+    auto catalog = getCatalogSnapshot();
+
     // Pre-populate filteredGames_ with non-homebrew games
     filteredGames_.clear();
-    filteredGames_.reserve(g_games.size());
-    for (const auto& g : g_games) {
+    filteredGames_.reserve(catalog->size());
+    for (const auto& g : *catalog) {
         if (!isHomebrewGame(g)) {
             filteredGames_.push_back(g);
         }
@@ -135,9 +137,10 @@ void CatalogView::onContentAvailable() {
     });
 
     this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+        auto catalog = getCatalogSnapshot();
         std::vector<Game> officialGames;
-        officialGames.reserve(g_games.size());
-        for (const auto& g : g_games) {
+        officialGames.reserve(catalog->size());
+        for (const auto& g : *catalog) {
             if (!isHomebrewGame(g)) officialGames.push_back(g);
         }
         FilterSortDialog::show(filterState_, officialGames, [this](const catalog::FilterSortState& newState) {
@@ -176,8 +179,9 @@ void CatalogView::filterCatalog() {
     filteredGames_.clear();
     auto& fm = catalog::FavoritesManager::instance();
     size_t totalNonHomebrew = 0;
+    auto catalog = getCatalogSnapshot();
 
-    for (const auto& game : g_games) {
+    for (const auto& game : *catalog) {
         if (isHomebrewGame(game)) continue;
         ++totalNonHomebrew;
         bool isFav = filterState_.onlyFavorites ? fm.isFavorite(game) : false;

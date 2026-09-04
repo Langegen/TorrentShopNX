@@ -56,11 +56,7 @@ bool readWholeFileLocal(const std::string& path, std::string& out) {
 }
 
 void ensureParentDirectory(const std::string& filePath) {
-    std::filesystem::path p(filePath);
-    if (p.has_parent_path()) {
-        std::error_code ec;
-        std::filesystem::create_directories(p.parent_path(), ec);
-    }
+    tsnx_ensure_parent_dirs(filePath.c_str());
 }
 
 std::vector<uint8_t> resizeImageAreaAverage(const uint8_t* src, int srcW, int srcH, int channels, int dstW, int dstH) {

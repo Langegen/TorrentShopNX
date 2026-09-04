@@ -5,6 +5,7 @@
 #include <deque>
 #include <string>
 #include <memory>
+#include <functional>
 #include "../../GameData.hpp"
 #include "../../download/download_manager.h"
 
@@ -21,6 +22,8 @@ public:
     void setRemoteInfo(const std::string& ip_str, int port);
     void setLibraryStats(int installed_count, int updates_count);
     void setSettingsStats(const std::string& engine_mode, uint64_t cache_size_bytes, uint64_t leftover_size_bytes);
+    void setOnDefocusCallback(std::function<void()> cb) { on_defocus_ = std::move(cb); }
+    void setGetActiveTileCallback(std::function<brls::View*()> cb) { get_active_tile_ = std::move(cb); }
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;
@@ -67,6 +70,9 @@ private:
     brls::Label* dl_etaLbl_ = nullptr;
     brls::Label* dl_qCountLbl_ = nullptr;
     class SpeedSparklineView* dl_sparkline_ = nullptr;
+
+    std::function<void()> on_defocus_;
+    std::function<brls::View*()> get_active_tile_;
 };
 
 } // namespace ui

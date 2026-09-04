@@ -34,8 +34,8 @@ static std::string truncateStr(const std::string& str, size_t maxLen) {
 // -------------------------------------------------------------
 class DashboardGameCard : public brls::Box {
 public:
-    DashboardGameCard(const Game& game, std::shared_ptr<bool> imageToken)
-        : game_(game), imageToken_(imageToken) {
+    DashboardGameCard(const Game& game, std::shared_ptr<bool> imageToken, std::function<void()> on_back = nullptr)
+        : game_(game), imageToken_(imageToken), on_back_(on_back) {
         
         this->setFocusable(true);
         this->setHideHighlight(true);
@@ -140,6 +140,16 @@ public:
             return true;
         });
 
+        if (on_back_) {
+            this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+                if (on_back_) {
+                    on_back_();
+                    return true;
+                }
+                return false;
+            });
+        }
+
         this->addGestureRecognizer(new brls::TapGestureRecognizer([this](brls::TapGestureStatus status, brls::Sound* sound) {
             if (status.state == brls::GestureState::END) {
                 triggerOpen();
@@ -236,6 +246,7 @@ private:
     brls::Label* titleLbl_ = nullptr;
     brls::Box* actPill_ = nullptr;
     brls::Label* actLbl_ = nullptr;
+    std::function<void()> on_back_;
     float scale_ = 1.0f;
     float glow_ = 0.0f;
 };
@@ -293,72 +304,82 @@ void DashboardSummaryView::updateDownloads(const std::vector<download::DownloadI
     cached_downloads_ = items;
 
     if (active_index_ == 3) {
-        if (activeItem != nullptr && dl_active_mode_ && dl_coverImg_ != nullptr &&
-            activeItem->topic_id == dl_active_topic_id_ && activeItem->title == dl_active_title_) {
+        bool hasActive = (activeItem != nullptr);
+        if (hasActive) {
+            if (dl_active_mode_ && dl_coverImg_ != nullptr &&
+                activeItem->topic_id == dl_active_topic_id_ && activeItem->title == dl_active_title_) {
 
-            // In-place dynamic updates without tearing down the UI hierarchy or cancelling imageToken_
-            if (dl_titleLbl_) dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
+                // In-place dynamic updates without tearing down the UI hierarchy or cancelling imageToken_
+                if (dl_titleLbl_) dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
 
-            std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
-                                 ? "Установка..." : "Загрузка...";
-            if (dl_stLbl_) dl_stLbl_->setText(stText);
+                std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
+                                     ? "Установка..." : "Загрузка...";
+                if (dl_stLbl_) dl_stLbl_->setText(stText);
 
-            if (dl_barFill_) dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
+                if (dl_barFill_) dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
 
-            char pctBuf[16];
-            std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", activeItem->progress * 100.0f);
-            if (dl_pctLbl_) dl_pctLbl_->setText(pctBuf);
+                char pctBuf[16];
+                std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", activeItem->progress * 100.0f);
+                if (dl_pctLbl_) dl_pctLbl_->setText(pctBuf);
 
-            char spdBuf[32];
-            std::snprintf(spdBuf, sizeof(spdBuf), "↓ %.1f MB/s", activeItem->download_speed_kbps / 1024.0f);
-            if (dl_spdLbl_) dl_spdLbl_->setText(spdBuf);
+                char spdBuf[32];
+                std::snprintf(spdBuf, sizeof(spdBuf), "↓ %.1f MB/s", activeItem->download_speed_kbps / 1024.0f);
+                if (dl_spdLbl_) dl_spdLbl_->setText(spdBuf);
 
-            unsigned long long inst_written = activeItem->install_written;
-            unsigned long long inst_total = activeItem->install_total;
-            if (inst_total == 0 && activeItem->hybrid_installer) {
-                inst_total = activeItem->hybrid_installer->totalBytes();
-            }
-            std::string szStr = formatBytes(inst_written) + " / " + formatBytes(inst_total);
-            if (dl_szLbl_) dl_szLbl_->setText(szStr);
-
-            std::string peersStr = "Пиры: " + std::to_string(activeItem->peers) + " / Сиды: " + std::to_string(activeItem->seeds);
-            if (dl_peersLbl_) dl_peersLbl_->setText(peersStr);
-
-            std::string etaStr = "В процессе";
-            if (activeItem->download_speed_kbps > 10.0f && inst_total > inst_written) {
-                unsigned long long remBytes = inst_total - inst_written;
-                unsigned long long rate = static_cast<unsigned long long>(activeItem->download_speed_kbps * 1024.0f);
-                unsigned long long sec = remBytes / rate;
-                char etaBuf[32];
-                std::snprintf(etaBuf, sizeof(etaBuf), "~%llu мин", (sec / 60) + 1);
-                etaStr = std::string(etaBuf);
-            }
-            if (dl_etaLbl_) dl_etaLbl_->setText("Осталось: " + etaStr);
-
-            if (dl_qCountLbl_) dl_qCountLbl_->setText("В очереди: " + std::to_string(items.size()));
-            if (dl_sparkline_) dl_sparkline_->setSamples(speed_history_);
-
-            // If cover URL was not resolved initially (e.g. catalog loaded asynchronously), try to resolve and set it now
-            if (dl_loaded_cover_url_.empty()) {
-                std::string coverUrl = findCoverForDownload(*activeItem, catalog_sample_);
-                if (!coverUrl.empty()) {
-                    dl_loaded_cover_url_ = coverUrl;
-                    setImageFromHTTPS(
-                        dl_coverImg_,
-                        coverUrl,
-                        imageToken_,
-                        "romfs:/img/borealis_96.png",
-                        false,
-                        "",
-                        -1,
-                        -1,
-                        1000000
-                    );
+                unsigned long long inst_written = activeItem->install_written;
+                unsigned long long inst_total = activeItem->install_total;
+                if (inst_total == 0 && activeItem->hybrid_installer) {
+                    inst_total = activeItem->hybrid_installer->totalBytes();
                 }
+                std::string szStr = formatBytes(inst_written) + " / " + formatBytes(inst_total);
+                if (dl_szLbl_) dl_szLbl_->setText(szStr);
+
+                std::string peersStr = "Пиры: " + std::to_string(activeItem->peers) + " / Сиды: " + std::to_string(activeItem->seeds);
+                if (dl_peersLbl_) dl_peersLbl_->setText(peersStr);
+
+                std::string etaStr = "В процессе";
+                if (activeItem->download_speed_kbps > 10.0f && inst_total > inst_written) {
+                    unsigned long long remBytes = inst_total - inst_written;
+                    unsigned long long rate = static_cast<unsigned long long>(activeItem->download_speed_kbps * 1024.0f);
+                    unsigned long long sec = remBytes / rate;
+                    char etaBuf[32];
+                    std::snprintf(etaBuf, sizeof(etaBuf), "~%llu мин", (sec / 60) + 1);
+                    etaStr = std::string(etaBuf);
+                }
+                if (dl_etaLbl_) dl_etaLbl_->setText("Осталось: " + etaStr);
+
+                if (dl_qCountLbl_) dl_qCountLbl_->setText("В очереди: " + std::to_string(items.size()));
+                if (dl_sparkline_) dl_sparkline_->setSamples(speed_history_);
+
+                // If cover URL was not resolved initially (e.g. catalog loaded asynchronously), try to resolve and set it now
+                if (dl_loaded_cover_url_.empty()) {
+                    std::string coverUrl = findCoverForDownload(*activeItem, catalog_sample_);
+                    if (!coverUrl.empty()) {
+                        dl_loaded_cover_url_ = coverUrl;
+                        setImageFromHTTPS(
+                            dl_coverImg_,
+                            coverUrl,
+                            imageToken_,
+                            "romfs:/img/borealis_96.png",
+                            false,
+                            "",
+                            -1,
+                            -1,
+                            1000000
+                        );
+                    }
+                }
+            } else {
+                // Mode changed to active or active download item changed
+                rebuildContent();
             }
         } else {
-            // Mode changed (active <-> idle or active download item changed)
-            rebuildContent();
+            // Idle mode (no active downloads)
+            if (dl_active_mode_) {
+                // Transitioned from active to idle: rebuild once
+                rebuildContent();
+            }
+            // If already in idle mode (!dl_active_mode_), DO NOT rebuild every second!
         }
     }
 }
@@ -382,7 +403,7 @@ void DashboardSummaryView::setCatalogSample(const std::vector<Game>& games) {
     for (size_t i = 0; i < targetCount; ++i) {
         catalog_sample_.push_back(games[i]);
     }
-    if (active_index_ == 0 || (active_index_ == 3 && cached_downloads_.empty())) {
+    if (active_index_ == 0 || (active_index_ == 3 && !dl_active_mode_)) {
         rebuildContent();
     } else if (active_index_ == 3 && dl_active_mode_ && dl_loaded_cover_url_.empty() && dl_coverImg_) {
         // Try to resolve cover now that catalog sample is available
@@ -468,6 +489,20 @@ void DashboardSummaryView::rebuildContent() {
     imageToken_ = std::make_shared<bool>(true);
 
     if (!content_container_) return;
+
+    brls::View* currentFocus = brls::Application::getCurrentFocus();
+    bool focusInSummary = false;
+    for (brls::View* v = currentFocus; v != nullptr; v = v->getParent()) {
+        if (v == this || v == content_container_) {
+            focusInSummary = true;
+            break;
+        }
+    }
+
+    if (focusInSummary && on_defocus_) {
+        on_defocus_();
+    }
+
     content_container_->clearViews();
 
     switch (active_index_) {
@@ -516,7 +551,12 @@ void DashboardSummaryView::buildCatalogSection() {
         cardsRow->addView(emptyLbl);
     } else {
         for (const auto& g : catalog_sample_) {
-            cardsRow->addView(new DashboardGameCard(g, imageToken_));
+            DashboardGameCard* card = new DashboardGameCard(g, imageToken_, on_defocus_);
+            if (get_active_tile_) {
+                brls::View* tile = get_active_tile_();
+                if (tile) card->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            }
+            cardsRow->addView(card);
         }
     }
     content_container_->addView(cardsRow);
@@ -1108,7 +1148,12 @@ void DashboardSummaryView::buildDownloadsSection() {
             cardsRow->addView(emptyLbl);
         } else {
             for (const auto& g : catalog_sample_) {
-                cardsRow->addView(new DashboardGameCard(g, imageToken_));
+                DashboardGameCard* card = new DashboardGameCard(g, imageToken_, on_defocus_);
+                if (get_active_tile_) {
+                    brls::View* tile = get_active_tile_();
+                    if (tile) card->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+                }
+                cardsRow->addView(card);
             }
         }
         content_container_->addView(cardsRow);

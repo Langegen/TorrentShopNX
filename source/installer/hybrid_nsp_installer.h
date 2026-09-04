@@ -25,6 +25,8 @@
 
 #ifdef __SWITCH__
 #include <switch.h>
+#else
+#include <thread>
 #endif
 
 namespace installer {
@@ -218,6 +220,10 @@ private:
 #ifdef __SWITCH__
     Thread collector_thread_ = {};
     Thread installer_thread_ = {};
+    bool   threads_started_  = false;
+#else
+    std::thread collector_thread_;
+    std::thread installer_thread_;
     bool   threads_started_  = false;
 #endif
 };

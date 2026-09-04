@@ -343,5 +343,29 @@
     "step4": "4. Не отпускайте [R], пока не откроется Homebrew Menu.",
     "step5": "5. Выберите и запустите TorrentShopNX.",
     "exit_btn": "Выйти из приложения"
+  },
+  "file_manager": {
+    "title": "Файловый менеджер",
+    "col_name": "Имя",
+    "col_size": "Размер",
+    "col_date": "Дата изменения",
+    "empty_folder": "Папка пуста",
+    "parent_folder": "Папка выше",
+    "folder_type": "Папка",
+    "selection_actions_hint": "(Y) Выбор | (X) Действия | (A) Открыть",
+    "selected_count": "Выбрано: ",
+    "action_menu": "Действия с файлами",
+    "action_toggle_select": "Выбрать / Снять",
+    "select_all": "Выбрать всё",
+    "deselect_all": "Снять всё",
+    "new_folder": "Новая папка",
+    "rename": "Переименовать",
+    "extract_here": "Разархивировать сюда",
+    "extract_to_folder": "Разархивировать в отдельную папку",
+    "extract_success": "Успешно разархивировано!",
+    "deleted_success": "Выбранные элементы удалены",
+    "folder_created": "Папка создана",
+    "renamed_success": "Переименовано",
+    "paste_success": "Вставка завершена"
   }
 }

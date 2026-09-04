@@ -343,5 +343,29 @@
     "step4": "4. Keep holding [R] until the Homebrew Menu opens.",
     "step5": "5. Select and launch TorrentShopNX.",
     "exit_btn": "Exit Application"
+  },
+  "file_manager": {
+    "title": "File Manager",
+    "col_name": "Name",
+    "col_size": "Size",
+    "col_date": "Date Modified",
+    "empty_folder": "Folder is empty",
+    "parent_folder": "Parent Folder",
+    "folder_type": "Folder",
+    "selection_actions_hint": "(Y) Select | (X) Actions | (A) Open",
+    "selected_count": "Selected: ",
+    "action_menu": "File Actions",
+    "action_toggle_select": "Select / Deselect",
+    "select_all": "Select All",
+    "deselect_all": "Deselect All",
+    "new_folder": "New Folder",
+    "rename": "Rename",
+    "extract_here": "Extract Here",
+    "extract_to_folder": "Extract to Subfolder",
+    "extract_success": "Archive extracted successfully!",
+    "deleted_success": "Selected items deleted",
+    "folder_created": "Folder created",
+    "renamed_success": "Renamed successfully",
+    "paste_success": "Paste completed"
   }
 }

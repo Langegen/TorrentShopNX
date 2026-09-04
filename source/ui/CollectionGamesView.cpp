@@ -120,7 +120,8 @@ void CollectionGamesView::onContentAvailable() {
     });
 
     this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
-        FilterSortDialog::show(filterState_, g_games, [this](const catalog::FilterSortState& newState) {
+        auto catalog = getCatalogSnapshot();
+        FilterSortDialog::show(filterState_, *catalog, [this](const catalog::FilterSortState& newState) {
             filterState_ = newState;
             rebuildDisplay();
         }, [this]() {
@@ -153,6 +154,7 @@ void CollectionGamesView::loadAndShow() {
     catalog::CollectionInfo info = info_;
 
     brls::async([this, flag, info]() {
+        auto catalog = getCatalogSnapshot();
         std::vector<catalog::CollectionEntry> entries;
         bool from_cache = true;
         bool ok = catalog::CollectionsManager::instance().loadCollection(info, entries, from_cache);
@@ -164,16 +166,16 @@ void CollectionGamesView::loadAndShow() {
 
         if (ok && !entries.empty()) {
             if (info.id == "ports_homebrew") {
-                // Direct O(1) matching from g_games (where isHomebrewGame is true)
+                // Direct O(1) matching from catalog snapshot (where isHomebrewGame is true)
                 size_t entryIdx = 0;
-                for (const auto& g : g_games) {
+                for (const auto& g : *catalog) {
                     if (isHomebrewGame(g) && entryIdx < entries.size()) {
                         matchedGames[entryIdx] = g;
                         entryIdx++;
                     }
                 }
             } else {
-                matchIndex = catalog::buildMatchIndex(g_games);
+                matchIndex = catalog::buildMatchIndex(*catalog);
                 for (size_t i = 0; i < entries.size(); ++i) {
                     if (!flag->load()) return;
                     const Game* matched = catalog::matchWithIndex(matchIndex, entries[i]);

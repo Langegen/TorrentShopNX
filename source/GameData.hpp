@@ -2,6 +2,8 @@
 
 #include <string>
 #include <vector>
+#include <memory>
+#include <shared_mutex>
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -18,6 +20,26 @@
 #include "utils/log.h"
 #include "utils/app_paths.h"
 #include <borealis/extern/nlohmann/json.hpp>
+
+struct Game;
+extern std::vector<Game> g_games;
+
+inline std::shared_ptr<const std::vector<Game>> g_catalogSnapshot = std::make_shared<const std::vector<Game>>();
+inline std::shared_mutex g_catalogMutex;
+
+inline std::shared_ptr<const std::vector<Game>> getCatalogSnapshot() {
+    std::shared_lock<std::shared_mutex> lock(g_catalogMutex);
+    return g_catalogSnapshot;
+}
+
+inline void setCatalogSnapshot(std::vector<Game> games) {
+    auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(games));
+    {
+        std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+        g_catalogSnapshot = newSnapshot;
+        g_games = *newSnapshot;
+    }
+}
 
 struct Game {
     std::string title;
@@ -157,28 +179,177 @@ inline bool readFileFast(const std::string& path, std::string& out) {
     return true;
 }
 
-// Parse games directly from a JSON string in memory
+// SAX Consumer for streaming JSON directly into Game structs (zero DOM/AST allocations)
+class GameSaxConsumer {
+public:
+    std::vector<Game>& games;
+    Game currentGame;
+    std::string currentKey;
+    int arrayDepth = 0;
+    int objectDepth = 0;
+    int gameObjectDepth = -1;
+    bool inGamesArray = false;
+    bool inGameObject = false;
+    bool inScreenshots = false;
+
+    explicit GameSaxConsumer(std::vector<Game>& out_games) : games(out_games) {}
+
+    bool null() { return true; }
+
+    bool boolean(bool val) {
+        if (inGameObject && !inScreenshots) assignValue(val ? "true" : "false");
+        return true;
+    }
+
+    bool number_integer(int64_t val) {
+        if (inGameObject && !inScreenshots) assignValue(std::to_string(val));
+        return true;
+    }
+
+    bool number_unsigned(uint64_t val) {
+        if (inGameObject && !inScreenshots) assignValue(std::to_string(val));
+        return true;
+    }
+
+    bool number_float(double val, const std::string& s) {
+        if (inGameObject && !inScreenshots) assignValue(s.empty() ? std::to_string(val) : s);
+        return true;
+    }
+
+    bool string(std::string& val) {
+        if (inScreenshots) {
+            currentGame.screenshots.push_back(std::move(val));
+        } else if (inGameObject) {
+            assignValue(std::move(val));
+        }
+        return true;
+    }
+
+    bool binary(nlohmann::json::binary_t& /*val*/) { return true; }
+
+    bool start_object(std::size_t /*elements*/) {
+        objectDepth++;
+        if (inGamesArray && !inGameObject && !inScreenshots) {
+            inGameObject = true;
+            gameObjectDepth = objectDepth;
+            currentGame = Game{};
+        }
+        return true;
+    }
+
+    bool key(std::string& val) {
+        currentKey = std::move(val);
+        return true;
+    }
+
+    bool end_object() {
+        if (inGameObject && objectDepth == gameObjectDepth) {
+            if (!currentGame.title.empty()) {
+                games.push_back(std::move(currentGame));
+            }
+            inGameObject = false;
+            gameObjectDepth = -1;
+        }
+        objectDepth--;
+        return true;
+    }
+
+    bool start_array(std::size_t /*elements*/) {
+        arrayDepth++;
+        if (!inGamesArray) {
+            if (arrayDepth == 1 && objectDepth == 0) {
+                // Root is an array of games: [ { ... }, { ... } ]
+                inGamesArray = true;
+            } else if (objectDepth == 1 && (currentKey == "games" || currentKey == "entries")) {
+                // Root is an object containing "games" or "entries": { "games": [ ... ] }
+                inGamesArray = true;
+            }
+        } else if (inGameObject && currentKey == "screenshots") {
+            inScreenshots = true;
+        }
+        return true;
+    }
+
+    bool end_array() {
+        if (inScreenshots) {
+            inScreenshots = false;
+        } else if (inGamesArray && ((arrayDepth == 1 && objectDepth == 0) || (objectDepth == 1))) {
+            inGamesArray = false;
+        }
+        arrayDepth--;
+        return true;
+    }
+
+    bool parse_error(std::size_t position, const std::string& /*last_token*/, const nlohmann::detail::exception& ex) {
+        util::logLine("GameData: SAX parse error at position " + std::to_string(position) + ": " + ex.what());
+        return false;
+    }
+
+private:
+    void assignValue(std::string val) {
+        if (currentKey == "title") currentGame.title = std::move(val);
+        else if (currentKey == "title_id") currentGame.title_id = std::move(val);
+        else if (currentKey == "size") currentGame.size = std::move(val);
+        else if (currentKey == "magnet") currentGame.magnet = std::move(val);
+        else if (currentKey == "topic_id") currentGame.topic_id = std::move(val);
+        else if (currentKey == "url") currentGame.url = std::move(val);
+        else if (currentKey == "year") currentGame.year = std::move(val);
+        else if (currentKey == "genre") currentGame.genre = std::move(val);
+        else if (currentKey == "developer") currentGame.developer = std::move(val);
+        else if (currentKey == "publisher") currentGame.publisher = std::move(val);
+        else if (currentKey == "image_format") currentGame.image_format = std::move(val);
+        else if (currentKey == "interface_lang") currentGame.interface_lang = std::move(val);
+        else if (currentKey == "voice_lang") currentGame.voice_lang = std::move(val);
+        else if (currentKey == "cover") currentGame.cover = std::move(val);
+        else if (currentKey == "description") currentGame.description = std::move(val);
+    }
+};
+
+// Fast streaming JSON parser directly from file (avoids buffering 25MB string & 250MB AST in RAM)
+inline std::vector<Game> parseGamesFromFileStream(const std::string& filePath) {
+    util::logLine("GameData: parsing games streaming from file: " + filePath);
+    std::ifstream in(filePath, std::ios::binary);
+    if (!in.is_open()) {
+        util::logLine("GameData: failed to open file for streaming parse: " + filePath);
+        return {};
+    }
+
+    std::vector<Game> games;
+    games.reserve(8000);
+
+    GameSaxConsumer consumer(games);
+    bool ok = nlohmann::json::sax_parse(in, &consumer);
+    util::logLine("GameData: stream parsed " + std::to_string(games.size()) + " games (ok=" + std::to_string(ok) + ")");
+
+    return games;
+}
+
+// Parse games directly from a JSON string in memory using lightweight SAX
 inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent) {
     util::logLine("GameData: parsing games from JSON string (size=" + std::to_string(jsonContent.size()) + ")");
     std::vector<Game> games;
     if (jsonContent.empty()) return games;
+
+    games.reserve(8000);
+    GameSaxConsumer consumer(games);
+    bool ok = nlohmann::json::sax_parse(jsonContent, &consumer);
+    if (ok && !games.empty()) {
+        util::logLine("GameData: SAX parsed from string, count=" + std::to_string(games.size()));
+        return games;
+    }
+
+    // Fallback to DOM parse if needed
     try {
         nlohmann::json j = nlohmann::json::parse(jsonContent);
         if (j.is_array()) {
             games = j.get<std::vector<Game>>();
-            util::logLine("GameData: loaded array, count=" + std::to_string(games.size()));
+            util::logLine("GameData: fallback loaded array, count=" + std::to_string(games.size()));
         } else if (j.is_object()) {
             if (j.contains("games") && j["games"].is_array()) {
                 games = j["games"].get<std::vector<Game>>();
-                util::logLine("GameData: loaded object.games, count=" + std::to_string(games.size()));
             } else if (j.contains("entries") && j["entries"].is_array()) {
                 games = j["entries"].get<std::vector<Game>>();
-                util::logLine("GameData: loaded object.entries, count=" + std::to_string(games.size()));
-            } else {
-                util::logLine("GameData: JSON object does not contain 'games' or 'entries' array");
             }
-        } else {
-            util::logLine("GameData: JSON root is neither array nor object");
         }
     } catch (const std::exception& e) {
         util::logLine(std::string("GameData: JSON parsing exception: ") + e.what());
@@ -333,9 +504,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     return true;
 }
 
-// Load games from JSON file using fast block I/O
+// Load games from JSON file using streaming SAX parser directly from file
 inline std::vector<Game> loadGamesFromFile(const std::string& path) {
     util::logLine("GameData: loading games from " + path);
+    auto games = parseGamesFromFileStream(path);
+    if (!games.empty()) return games;
+
     std::string content;
     if (!readFileFast(path, content)) {
         util::logLine("GameData: failed to open file " + path);
@@ -521,10 +695,10 @@ inline void clearCaches() {
 
 // Creates every cache/ and data/ subfolder the app uses. Idempotent.
 inline void ensureAppDirs() {
-    std::error_code ec;
     const char* dirs[] = {
         TSNX_BASE_DIR,
         TSNX_DATA_DIR,
+        TSNX_DOWNLOADS_DIR,
         TSNX_CACHE_DIR,
         TSNX_CACHE_CATALOG,
         TSNX_CACHE_THUMBNAILS,
@@ -537,7 +711,9 @@ inline void ensureAppDirs() {
         TSNX_CACHE_STREAM,
         TSNX_CACHE_TMP,
     };
-    for (const char* d : dirs) std::filesystem::create_directories(d, ec);
+    for (const char* d : dirs) {
+        tsnx_ensure_dir(d);
+    }
 }
 
 // Moves a single file to its new location. If both exist, keeps the newer one
@@ -994,6 +1170,9 @@ inline std::string findCoverForDownload(const download::DownloadItem& item, cons
         return item.cover_url;
     }
 
+    auto catalog = getCatalogSnapshot();
+    const auto& catalogGames = *catalog;
+
     // 1. Match by topic_id (strip _fileIndex if present, e.g. "12345_0" -> "12345")
     std::string origTopicId = item.topic_id;
     size_t underscorePos = origTopicId.find('_');
@@ -1001,7 +1180,7 @@ inline std::string findCoverForDownload(const download::DownloadItem& item, cons
         origTopicId = origTopicId.substr(0, underscorePos);
     }
     if (!origTopicId.empty()) {
-        for (const auto& g : g_games) {
+        for (const auto& g : catalogGames) {
             if (g.topic_id == origTopicId && !g.cover.empty()) {
                 return g.cover;
             }
@@ -1019,7 +1198,7 @@ inline std::string findCoverForDownload(const download::DownloadItem& item, cons
         tid = parseTitleIdFromString(item.forced_stream_name);
     }
     if (tid != 0) {
-        for (const auto& g : g_games) {
+        for (const auto& g : catalogGames) {
             if (g.cover.empty()) continue;
             uint64_t gTid = parseTitleIdFromGame(g);
             if (gTid == tid) {
@@ -1046,7 +1225,7 @@ inline std::string findCoverForDownload(const download::DownloadItem& item, cons
     }
 
     if (!cTitle.empty()) {
-        for (const auto& g : g_games) {
+        for (const auto& g : catalogGames) {
             if (g.cover.empty()) continue;
             std::string gClean = cleanTitle(g.title);
             if (gClean == cTitle ||
