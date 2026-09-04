@@ -1,4 +1,6 @@
 # Builds TorrentShopNX for PC (Windows) using MinGW-w64 and CMake
+$env:TEMP = "D:\temp"
+$env:TMP = "D:\temp"
 $env:PATH = "C:\devkitPro\msys2\mingw64\bin;C:\devkitPro\msys2\usr\bin;$env:PATH"
 
 $env:CC = "C:/devkitPro/msys2/mingw64/bin/gcc.exe"

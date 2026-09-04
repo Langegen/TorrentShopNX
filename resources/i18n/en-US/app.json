@@ -122,6 +122,7 @@
     "peers_with_known": "Seeds: {0} · Peers: {1} ({2} known) · DHT: {3}",
     "peers_standard": "Seeds: {0} · Peers: {1} · DHT: {2}",
     "action_delete": "Remove from list",
+    "action_open_folder": "Open folder",
     "action_resume": "Resume",
     "action_pause": "Pause",
     "action_cancel": "Cancel download",

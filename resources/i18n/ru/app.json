@@ -122,6 +122,7 @@
     "peers_with_known": "Сиды: {0} · Пиры: {1} ({2} изв.) · DHT: {3}",
     "peers_standard": "Сиды: {0} · Пиры: {1} · DHT: {2}",
     "action_delete": "Удалить из списка",
+    "action_open_folder": "Открыть папку",
     "action_resume": "Возобновить",
     "action_pause": "Приостановить",
     "action_cancel": "Отменить загрузку",

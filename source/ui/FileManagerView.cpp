@@ -109,7 +109,7 @@ static std::string getParentDir(const std::string& path) {
     return p.substr(0, lastSlash);
 }
 
-FileManagerView::FileManagerView(const std::string& initialPath) {
+FileManagerView::FileManagerView(const std::string& initialPath, const std::string& focusChild) {
     if (!initialPath.empty()) {
         currentDir_ = initialPath;
     } else {
@@ -117,6 +117,7 @@ FileManagerView::FileManagerView(const std::string& initialPath) {
     }
     currentDir_ = normalizeDir(currentDir_);
     rootDir_ = currentDir_;
+    initialFocusChild_ = focusChild;
 }
 
 void FileManagerView::onContentAvailable() {
@@ -152,7 +153,7 @@ void FileManagerView::onContentAvailable() {
 
     // Custom B button handling: navigate up if inside subfolder, else exit activity
     this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
-        if (hasParentDir_) {
+        if (currentDir_ != rootDir_ && hasParentDir_) {
             brls::sync([this]() {
                 navigateUp();
             });
@@ -163,7 +164,7 @@ void FileManagerView::onContentAvailable() {
     });
 
     this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_BACKSPACE), [this](brls::View* view) {
-        if (hasParentDir_) {
+        if (currentDir_ != rootDir_ && hasParentDir_) {
             brls::sync([this]() {
                 navigateUp();
             });
@@ -173,7 +174,9 @@ void FileManagerView::onContentAvailable() {
     });
 
     util::logLine("FileManagerView: calling initial refresh");
-    refresh();
+    std::string focus = initialFocusChild_;
+    initialFocusChild_.clear();
+    refresh(focus);
     util::logLine("FileManagerView: onContentAvailable end");
 }
 
@@ -208,7 +211,7 @@ void FileManagerView::refresh(const std::string& focusChild) {
 
     // Check if we have a parent directory
     std::string parentDir = getParentDir(currentDir_);
-    hasParentDir_ = (!parentDir.empty() && parentDir != currentDir_);
+    hasParentDir_ = (currentDir_ != rootDir_) && (!parentDir.empty() && parentDir != currentDir_);
 
     std::string err;
     items_ = util::listFolder(currentDir_, err);

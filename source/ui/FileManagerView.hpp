@@ -28,7 +28,7 @@ class FileManagerView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("file_manager_view.xml");
 
-    FileManagerView(const std::string& initialPath = "");
+    FileManagerView(const std::string& initialPath = "", const std::string& focusChild = "");
     ~FileManagerView() override = default;
 
     void onContentAvailable() override;
@@ -64,6 +64,7 @@ public:
 private:
     std::string currentDir_;
     std::string rootDir_;
+    std::string initialFocusChild_;
     std::vector<util::FileItem> items_;
     bool hasParentDir_ = false;
     int currentFocusedRow_ = -1;

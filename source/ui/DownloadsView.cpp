@@ -1,14 +1,59 @@
 #include "DownloadsView.hpp"
 #include "DownloadUiManager.hpp"
+#include "FileManagerView.hpp"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
+#include "../utils/app_paths.h"
+#include "../utils/file_ops.h"
 #include <iomanip>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 
 extern std::vector<Game> g_games;
 
 namespace ui {
+
+namespace {
+
+bool isFileDownloadItem(const download::DownloadItem& item) {
+    if (item.is_homebrew || item.file_dl_dispatched || !item.file_dl_dest.empty()) {
+        return true;
+    }
+    if (!item.forced_stream_name.empty() && !util::isGamePackage(item.forced_stream_name)) {
+        return true;
+    }
+    if (!item.hybrid_installer && item.state == download::DownloadState::Completed) {
+        return true;
+    }
+    return false;
+}
+
+void openDownloadsFolderForItem(const download::DownloadItem& item) {
+    std::string targetDir = TSNX_DOWNLOADS_DIR;
+    std::string focusChild;
+
+    if (!item.file_dl_dest.empty()) {
+        std::filesystem::path p(item.file_dl_dest);
+        std::error_code ec;
+        if (std::filesystem::is_directory(p, ec)) {
+            targetDir = p.generic_string();
+        } else {
+            std::filesystem::path parent = p.parent_path();
+            if (std::filesystem::exists(parent, ec) && std::filesystem::is_directory(parent, ec)) {
+                targetDir = parent.generic_string();
+                focusChild = p.filename().generic_string();
+            }
+        }
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(targetDir, ec);
+
+    brls::Application::pushActivity(new ui::FileManagerView(targetDir, focusChild));
+}
+
+} // namespace
 
 // DOWNLOADCELL IMPLEMENTATION
 DownloadCell::DownloadCell() {
@@ -477,6 +522,18 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             ui::DownloadManager::instance().deleteDownload(topic_id);
             return true;
         });
+
+        if (item.state == download::DownloadState::Completed && isFileDownloadItem(item)) {
+            cell->registerAction("app/downloads/action_open_folder"_i18n, brls::ControllerButton::BUTTON_A, [item](brls::View* view) {
+                openDownloadsFolderForItem(item);
+                return true;
+            });
+
+            cell->registerClickAction([item](brls::View* view) {
+                openDownloadsFolderForItem(item);
+                return true;
+            });
+        }
     } else {
         cell->registerAction(item.state == download::DownloadState::Paused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n, 
                              brls::ControllerButton::BUTTON_A, [topic_id = item.topic_id, state = item.state](brls::View* view) {
@@ -514,7 +571,13 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
 }
 
 void DownloadsView::DownloadsDataSource::didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    // Standard click is mapped to controller button actions (A button handles toggle pause/resume automatically)
+    const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+    if (static_cast<size_t>(index.row) < queue.size()) {
+        const auto& item = queue[index.row];
+        if (item.state == download::DownloadState::Completed && isFileDownloadItem(item)) {
+            openDownloadsFolderForItem(item);
+        }
+    }
 }
 
 } // namespace ui
