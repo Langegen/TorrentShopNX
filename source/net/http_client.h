@@ -47,6 +47,15 @@ public:
     int httpGetStream(const std::string& url, uint64_t offset, uint64_t length,
                       StreamCallback cb, const std::atomic<bool>* cancel_flag = nullptr);
 
+    /// Потоковая загрузка файла напрямую на диск без промежуточной буферизации в памяти.
+    /// @param url         адрес загружаемого файла
+    /// @param dest_path   путь к локальному файлу назначения
+    /// @param cancel_flag опциональный флаг мгновенной отмены
+    /// @param timeout_sec максимальное время загрузки в секундах (по умолчанию 180с)
+    /// @return true если файл успешно загружен (HTTP 200) и записан на диск
+    bool downloadToFile(const std::string& url, const std::string& dest_path,
+                        const std::atomic<bool>* cancel_flag = nullptr, int timeout_sec = 180);
+
     /// Установить таймаут (секунды)
     void setTimeout(int seconds) { timeout_sec_ = seconds; }
 

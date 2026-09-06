@@ -88,6 +88,16 @@ target_link_libraries(TorrentShopNX PRIVATE
     mbedtls
     mbedx509
     mbedcrypto
+    archive
+    bz2
+    lzma
+    lz4
+    zstd
+    expat
+    acl
+    crypto
+    crypt32
+    iconv
     z
     pthread
     stdc++

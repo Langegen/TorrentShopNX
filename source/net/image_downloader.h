@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <memory>
+#include <unordered_set>
 
 namespace net {
 

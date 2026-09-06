@@ -276,6 +276,14 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
         state->buttons[BUTTON_B] |= glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     }
     state->buttons[BUTTON_X] |= (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
+    state->buttons[BUTTON_X] |= (glfwGetKey(this->window, GLFW_KEY_X) != 0);
+    state->buttons[BUTTON_Y] |= (glfwGetKey(this->window, GLFW_KEY_Y) != 0);
+    state->buttons[BUTTON_Y] |= (glfwGetKey(this->window, GLFW_KEY_SPACE) != 0);
+    state->buttons[BUTTON_START] |= (glfwGetKey(this->window, GLFW_KEY_EQUAL) != 0);
+    state->buttons[BUTTON_START] |= (glfwGetKey(this->window, GLFW_KEY_KP_ADD) != 0);
+    state->buttons[BUTTON_START] |= (glfwGetKey(this->window, GLFW_KEY_F1) != 0);
+    state->buttons[BUTTON_LB] |= (glfwGetKey(this->window, GLFW_KEY_LEFT_BRACKET) != 0);
+    state->buttons[BUTTON_RB] |= (glfwGetKey(this->window, GLFW_KEY_RIGHT_BRACKET) != 0);
 
     state->buttons[BUTTON_UP] |= glfwGetKey(this->window, GLFW_KEY_UP) != 0;
     state->buttons[BUTTON_RIGHT] |= glfwGetKey(this->window, GLFW_KEY_RIGHT) != 0;

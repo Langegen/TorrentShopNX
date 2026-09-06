@@ -151,13 +151,31 @@ static std::string sanitizePathComponent(const std::string& raw) {
     return collapsed;
 }
 
+// Удаление квадратных скобок с метаданными вроде "[NRO][ENG]"
+static std::string stripSquareBrackets(const std::string& s) {
+    size_t pos = s.find('[');
+    if (pos == std::string::npos) return s;
+    std::string cleaned = s.substr(0, pos);
+    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
+        cleaned.pop_back();
+    }
+    return cleaned;
+}
+
 // Извлечение безопасного имени папки раздачи из названия
 static std::string extractReleaseFolderName(const std::string& title) {
-    std::string name = title;
-    // Если в конце названия указано "(имя_файла)" из FileSelectView, убираем его
+    std::string name = stripSquareBrackets(title);
+    // Если в конце названия указано "(...)" (например имя файла из FileSelectView или тег раздачи), убираем его,
+    // если перед ним остаётся непустое название игры
     size_t lastParen = name.rfind(" (");
     if (lastParen != std::string::npos && !name.empty() && name.back() == ')') {
-        name = name.substr(0, lastParen);
+        std::string stripped = name.substr(0, lastParen);
+        while (!stripped.empty() && std::isspace(static_cast<unsigned char>(stripped.back()))) {
+            stripped.pop_back();
+        }
+        if (!stripped.empty()) {
+            name = stripped;
+        }
     }
     return sanitizePathComponent(name);
 }
@@ -279,8 +297,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
         if (first_dest.empty()) first_dest = file_dest;
 
         if (file_size == 0) {
-            std::error_code ec;
-            std::filesystem::create_directories(std::filesystem::path(file_dest).parent_path(), ec);
+            tsnx_ensure_parent_dirs(file_dest.c_str());
             FILE* empty_f = std::fopen(file_dest.c_str(), "wb");
             if (empty_f) std::fclose(empty_f);
             continue;
@@ -294,12 +311,13 @@ static void fileCopyWorker(datasource::IDataSource* source,
             break;
         }
 
-        std::error_code ec;
-        std::filesystem::create_directories(std::filesystem::path(file_dest).parent_path(), ec);
+        tsnx_ensure_parent_dirs(file_dest.c_str());
         FILE* f = std::fopen(file_dest.c_str(), "wb");
         if (!f) {
             st->failed = true;
-            st->error = "cannot create destination file: " + file_dest;
+            st->error = "cannot create destination file: " + file_dest +
+                        (errno != 0 ? (" (" + std::string(strerror(errno)) + ")") : "");
+            util::logLine("download: " + st->error);
             source->notifyStreamingComplete(false);
             all_ok = false;
             break;

@@ -86,23 +86,29 @@
  * Failures are ignored: the actual open()/fopen() reports the real error.
  * C and C++ safe.
  */
-static inline void tsnx_ensure_parent_dirs(const char *path) {
-    char dir[512];
-    size_t len = strlen(path);
+static inline void tsnx_ensure_dir(const char *dir_path) {
+    if (!dir_path || !*dir_path) return;
+    char dir[1024];
+    size_t len = strlen(dir_path);
     if (len >= sizeof(dir)) return;
-    memcpy(dir, path, len + 1);
-    char *slash = strrchr(dir, '/');
-    if (!slash) return;
-    *slash = '\0';
+    memcpy(dir, dir_path, len + 1);
+    size_t i;
+    for (i = 0; i < len; ++i) {
+        if (dir[i] == '\\') dir[i] = '/';
+    }
+    while (len > 0 && dir[len - 1] == '/') {
+        dir[--len] = '\0';
+    }
+    if (len == 0) return;
 
-    char cur[512];
+    char cur[1024];
     size_t pos = 0;
     cur[0] = '\0';
     if (strncmp(dir, "sdmc:/", 6) == 0) {
         snprintf(cur, sizeof(cur), "sdmc:");
         pos = 6;
     }
-    while (pos <= strlen(dir)) {
+    while (pos <= len) {
         size_t next = pos;
         while (dir[next] && dir[next] != '/') next++;
         if (next > pos) {
@@ -117,6 +123,22 @@ static inline void tsnx_ensure_parent_dirs(const char *path) {
         if (!dir[next]) break;
         pos = next + 1;
     }
+}
+
+static inline void tsnx_ensure_parent_dirs(const char *path) {
+    if (!path || !*path) return;
+    char dir[1024];
+    size_t len = strlen(path);
+    if (len >= sizeof(dir)) return;
+    memcpy(dir, path, len + 1);
+    size_t i;
+    for (i = 0; i < len; ++i) {
+        if (dir[i] == '\\') dir[i] = '/';
+    }
+    char *slash = strrchr(dir, '/');
+    if (!slash) return;
+    *slash = '\0';
+    tsnx_ensure_dir(dir);
 }
 
 #endif /* TSNX_APP_PATHS_H */

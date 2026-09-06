@@ -19,7 +19,8 @@ namespace {
 int cachedCount(const catalog::CollectionInfo& info) {
     if (info.id == "ports_homebrew") {
         int count = 0;
-        for (const auto& g : g_games) {
+        auto catalog = getCatalogSnapshot();
+        for (const auto& g : *catalog) {
             if (isHomebrewGame(g)) ++count;
         }
         return count;
@@ -154,7 +155,8 @@ void CollectionsView::rebuildGrid() {
     // 1.1 Весь каталог
     {
         size_t officialCount = 0;
-        for (const auto& g : g_games) {
+        auto catalog = getCatalogSnapshot();
+        for (const auto& g : *catalog) {
             if (!isHomebrewGame(g)) ++officialCount;
         }
         std::string totalCount = std::to_string(officialCount) + " игр";

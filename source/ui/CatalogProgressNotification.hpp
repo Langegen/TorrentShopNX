@@ -56,6 +56,8 @@ public:
         }
     }
 
+    std::shared_ptr<bool> getAliveToken() const { return aliveToken_; }
+
     void updateProgress(float percent, const std::string& statusText) {
         if (percent < 0.0f) percent = 0.0f;
         if (percent > 100.0f) percent = 100.0f;

@@ -21,6 +21,8 @@ private:
     brls::View* buildGeneralTab();
     brls::View* buildDownloadsTab();
     brls::View* buildStorageTab();
+    brls::View* buildAboutTab();
+    void showCommunityDialog();
 };
 
 } // namespace ui

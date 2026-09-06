@@ -106,7 +106,8 @@ void FavoritesManager::addFavorite(const Game& game) {
 
 void FavoritesManager::addFavorite(const std::string& topic_id) {
     if (topic_id.empty()) return;
-    for (const auto& g : g_games) {
+    auto catalog = getCatalogSnapshot();
+    for (const auto& g : *catalog) {
         if (g.topic_id == topic_id || g.magnet == topic_id) {
             addFavorite(g);
             return;

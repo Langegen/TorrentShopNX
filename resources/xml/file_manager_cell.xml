@@ -1,0 +1,54 @@
+<brls:Box
+    width="auto"
+    height="56px"
+    focusable="true"
+    paddingTop="6"
+    paddingBottom="6"
+    paddingLeft="16"
+    paddingRight="16"
+    marginRight="24"
+    axis="row"
+    alignItems="center">
+
+    <brls:Box
+        id="accentBar"
+        width="4px"
+        height="36px"
+        cornerRadius="2px"
+        marginRight="10"
+        backgroundColor="#00000000" />
+
+    <brls:Label
+        id="icon"
+        width="32px"
+        height="auto"
+        fontSize="22"
+        marginRight="10" />
+
+    <brls:Label
+        id="name"
+        width="auto"
+        height="auto"
+        grow="1.0"
+        fontSize="16"
+        singleLine="true"
+        marginRight="16" />
+
+    <brls:Label
+        id="size"
+        width="130px"
+        height="auto"
+        horizontalAlign="right"
+        fontSize="14"
+        textColor="#999999"
+        marginRight="12" />
+
+    <brls:Label
+        id="date"
+        width="140px"
+        height="auto"
+        horizontalAlign="right"
+        fontSize="13"
+        textColor="#666666" />
+
+</brls:Box>

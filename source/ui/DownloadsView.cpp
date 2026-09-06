@@ -1,14 +1,59 @@
 #include "DownloadsView.hpp"
 #include "DownloadUiManager.hpp"
+#include "FileManagerView.hpp"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
+#include "../utils/app_paths.h"
+#include "../utils/file_ops.h"
 #include <iomanip>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 
 extern std::vector<Game> g_games;
 
 namespace ui {
+
+namespace {
+
+bool isFileDownloadItem(const download::DownloadItem& item) {
+    if (item.is_homebrew || item.file_dl_dispatched || !item.file_dl_dest.empty()) {
+        return true;
+    }
+    if (!item.forced_stream_name.empty() && !util::isGamePackage(item.forced_stream_name)) {
+        return true;
+    }
+    if (!item.hybrid_installer && item.state == download::DownloadState::Completed) {
+        return true;
+    }
+    return false;
+}
+
+void openDownloadsFolderForItem(const download::DownloadItem& item) {
+    std::string targetDir = TSNX_DOWNLOADS_DIR;
+    std::string focusChild;
+
+    if (!item.file_dl_dest.empty()) {
+        std::filesystem::path p(item.file_dl_dest);
+        std::error_code ec;
+        if (std::filesystem::is_directory(p, ec)) {
+            targetDir = p.generic_string();
+        } else {
+            std::filesystem::path parent = p.parent_path();
+            if (std::filesystem::exists(parent, ec) && std::filesystem::is_directory(parent, ec)) {
+                targetDir = parent.generic_string();
+                focusChild = p.filename().generic_string();
+            }
+        }
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(targetDir, ec);
+
+    brls::Application::pushActivity(new ui::FileManagerView(targetDir, focusChild));
+}
+
+} // namespace
 
 // DOWNLOADCELL IMPLEMENTATION
 DownloadCell::DownloadCell() {
@@ -69,6 +114,12 @@ void DownloadsView::onContentAvailable() {
             if (currentRows != lastRows_) {
                 lastRows_ = currentRows;
                 recycler->reloadData();
+                if (!queue.empty()) {
+                    int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
+                    recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                    recycler->selectRowAt(brls::IndexPath(0, validRow), false);
+                    brls::Application::giveFocus(recycler);
+                }
                 return;
             }
 
@@ -91,6 +142,14 @@ void DownloadsView::onContentAvailable() {
                         }
                     }
                 }
+            }
+
+            // If focus was lost and queue is not empty, restore focus
+            if (!queue.empty() && brls::Application::getCurrentFocus() == nullptr) {
+                int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
+                recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                recycler->selectRowAt(brls::IndexPath(0, validRow), false);
+                brls::Application::giveFocus(recycler);
             }
         });
     });
@@ -117,7 +176,11 @@ DownloadsView::~DownloadsView() {
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     lastInputTime_ = std::chrono::steady_clock::now();
-    if (!ui::DownloadManager::instance().getImpl().queue().empty()) {
+    const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+    if (!queue.empty()) {
+        int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
+        recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
+        recycler->selectRowAt(brls::IndexPath(0, validRow), false);
         brls::Application::giveFocus(recycler);
     }
 }
@@ -469,6 +532,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     }
 
     // Configure Gamepad Controls on Cell Focus
+    // Reset actions on cell to avoid accumulating stale actions across progress ticks
+    cell->clearRegisteredActions();
+
     if (item.state == download::DownloadState::Completed || 
         item.state == download::DownloadState::Cancelled || 
         item.state == download::DownloadState::Failed) {
@@ -477,6 +543,13 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             ui::DownloadManager::instance().deleteDownload(topic_id);
             return true;
         });
+
+        if (item.state == download::DownloadState::Completed && isFileDownloadItem(item)) {
+            cell->registerAction("app/downloads/action_open_folder"_i18n, brls::ControllerButton::BUTTON_A, [item](brls::View* view) {
+                openDownloadsFolderForItem(item);
+                return true;
+            }, false, false, brls::SOUND_CLICK);
+        }
     } else {
         cell->registerAction(item.state == download::DownloadState::Paused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n, 
                              brls::ControllerButton::BUTTON_A, [topic_id = item.topic_id, state = item.state](brls::View* view) {
@@ -492,6 +565,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             ui::DownloadManager::instance().cancelDownload(topic_id);
             return true;
         });
+    }
+
+    // If this cell is currently focused, trigger hint refresh so bottom hints update immediately
+    if (brls::Application::getCurrentFocus() == cell) {
+        brls::Application::getGlobalHintsUpdateEvent()->fire();
     }
 }
 
@@ -510,11 +588,23 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
         parent_->updateCell(cell, queue[row]);
     }
 
+    cell->getFocusEvent()->subscribe([this, row](bool focused) {
+        if (focused) {
+            parent_->focusedRow_ = row;
+        }
+    });
+
     return cell;
 }
 
 void DownloadsView::DownloadsDataSource::didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    // Standard click is mapped to controller button actions (A button handles toggle pause/resume automatically)
+    const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+    if (static_cast<size_t>(index.row) < queue.size()) {
+        const auto& item = queue[index.row];
+        if (item.state == download::DownloadState::Completed && isFileDownloadItem(item)) {
+            openDownloadsFolderForItem(item);
+        }
+    }
 }
 
 } // namespace ui

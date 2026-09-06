@@ -220,5 +220,12 @@ extern "C" int pthread_sigmask(int how, const sigset_t* set, sigset_t* oldset) {
     return 0;
 }
 
+extern "C" mode_t umask(mode_t mask) {
+    static mode_t s_mask = 022;
+    mode_t old = s_mask;
+    s_mask = mask;
+    return old;
+}
+
 #endif // __SWITCH__
 

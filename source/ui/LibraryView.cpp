@@ -623,14 +623,15 @@ void LibraryView::scanForUpdates() {
         // Build a catalog index once per scan: exact title id lookup + a
         // pre-normalized name list, so per-game matching is O(1) instead of
         // re-running the expensive normalization for every catalog entry.
+        auto catalog = getCatalogSnapshot();
         struct CatalogIndex {
             std::unordered_map<uint64_t, const Game*> byTid;
             std::vector<std::pair<std::string, const Game*>> byCleanName;
         };
         CatalogIndex catIndex;
-        catIndex.byTid.reserve(g_games.size());
-        catIndex.byCleanName.reserve(g_games.size());
-        for (const auto& g : g_games) {
+        catIndex.byTid.reserve(catalog->size());
+        catIndex.byCleanName.reserve(catalog->size());
+        for (const auto& g : *catalog) {
             uint64_t tid = parseTitleIdFromGame(g);
             if (tid != 0) {
                 if (catIndex.byTid.find(tid) == catIndex.byTid.end()) catIndex.byTid.emplace(tid, &g);

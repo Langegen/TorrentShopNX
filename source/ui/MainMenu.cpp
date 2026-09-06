@@ -6,6 +6,7 @@
 #include "DownloadsView.hpp"
 #include "SettingsTab.hpp"
 #include "RemoteAddView.hpp"
+#include "FileManagerView.hpp"
 #include "CatalogProgressNotification.hpp"
 #include "FavoritesManager.hpp"
 #include "../GameData.hpp"
@@ -106,6 +107,9 @@ void MainMenu::setupLayout() {
 
     // 1. Top Header Bar
     header_ = new ui::DashboardHeader();
+    header_->setOnFileManagerClicked([this]() {
+        openFileManager();
+    });
     rootBox_->addView(header_);
 
     // 2. Center 5x Dashboard Tiles Row (Lowered by 30px)
@@ -144,6 +148,31 @@ void MainMenu::setupLayout() {
             [this](int idx) { onTileClicked(idx); }
         );
 
+        tile->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+            openFileManager();
+            return true;
+        });
+        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
+            openFileManager();
+            return true;
+        });
+        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
+            openFileManager();
+            return true;
+        });
+        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
+            openFileManager();
+            return true;
+        });
+        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
+            openFileManager();
+            return true;
+        });
+        tile->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+            refreshDashboardState();
+            return true;
+        }, true);
+
         if (i < 4) {
             tile->setMarginRight(16.0f);
         }
@@ -151,18 +180,75 @@ void MainMenu::setupLayout() {
         tiles_.push_back(tile);
         tilesBox_->addView(tile);
     }
+    if (!tiles_.empty()) {
+        tilesBox_->setDefaultFocusedIndex(0);
+    }
     rootBox_->addView(tilesBox_);
 
     // 3. Bottom 1/3 Summary Drawer (Compact 175px, lifted with margin)
     summaryView_ = new ui::DashboardSummaryView();
     summaryView_->setMarginBottom(18.0f);
-    rootBox_->addView(summaryView_);
-
-    // Register Activity Level Actions for Borealis Hints
-    this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        refreshDashboardState();
+    summaryView_->setOnDefocusCallback([this]() {
+        if (current_focused_index_ >= 0 && current_focused_index_ < static_cast<int>(tiles_.size()) && tiles_[current_focused_index_]) {
+            brls::Application::giveFocus(tiles_[current_focused_index_]);
+        }
+    });
+    summaryView_->setGetActiveTileCallback([this]() -> brls::View* {
+        if (current_focused_index_ >= 0 && current_focused_index_ < static_cast<int>(tiles_.size())) {
+            return tiles_[current_focused_index_];
+        }
+        return nullptr;
+    });
+    summaryView_->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        openFileManager();
         return true;
     });
+    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    summaryView_->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+        refreshDashboardState();
+        return true;
+    }, true);
+    rootBox_->addView(summaryView_);
+
+    rootBox_->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    rootBox_->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+        refreshDashboardState();
+        return true;
+    }, true);
 }
 
 static int s_cachedInstalledCount = 0;
@@ -187,6 +273,9 @@ void MainMenu::willAppear(bool resetState) {
 
 void MainMenu::onTileFocused(int index) {
     current_focused_index_ = index;
+    if (tilesBox_ && index >= 0 && index < static_cast<int>(tiles_.size())) {
+        tilesBox_->setDefaultFocusedIndex(index);
+    }
     if (summaryView_) {
         if (index == 2) {
             // Instantly display cached installed count and updates count (0ms, 60 FPS)
@@ -398,27 +487,20 @@ void MainMenu::refreshDashboardState() {
         ? (formatBytesLocal(static_cast<unsigned long long>(nandFree)) + " / " + formatBytesLocal(static_cast<unsigned long long>(nandTotal)))
         : "18.5 GB / 32.0 GB";
 
-    // 3. Catalog Count & Update Timestamp
-    int gameCount = static_cast<int>(g_games.size());
+    // 3. Catalog Count & Update Timestamp (fast in-memory, avoid synchronous SD card stat every second)
+    auto catalog = getCatalogSnapshot();
+    int gameCount = static_cast<int>(catalog->size());
     if (gameCount == 0) gameCount = 7087;
 
     std::string dateStr = "28.08.2026";
-    try {
-        std::string catPath = TSNX_CATALOG_JSON_RU;
-        if (std::filesystem::exists(catPath)) {
-            auto ftime = std::filesystem::last_write_time(catPath);
-            auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now()
-            );
-            std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
-            std::tm* tm_ptr = std::localtime(&cftime);
-            if (tm_ptr) {
-                char buf[32];
-                std::strftime(buf, sizeof(buf), "%d.%m.%Y", tm_ptr);
-                dateStr = std::string(buf);
-            }
+    std::string lastDate = config::ConfigManager::instance().getLastCatalogUpdateDate();
+    if (!lastDate.empty()) {
+        if (lastDate.size() == 10 && lastDate[4] == '-' && lastDate[7] == '-') {
+            dateStr = lastDate.substr(8, 2) + "." + lastDate.substr(5, 2) + "." + lastDate.substr(0, 4);
+        } else {
+            dateStr = lastDate;
         }
-    } catch (...) {}
+    }
 
     if (header_) {
         header_->updateStats(gameCount, dateStr, sdStr, nandStr);
@@ -428,10 +510,22 @@ void MainMenu::refreshDashboardState() {
 
     if (summaryView_) {
         summaryView_->updateDownloads(items);
-        if (!g_games.empty()) {
-            summaryView_->setCatalogSample(g_games);
+        if (!catalog->empty()) {
+            summaryView_->setCatalogSample(*catalog);
         }
         summaryView_->setRemoteInfo(ui::RemoteAddView::getLocalIpAddress(), 8080);
+    }
+}
+
+void MainMenu::openFileManager() {
+    util::logLine("MainMenu: openFileManager triggered");
+    try {
+        brls::Application::pushActivity(new ui::FileManagerView());
+        util::logLine("MainMenu: FileManagerView pushed successfully");
+    } catch (const std::exception& e) {
+        util::logLine(std::string("MainMenu: EXCEPTION opening FileManager: ") + e.what());
+    } catch (...) {
+        util::logLine("MainMenu: UNKNOWN EXCEPTION opening FileManager");
     }
 }
 
@@ -439,11 +533,35 @@ void MainMenu::onContentAvailable() {
     util::logLine("MainMenu: onContentAvailable start");
     refreshDashboardState();
 
+    this->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+
+    this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+        refreshDashboardState();
+        return true;
+    }, true);
+
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
+        openFileManager();
+        return true;
+    });
+
     // Trigger asynchronous catalog update using brls::async with safety flags
     auto& cfg = config::ConfigManager::instance();
     std::string catalog_url = cfg.getEffectiveCatalogSourceUrl();
     bool should_update = cfg.shouldUpdateCatalogToday();
-    bool was_empty = g_games.empty();
+    auto initialCatalog = getCatalogSnapshot();
+    bool was_empty = !initialCatalog || initialCatalog->empty();
 
     if (should_update || was_empty) {
         g_catalogUpdateRunning = true;
@@ -451,56 +569,112 @@ void MainMenu::onContentAvailable() {
         if (brls::Application::getNotificationManager()) {
             brls::Application::getNotificationManager()->addView(notif);
         }
+        auto notifToken = notif->getAliveToken();
 
-        brls::async([catalog_url, should_update, was_empty, notif]() {
+        brls::async([catalog_url, was_empty, notif, notifToken]() {
             bool updated = false;
             std::vector<Game> online_games;
 
-            // 1. Fetch catalog online directly in memory
+            // 1. Fetch catalog online directly to a temporary file (zero RAM buffer overhead)
             util::logLine("catalog: background online update started from " + catalog_url);
             net::HttpClient http;
 
-            http.setProgressCallback([notif](int64_t dltotal, int64_t dlnow) {
-                if (dltotal > 0) {
-                    float percent = (static_cast<float>(dlnow) * 75.0f) / static_cast<float>(dltotal);
-                    float dlMB = static_cast<float>(dlnow) / (1024.0f * 1024.0f);
-                    float totMB = static_cast<float>(dltotal) / (1024.0f * 1024.0f);
-                    char bufDl[32], bufTot[32], bufPct[32];
-                    std::snprintf(bufDl, sizeof(bufDl), "%.1f", dlMB);
-                    std::snprintf(bufTot, sizeof(bufTot), "%.1f", totMB);
-                    std::snprintf(bufPct, sizeof(bufPct), "%.0f", (static_cast<float>(dlnow) * 100.0f) / static_cast<float>(dltotal));
-                    std::string status = brls::getStr("app/catalog/downloading_progress", std::string(bufDl), std::string(bufTot), std::string(bufPct));
-                    brls::sync([notif, percent, status]() {
-                        if (notif) notif->updateProgress(percent, status);
-                    });
+            std::string tempJsonPath = getCatalogPath() + ".tmp";
+            auto lastProgressUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+
+            http.setProgressCallback([notif, notifToken, lastProgressUpdate](int64_t dltotal, int64_t dlnow) {
+                if (g_appExiting.load()) return;
+                if (!notifToken || !*notifToken) return;
+                if (dltotal <= 0) return;
+
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastProgressUpdate).count();
+                if (elapsed < 150 && dlnow < dltotal) {
+                    return; // Throttle UI updates to ~6-7 Hz
                 }
+                *lastProgressUpdate = now;
+
+                float percent = (static_cast<float>(dlnow) * 75.0f) / static_cast<float>(dltotal);
+                float dlMB = static_cast<float>(dlnow) / (1024.0f * 1024.0f);
+                float totMB = static_cast<float>(dltotal) / (1024.0f * 1024.0f);
+                char bufDl[32], bufTot[32], bufPct[32];
+                std::snprintf(bufDl, sizeof(bufDl), "%.1f", dlMB);
+                std::snprintf(bufTot, sizeof(bufTot), "%.1f", totMB);
+                std::snprintf(bufPct, sizeof(bufPct), "%.0f", (static_cast<float>(dlnow) * 100.0f) / static_cast<float>(dltotal));
+                std::string status = brls::getStr("app/catalog/downloading_progress", std::string(bufDl), std::string(bufTot), std::string(bufPct));
+
+                brls::sync([notif, notifToken, percent, status]() {
+                    if (notifToken && *notifToken && notif) {
+                        notif->updateProgress(percent, status);
+                    }
+                });
             });
 
-            auto res = http.httpGet(catalog_url);
-            if (res.status_code == 200 && !res.body.empty()) {
-                brls::sync([notif]() {
-                    if (notif) notif->updateProgress(85.0f, "app/catalog/processing"_i18n);
+            bool download_ok = http.downloadToFile(catalog_url, tempJsonPath, &g_appExiting, 180);
+            if (download_ok && !g_appExiting.load()) {
+                brls::sync([notif, notifToken]() {
+                    if (notifToken && *notifToken && notif) {
+                        notif->updateProgress(85.0f, "app/catalog/processing"_i18n);
+                    }
                 });
-                online_games = parseGamesFromJsonString(res.body);
-                if (!online_games.empty()) {
-                    util::logLine("catalog: background online update parsed " + std::to_string(online_games.size()) + " games directly in memory");
-                    writeTextFile(getCatalogPath(), res.body);
-                    saveGamesToBinaryFile(getCatalogBinPath(), online_games);
-                    updated = true;
+
+                // Stream parse from disk with SAX (avoids 250MB AST memory spike)
+                online_games = parseGamesFromFileStream(tempJsonPath);
+                if (!online_games.empty() && !g_appExiting.load()) {
+                    util::logLine("catalog: background online update parsed " + std::to_string(online_games.size()) + " games from stream");
+
+                    // Save binary cache to a temporary file first
+                    std::string tempBinPath = getCatalogBinPath() + ".tmp";
+                    saveGamesToBinaryFile(tempBinPath, online_games);
+
+                    // Atomically replace both files. On the Switch filesystem
+                    // rename() fails with "File exists" when the target exists,
+                    // so remove the destinations first.
+                    std::error_code ec;
+                    bool jsonOk = false;
+                    bool binOk = false;
+                    // Replace the binary cache first: it is the primary source
+                    // at startup, while the json is only a fallback.
+                    std::filesystem::remove(getCatalogBinPath(), ec);
+                    std::filesystem::rename(tempBinPath, getCatalogBinPath(), ec);
+                    binOk = !ec;
+                    if (!binOk) {
+                        util::logLine("catalog: rename bin failed: " + ec.message());
+                    }
+                    std::filesystem::remove(getCatalogPath(), ec);
+                    std::filesystem::rename(tempJsonPath, getCatalogPath(), ec);
+                    jsonOk = !ec;
+                    if (!jsonOk) {
+                        util::logLine("catalog: rename json failed: " + ec.message());
+                    }
+
+                    // The in-memory snapshot is fine either way, but only mark
+                    // the update as persisted when the on-disk caches actually
+                    // got replaced; otherwise the next launch would reload the
+                    // stale files and try again.
+                    updated = jsonOk && binOk;
+                    if (!updated) {
+                        std::filesystem::remove(tempJsonPath, ec);
+                        std::filesystem::remove(tempBinPath, ec);
+                        util::logLine("catalog: background online update could not be persisted, keeping old files");
+                    }
+                } else {
+                    std::error_code ec;
+                    std::filesystem::remove(tempJsonPath, ec);
                 }
             } else {
-                util::logLine("catalog: background online update failed, status=" + std::to_string(res.status_code));
+                util::logLine("catalog: background online download failed for " + catalog_url);
             }
 
             // 2. Fallback parser if online fetch failed and catalog was empty
-            if (was_empty && !updated) {
+            if (was_empty && !updated && !g_appExiting.load()) {
                 util::logLine("catalog: running background fallback sources parser");
                 catalog::CatalogManager catalog_mgr;
                 bool sources_loaded = catalog_mgr.loadSourcesWithFallback(TSNX_SOURCES_PATH, "romfs:/sources.json");
                 if (sources_loaded) {
                     catalog_mgr.updateCatalogs();
                     catalog_mgr.mergeCatalogEntries();
-                    
+
                     for (const auto& entry : catalog_mgr.entries()) {
                         Game g;
                         g.title = entry.title;
@@ -522,10 +696,12 @@ void MainMenu::onContentAvailable() {
             }
 
             if (updated && !online_games.empty()) {
-                brls::sync([online_games, notif]() {
-                    g_games = online_games;
-                    catalog::FavoritesManager::instance().syncLegacyFavorites(g_games);
-                    
+                auto newSnapshot = std::make_shared<std::vector<Game>>(std::move(online_games));
+                brls::sync([newSnapshot, notif, notifToken]() {
+                    setCatalogSnapshot(std::move(*newSnapshot));
+                    auto snap = getCatalogSnapshot();
+                    catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
+
                     auto& main_cfg = config::ConfigManager::instance();
                     main_cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
                     main_cfg.save();
@@ -534,13 +710,13 @@ void MainMenu::onContentAvailable() {
                         ui::g_activeCatalogView->filterCatalog();
                     }
 
-                    if (notif) {
-                        notif->setCompleted(brls::getStr("app/catalog/loaded_games", std::to_string(g_games.size())));
+                    if (notifToken && *notifToken && notif) {
+                        notif->setCompleted(brls::getStr("app/catalog/loaded_games", std::to_string(snap->size())));
                     }
                 });
             } else {
-                brls::sync([notif]() {
-                    if (notif) {
+                brls::sync([notif, notifToken]() {
+                    if (notifToken && *notifToken && notif) {
                         notif->setFailed("app/catalog/update_failed"_i18n);
                     }
                 });

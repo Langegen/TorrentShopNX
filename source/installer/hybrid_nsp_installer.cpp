@@ -141,6 +141,12 @@ HybridNspInstaller::~HybridNspInstaller() {
         threadClose(&installer_thread_);
         threads_started_ = false;
     }
+#else
+    if (threads_started_) {
+        if (collector_thread_.joinable()) collector_thread_.join();
+        if (installer_thread_.joinable()) installer_thread_.join();
+        threads_started_ = false;
+    }
 #endif
     ring_buffer_.clear();
 }
@@ -466,9 +472,10 @@ bool HybridNspInstaller::startStreamingPhase() {
     util::cpuBoostBegin();
     util::logLine("hybrid: both threads started");
 #else
-    // На хосте — однопоточная имитация
-    collectorThreadFunc();
-    installerThreadFunc();
+    // На хосте — запуск через std::thread
+    threads_started_ = true;
+    collector_thread_ = std::thread(&HybridNspInstaller::collectorThreadFunc, this);
+    installer_thread_ = std::thread(&HybridNspInstaller::installerThreadFunc, this);
 #endif
 
     return true;
@@ -1558,6 +1565,12 @@ void HybridNspInstaller::cancel() {
             threadWaitForExit(&installer_thread_);
             threadClose(&collector_thread_);
             threadClose(&installer_thread_);
+            threads_started_ = false;
+        }
+#else
+        if (threads_started_) {
+            if (collector_thread_.joinable()) collector_thread_.join();
+            if (installer_thread_.joinable()) installer_thread_.join();
             threads_started_ = false;
         }
 #endif

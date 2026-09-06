@@ -16,6 +16,7 @@ public:
     void willAppear(bool resetState = false) override;
     void updateDownloadsBadge(int count);
     void refreshDashboardState();
+    void openFileManager();
 
 private:
     void setupLayout();

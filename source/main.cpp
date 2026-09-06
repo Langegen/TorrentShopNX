@@ -314,8 +314,9 @@ int main(int argc, char** argv) {
         net::ImageDownloader::instance().init(4);
 
         // Load database games via fast binary cache (or fallback to JSON)
-        g_games = loadGamesCached(getCatalogPath(), getCatalogBinPath());
-        util::logLine("main: initially loaded g_games count=" + std::to_string(g_games.size()) + " (path=" + getCatalogPath() + ")");
+        auto loadedGames = loadGamesCached(getCatalogPath(), getCatalogBinPath());
+        setCatalogSnapshot(std::move(loadedGames));
+        util::logLine("main: initially loaded g_games count=" + std::to_string(getCatalogSnapshot()->size()) + " (path=" + getCatalogPath() + ")");
 
         // Logger configuration
         brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
