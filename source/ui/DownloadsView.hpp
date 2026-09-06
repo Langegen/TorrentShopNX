@@ -13,6 +13,12 @@ public:
     std::shared_ptr<bool> imageToken;
     static DownloadCell* create();
 
+    void clearRegisteredActions() {
+        while (!this->getActions().empty()) {
+            this->unregisterAction(this->getActions().front()->getIdentifier());
+        }
+    }
+
     BRLS_BIND(brls::Image, cover, "cover");
     BRLS_BIND(brls::Label, title, "title");
     BRLS_BIND(brls::Box, progressBar, "progressBar");
@@ -44,6 +50,7 @@ public:
 
     void updateCell(DownloadCell* cell, const download::DownloadItem& item);
     size_t lastRows_ = 0;
+    int focusedRow_ = 0;
 
 private:
     void checkBacklightState();

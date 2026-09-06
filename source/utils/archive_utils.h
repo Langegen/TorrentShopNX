@@ -10,9 +10,11 @@ namespace util {
 
 struct ArchiveProgress {
     float percentage = 0.0f;           // 0.0 to 100.0%
-    uint64_t bytesExtracted = 0;       // Bytes extracted so far
+    uint64_t bytesExtracted = 0;       // Bytes extracted so far (uncompressed)
+    uint64_t totalUncompressedSize = 0;// Total uncompressed size across all files (if known)
     uint64_t totalArchiveSize = 0;     // Compressed archive size on disk
     size_t entriesProcessed = 0;       // Number of files/dirs extracted
+    size_t totalEntries = 0;           // Total files/dirs in archive (if known)
     std::string currentFileName;       // Name of the current entry being unpacked
 };
 

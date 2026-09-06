@@ -60,6 +60,9 @@ size_t FileDataSource::read(uint64_t offset, void* buf, size_t size) {
     }
 
     std::lock_guard<std::mutex> lock(readMutex_);
+    if (!file_) {
+        return 0;
+    }
 
 #if defined(_WIN32)
     if (_fseeki64(file_, static_cast<__int64>(offset), SEEK_SET) != 0) {

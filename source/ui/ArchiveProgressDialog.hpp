@@ -6,6 +6,12 @@
 #include <memory>
 #include <chrono>
 
+#if defined(__SWITCH__)
+#include <switch.h>
+#else
+#include <thread>
+#endif
+
 namespace ui {
 
 class ArchiveProgressDialog : public brls::Dialog {
@@ -16,7 +22,18 @@ public:
     void startExtraction();
 
 private:
+    ArchiveProgressDialog(brls::Box* contentBox, const std::string& archivePath, const std::string& destDir, std::function<void(bool success, const std::string& msg)> onComplete);
+
+    void runExtraction();
     void updateUi(const util::ArchiveProgress& progress);
+
+#if defined(__SWITCH__)
+    Thread thread_{};
+    bool threadStarted_ = false;
+    static void threadEntry(void* arg);
+#else
+    std::thread workerThread_;
+#endif
 
     std::string archivePath_;
     std::string destDir_;
@@ -24,6 +41,7 @@ private:
 
     std::shared_ptr<std::atomic<bool>> cancelToken_;
     std::shared_ptr<std::atomic<bool>> aliveToken_;
+    std::atomic<bool> closed_{false};
 
     brls::Box* contentBox_ = nullptr;
     brls::Label* titleLabel_ = nullptr;

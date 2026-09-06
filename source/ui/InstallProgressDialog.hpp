@@ -9,6 +9,12 @@
 #include <string>
 #include <functional>
 
+#if defined(__SWITCH__)
+#include <switch.h>
+#else
+#include <thread>
+#endif
+
 namespace ui {
 
 class InstallProgressDialog : public brls::Dialog {
@@ -23,6 +29,14 @@ public:
     void startInstallation();
 
 private:
+    InstallProgressDialog(
+        brls::Box* contentBox,
+        const std::string& packagePath,
+        int storageId,
+        std::function<void(bool success, const std::string& msg)> onComplete
+    );
+
+    void runInstallation();
     void updateUi(
         float progressPct,
         uint64_t bytesInstalled,
@@ -30,6 +44,15 @@ private:
         double speedKbps,
         const std::string& statusText
     );
+
+#if defined(__SWITCH__)
+    Thread thread_{};
+    bool threadStarted_ = false;
+    static void threadEntry(void* arg);
+#else
+    std::thread workerThread_;
+#endif
+    std::atomic<bool> closed_{false};
 
     std::string packagePath_;
     int storageId_;

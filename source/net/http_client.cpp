@@ -547,7 +547,7 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
     curl_easy_reset(curl);
 
     struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.5)");
+    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.6)");
 
     FileWriteCtx file_ctx{fp, 0};
     CurlXferContext xfer_ctx{cancel_flag ? cancel_flag : cancel_flag_, progress_cb_};

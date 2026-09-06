@@ -114,6 +114,12 @@ void DownloadsView::onContentAvailable() {
             if (currentRows != lastRows_) {
                 lastRows_ = currentRows;
                 recycler->reloadData();
+                if (!queue.empty()) {
+                    int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
+                    recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                    recycler->selectRowAt(brls::IndexPath(0, validRow), false);
+                    brls::Application::giveFocus(recycler);
+                }
                 return;
             }
 
@@ -136,6 +142,14 @@ void DownloadsView::onContentAvailable() {
                         }
                     }
                 }
+            }
+
+            // If focus was lost and queue is not empty, restore focus
+            if (!queue.empty() && brls::Application::getCurrentFocus() == nullptr) {
+                int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
+                recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                recycler->selectRowAt(brls::IndexPath(0, validRow), false);
+                brls::Application::giveFocus(recycler);
             }
         });
     });
@@ -162,7 +176,11 @@ DownloadsView::~DownloadsView() {
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     lastInputTime_ = std::chrono::steady_clock::now();
-    if (!ui::DownloadManager::instance().getImpl().queue().empty()) {
+    const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+    if (!queue.empty()) {
+        int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
+        recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
+        recycler->selectRowAt(brls::IndexPath(0, validRow), false);
         brls::Application::giveFocus(recycler);
     }
 }
@@ -514,6 +532,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     }
 
     // Configure Gamepad Controls on Cell Focus
+    // Reset actions on cell to avoid accumulating stale actions across progress ticks
+    cell->clearRegisteredActions();
+
     if (item.state == download::DownloadState::Completed || 
         item.state == download::DownloadState::Cancelled || 
         item.state == download::DownloadState::Failed) {
@@ -527,12 +548,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             cell->registerAction("app/downloads/action_open_folder"_i18n, brls::ControllerButton::BUTTON_A, [item](brls::View* view) {
                 openDownloadsFolderForItem(item);
                 return true;
-            });
-
-            cell->registerClickAction([item](brls::View* view) {
-                openDownloadsFolderForItem(item);
-                return true;
-            });
+            }, false, false, brls::SOUND_CLICK);
         }
     } else {
         cell->registerAction(item.state == download::DownloadState::Paused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n, 
@@ -550,6 +566,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             return true;
         });
     }
+
+    // If this cell is currently focused, trigger hint refresh so bottom hints update immediately
+    if (brls::Application::getCurrentFocus() == cell) {
+        brls::Application::getGlobalHintsUpdateEvent()->fire();
+    }
 }
 
 
@@ -566,6 +587,12 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
     if (static_cast<size_t>(row) < queue.size()) {
         parent_->updateCell(cell, queue[row]);
     }
+
+    cell->getFocusEvent()->subscribe([this, row](bool focused) {
+        if (focused) {
+            parent_->focusedRow_ = row;
+        }
+    });
 
     return cell;
 }

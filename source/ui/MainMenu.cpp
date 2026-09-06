@@ -627,18 +627,37 @@ void MainMenu::onContentAvailable() {
                     std::string tempBinPath = getCatalogBinPath() + ".tmp";
                     saveGamesToBinaryFile(tempBinPath, online_games);
 
-                    // Atomically rename both files so readers never see half-written states
+                    // Atomically replace both files. On the Switch filesystem
+                    // rename() fails with "File exists" when the target exists,
+                    // so remove the destinations first.
                     std::error_code ec;
-                    std::filesystem::rename(tempJsonPath, getCatalogPath(), ec);
-                    if (ec) {
-                        util::logLine("catalog: rename json failed: " + ec.message());
-                    }
+                    bool jsonOk = false;
+                    bool binOk = false;
+                    // Replace the binary cache first: it is the primary source
+                    // at startup, while the json is only a fallback.
+                    std::filesystem::remove(getCatalogBinPath(), ec);
                     std::filesystem::rename(tempBinPath, getCatalogBinPath(), ec);
-                    if (ec) {
+                    binOk = !ec;
+                    if (!binOk) {
                         util::logLine("catalog: rename bin failed: " + ec.message());
                     }
+                    std::filesystem::remove(getCatalogPath(), ec);
+                    std::filesystem::rename(tempJsonPath, getCatalogPath(), ec);
+                    jsonOk = !ec;
+                    if (!jsonOk) {
+                        util::logLine("catalog: rename json failed: " + ec.message());
+                    }
 
-                    updated = true;
+                    // The in-memory snapshot is fine either way, but only mark
+                    // the update as persisted when the on-disk caches actually
+                    // got replaced; otherwise the next launch would reload the
+                    // stale files and try again.
+                    updated = jsonOk && binOk;
+                    if (!updated) {
+                        std::filesystem::remove(tempJsonPath, ec);
+                        std::filesystem::remove(tempBinPath, ec);
+                        util::logLine("catalog: background online update could not be persisted, keeping old files");
+                    }
                 } else {
                     std::error_code ec;
                     std::filesystem::remove(tempJsonPath, ec);

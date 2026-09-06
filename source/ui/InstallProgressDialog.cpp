@@ -9,6 +9,13 @@
 
 namespace ui {
 
+#if defined(__SWITCH__)
+void InstallProgressDialog::threadEntry(void* arg) {
+    auto* self = static_cast<InstallProgressDialog*>(arg);
+    self->runInstallation();
+}
+#endif
+
 namespace {
 
 uint64_t extractTitleId(const std::string& name) {
@@ -57,11 +64,22 @@ InstallProgressDialog::InstallProgressDialog(
     const std::string& packagePath,
     int storageId,
     std::function<void(bool, const std::string&)> onComplete
-) : brls::Dialog(contentBox_ = new brls::Box()),
+) : InstallProgressDialog(new brls::Box(), packagePath, storageId, std::move(onComplete))
+{
+}
+
+InstallProgressDialog::InstallProgressDialog(
+    brls::Box* contentBox,
+    const std::string& packagePath,
+    int storageId,
+    std::function<void(bool, const std::string&)> onComplete
+) : brls::Dialog(contentBox),
     packagePath_(packagePath),
     storageId_(storageId),
-    onComplete_(std::move(onComplete))
+    onComplete_(std::move(onComplete)),
+    contentBox_(contentBox)
 {
+    util::logLine("InstallProgressDialog: constructor entered for " + packagePath_);
     cancelToken_ = std::make_shared<std::atomic<bool>>(false);
     aliveToken_ = std::make_shared<std::atomic<bool>>(true);
     startTime_ = std::chrono::steady_clock::now();
@@ -176,15 +194,17 @@ InstallProgressDialog::InstallProgressDialog(
 
     this->setCancelable(true);
 
-    auto* applet = dynamic_cast<brls::AppletFrame*>(this->getView("brls/dialog/applet"));
+    auto* applet = this->getAppletFrame();
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
         applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
     }
+    util::logLine("InstallProgressDialog: constructor completed");
 }
 
 InstallProgressDialog::~InstallProgressDialog() {
+    util::logLine("InstallProgressDialog: destructor entered");
     if (aliveToken_) {
         aliveToken_->store(false);
     }
@@ -194,9 +214,23 @@ InstallProgressDialog::~InstallProgressDialog() {
     if (installer_) {
         installer_->cancel();
     }
+
+#if defined(__SWITCH__)
+    if (threadStarted_) {
+        threadWaitForExit(&thread_);
+        threadClose(&thread_);
+        threadStarted_ = false;
+    }
+#else
+    if (workerThread_.joinable()) {
+        workerThread_.join();
+    }
+#endif
+
     if (dataSource_) {
         dataSource_->close();
     }
+    util::logLine("InstallProgressDialog: destructor completed");
 }
 
 void InstallProgressDialog::updateUi(
@@ -206,7 +240,7 @@ void InstallProgressDialog::updateUi(
     double speedKbps,
     const std::string& statusText
 ) {
-    if (!aliveToken_ || !aliveToken_->load()) return;
+    if (!aliveToken_ || !aliveToken_->load() || closed_.load()) return;
 
     if (statusLabel_) {
         statusLabel_->setText(statusText);
@@ -267,125 +301,159 @@ void InstallProgressDialog::updateUi(
 }
 
 void InstallProgressDialog::startInstallation() {
+    util::logLine("InstallProgressDialog: startInstallation opening dialog for " + packagePath_ + " storage=" + std::to_string(storageId_));
     this->open();
+    util::logLine("InstallProgressDialog: dialog opened, creating installation thread");
 
+#if defined(__SWITCH__)
+    // 512KB stack size (0x80000), default core (-2), Priority 0x2C
+    Result rc = threadCreate(&thread_, &InstallProgressDialog::threadEntry, this, nullptr, 0x80000, 0x2C, -2);
+    if (R_SUCCEEDED(rc)) {
+        threadStarted_ = true;
+        rc = threadStart(&thread_);
+        if (R_FAILED(rc)) {
+            util::logLine("InstallProgressDialog: threadStart failed, rc=" + std::to_string(rc));
+            threadClose(&thread_);
+            threadStarted_ = false;
+            if (onComplete_) onComplete_(false, "Failed to start installer thread");
+            if (!closed_.exchange(true)) this->close();
+        }
+    } else {
+        util::logLine("InstallProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
+        if (onComplete_) onComplete_(false, "Failed to create installer thread");
+        if (!closed_.exchange(true)) this->close();
+    }
+#else
+    workerThread_ = std::thread([this]() { runInstallation(); });
+#endif
+}
+
+void InstallProgressDialog::runInstallation() {
     auto alive = aliveToken_;
     auto cancel = cancelToken_;
     auto onComplete = onComplete_;
     std::string packagePath = packagePath_;
     int storageId = storageId_;
 
-    util::logLine("InstallProgressDialog: startInstallation for " + packagePath + " storage=" + std::to_string(storageId));
+    util::logLine("InstallProgressDialog: runInstallation running for " + packagePath);
 
-    brls::async([this, alive, cancel, onComplete, packagePath, storageId]() {
-        dataSource_ = std::make_shared<datasource::FileDataSource>(packagePath);
-        dataSource_->setCancelFlag(cancel.get());
+    dataSource_ = std::make_shared<datasource::FileDataSource>(packagePath);
+    dataSource_->setCancelFlag(cancel.get());
 
-        if (!dataSource_->open()) {
-            util::logLine("InstallProgressDialog: failed to open package data source: " + packagePath);
-            brls::sync([this, onComplete]() {
+    if (!dataSource_->open()) {
+        util::logLine("InstallProgressDialog: failed to open package data source: " + packagePath);
+        brls::sync([this, alive, onComplete]() {
+            if (!alive || !alive->load()) return;
+            if (!closed_.exchange(true)) {
                 this->close([onComplete]() {
                     if (onComplete) onComplete(false, "Не удалось открыть файл пакета");
                 });
-            });
-            return;
-        }
+            }
+        });
+        return;
+    }
 
-        uint64_t fileTotalSize = dataSource_->totalSize();
+    uint64_t fileTotalSize = dataSource_->totalSize();
+    installer_ = std::make_shared<installer::HybridNspInstaller>();
 
-        installer_ = std::make_shared<installer::HybridNspInstaller>();
+    std::filesystem::path pp(packagePath);
+    std::string fileName = pp.filename().generic_string();
+    installer_->setSourceFileNameHint(fileName);
+    installer_->setHintTitleId(extractTitleId(fileName));
 
-        std::filesystem::path pp(packagePath);
-        std::string fileName = pp.filename().generic_string();
-        installer_->setSourceFileNameHint(fileName);
-        installer_->setHintTitleId(extractTitleId(fileName));
-
-        installer::InstallConfig config;
-        config.buffer_size = 64 * 1024 * 1024;
-        config.chunk_size = 4 * 1024 * 1024;
-        config.verify_sha256 = true;
-        config.install_ticket = true;
+    installer::InstallConfig config;
+    config.buffer_size = 64 * 1024 * 1024;
+    config.chunk_size = 4 * 1024 * 1024;
+    config.verify_sha256 = true;
+    config.install_ticket = true;
 #ifdef __SWITCH__
-        config.storage = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
+    config.storage = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
 #else
-        config.storage = storageId;
+    config.storage = storageId;
 #endif
 
-        if (!installer_->start(dataSource_.get(), config)) {
-            std::string errMsg = installer_->errorMessage();
-            if (errMsg.empty()) errMsg = "Не удалось запустить установщик пакета";
-            util::logLine("InstallProgressDialog: installer start failed: " + errMsg);
+    if (!installer_->start(dataSource_.get(), config)) {
+        std::string errMsg = installer_->errorMessage();
+        if (errMsg.empty()) errMsg = "Не удалось запустить установщик пакета";
+        util::logLine("InstallProgressDialog: installer start failed: " + errMsg);
 
-            if (dataSource_) dataSource_->close();
+        if (dataSource_) dataSource_->close();
 
-            brls::sync([this, onComplete, errMsg]() {
+        brls::sync([this, alive, onComplete, errMsg]() {
+            if (!alive || !alive->load()) return;
+            if (!closed_.exchange(true)) {
                 this->close([onComplete, errMsg]() {
                     if (onComplete) onComplete(false, errMsg);
                 });
-            });
-            return;
-        }
-
-        // Monitoring and UI update loop
-        auto lastUiTime = std::chrono::steady_clock::now();
-        while (alive->load() && !installer_->isFinished()) {
-            if (cancel->load()) {
-                installer_->cancel();
-                break;
             }
+        });
+        return;
+    }
 
-            auto now = std::chrono::steady_clock::now();
-            auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUiTime).count();
-            if (elapsedMs >= 150) {
-                lastUiTime = now;
-
-                float prog = installer_->progress() * 100.0f;
-                uint64_t instBytes = installer_->bytesInstalled();
-                uint64_t totalBytes = installer_->totalBytes();
-                if (totalBytes == 0) totalBytes = fileTotalSize;
-                double speed = installer_->downloadSpeedKbps();
-                std::string statusText = getRussianPhaseText(installer_->state());
-
-                brls::sync([this, prog, instBytes, totalBytes, speed, statusText]() {
-                    this->updateUi(prog, instBytes, totalBytes, speed, statusText);
-                });
-            }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(80));
-        }
-
-        // If cancelled, wait for graceful shutdown
+    // Monitoring and UI update loop
+    auto lastUiTime = std::chrono::steady_clock::now();
+    while (alive->load() && !closed_.load() && !installer_->isFinished()) {
         if (cancel->load()) {
             installer_->cancel();
-            int waitIters = 0;
-            while (!installer_->isFinished() && waitIters < 40) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                waitIters++;
-            }
+            break;
         }
 
-        bool success = (installer_->state() == installer::InstallState::Completed);
-        std::string finalMsg;
-        if (cancel->load()) {
-            finalMsg = "Установка отменена";
-        } else if (success) {
-            finalMsg = "Установка успешно завершена!";
-        } else {
-            finalMsg = installer_->errorMessage();
-            if (finalMsg.empty()) finalMsg = "Произошла ошибка при установке пакета";
+        auto now = std::chrono::steady_clock::now();
+        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUiTime).count();
+        if (elapsedMs >= 150) {
+            lastUiTime = now;
+
+            float prog = installer_->progress() * 100.0f;
+            uint64_t instBytes = installer_->bytesInstalled();
+            uint64_t totalBytes = installer_->totalBytes();
+            if (totalBytes == 0) totalBytes = fileTotalSize;
+            double speed = installer_->downloadSpeedKbps();
+            std::string statusText = getRussianPhaseText(installer_->state());
+
+            brls::sync([this, alive, prog, instBytes, totalBytes, speed, statusText]() {
+                if (alive && alive->load() && !closed_.load()) {
+                    this->updateUi(prog, instBytes, totalBytes, speed, statusText);
+                }
+            });
         }
 
-        util::logLine("InstallProgressDialog: finished, success=" + std::string(success ? "yes" : "no") + " msg=" + finalMsg);
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    }
 
-        if (dataSource_) {
-            dataSource_->close();
+    // If cancelled, wait for graceful shutdown
+    if (cancel->load()) {
+        installer_->cancel();
+        int waitIters = 0;
+        while (!installer_->isFinished() && waitIters < 40) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waitIters++;
         }
+    }
 
-        brls::sync([this, onComplete, success, finalMsg]() {
+    bool success = (installer_->state() == installer::InstallState::Completed);
+    std::string finalMsg;
+    if (cancel->load()) {
+        finalMsg = "Установка отменена";
+    } else if (success) {
+        finalMsg = "Установка успешно завершена!";
+    } else {
+        finalMsg = installer_->errorMessage();
+        if (finalMsg.empty()) finalMsg = "Произошла ошибка при установке пакета";
+    }
+
+    util::logLine("InstallProgressDialog: finished, success=" + std::string(success ? "yes" : "no") + " msg=" + finalMsg);
+
+    if (dataSource_) {
+        dataSource_->close();
+    }
+
+    brls::sync([this, alive, onComplete, success, finalMsg]() {
+        if (!alive || !alive->load()) return;
+        if (!closed_.exchange(true)) {
             this->close([onComplete, success, finalMsg]() {
                 if (onComplete) onComplete(success, finalMsg);
             });
-        });
+        }
     });
 }
 

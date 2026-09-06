@@ -9,6 +9,8 @@
 
 namespace ui {
 
+class FileManagerView;
+
 class FileManagerCell : public brls::RecyclerCell {
 public:
     FileManagerCell();
@@ -16,6 +18,14 @@ public:
     static FileManagerCell* create();
 
     void setSelectedVisual(bool selected);
+    void clearRegisteredActions() {
+        while (!this->getActions().empty()) {
+            this->unregisterAction(this->getActions().front()->getIdentifier());
+        }
+    }
+
+    size_t rowIndex = 0;
+    FileManagerView* parentView = nullptr;
 
     BRLS_BIND(brls::Box,   accentBar, "accentBar");
     BRLS_BIND(brls::Label, icon,      "icon");
@@ -28,7 +38,7 @@ class FileManagerView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("file_manager_view.xml");
 
-    FileManagerView(const std::string& initialPath = "", const std::string& focusChild = "");
+    FileManagerView(const std::string& initialPath = "", const std::string& focusChild = "", const std::string& rootDir = "");
     ~FileManagerView() override = default;
 
     void onContentAvailable() override;
@@ -38,6 +48,7 @@ public:
     void navigateUp();
     void refresh(const std::string& focusChild = "");
 
+    void setFocusedRow(int row) { currentFocusedRow_ = row; }
     void toggleSelection(size_t index);
     void toggleSelectionOnCell(size_t index, FileManagerCell* cell);
     void selectAll();

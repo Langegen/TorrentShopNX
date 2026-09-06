@@ -34,9 +34,11 @@ static std::string truncateStr(const std::string& str, size_t maxLen) {
 // -------------------------------------------------------------
 class DashboardGameCard : public brls::Box {
 public:
-    DashboardGameCard(const Game& game, std::shared_ptr<bool> imageToken, std::function<void()> on_back = nullptr)
-        : game_(game), imageToken_(imageToken), on_back_(on_back) {
+    DashboardGameCard(const Game& game, std::function<void()> on_back = nullptr)
+        : game_(game), on_back_(on_back) {
         
+        cardImageToken_ = std::make_shared<bool>(true);
+
         this->setFocusable(true);
         this->setHideHighlight(true);
         this->setAxis(brls::Axis::ROW);
@@ -54,18 +56,22 @@ public:
         imgBox->setAlignItems(brls::AlignItems::CENTER);
         imgBox->setJustifyContent(brls::JustifyContent::CENTER);
         imgBox->setMarginRight(10.0f);
+        imgBox->setGrow(0.0f);
+        imgBox->setShrink(0.0f);
 
         brls::Image* coverImg = new brls::Image();
         coverImg->setWidth(68.0f);
         coverImg->setHeight(108.0f);
         coverImg->setCornerRadius(6.0f);
         coverImg->setScalingType(brls::ImageScalingType::FILL);
+        coverImg->setGrow(0.0f);
+        coverImg->setShrink(0.0f);
 
         if (!game.cover.empty()) {
             setImageFromHTTPS(
                 coverImg,
                 game.cover,
-                imageToken_,
+                cardImageToken_,
                 "romfs:/img/borealis_96.png"
             );
         } else {
@@ -234,15 +240,21 @@ public:
         }
         nvgStroke(vg);
 
-        nvgRestore(vg);
-
         // 5. Draw children views
         Box::draw(vg, x, y, width, height, style, ctx);
+
+        nvgRestore(vg);
+    }
+
+    ~DashboardGameCard() override {
+        if (cardImageToken_) {
+            *cardImageToken_ = false;
+        }
     }
 
 private:
     Game game_;
-    std::shared_ptr<bool> imageToken_;
+    std::shared_ptr<bool> cardImageToken_;
     brls::Label* titleLbl_ = nullptr;
     brls::Box* actPill_ = nullptr;
     brls::Label* actLbl_ = nullptr;
@@ -551,7 +563,7 @@ void DashboardSummaryView::buildCatalogSection() {
         cardsRow->addView(emptyLbl);
     } else {
         for (const auto& g : catalog_sample_) {
-            DashboardGameCard* card = new DashboardGameCard(g, imageToken_, on_defocus_);
+            DashboardGameCard* card = new DashboardGameCard(g, on_defocus_);
             if (get_active_tile_) {
                 brls::View* tile = get_active_tile_();
                 if (tile) card->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
@@ -1148,7 +1160,7 @@ void DashboardSummaryView::buildDownloadsSection() {
             cardsRow->addView(emptyLbl);
         } else {
             for (const auto& g : catalog_sample_) {
-                DashboardGameCard* card = new DashboardGameCard(g, imageToken_, on_defocus_);
+                DashboardGameCard* card = new DashboardGameCard(g, on_defocus_);
                 if (get_active_tile_) {
                     brls::View* tile = get_active_tile_();
                     if (tile) card->setCustomNavigationRoute(brls::FocusDirection::UP, tile);

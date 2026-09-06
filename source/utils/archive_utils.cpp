@@ -1,5 +1,7 @@
 #include "archive_utils.h"
+#include "file_ops.h"
 #include "log.h"
+#include "sevenzip_utils.h"
 #include <archive.h>
 #include <archive_entry.h>
 #include <filesystem>
@@ -29,49 +31,6 @@ bool isArchiveFile(const std::string& path) {
            endsWith(".xz");
 }
 
-static bool safeCreateDirectories(const std::string& path) {
-    if (path.empty()) return true;
-
-    std::string norm = path;
-    std::replace(norm.begin(), norm.end(), '\\', '/');
-    while (norm.size() > 1 && norm.back() == '/') {
-        if (norm == "sdmc:/" || (norm.size() == 3 && norm[1] == ':')) break;
-        norm.pop_back();
-    }
-
-    std::error_code ec;
-    if (std::filesystem::exists(norm, ec)) {
-        return true;
-    }
-
-    std::string cur;
-    size_t pos = 0;
-    if (norm.rfind("sdmc:/", 0) == 0) {
-        cur = "sdmc:/";
-        pos = 6;
-    } else if (norm.size() >= 3 && norm[1] == ':' && norm[2] == '/') {
-        cur = norm.substr(0, 3);
-        pos = 3;
-    } else if (norm.rfind("/", 0) == 0) {
-        cur = "/";
-        pos = 1;
-    }
-
-    while (pos < norm.size()) {
-        size_t next = norm.find('/', pos);
-        std::string part = (next == std::string::npos) ? norm.substr(pos) : norm.substr(pos, next - pos);
-        if (!part.empty()) {
-            if (!cur.empty() && cur.back() != '/') cur += "/";
-            cur += part;
-            if (!std::filesystem::exists(cur, ec)) {
-                std::filesystem::create_directory(cur, ec);
-            }
-        }
-        if (next == std::string::npos) break;
-        pos = next + 1;
-    }
-    return true;
-}
 
 bool extractArchive(
     const std::string& archivePath,
@@ -80,6 +39,13 @@ bool extractArchive(
     std::shared_ptr<std::atomic<bool>> cancelToken,
     std::string& outError
 ) {
+    // 7z archives go through the embedded 7-Zip SDK decoder, which supports
+    // every codec the official 7-Zip creates (ARM64/ARM/x86 BCJ, BCJ2, PPMd, ...).
+    // The devkitPro libarchive build does not, and fails on such archives.
+    if (is7zFile(archivePath)) {
+        return extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError);
+    }
+
     util::logLine("archive_utils: extractArchive start: " + archivePath + " -> " + destinationDir);
 
     std::error_code ec;
@@ -116,6 +82,7 @@ bool extractArchive(
         archive_read_free(a);
         return false;
     }
+    util::logLine("archive_utils: archive opened successfully, total size=" + std::to_string(totalFileSize));
 
     ArchiveProgress progress;
     progress.totalArchiveSize = totalFileSize;
@@ -145,12 +112,22 @@ bool extractArchive(
         while ((dotdot = cleanName.find("..")) != std::string::npos) {
             cleanName.replace(dotdot, 2, "__");
         }
+        // Sanitize FAT32 illegal characters: ':', '*', '?', '"', '<', '>', '|'
+        for (char& c : cleanName) {
+            if (c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+                c = '_';
+            }
+        }
         if (cleanName.empty()) {
             continue;
         }
 
         progress.currentFileName = cleanName;
         progress.entriesProcessed++;
+
+        if (progress.entriesProcessed == 1 || (progress.entriesProcessed % 50 == 0)) {
+            util::logLine("archive_utils: extracting entry #" + std::to_string(progress.entriesProcessed) + ": " + cleanName);
+        }
 
         std::string fullPath = destinationDir;
         if (!fullPath.empty() && fullPath.back() != '/') {
@@ -196,6 +173,11 @@ bool extractArchive(
                 }
 
                 if (size > 0 && buff != nullptr) {
+#if defined(_WIN32)
+                        _fseeki64(outFile, offset, SEEK_SET);
+#else
+                        fseeko(outFile, static_cast<off_t>(offset), SEEK_SET);
+#endif
                     size_t written = fwrite(buff, 1, size, outFile);
                     if (written != size) {
                         outError = "Ошибка записи на диск: " + fullPath;
@@ -206,7 +188,8 @@ bool extractArchive(
                     progress.bytesExtracted += size;
                 }
 
-                la_int64_t pos = archive_read_header_position(a);
+                la_int64_t pos = archive_filter_bytes(a, -1);
+                if (pos <= 0) pos = archive_read_header_position(a);
                 if (totalFileSize > 0 && pos > 0) {
                     float pct = (static_cast<float>(pos) / static_cast<float>(totalFileSize)) * 100.0f;
                     if (!std::isnan(pct) && !std::isinf(pct)) {
@@ -234,7 +217,8 @@ bool extractArchive(
             }
         }
 
-        la_int64_t pos = archive_read_header_position(a);
+        la_int64_t pos = archive_filter_bytes(a, -1);
+        if (pos <= 0) pos = archive_read_header_position(a);
         if (totalFileSize > 0 && pos > 0) {
             float pct = (static_cast<float>(pos) / static_cast<float>(totalFileSize)) * 100.0f;
             if (!std::isnan(pct) && !std::isinf(pct)) {

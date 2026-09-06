@@ -37,6 +37,11 @@ bool isTextFile(const std::string& path) {
 
 FileManagerCell::FileManagerCell() {
     this->inflateFromXMLRes("xml/file_manager_cell.xml");
+    this->getFocusEvent()->subscribe([this](bool focused) {
+        if (focused && parentView) {
+            parentView->setFocusedRow(static_cast<int>(rowIndex));
+        }
+    });
 }
 
 FileManagerCell* FileManagerCell::create() {
@@ -58,6 +63,12 @@ void FileManagerCell::setSelectedVisual(bool selected) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FileManagerView
 // ─────────────────────────────────────────────────────────────────────────────
+
+static std::string joinPath(const std::string& dir, const std::string& file) {
+    if (dir.empty()) return file;
+    if (dir.back() == '/' || dir.back() == '\\') return dir + file;
+    return dir + "/" + file;
+}
 
 static std::string normalizeDir(const std::string& path) {
     std::string p = path;
@@ -109,14 +120,18 @@ static std::string getParentDir(const std::string& path) {
     return p.substr(0, lastSlash);
 }
 
-FileManagerView::FileManagerView(const std::string& initialPath, const std::string& focusChild) {
-    if (!initialPath.empty()) {
-        currentDir_ = initialPath;
+FileManagerView::FileManagerView(const std::string& initialPath, const std::string& focusChild, const std::string& rootDir) {
+    if (!rootDir.empty()) {
+        rootDir_ = normalizeDir(rootDir);
     } else {
-        currentDir_ = util::getDefaultRootPath();
+        rootDir_ = normalizeDir(util::getDefaultRootPath());
     }
-    currentDir_ = normalizeDir(currentDir_);
-    rootDir_ = currentDir_;
+
+    if (!initialPath.empty()) {
+        currentDir_ = normalizeDir(initialPath);
+    } else {
+        currentDir_ = rootDir_;
+    }
     initialFocusChild_ = focusChild;
 }
 
@@ -172,6 +187,12 @@ void FileManagerView::onContentAvailable() {
         }
         return false;
     });
+
+    // Start (+) button allows immediately exiting back to previous screen
+    this->registerAction("hints/exit"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
 
     util::logLine("FileManagerView: calling initial refresh");
     std::string focus = initialFocusChild_;
@@ -368,6 +389,8 @@ void FileManagerView::openTextViewer(const std::string& path, const std::string&
 }
 
 void FileManagerView::showArchiveDialog(const util::FileItem& item) {
+    util::logLine("FileManagerView: showArchiveDialog for " + item.path);
+
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setWidthPercentage(100.0f);
@@ -423,7 +446,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 
-    auto* applet = dynamic_cast<brls::AppletFrame*>(dialog->getView("brls/dialog/applet"));
+    auto* applet = dialog->getAppletFrame();
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
@@ -462,11 +485,17 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
 
         if (!firstOption) firstOption = row;
 
-        row->registerClickAction([dialog, action, this, restoreRow](brls::View* v) {
+        row->registerClickAction([dialog, action, this, restoreRow, labelText](brls::View* v) {
+            util::logLine("FileManagerView: showArchiveDialog option clicked: " + labelText);
             brls::sync([dialog, action, this, restoreRow]() {
-                dialog->dismiss([action, this, restoreRow]() {
+                util::logLine("FileManagerView: closing archive option dialog");
+                dialog->close([action, this, restoreRow]() {
+                    util::logLine("FileManagerView: archive option dialog closed");
                     if (action) {
-                        action();
+                        brls::sync([action]() {
+                            util::logLine("FileManagerView: executing archive action");
+                            action();
+                        });
                     } else {
                         // Cancelled - restore focus to recycler
                         brls::sync([this, restoreRow]() {
@@ -490,35 +519,78 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
 
     // Option 1: Extract here
     addOption("\uE2C6", nvgRGB(255, 110, 64), "Распаковать в текущую папку", [this, item]() {
-        brls::sync([this, item]() {
-            auto* progressDlg = new ArchiveProgressDialog(item.path, currentDir_, [this, item](bool ok, const std::string& msg) {
-                if (ok) {
+        // Extract into a hidden temp folder first, then merge up, so a failed
+        // extraction never leaves partial files in the real destination.
+        const std::string tmpDir = joinPath(currentDir_, ".tsnx_extract_tmp");
+        {
+            std::string delErr;
+            util::deletePathRecursive(tmpDir, delErr);
+        }
+        auto* progressDlg = new ArchiveProgressDialog(item.path, tmpDir, [this, item, tmpDir](bool ok, const std::string& msg) {
+            std::string err;
+            if (ok) {
+                bool merged = true;
+                std::vector<util::FileItem> entries = util::listFolder(tmpDir, err);
+                for (const auto& e : entries) {
+                    std::string dst = joinPath(currentDir_, e.name);
+                    std::string moveErr;
+                    if (!util::movePath(e.path, dst, moveErr)) {
+                        util::logLine("FileManagerView: merge move failed: " + e.path + " -> " + dst + " (" + moveErr + ")");
+                        merged = false;
+                    }
+                }
+                std::string delErr;
+                util::deletePathRecursive(tmpDir, delErr);
+                if (merged) {
                     brls::Application::notify("Распаковка завершена!");
                     refresh(item.name);
                 } else {
-                    brls::Application::notify(msg.empty() ? "Ошибка распаковки" : msg);
+                    brls::Application::notify("Распаковка завершена, но часть файлов не удалось перенести");
+                    refresh(item.name);
                 }
-            });
-            progressDlg->startExtraction();
+            } else {
+                std::string delErr;
+                util::deletePathRecursive(tmpDir, delErr);
+                brls::Application::notify(msg.empty() ? "Ошибка распаковки" : msg);
+                refresh(item.name);
+            }
         });
+        progressDlg->startExtraction();
     });
 
     // Option 2: Extract to subfolder named after archive
     std::filesystem::path p(item.path);
     std::string folderName = p.stem().generic_string();
-    std::string targetDir = currentDir_ + "/" + folderName;
-    addOption("\uE2CC", nvgRGB(0, 224, 165), "Распаковать в папку /" + folderName, [this, item, targetDir, folderName]() {
-        brls::sync([this, item, targetDir, folderName]() {
-            auto* progressDlg = new ArchiveProgressDialog(item.path, targetDir, [this, folderName](bool ok, const std::string& msg) {
-                if (ok) {
+    std::string targetDir = joinPath(currentDir_, folderName);
+    const std::string tmpDir = targetDir + ".tsnx_tmp";
+    addOption("\uE2CC", nvgRGB(0, 224, 165), "Распаковать в папку /" + folderName, [this, targetDir, folderName, item, tmpDir]() {
+        // Extract into a sibling temp folder, then atomically move it over the
+        // real destination, so a failed extraction leaves no partial content.
+        {
+            std::string delErr;
+            util::deletePathRecursive(tmpDir, delErr);
+        }
+        auto* progressDlg = new ArchiveProgressDialog(item.path, tmpDir, [this, targetDir, folderName, item, tmpDir](bool ok, const std::string& msg) {
+            std::string err;
+            if (ok) {
+                std::string delErr;
+                util::deletePathRecursive(targetDir, delErr);
+                if (util::movePath(tmpDir, targetDir, err)) {
                     brls::Application::notify("Распаковка завершена!");
                     refresh(folderName);
                 } else {
-                    brls::Application::notify(msg.empty() ? "Ошибка распаковки" : msg);
+                    util::logLine("FileManagerView: finalize move failed: " + tmpDir + " -> " + targetDir + " (" + err + ")");
+                    brls::Application::notify("Файлы распакованы во временную папку, перенос не удался");
+                    refresh(item.name);
                 }
-            });
-            progressDlg->startExtraction();
+            } else {
+                std::string delErr;
+                util::deletePathRecursive(tmpDir, delErr);
+                brls::Application::notify(msg.empty() ? "Ошибка распаковки" : msg);
+                refresh(item.name);
+            }
         });
+        progressDlg->startExtraction();
     });
 
     // Separator
@@ -537,7 +609,9 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
         content->setLastFocusedView(firstOption);
     }
 
+    util::logLine("FileManagerView: showArchiveDialog opening dialog");
     dialog->open();
+    util::logLine("FileManagerView: showArchiveDialog dialog opened successfully");
 
     if (firstOption) {
         brls::Application::giveFocus(firstOption);
@@ -548,6 +622,8 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
 }
 
 void FileManagerView::showInstallDialog(const util::FileItem& item) {
+    util::logLine("FileManagerView: showInstallDialog for " + item.path);
+
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setWidthPercentage(100.0f);
@@ -603,7 +679,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 
-    auto* applet = dynamic_cast<brls::AppletFrame*>(dialog->getView("brls/dialog/applet"));
+    auto* applet = dialog->getAppletFrame();
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
@@ -657,11 +733,17 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
 
         if (!firstOption) firstOption = row;
 
-        row->registerClickAction([dialog, action, this, restoreRow](brls::View* v) {
+        row->registerClickAction([dialog, action, this, restoreRow, labelText](brls::View* v) {
+            util::logLine("FileManagerView: showInstallDialog option clicked: " + labelText);
             brls::sync([dialog, action, this, restoreRow]() {
-                dialog->dismiss([action, this, restoreRow]() {
+                util::logLine("FileManagerView: closing install option dialog");
+                dialog->close([action, this, restoreRow]() {
+                    util::logLine("FileManagerView: install option dialog closed");
                     if (action) {
-                        action();
+                        brls::sync([action]() {
+                            util::logLine("FileManagerView: executing install action");
+                            action();
+                        });
                     } else {
                         // Cancelled - restore focus to recycler
                         brls::sync([this, restoreRow]() {
@@ -693,32 +775,32 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
 
     // Option 1: SD Card (Emerald)
     addOption("\uE1DB", nvgRGB(0, 224, 165), "Установить на SD-карту", sdFreeStr, [this, item]() {
-        brls::sync([this, item]() {
-            auto* progressDlg = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& msg) {
-                if (ok) {
+        auto* progressDlg = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& msg) {
+            if (ok) {
+                brls::sync([this, item]() {
                     promptDeleteSourceFile(item.path, item.name);
-                } else {
-                    brls::Application::notify(msg.empty() ? "Ошибка установки" : msg);
-                    refresh(item.name);
-                }
-            });
-            progressDlg->startInstallation();
+                });
+            } else {
+                brls::Application::notify(msg.empty() ? "Ошибка установки" : msg);
+                refresh(item.name);
+            }
         });
+        progressDlg->startInstallation();
     });
 
     // Option 2: NAND System Storage (Emerald)
     addOption("\uE318", nvgRGB(0, 224, 165), "Установить в память консоли (NAND)", nandFreeStr, [this, item]() {
-        brls::sync([this, item]() {
-            auto* progressDlg = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& msg) {
-                if (ok) {
+        auto* progressDlg = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& msg) {
+            if (ok) {
+                brls::sync([this, item]() {
                     promptDeleteSourceFile(item.path, item.name);
-                } else {
-                    brls::Application::notify(msg.empty() ? "Ошибка установки" : msg);
-                    refresh(item.name);
-                }
-            });
-            progressDlg->startInstallation();
+                });
+            } else {
+                brls::Application::notify(msg.empty() ? "Ошибка установки" : msg);
+                refresh(item.name);
+            }
         });
+        progressDlg->startInstallation();
     });
 
     // Separator
@@ -737,7 +819,9 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         content->setLastFocusedView(firstOption);
     }
 
+    util::logLine("FileManagerView: showInstallDialog opening dialog");
     dialog->open();
+    util::logLine("FileManagerView: showInstallDialog dialog opened successfully");
 
     if (firstOption) {
         brls::Application::giveFocus(firstOption);
@@ -809,7 +893,7 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 
-    auto* applet = dynamic_cast<brls::AppletFrame*>(dialog->getView("brls/dialog/applet"));
+    auto* applet = dialog->getAppletFrame();
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
@@ -861,7 +945,7 @@ void FileManagerView::showDeleteConfirmDialog() {
 void FileManagerView::showNewFolderDialog() {
     brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) return;
-        std::string newPath = currentDir_ + "/" + text;
+        std::string newPath = joinPath(currentDir_, text);
         std::string err;
         if (util::createFolder(newPath, err)) {
             brls::Application::notify("app/file_manager/folder_created"_i18n);
@@ -898,19 +982,27 @@ void FileManagerView::pasteClipboard() {
         std::string lastErr;
 
         for (const auto& src : paths) {
-            std::filesystem::path sp(src);
-            std::string dest = currentDir_ + "/" + sp.filename().generic_string();
+            std::string cleanSrc = src;
+            while (cleanSrc.size() > 1 && (cleanSrc.back() == '/' || cleanSrc.back() == '\\')) {
+                cleanSrc.pop_back();
+            }
+            std::filesystem::path sp(cleanSrc);
+            std::string dest = joinPath(currentDir_, sp.filename().generic_string());
             std::string err;
 
+            util::logLine("FileManagerView: pasteClipboard src=" + cleanSrc + " dest=" + dest + " isCut=" + std::to_string(isCut));
+
             if (isCut) {
-                if (!util::movePath(src, dest, err)) {
+                if (!util::movePath(cleanSrc, dest, err)) {
                     allOk = false;
                     lastErr = err;
+                    util::logLine("FileManagerView: pasteClipboard movePath failed: " + err);
                 }
             } else {
-                if (!util::copyPathRecursive(src, dest, nullptr, nullptr, err)) {
+                if (!util::copyPathRecursive(cleanSrc, dest, nullptr, nullptr, err)) {
                     allOk = false;
                     lastErr = err;
+                    util::logLine("FileManagerView: pasteClipboard copyPathRecursive failed: " + err);
                 }
             }
         }
@@ -1092,11 +1184,14 @@ void FileManagerView::showActionsMenu() {
 
         if (!firstOption) firstOption = row;
 
-        row->registerClickAction([dialog, action, this, restoreRow, opensSubDialog](brls::View* v) {
+        row->registerClickAction([dialog, action, this, restoreRow, opensSubDialog, labelText](brls::View* v) {
+            util::logLine("FileManagerView: showActionsMenu option clicked: " + labelText);
             brls::sync([dialog, action, this, restoreRow, opensSubDialog]() {
-                dialog->dismiss([action, this, restoreRow, opensSubDialog]() {
+                dialog->close([action, this, restoreRow, opensSubDialog]() {
                     if (action) {
-                        action();
+                        brls::sync([action]() {
+                            action();
+                        });
                     }
                     if (!opensSubDialog) {
                         // Restore focus safely on next tick ONLY if not opening another modal dialog
@@ -1267,6 +1362,10 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
         cell->reuseIdentifier = "Cell";
     }
 
+    cell->clearRegisteredActions();
+    cell->rowIndex = index.row;
+    cell->parentView = parent_;
+
     bool isParentRow = (parent_->hasParentDir_ && index.row == 0);
 
     if (isParentRow) {
@@ -1351,25 +1450,28 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
 
     // Click action (A button)
     cell->registerClickAction([parent = parent_, item](brls::View* view) {
+        util::logLine("FileManagerView: cell clicked on " + item.name);
         if (item.isDir) {
             brls::sync([parent, target = item.path]() {
                 parent->navigateTo(target);
             });
         } else if (util::isGamePackage(item.path)) {
-            parent->showInstallDialog(item);
+            brls::sync([parent, item]() {
+                parent->showInstallDialog(item);
+            });
         } else if (util::isArchiveFile(item.path)) {
-            parent->showArchiveDialog(item);
+            brls::sync([parent, item]() {
+                parent->showArchiveDialog(item);
+            });
         } else if (isTextFile(item.path)) {
-            parent->openTextViewer(item.path, item.name);
+            brls::sync([parent, item]() {
+                parent->openTextViewer(item.path, item.name);
+            });
         } else {
             // Give brief info notification
             brls::Application::notify(item.name + " (" + util::formatFileSize(item.size) + ")");
         }
         return true;
-    });
-
-    cell->getFocusEvent()->subscribe([parent = parent_, rowIndex = index.row](bool focused) {
-        if (focused) parent->currentFocusedRow_ = static_cast<int>(rowIndex);
     });
 
     // Selection toggle action (Y button on gamepad, Space / Y on keyboard)

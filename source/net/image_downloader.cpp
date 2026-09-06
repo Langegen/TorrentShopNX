@@ -302,12 +302,11 @@ void ImageDownloader::processTask(const ImageTask& task) {
     bool cacheEnabled = config::ConfigManager::instance().getCacheCoverThumbnails() && !task.bypassCache;
     std::string thumbPath;
     if (cacheEnabled && !task.url.empty()) {
-        thumbPath = getThumbnailCachePath(task.url);
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
             util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
             brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(cachedBody), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-                if ((token && !*token) || g_appExiting.load()) return;
+                if (g_appExiting.load()) return;
 
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
@@ -411,14 +410,14 @@ void ImageDownloader::processTask(const ImageTask& task) {
         }
 
         brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(bodyToDisplay), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-            if (token && !*token) {
-                util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
-                              " col=" + std::to_string(col) + " url=" + url);
-                return;
-            }
             if (g_appExiting.load()) return;
 
             if (bypassCache) {
+                if (token && !*token) {
+                    util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
+                                  " col=" + std::to_string(col) + " url=" + url);
+                    return;
+                }
                 int tex = nvgCreateImageMem(
                     brls::Application::getNVGContext(),
                     NVG_IMAGE_GENERATE_MIPMAPS,
@@ -449,7 +448,11 @@ void ImageDownloader::processTask(const ImageTask& task) {
                         util::logLine("ImageDownloader: nvgCreateImageMem failed for " + url + " (size=" + std::to_string(body.size()) + ")");
                     }
                 }
-                if (token && !*token) return;
+                if (token && !*token) {
+                    util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
+                                  " col=" + std::to_string(col) + " url=" + url);
+                    return;
+                }
                 if (tex > 0) {
                     img->innerSetImage(tex);
                 }

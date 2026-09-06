@@ -1,6 +1,7 @@
 #include "SettingsTab.hpp"
 #include "DownloadUiManager.hpp"
 #include "StorageTabView.hpp"
+#include "QrCodeView.hpp"
 #include "../config/config.h"
 #include "../utils/log.h"
 #include <fstream>
@@ -321,6 +322,7 @@ void SettingsTab::onContentAvailable() {
     tabFrame->addTab("app/settings/cat_general"_i18n, [this]() { return buildGeneralTab(); });
     tabFrame->addTab("app/settings/cat_downloads"_i18n, [this]() { return buildDownloadsTab(); });
     tabFrame->addTab("app/settings/cat_storage"_i18n, [this]() { return buildStorageTab(); });
+    tabFrame->addTab("app/settings/cat_about"_i18n, [this]() { return buildAboutTab(); });
 }
 
 brls::View* SettingsTab::buildGeneralTab() {
@@ -415,6 +417,16 @@ brls::View* SettingsTab::buildGeneralTab() {
         return true;
     });
     box->addView(catalogUrlCell);
+
+    // Telegram и GitHub (QR-коды)
+    auto* communityCell = new brls::DetailCell();
+    communityCell->setText("app/settings/links_cell_title"_i18n);
+    communityCell->setDetailText("app/settings/links_cell_desc"_i18n);
+    communityCell->registerClickAction([this](brls::View* view) {
+        showCommunityDialog();
+        return true;
+    });
+    box->addView(communityCell);
 
     return scroll;
 }
@@ -525,6 +537,248 @@ brls::View* SettingsTab::buildStorageTab() {
     scroll->setHeight(brls::View::AUTO);
     scroll->setContentView(new StorageTabView());
     return scroll;
+}
+
+brls::View* SettingsTab::buildAboutTab() {
+    brls::Box* box = nullptr;
+    brls::ScrollingFrame* scroll = makeTabBox(&box);
+
+    // Header Box
+    brls::Box* headerBox = new brls::Box(brls::Axis::COLUMN);
+    headerBox->setAlignItems(brls::AlignItems::CENTER);
+    headerBox->setMarginBottom(16.0f);
+
+    brls::Label* titleLabel = new brls::Label();
+    titleLabel->setText(std::string("TorrentShopNX v") + config::ConfigManager::APP_VERSION);
+    titleLabel->setFontSize(26.0f);
+    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    titleLabel->setMarginBottom(4.0f);
+    headerBox->addView(titleLabel);
+
+    brls::Label* descLabel = new brls::Label();
+    descLabel->setText("app/settings/about_desc"_i18n);
+    descLabel->setFontSize(14.5f);
+    descLabel->setTextColor(nvgRGB(170, 175, 185));
+    descLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    descLabel->setMarginBottom(4.0f);
+    headerBox->addView(descLabel);
+
+    brls::Label* authorLabel = new brls::Label();
+    authorLabel->setText("app/settings/about_author"_i18n);
+    authorLabel->setFontSize(13.0f);
+    authorLabel->setTextColor(nvgRGB(130, 135, 145));
+    authorLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    authorLabel->setMarginBottom(10.0f);
+    headerBox->addView(authorLabel);
+
+    brls::Label* hintLabel = new brls::Label();
+    hintLabel->setText("app/settings/community_hint"_i18n);
+    hintLabel->setFontSize(13.5f);
+    hintLabel->setTextColor(nvgRGB(100, 180, 245));
+    hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    headerBox->addView(hintLabel);
+
+    box->addView(headerBox);
+
+    // Row of 2 QR cards
+    brls::Box* cardsRow = new brls::Box(brls::Axis::ROW);
+    cardsRow->setJustifyContent(brls::JustifyContent::CENTER);
+    cardsRow->setAlignItems(brls::AlignItems::CENTER);
+    cardsRow->setWidth(brls::View::AUTO);
+    cardsRow->setHeight(brls::View::AUTO);
+
+    auto createQrCard = [](const std::string& title, const std::string& desc,
+                           const std::string& url, NVGcolor accentColor, bool isLeft) -> brls::Box* {
+        brls::Box* card = new brls::Box(brls::Axis::COLUMN);
+        card->setWidth(400.0f);
+        card->setAlignItems(brls::AlignItems::CENTER);
+        card->setBackgroundColor(nvgRGBA(34, 38, 48, 220));
+        card->setCornerRadius(16.0f);
+        card->setPadding(18.0f, 18.0f, 16.0f, 18.0f);
+        if (isLeft) {
+            card->setMarginRight(14.0f);
+        } else {
+            card->setMarginLeft(14.0f);
+        }
+        card->setFocusable(true);
+
+        brls::Label* lblTitle = new brls::Label();
+        lblTitle->setText(title);
+        lblTitle->setFontSize(20.0f);
+        lblTitle->setTextColor(accentColor);
+        lblTitle->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        lblTitle->setMarginBottom(3.0f);
+        card->addView(lblTitle);
+
+        brls::Label* lblDesc = new brls::Label();
+        lblDesc->setText(desc);
+        lblDesc->setFontSize(12.5f);
+        lblDesc->setTextColor(nvgRGB(160, 165, 175));
+        lblDesc->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        lblDesc->setMarginBottom(12.0f);
+        card->addView(lblDesc);
+
+        brls::Box* qrContainer = new brls::Box();
+        qrContainer->setWidth(200.0f);
+        qrContainer->setHeight(200.0f);
+        qrContainer->setBackgroundColor(nvgRGB(255, 255, 255));
+        qrContainer->setCornerRadius(12.0f);
+        qrContainer->setJustifyContent(brls::JustifyContent::CENTER);
+        qrContainer->setAlignItems(brls::AlignItems::CENTER);
+        qrContainer->setPadding(10.0f, 10.0f, 10.0f, 10.0f);
+        qrContainer->setMarginBottom(12.0f);
+
+        QrCodeView* qrView = new QrCodeView();
+        qrView->setWidth(180.0f);
+        qrView->setHeight(180.0f);
+        qrView->setContent(url);
+        qrContainer->addView(qrView);
+        card->addView(qrContainer);
+
+        brls::Box* urlBox = new brls::Box();
+        urlBox->setWidth(350.0f);
+        urlBox->setBackgroundColor(nvgRGBA(18, 20, 26, 220));
+        urlBox->setCornerRadius(8.0f);
+        urlBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
+        urlBox->setAlignItems(brls::AlignItems::CENTER);
+        urlBox->setMarginBottom(8.0f);
+
+        brls::Label* lblUrl = new brls::Label();
+        lblUrl->setText(url);
+        lblUrl->setFontSize(12.0f);
+        lblUrl->setTextColor(accentColor);
+        lblUrl->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        urlBox->addView(lblUrl);
+        card->addView(urlBox);
+
+        brls::Label* hintAction = new brls::Label();
+        hintAction->setText("app/settings/qr_press_hint"_i18n);
+        hintAction->setFontSize(11.5f);
+        hintAction->setTextColor(nvgRGB(120, 130, 145));
+        hintAction->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        card->addView(hintAction);
+
+        card->registerClickAction([title, url, desc](brls::View* view) {
+            QrDialog::open(title, url, desc);
+            return true;
+        });
+
+        return card;
+    };
+
+    cardsRow->addView(createQrCard("app/settings/telegram_title"_i18n,
+                                   "app/settings/telegram_desc"_i18n,
+                                   "https://t.me/TorrentShopNX",
+                                   nvgRGB(56, 170, 245),
+                                   true));
+
+    cardsRow->addView(createQrCard("app/settings/github_title"_i18n,
+                                   "app/settings/github_desc"_i18n,
+                                   "https://github.com/Langegen/TorrentShopNX",
+                                   nvgRGB(235, 240, 245),
+                                   false));
+
+    box->addView(cardsRow);
+
+    return scroll;
+}
+
+void SettingsTab::showCommunityDialog() {
+    brls::Box* content = new brls::Box(brls::Axis::COLUMN);
+    content->setAlignItems(brls::AlignItems::CENTER);
+    content->setWidth(680.0f);
+    content->setPadding(10.0f, 10.0f, 10.0f, 10.0f);
+
+    brls::Label* titleLabel = new brls::Label();
+    titleLabel->setText("app/settings/links_dialog_title"_i18n);
+    titleLabel->setFontSize(20.0f);
+    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    titleLabel->setMarginBottom(4.0f);
+    content->addView(titleLabel);
+
+    brls::Label* hintLabel = new brls::Label();
+    hintLabel->setText("app/settings/community_hint"_i18n);
+    hintLabel->setFontSize(13.5f);
+    hintLabel->setTextColor(nvgRGB(150, 160, 175));
+    hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    hintLabel->setMarginBottom(16.0f);
+    content->addView(hintLabel);
+
+    brls::Box* row = new brls::Box(brls::Axis::ROW);
+    row->setJustifyContent(brls::JustifyContent::CENTER);
+    row->setAlignItems(brls::AlignItems::CENTER);
+    row->setWidth(brls::View::AUTO);
+    row->setHeight(brls::View::AUTO);
+
+    auto addQrCol = [row](const std::string& name, const std::string& url,
+                          const std::string& desc, NVGcolor titleColor) {
+        brls::Box* col = new brls::Box(brls::Axis::COLUMN);
+        col->setAlignItems(brls::AlignItems::CENTER);
+        col->setWidth(300.0f);
+        col->setMarginLeft(10.0f);
+        col->setMarginRight(10.0f);
+
+        brls::Label* lblName = new brls::Label();
+        lblName->setText(name);
+        lblName->setFontSize(17.0f);
+        lblName->setTextColor(titleColor);
+        lblName->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        lblName->setMarginBottom(2.0f);
+        col->addView(lblName);
+
+        brls::Label* lblDesc = new brls::Label();
+        lblDesc->setText(desc);
+        lblDesc->setFontSize(11.5f);
+        lblDesc->setTextColor(nvgRGB(140, 145, 155));
+        lblDesc->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        lblDesc->setMarginBottom(8.0f);
+        col->addView(lblDesc);
+
+        brls::Box* qrBox = new brls::Box();
+        qrBox->setWidth(170.0f);
+        qrBox->setHeight(170.0f);
+        qrBox->setBackgroundColor(nvgRGB(255, 255, 255));
+        qrBox->setCornerRadius(10.0f);
+        qrBox->setJustifyContent(brls::JustifyContent::CENTER);
+        qrBox->setAlignItems(brls::AlignItems::CENTER);
+        qrBox->setPadding(8.0f, 8.0f, 8.0f, 8.0f);
+        qrBox->setMarginBottom(8.0f);
+
+        QrCodeView* qr = new QrCodeView();
+        qr->setWidth(154.0f);
+        qr->setHeight(154.0f);
+        qr->setContent(url);
+        qrBox->addView(qr);
+        col->addView(qrBox);
+
+        brls::Label* lblUrl = new brls::Label();
+        lblUrl->setText(url);
+        lblUrl->setFontSize(11.0f);
+        lblUrl->setTextColor(titleColor);
+        lblUrl->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        col->addView(lblUrl);
+
+        row->addView(col);
+    };
+
+    addQrCol("app/settings/telegram_title"_i18n,
+             "https://t.me/TorrentShopNX",
+             "app/settings/telegram_desc"_i18n,
+             nvgRGB(56, 170, 245));
+
+    addQrCol("app/settings/github_title"_i18n,
+             "https://github.com/Langegen/TorrentShopNX",
+             "app/settings/github_desc"_i18n,
+             nvgRGB(230, 235, 245));
+
+    content->addView(row);
+
+    brls::Dialog* dialog = new brls::Dialog(content);
+    dialog->setCancelable(true);
+    dialog->addButton("app/common/ok"_i18n, []() {});
+    dialog->open();
 }
 
 void SettingsTab::willAppear(bool resetState) {

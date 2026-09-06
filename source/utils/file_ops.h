@@ -54,6 +54,9 @@ bool copyPathRecursive(
 // Moves or renames file or directory
 bool movePath(const std::string& src, const std::string& dst, std::string& outError);
 
+// Creates directory (and parent directories if needed) safely across all platforms/schemes (e.g. sdmc:/)
+bool safeCreateDirectories(const std::string& path);
+
 // Creates directory (and parent directories if needed)
 bool createFolder(const std::string& path, std::string& outError);
 
