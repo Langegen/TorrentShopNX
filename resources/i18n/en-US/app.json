@@ -248,7 +248,14 @@
     "lang_eng": "English only (ENG)",
     "only_favorites": "Only favorites",
     "year_label": "Release year",
-    "all_years": "All years"
+    "all_years": "All years",
+    "players_label": "Number of players",
+    "players_all": "All",
+    "players_1": "1 Player (Singleplayer)",
+    "players_2": "2 Players",
+    "players_3_4": "3-4 Players",
+    "players_5_plus": "5+ Players",
+    "players_multi": "Any Multiplayer"
   },
   "settings": {
     "title": "Tools",

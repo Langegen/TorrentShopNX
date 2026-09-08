@@ -209,7 +209,15 @@ static std::string cleanNameForMatching(const std::string& name) {
 }
 
 static std::string getFirstTwoWords(const std::string& str) {
-    std::stringstream ss(str);
+    std::string clean;
+    for (char c : str) {
+        if (c == ':' || c == '-' || c == ',' || c == '.' || c == '!' || c == '?' || c == '\'' || c == '\"') {
+            clean.push_back(' ');
+        } else {
+            clean.push_back(c);
+        }
+    }
+    std::stringstream ss(clean);
     std::string word1, word2;
     if (ss >> word1) {
         if (ss >> word2) {
@@ -440,12 +448,19 @@ void LibraryView::showModWarningDialog(const LibraryItem& item) {
     std::string rawName = item.rawName;
     uint64_t tid = item.titleId;
 
-    dialog->addButton("app/library/mod_warn_btn_proceed"_i18n, [game, rawName]() {
+    dialog->addButton("app/library/mod_warn_btn_proceed"_i18n, [game, rawName, tid]() {
         if (!game.magnet.empty()) {
             brls::Application::pushActivity(new GameDetailView(game));
         } else {
-            std::string query = getFirstTwoWords(rawName);
-            if (query.empty()) query = rawName;
+            std::string query;
+            if (tid != 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+                query = buf;
+            } else {
+                query = getFirstTwoWords(rawName);
+                if (query.empty()) query = rawName;
+            }
             brls::Application::pushActivity(new CatalogView(query));
         }
     });
@@ -671,9 +686,17 @@ void LibraryView::scanForUpdates() {
             uint64_t patchTid = baseTid | 0x800ULL; // Patch ID
             
             uint32_t latestVer = 0;
+            bool foundVersionInDb = false;
             auto it = availableVersions.find(patchTid);
             if (it != availableVersions.end()) {
                 latestVer = it->second;
+                foundVersionInDb = true;
+            } else {
+                auto bit = availableVersions.find(baseTid);
+                if (bit != availableVersions.end()) {
+                    latestVer = bit->second;
+                    foundVersionInDb = true;
+                }
             }
             
             uint32_t currentVer = 0;
@@ -685,7 +708,7 @@ void LibraryView::scanForUpdates() {
             // The raw titledb value (e.g. 196608) is a Nintendo "update number"
             // that cannot be reliably converted to real semver (1.2.0 style),
             // so display it honestly as v<number> — same convention tinfoil uses.
-            bool hasVersionInfo = (latestVer > 0);
+            bool hasVersionInfo = (latestVer > 0) || foundVersionInDb;
             GameUpdateStatus status = GameUpdateStatus::Unknown;
             std::string latestVerStr = "—";
             std::string currentVerStr = inst.currentVersionStr;
@@ -694,14 +717,20 @@ void LibraryView::scanForUpdates() {
             }
             
             if (hasVersionInfo) {
-                latestVerStr = "v" + std::to_string(latestVer);
-                bool needsUpdate = false;
-                if (currentVer > 0) {
-                    needsUpdate = (latestVer > currentVer);
+                if (latestVer > 0) {
+                    latestVerStr = "v" + std::to_string(latestVer);
+                    bool needsUpdate = false;
+                    if (currentVer > 0) {
+                        needsUpdate = (latestVer > currentVer);
+                    } else {
+                        needsUpdate = true; // an update exists and none is installed
+                    }
+                    status = needsUpdate ? GameUpdateStatus::UpdateAvailable : GameUpdateStatus::UpToDate;
                 } else {
-                    needsUpdate = true; // an update exists and none is installed
+                    // Base game exists in titledb with no published patches yet (version 0)
+                    latestVerStr = currentVerStr.empty() ? "v0" : currentVerStr;
+                    status = GameUpdateStatus::UpToDate;
                 }
-                status = needsUpdate ? GameUpdateStatus::UpdateAvailable : GameUpdateStatus::UpToDate;
             }
 
             // Check if game has mods and if update check is ignored
@@ -958,12 +987,19 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
                 return true;
             });
         } else {
-            cell->registerClickAction([game, rawName](brls::View* view) {
+            cell->registerClickAction([game, rawName, tid](brls::View* view) {
                 if (!game.magnet.empty()) {
                     brls::Application::pushActivity(new GameDetailView(game));
                 } else {
-                    std::string query = getFirstTwoWords(rawName);
-                    if (query.empty()) query = rawName;
+                    std::string query;
+                    if (tid != 0) {
+                        char buf[32];
+                        std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+                        query = buf;
+                    } else {
+                        query = getFirstTwoWords(rawName);
+                        if (query.empty()) query = rawName;
+                    }
                     brls::Application::pushActivity(new CatalogView(query));
                 }
                 return true;

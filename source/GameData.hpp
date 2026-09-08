@@ -58,6 +58,7 @@ struct Game {
     std::string cover;
     std::vector<std::string> screenshots;
     std::string description;
+    std::string multiplayer;
 };
 
 inline std::string safeGetStr(const nlohmann::json& j, const std::string& key) {
@@ -97,6 +98,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
     }
     
     g.description = safeGetStr(j, "description");
+    g.multiplayer = safeGetStr(j, "multiplayer");
 }
 
 // nlohmann::json serialization
@@ -117,7 +119,8 @@ inline void to_json(nlohmann::json& j, const Game& g) {
         {"voice_lang", g.voice_lang},
         {"cover", g.cover},
         {"screenshots", g.screenshots},
-        {"description", g.description}
+        {"description", g.description},
+        {"multiplayer", g.multiplayer}
     };
 }
 
@@ -302,6 +305,7 @@ private:
         else if (currentKey == "voice_lang") currentGame.voice_lang = std::move(val);
         else if (currentKey == "cover") currentGame.cover = std::move(val);
         else if (currentKey == "description") currentGame.description = std::move(val);
+        else if (currentKey == "multiplayer") currentGame.multiplayer = std::move(val);
     }
 };
 
@@ -375,7 +379,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     out.write(magic, 8);
-    uint32_t version = 1;
+    uint32_t version = 2;
     out.write(reinterpret_cast<const char*>(&version), sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     out.write(reinterpret_cast<const char*>(&count), sizeof(count));
@@ -411,6 +415,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         }
 
         writeStr(g.description);
+        writeStr(g.multiplayer);
     }
 
     out.flush();
@@ -443,7 +448,7 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version != 1) {
+    if (version != 2) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
@@ -496,6 +501,7 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
         }
 
         if (!readStr(g.description)) return false;
+        if (!readStr(g.multiplayer)) return false;
 
         games.push_back(std::move(g));
     }

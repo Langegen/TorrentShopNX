@@ -25,8 +25,8 @@ brls::View* ScreenshotViewer::createContentView() {
     image_->setHeight(brls::Application::windowHeight);
     root->addView(image_);
     
-    // Navigation actions
-    root->registerAction("Next", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View* view) {
+    // Navigation actions (supports both left stick and D-Pad)
+    root->registerAction("Next", brls::ControllerButton::BUTTON_NAV_RIGHT, [this](brls::View* view) {
         if (currentIndex_ + 1 < urls_.size()) {
             currentIndex_++;
             loadCurrent();
@@ -34,7 +34,7 @@ brls::View* ScreenshotViewer::createContentView() {
         return true;
     });
     
-    root->registerAction("Prev", brls::ControllerButton::BUTTON_LEFT, [this](brls::View* view) {
+    root->registerAction("Prev", brls::ControllerButton::BUTTON_NAV_LEFT, [this](brls::View* view) {
         if (currentIndex_ > 0) {
             currentIndex_--;
             loadCurrent();

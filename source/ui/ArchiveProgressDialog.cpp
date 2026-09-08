@@ -95,7 +95,17 @@ ArchiveProgressDialog::ArchiveProgressDialog(
         }
     });
 
-    this->setCancelable(true);
+    // Handle B button properly to cancel extraction gracefully
+    this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        if (cancelToken_) {
+            cancelToken_->store(true);
+        }
+        if (currentFileLabel_) {
+            currentFileLabel_->setText("Отмена распаковки...");
+        }
+        this->dismiss();
+        return true;
+    }, false, false, brls::SOUND_BACK);
 
     auto* applet = this->getAppletFrame();
     if (applet) {
@@ -265,7 +275,12 @@ void ArchiveProgressDialog::runExtraction() {
     }
 
     brls::sync([this, alive, ok, err, onComplete]() {
-        if (!alive || !alive->load()) return;
+        if (!alive || !alive->load()) {
+            if (onComplete) {
+                onComplete(ok, err.empty() ? "Распаковка отменена пользователем" : err);
+            }
+            return;
+        }
         if (!closed_.exchange(true)) {
             this->close([onComplete, ok, err]() {
                 if (onComplete) {

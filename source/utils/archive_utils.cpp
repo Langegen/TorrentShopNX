@@ -205,6 +205,9 @@ bool extractArchive(
             fclose(outFile);
 
             if (!success) {
+                if (cancelToken && cancelToken->load()) {
+                    std::remove(fullPath.c_str());
+                }
                 break;
             }
 

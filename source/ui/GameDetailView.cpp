@@ -5,6 +5,7 @@
 #include "FavoritesManager.hpp"
 #include "ScreenshotViewer.hpp"
 #include "QrCodeView.hpp"
+#include "../catalog/filter_manager.hpp"
 #include <sstream>
 
 namespace ui {
@@ -125,6 +126,28 @@ void GameDetailView::onContentAvailable() {
             gBadge->addView(gLabel);
 
             badgesBox->addView(gBadge);
+        }
+    }
+
+    // Add multiplayer badge
+    if (!game_.multiplayer.empty()) {
+        std::string mp = game_.multiplayer;
+        std::string lowerMp = catalog::toLowerUtf8(mp);
+        if (lowerMp != "нет" && lowerMp != "no" && lowerMp != "1") {
+            brls::Box* mpBadge = new brls::Box();
+            mpBadge->setPadding(5, 10, 5, 10);
+            mpBadge->setMarginRight(10);
+            mpBadge->setMarginBottom(10);
+            mpBadge->setBackgroundColor(nvgRGB(63, 81, 181)); // Indigo multiplayer badge
+            mpBadge->setCornerRadius(6);
+
+            brls::Label* mpLabel = new brls::Label();
+            mpLabel->setText(mp);
+            mpLabel->setFontSize(14);
+            mpLabel->setTextColor(nvgRGB(255, 255, 255));
+            mpBadge->addView(mpLabel);
+
+            badgesBox->addView(mpBadge);
         }
     }
     

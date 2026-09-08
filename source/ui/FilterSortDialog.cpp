@@ -93,6 +93,16 @@ void FilterSortDialog::show(const catalog::FilterSortState& currentState,
     });
     content->addView(yearCell);
 
+    // 6. Players option
+    brls::SelectorCell* playersCell = new brls::SelectorCell();
+    const auto& playerFilterNames = catalog::getPlayerFilterNames();
+    int initialPlayers = static_cast<int>(statePtr->players);
+    if (initialPlayers < 0 || initialPlayers >= static_cast<int>(playerFilterNames.size())) initialPlayers = 0;
+    playersCell->init("app/filter/players_label"_i18n, playerFilterNames, initialPlayers, [statePtr](int selected) {
+        statePtr->players = static_cast<catalog::PlayersFilter>(selected);
+    });
+    content->addView(playersCell);
+
     brls::Dialog* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 

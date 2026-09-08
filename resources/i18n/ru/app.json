@@ -248,7 +248,14 @@
     "lang_eng": "Только английский (ENG)",
     "only_favorites": "Только избранное",
     "year_label": "Год выхода",
-    "all_years": "Все года"
+    "all_years": "Все года",
+    "players_label": "Количество игроков",
+    "players_all": "Все",
+    "players_1": "1 игрок (Одиночная)",
+    "players_2": "2 игрока",
+    "players_3_4": "3-4 игрока",
+    "players_5_plus": "5+ игроков",
+    "players_multi": "Любой мультиплеер"
   },
   "settings": {
     "title": "Инструменты",
