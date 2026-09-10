@@ -8,6 +8,7 @@
 #include "borealis/views/dropdown.hpp"
 
 #include "borealis/core/application.hpp"
+#include "borealis/core/touch/tap_gesture.hpp"
 #include "borealis/views/cells/cell_radio.hpp"
 
 namespace brls
@@ -129,6 +130,17 @@ Dropdown::Dropdown(std::string title, std::vector<std::string> values, ValueSele
         ;
 
     content->setHeight(min(height, Application::contentHeight * 0.73f));
+
+    this->addGestureRecognizer(new TapGestureRecognizer([this](TapGestureStatus status, Sound* soundToPlay) {
+        if (status.state == GestureState::END) {
+            if (this->content && !this->content->getFrame().pointInside(status.position)) {
+                Application::popActivity(TransitionAnimation::FADE, [this] {
+                    if (this->dismissCb)
+                        this->dismissCb(this->selected);
+                });
+            }
+        }
+    }));
 }
 
 int Dropdown::numberOfRows(RecyclerFrame* recycler, int section)

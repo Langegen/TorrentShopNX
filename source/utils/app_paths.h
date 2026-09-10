@@ -44,6 +44,14 @@
 #define TSNX_DATA_DIR            TSNX_BASE_DIR "/data"
 #define TSNX_DOWNLOADS_DIR       TSNX_BASE_DIR "/downloads"
 
+#ifdef __SWITCH__
+#define TSNX_ROMS_BASE_DIR       "sdmc:/roms"
+#else
+#define TSNX_ROMS_BASE_DIR       "./roms"
+#endif
+
+#define TSNX_RETRO_DATA_DIR      TSNX_DATA_DIR "/retro"
+
 #define TSNX_CONFIG_PATH         TSNX_BASE_DIR "/config.ini"
 #define TSNX_LOG_PATH            TSNX_BASE_DIR "/log.txt"
 #define TSNX_ENGINE_LOG_PATH     TSNX_BASE_DIR "/engine.log"

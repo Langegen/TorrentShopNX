@@ -63,11 +63,12 @@ Hint::Hint(std::shared_ptr<Action> action, bool allowAButtonTouch)
     icon->setText(getKeyIcon(static_cast<ControllerButton>(action->getButton())));
     hint->setText(action->getHintText());
 
-    if ((action->getButton() != BUTTON_A || allowAButtonTouch) && action->isAvailable() && !Application::isInputBlocks())
+    if ((action->getButton() != BUTTON_A || allowAButtonTouch) && action->isAvailable() && !Application::isInputBlocks() && action->getActionListener())
     {
         this->addGestureRecognizer(new TapGestureRecognizer(this, [this, action]()
         {
-            action->getActionListener()(this);
+            if (action->getActionListener())
+                action->getActionListener()(this);
         }));
     }
 

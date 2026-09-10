@@ -1,0 +1,77 @@
+<brls:Box
+    width="auto"
+    height="82px"
+    focusable="true"
+    axis="row"
+    alignItems="center"
+    paddingLeft="16"
+    paddingRight="20"
+    cornerRadius="8"
+    marginBottom="4">
+
+    <!-- Cover Thumbnail -->
+    <brls:Box width="51px" height="68px" cornerRadius="6" backgroundColor="#121826" alignItems="center" justifyContent="center" marginRight="16">
+        <brls:Image id="cover" width="51px" height="68px" cornerRadius="6" scalingType="fit" />
+    </brls:Box>
+
+    <!-- Details Column -->
+    <brls:Box
+        width="auto"
+        height="auto"
+        grow="1.0"
+        axis="column"
+        marginRight="16">
+
+        <!-- Title -->
+        <brls:Label
+            id="title"
+            fontSize="16"
+            singleLine="true" />
+
+        <!-- Subtitle: Year / Genre + Lang badge -->
+        <brls:Box width="auto" height="auto" axis="row" alignItems="center" marginTop="4">
+            <brls:Label
+                id="meta"
+                fontSize="12"
+                textColor="#8da2b5"
+                marginRight="10"
+                singleLine="true" />
+
+            <brls:Label
+                id="lang"
+                fontSize="10.5"
+                textColor="#FFFFFF"
+                backgroundColor="#E91E63"
+                cornerRadius="4"
+                visibility="gone" />
+        </brls:Box>
+
+    </brls:Box>
+
+    <!-- Size & Action Tag -->
+    <brls:Box width="auto" height="auto" axis="row" alignItems="center">
+        <brls:Label
+            id="size"
+            fontSize="13"
+            textColor="#8da2b5"
+            marginRight="16" />
+
+        <brls:Box
+            id="actionBox"
+            paddingLeft="10"
+            paddingRight="10"
+            paddingTop="5"
+            paddingBottom="5"
+            cornerRadius="6"
+            backgroundColor="#00e0a520"
+            alignItems="center"
+            justifyContent="center">
+            <brls:Label
+                id="actionLabel"
+                text="(A) Скачать РОМ"
+                fontSize="11"
+                textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+</brls:Box>

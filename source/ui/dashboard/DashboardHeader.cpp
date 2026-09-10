@@ -1,4 +1,5 @@
 #include "DashboardHeader.hpp"
+#include "../StorageTabView.hpp"
 #include "../../config/config.h"
 
 namespace ui {
@@ -86,6 +87,16 @@ DashboardHeader::DashboardHeader() {
     storage_info_label_->setMarginTop(4.0f);
     storage_info_label_->setSingleLine(true);
     rightBox->addView(storage_info_label_);
+
+    rightBox->setFocusable(true);
+    rightBox->registerClickAction([](brls::View* view) {
+        auto* scroll = new brls::ScrollingFrame();
+        scroll->setContentView(new StorageTabView());
+        auto* applet = new brls::AppletFrame(scroll);
+        applet->setTitle("Управление хранилищем");
+        brls::Application::pushActivity(new brls::Activity(applet));
+        return true;
+    });
 
     this->addView(rightBox);
 }

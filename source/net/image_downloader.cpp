@@ -300,8 +300,8 @@ void ImageDownloader::processTask(const ImageTask& task) {
     if (task.token && !*task.token) return;
 
     bool cacheEnabled = config::ConfigManager::instance().getCacheCoverThumbnails() && !task.bypassCache;
-    std::string thumbPath;
-    if (cacheEnabled && !task.url.empty()) {
+    std::string thumbPath = task.url.empty() ? "" : getThumbnailCachePath(task.url);
+    if (cacheEnabled && !thumbPath.empty()) {
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
             util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
@@ -463,6 +463,14 @@ void ImageDownloader::processTask(const ImageTask& task) {
         if (!task.fallbackUrl.empty()) {
             if (task.token && !*task.token) return;
             enqueue(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+        } else if (!task.placeholder.empty()) {
+            brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
+                if (g_appExiting.load()) return;
+                if (token && !*token) return;
+                if (img) {
+                    img->setImageFromFile(placeholder);
+                }
+            });
         }
     }
 }

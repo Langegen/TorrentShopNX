@@ -17,7 +17,7 @@ namespace ui {
 namespace {
 
 bool isFileDownloadItem(const download::DownloadItem& item) {
-    if (item.is_homebrew || item.file_dl_dispatched || !item.file_dl_dest.empty()) {
+    if (item.is_homebrew || !item.retro_console_id.empty() || item.file_dl_dispatched || !item.file_dl_dest.empty()) {
         return true;
     }
     if (!item.forced_stream_name.empty() && !util::isGamePackage(item.forced_stream_name)) {

@@ -6,6 +6,8 @@
 #include "ScreenshotViewer.hpp"
 #include "QrCodeView.hpp"
 #include "../catalog/filter_manager.hpp"
+#include "../catalog/retro_catalog_manager.h"
+#include "../config/config.h"
 #include <sstream>
 
 namespace ui {
@@ -57,7 +59,8 @@ private:
     brls::Button* btnDownload_;
 };
 
-GameDetailView::GameDetailView(const Game& game) : game_(game) {
+GameDetailView::GameDetailView(const Game& game, const std::string& retro_console_id)
+    : game_(game), retro_console_id_(retro_console_id) {
 }
 
 GameDetailView::~GameDetailView() {
@@ -85,7 +88,52 @@ void GameDetailView::onContentAvailable() {
     }
     description->setText(desc);
     
-    // Dynamic Badges (Genres & Languages)
+    // Dynamic Badges (Console, Genres & Languages)
+    if (!retro_console_id_.empty()) {
+        const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
+        brls::Box* cBadge = new brls::Box();
+        cBadge->setPadding(5, 10, 5, 10);
+        cBadge->setMarginRight(10);
+        cBadge->setMarginBottom(10);
+        NVGcolor col = cInfo ? cInfo->color : nvgRGB(80, 80, 80);
+        cBadge->setBackgroundColor(col);
+        cBadge->setCornerRadius(6);
+
+        brls::Label* cLabel = new brls::Label();
+        cLabel->setText(cInfo ? cInfo->name : retro_console_id_);
+        cLabel->setFontSize(14);
+        cLabel->setTextColor(nvgRGB(255, 255, 255));
+        cBadge->addView(cLabel);
+
+        badgesBox->addView(cBadge);
+
+        if (isRomsetGame(game_)) {
+            brls::Box* setBadge = new brls::Box();
+            setBadge->setPadding(5, 10, 5, 10);
+            setBadge->setMarginRight(10);
+            setBadge->setMarginBottom(10);
+            setBadge->setBackgroundColor(nvgRGB(230, 130, 20)); // Amber
+            setBadge->setCornerRadius(6);
+
+            brls::Label* setLabel = new brls::Label();
+            setLabel->setText("СБОРНИК / РОМСЕТ");
+            setLabel->setFontSize(14);
+            setLabel->setTextColor(nvgRGB(255, 255, 255));
+            setBadge->addView(setLabel);
+
+            badgesBox->addView(setBadge);
+
+            const auto& cfg = config::ConfigManager::instance();
+            if (cfg.getRetroRomsetMode() == "select") {
+                btnDownload->setText("Выбрать файлы");
+            } else {
+                btnDownload->setText("Скачать ромсет");
+            }
+        } else {
+            btnDownload->setText("app/detail/download_rom"_i18n);
+        }
+    }
+
     // Add language badge
     std::string lang = extractLangBadge(game_.interface_lang);
     if (!lang.empty()) {
@@ -177,6 +225,21 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     btnDownload->registerClickAction([this](brls::View* view) {
+        if (!retro_console_id_.empty()) {
+            const auto& cfg = config::ConfigManager::instance();
+            if (isRomsetGame(game_) && cfg.getRetroRomsetMode() == "select") {
+                brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
+                return true;
+            } else {
+                ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+                brls::sync([]() {
+                    while (brls::Application::getActivitiesStack().size() > 1)
+                        brls::Application::popActivity(brls::TransitionAnimation::NONE);
+                    brls::Application::pushActivity(new ui::DownloadsView());
+                });
+                return true;
+            }
+        }
         if (isHomebrewGame(game_)) {
             ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
             brls::sync([]() {

@@ -68,6 +68,7 @@ public:
     void resetFilters();
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
+    BRLS_BIND(brls::Label, headerTitle, "headerTitle");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
 
 private:

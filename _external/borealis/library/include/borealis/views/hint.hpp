@@ -69,7 +69,7 @@ class Hints : public Box
   private:
     void refillHints(View* focusView);
     bool addUnableAButtonAction = true;
-    bool allowAButtonTouch      = false;
+    bool allowAButtonTouch      = true;
     bool forceShown             = false;
 
     VoidEvent::Subscription hintSubscription;

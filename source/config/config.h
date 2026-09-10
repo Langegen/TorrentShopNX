@@ -68,6 +68,21 @@ public:
     const std::string& getLanguage() const;
     void setLanguage(const std::string& lang);
 
+    // Retro Games settings
+    const std::string& getRetroRomsMode() const; // "retroarch" (default), "downloads", "custom"
+    void setRetroRomsMode(const std::string& mode);
+
+    const std::string& getRetroCustomPath() const;
+    void setRetroCustomPath(const std::string& path);
+
+    bool getRetroAutoExtract() const; // default false
+    void setRetroAutoExtract(bool enabled);
+
+    const std::string& getRetroRomsetMode() const; // "full" (default), "select"
+    void setRetroRomsetMode(const std::string& mode);
+
+    std::string getEffectiveRetroRomsDir(const std::string& console_default_subfolder = "") const;
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -85,6 +100,10 @@ private:
     bool auto_app_update_;
     std::string last_app_update_check_date_;
     std::string language_;
+    std::string retro_roms_mode_;
+    std::string retro_custom_path_;
+    bool retro_auto_extract_;
+    std::string retro_romset_mode_;
     std::string config_path_;
     std::string legacy_config_path_;
 };

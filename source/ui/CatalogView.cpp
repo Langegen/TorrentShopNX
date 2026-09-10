@@ -128,6 +128,31 @@ void CatalogView::onContentAvailable() {
     std::string countStr = "Игр: " + std::to_string(filteredGames_.size());
     statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
 
+    if (headerTitle) {
+        headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
+            std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
+            filterState_.searchQuery = query;
+            filterCatalog();
+        }));
+    }
+
+    if (statsHint) {
+        statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {
+            auto catalog = getCatalogSnapshot();
+            std::vector<Game> officialGames;
+            officialGames.reserve(catalog->size());
+            for (const auto& g : *catalog) {
+                if (!isHomebrewGame(g)) officialGames.push_back(g);
+            }
+            FilterSortDialog::show(filterState_, officialGames, [this](const catalog::FilterSortState& newState) {
+                filterState_ = newState;
+                filterCatalog();
+            }, [this]() {
+                resetFilters();
+            });
+        }));
+    }
+
     // Register search/filter action keys
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());

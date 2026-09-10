@@ -262,6 +262,8 @@ void ScrollingFrame::naturalScrollingButtonProcessing(FocusDirection focusDirect
 
     setContentOffsetY(newOffset, false);
     View* current = Application::getCurrentFocus();
+    if (!current || !current->getParent())
+        return;
     View* next    = current->getParent()->getNextFocus(focusDirection, current);
     if (next)
     {
@@ -505,7 +507,7 @@ View* ScrollingFrame::getParentNavigationDecision(View* from, View* newFocus, Fo
         if (from == contentView)
         {
             naturalScrollingCanScroll = true;
-            if (currentFocus->getFrame().inscribed(this->getFrame()))
+            if (currentFocus && currentFocus->getFrame().inscribed(this->getFrame()))
                 return currentFocus;
 
             return this;
@@ -520,7 +522,7 @@ View* ScrollingFrame::getParentNavigationDecision(View* from, View* newFocus, Fo
             naturalScrollingCanScroll = true;
     }
 
-    if (currentFocus->getFrame().inscribed(this->getFrame()))
+    if (currentFocus && currentFocus->getFrame().inscribed(this->getFrame()))
         return currentFocus;
 
     return this;

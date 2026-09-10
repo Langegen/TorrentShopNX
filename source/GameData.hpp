@@ -59,7 +59,37 @@ struct Game {
     std::vector<std::string> screenshots;
     std::string description;
     std::string multiplayer;
+    bool is_romset = false;
+    std::string content_type;
 };
+
+// Heuristic and flag checker for romsets / multi-game collections
+inline bool isRomsetGame(const Game& g) {
+    if (g.is_romset) return true;
+    if (g.content_type == "romset") return true;
+
+    // Fast keyword check in lowercase title
+    std::string lower = g.title;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    if (lower.find("сборник") != std::string::npos ||
+        lower.find("ромсет") != std::string::npos ||
+        lower.find("антология") != std::string::npos ||
+        lower.find("коллекция") != std::string::npos ||
+        lower.find("полный комплект") != std::string::npos ||
+        lower.find("romset") != std::string::npos ||
+        lower.find("collection") != std::string::npos ||
+        lower.find("anthology") != std::string::npos ||
+        lower.find("complete set") != std::string::npos ||
+        lower.find("in 1") != std::string::npos ||
+        lower.find("in-1") != std::string::npos ||
+        lower.find("в 1") != std::string::npos) {
+        return true;
+    }
+    return false;
+}
 
 inline std::string safeGetStr(const nlohmann::json& j, const std::string& key) {
     if (!j.contains(key) || j[key].is_null()) return "";
@@ -99,6 +129,19 @@ inline void from_json(const nlohmann::json& j, Game& g) {
     
     g.description = safeGetStr(j, "description");
     g.multiplayer = safeGetStr(j, "multiplayer");
+
+    g.is_romset = false;
+    if (j.contains("is_romset")) {
+        try {
+            if (j["is_romset"].is_boolean()) g.is_romset = j["is_romset"].get<bool>();
+            else if (j["is_romset"].is_number()) g.is_romset = (j["is_romset"].get<int>() != 0);
+            else if (j["is_romset"].is_string()) g.is_romset = (j["is_romset"].get<std::string>() == "true" || j["is_romset"].get<std::string>() == "1");
+        } catch (...) {}
+    }
+    g.content_type = safeGetStr(j, "content_type");
+    if (!g.is_romset && isRomsetGame(g)) {
+        g.is_romset = true;
+    }
 }
 
 // nlohmann::json serialization
@@ -120,20 +163,86 @@ inline void to_json(nlohmann::json& j, const Game& g) {
         {"cover", g.cover},
         {"screenshots", g.screenshots},
         {"description", g.description},
-        {"multiplayer", g.multiplayer}
+        {"multiplayer", g.multiplayer},
+        {"is_romset", g.is_romset},
+        {"content_type", g.content_type}
     };
 }
 
+
+// Cleans retro game titles by preserving leading compilation tags like [2 in 1] or [3 in 1],
+// but stripping trailing release metadata like [SLUS-00123], [NTSC], [RUS], [ENG], etc.
+inline std::string cleanRetroTitle(const std::string& title) {
+    if (title.empty()) return "";
+    
+    std::string s = title;
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+        s.erase(s.begin());
+    }
+
+    // Strip leading corrupted / empty brackets like [?] or [ ]
+    if (s.size() >= 3 && s.front() == '[') {
+        size_t close = s.find(']');
+        if (close != std::string::npos && close <= 4) {
+            bool hasLetters = false;
+            for (size_t i = 1; i < close; ++i) {
+                unsigned char ch = static_cast<unsigned char>(s[i]);
+                if (std::isalnum(ch)) hasLetters = true;
+            }
+            if (!hasLetters) {
+                s = s.substr(close + 1);
+                while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+                    s.erase(s.begin());
+                }
+            }
+        }
+    }
+
+    // Strip trailing bracketed tags from right to left
+    while (!s.empty()) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+            s.pop_back();
+        }
+        if (s.empty()) break;
+
+        if (s.back() == ']') {
+            size_t open = s.rfind('[');
+            if (open == 0 || open == std::string::npos) break;
+            s = s.substr(0, open);
+        } else if (s.back() == ')') {
+            size_t open = s.rfind('(');
+            if (open == 0 || open == std::string::npos) break;
+            std::string inside = s.substr(open + 1, s.size() - open - 2);
+            if (inside.find("compilation") != std::string::npos ||
+                inside.find("ENG") != std::string::npos ||
+                inside.find("RUS") != std::string::npos) {
+                s = s.substr(0, open);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+        s.pop_back();
+    }
+
+    if (s.empty()) return title;
+    return s;
+}
 
 // Clean title: removes everything from the first '[' to the end of string, and trims trailing spaces
 inline std::string cleanTitle(const std::string& title) {
     size_t pos = title.find('[');
     if (pos == std::string::npos) return title;
+    if (pos == 0) return cleanRetroTitle(title);
     std::string cleaned = title.substr(0, pos);
     while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
         cleaned.pop_back();
     }
-    return cleaned;
+    return cleaned.empty() ? cleanRetroTitle(title) : cleaned;
 }
 
 // Truncate a UTF-8 string to at most maxCodepoints Unicode codepoints,
@@ -200,17 +309,35 @@ public:
     bool null() { return true; }
 
     bool boolean(bool val) {
-        if (inGameObject && !inScreenshots) assignValue(val ? "true" : "false");
+        if (inGameObject && !inScreenshots) {
+            if (currentKey == "is_romset") {
+                currentGame.is_romset = val;
+            } else {
+                assignValue(val ? "true" : "false");
+            }
+        }
         return true;
     }
 
     bool number_integer(int64_t val) {
-        if (inGameObject && !inScreenshots) assignValue(std::to_string(val));
+        if (inGameObject && !inScreenshots) {
+            if (currentKey == "is_romset") {
+                currentGame.is_romset = (val != 0);
+            } else {
+                assignValue(std::to_string(val));
+            }
+        }
         return true;
     }
 
     bool number_unsigned(uint64_t val) {
-        if (inGameObject && !inScreenshots) assignValue(std::to_string(val));
+        if (inGameObject && !inScreenshots) {
+            if (currentKey == "is_romset") {
+                currentGame.is_romset = (val != 0);
+            } else {
+                assignValue(std::to_string(val));
+            }
+        }
         return true;
     }
 
@@ -248,6 +375,9 @@ public:
     bool end_object() {
         if (inGameObject && objectDepth == gameObjectDepth) {
             if (!currentGame.title.empty()) {
+                if (!currentGame.is_romset && isRomsetGame(currentGame)) {
+                    currentGame.is_romset = true;
+                }
                 games.push_back(std::move(currentGame));
             }
             inGameObject = false;
@@ -306,6 +436,8 @@ private:
         else if (currentKey == "cover") currentGame.cover = std::move(val);
         else if (currentKey == "description") currentGame.description = std::move(val);
         else if (currentKey == "multiplayer") currentGame.multiplayer = std::move(val);
+        else if (currentKey == "is_romset") currentGame.is_romset = (val == "true" || val == "1");
+        else if (currentKey == "content_type") currentGame.content_type = std::move(val);
     }
 };
 
@@ -379,7 +511,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     out.write(magic, 8);
-    uint32_t version = 2;
+    uint32_t version = 3;
     out.write(reinterpret_cast<const char*>(&version), sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     out.write(reinterpret_cast<const char*>(&count), sizeof(count));
@@ -416,6 +548,10 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
         writeStr(g.description);
         writeStr(g.multiplayer);
+
+        uint8_t is_rom = g.is_romset ? 1 : 0;
+        out.write(reinterpret_cast<const char*>(&is_rom), sizeof(is_rom));
+        writeStr(g.content_type);
     }
 
     out.flush();
@@ -448,7 +584,7 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version != 2) {
+    if (version != 1 && version != 2 && version != 3) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
@@ -500,8 +636,25 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
             g.screenshots.push_back(std::move(sc));
         }
 
-        if (!readStr(g.description)) return false;
-        if (!readStr(g.multiplayer)) return false;
+        if (version >= 2) {
+            if (!readStr(g.description)) return false;
+            if (!readStr(g.multiplayer)) return false;
+        }
+
+        if (version >= 3) {
+            if (ptr + sizeof(uint8_t) > end) return false;
+            uint8_t is_rom = 0;
+            std::memcpy(&is_rom, ptr, sizeof(is_rom));
+            ptr += sizeof(is_rom);
+            g.is_romset = (is_rom != 0);
+            if (!readStr(g.content_type)) return false;
+        } else {
+            g.is_romset = isRomsetGame(g);
+        }
+
+        if (!g.is_romset && isRomsetGame(g)) {
+            g.is_romset = true;
+        }
 
         games.push_back(std::move(g));
     }
@@ -1041,8 +1194,17 @@ inline bool isHomebrewGame(const Game& g) {
 
 // Asynchronously download and cache images from URLs, showing placeholder during download
 inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0) {
+#ifndef __SWITCH__
+    std::string actualPlaceholder = placeholder;
+    if (actualPlaceholder.rfind("romfs:/", 0) == 0) {
+        actualPlaceholder = std::string(BRLS_RESOURCES) + actualPlaceholder.substr(7);
+    }
+#else
+    const std::string& actualPlaceholder = placeholder;
+#endif
+
     if (url.empty() || !img) {
-        if (img) img->setImageFromFile(placeholder);
+        if (img) img->setImageFromFile(actualPlaceholder);
         return;
     }
     
@@ -1064,7 +1226,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     }
 
-    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, placeholder, bypassCache, effectiveFallback, row, col, priorityOverride);
+    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, actualPlaceholder, bypassCache, effectiveFallback, row, col, priorityOverride);
 }
 
 #include <sstream>

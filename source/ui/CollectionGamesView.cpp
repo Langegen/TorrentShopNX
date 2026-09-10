@@ -112,6 +112,26 @@ void CollectionGamesView::onContentAvailable() {
     headerTitle->setText(brls::getStr("app/collections/collection_prefix", info_.getName()));
     statsHint->setText(brls::getStr("app/collections/games_count", "..."));
 
+    if (headerTitle) {
+        headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
+            std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
+            filterState_.searchQuery = query;
+            rebuildDisplay();
+        }));
+    }
+
+    if (statsHint) {
+        statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {
+            auto catalog = getCatalogSnapshot();
+            FilterSortDialog::show(filterState_, *catalog, [this](const catalog::FilterSortState& newState) {
+                filterState_ = newState;
+                rebuildDisplay();
+            }, [this]() {
+                resetFilters();
+            });
+        }));
+    }
+
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
         filterState_.searchQuery = query;

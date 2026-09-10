@@ -1,0 +1,87 @@
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="row"
+    justifyContent="spaceEvenly"
+    paddingTop="6"
+    paddingBottom="6">
+
+    <!-- Card 0 -->
+    <brls:Box id="card0" width="186px" height="288px" axis="column" focusable="true" padding="6" cornerRadius="10">
+        <brls:Box width="174px" height="232px" cornerRadius="8" backgroundColor="#121826" alignItems="center" justifyContent="center">
+            <brls:Image id="cover0" width="174px" height="232px" cornerRadius="8" scalingType="fit" />
+            <brls:Label id="lang0" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+        </brls:Box>
+        <brls:Label id="title0" width="174px" maxWidth="174px" height="20px" fontSize="13" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Box width="174px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="3">
+            <brls:Label id="size0" fontSize="10.5" textColor="#8da2b5" />
+            <brls:Label id="romBadge0" text="ROM" fontSize="9.5" textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Card 1 -->
+    <brls:Box id="card1" width="186px" height="288px" axis="column" focusable="true" padding="6" cornerRadius="10">
+        <brls:Box width="174px" height="232px" cornerRadius="8" backgroundColor="#121826" alignItems="center" justifyContent="center">
+            <brls:Image id="cover1" width="174px" height="232px" cornerRadius="8" scalingType="fit" />
+            <brls:Label id="lang1" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+        </brls:Box>
+        <brls:Label id="title1" width="174px" maxWidth="174px" height="20px" fontSize="13" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Box width="174px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="3">
+            <brls:Label id="size1" fontSize="10.5" textColor="#8da2b5" />
+            <brls:Label id="romBadge1" text="ROM" fontSize="9.5" textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Card 2 -->
+    <brls:Box id="card2" width="186px" height="288px" axis="column" focusable="true" padding="6" cornerRadius="10">
+        <brls:Box width="174px" height="232px" cornerRadius="8" backgroundColor="#121826" alignItems="center" justifyContent="center">
+            <brls:Image id="cover2" width="174px" height="232px" cornerRadius="8" scalingType="fit" />
+            <brls:Label id="lang2" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+        </brls:Box>
+        <brls:Label id="title2" width="174px" maxWidth="174px" height="20px" fontSize="13" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Box width="174px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="3">
+            <brls:Label id="size2" fontSize="10.5" textColor="#8da2b5" />
+            <brls:Label id="romBadge2" text="ROM" fontSize="9.5" textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Card 3 -->
+    <brls:Box id="card3" width="186px" height="288px" axis="column" focusable="true" padding="6" cornerRadius="10">
+        <brls:Box width="174px" height="232px" cornerRadius="8" backgroundColor="#121826" alignItems="center" justifyContent="center">
+            <brls:Image id="cover3" width="174px" height="232px" cornerRadius="8" scalingType="fit" />
+            <brls:Label id="lang3" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+        </brls:Box>
+        <brls:Label id="title3" width="174px" maxWidth="174px" height="20px" fontSize="13" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Box width="174px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="3">
+            <brls:Label id="size3" fontSize="10.5" textColor="#8da2b5" />
+            <brls:Label id="romBadge3" text="ROM" fontSize="9.5" textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Card 4 -->
+    <brls:Box id="card4" width="186px" height="288px" axis="column" focusable="true" padding="6" cornerRadius="10">
+        <brls:Box width="174px" height="232px" cornerRadius="8" backgroundColor="#121826" alignItems="center" justifyContent="center">
+            <brls:Image id="cover4" width="174px" height="232px" cornerRadius="8" scalingType="fit" />
+            <brls:Label id="lang4" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+        </brls:Box>
+        <brls:Label id="title4" width="174px" maxWidth="174px" height="20px" fontSize="13" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Box width="174px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="3">
+            <brls:Label id="size4" fontSize="10.5" textColor="#8da2b5" />
+            <brls:Label id="romBadge4" text="ROM" fontSize="9.5" textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Card 5 -->
+    <brls:Box id="card5" width="186px" height="288px" axis="column" focusable="true" padding="6" cornerRadius="10">
+        <brls:Box width="174px" height="232px" cornerRadius="8" backgroundColor="#121826" alignItems="center" justifyContent="center">
+            <brls:Image id="cover5" width="174px" height="232px" cornerRadius="8" scalingType="fit" />
+            <brls:Label id="lang5" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+        </brls:Box>
+        <brls:Label id="title5" width="174px" maxWidth="174px" height="20px" fontSize="13" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Box width="174px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="3">
+            <brls:Label id="size5" fontSize="10.5" textColor="#8da2b5" />
+            <brls:Label id="romBadge5" text="ROM" fontSize="9.5" textColor="#00e6af" />
+        </brls:Box>
+    </brls:Box>
+
+</brls:Box>

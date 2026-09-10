@@ -6,7 +6,8 @@
     "downloads": "Загрузки",
     "settings": "Настройки",
     "footer": "TorrentShopNX v2.4 | Игр в каталоге: {0}",
-    "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse."
+    "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
+    "retro_games": "Ретро-игры"
   },
   "common": {
     "loading": "Загрузка...",
@@ -108,7 +109,7 @@
     "state_preparing": "Подготовка к установке",
     "state_installing": "Установка",
     "state_no_peers": "Установка: нет пиров",
-    "state_completed": "Завершено \uE5CA",
+    "state_completed": "Завершено ",
     "state_cancelled": "Отменено",
     "state_failed": "Ошибка",
     "state_paused": "Пауза",
@@ -143,7 +144,8 @@
     "remove_favorite_btn": "Из избранного",
     "torrent_link_btn": "Ссылка на раздачу",
     "qr_hint": "Отсканируйте QR-код телефоном, чтобы открыть страницу раздачи",
-    "qr_no_url": "Для этой игры нет ссылки на раздачу"
+    "qr_no_url": "Для этой игры нет ссылки на раздачу",
+    "download_rom": "Скачать РОМ"
   },
   "fileselect": {
     "title": "Выбор файлов",
@@ -171,7 +173,8 @@
     "low_space_prompt": "Внимание: Недостаточно свободного места на {0}!\nТребуется: {1}\nДоступно: {2}\n\nПродолжить установку?",
     "storage_sd": "карте памяти (SD)",
     "storage_nand": "памяти консоли (NAND)",
-    "storage_auto": "системе (SD или NAND)"
+    "storage_auto": "системе (SD или NAND)",
+    "group_roms": "РОМ-ФАЙЛЫ И ОБРАЗЫ"
   },
   "remote": {
     "title": "Добавить по сети",
@@ -200,7 +203,7 @@
     "col_title": "Игра",
     "col_status": "Статус",
     "badge_update": "ОБНОВИТЬ",
-    "badge_update_mod_warn": "ОБНОВИТЬ \uE002",
+    "badge_update_mod_warn": "ОБНОВИТЬ ",
     "badge_uptodate": "АКТУАЛЬНО",
     "badge_unknown": "НЕТ ДАННЫХ",
     "badge_ignored": "ОТКЛЮЧЕНО",
@@ -220,7 +223,7 @@
     "action_enable_update": "Включить проверку",
     "notify_update_disabled": "Проверка обновлений отключена для «{0}»",
     "notify_update_enabled": "Проверка обновлений включена для «{0}»",
-    "section_mods_updates": "\uE002 ОБНОВЛЕНИЯ С МОДАМИ (Внимание: моды могут слететь) — {0}",
+    "section_mods_updates": " ОБНОВЛЕНИЯ С МОДАМИ (Внимание: моды могут слететь) — {0}",
     "section_updates": "ДОСТУПНЫЕ ОБНОВЛЕНИЯ — {0}",
     "section_ignored": "ПРОВЕРКА ОБНОВЛЕНИЙ ОТКЛЮЧЕНА (ЗАМОРОЖЕНО) — {0}",
     "section_uptodate": "АКТУАЛЬНЫЕ ИГРЫ — {0}",
@@ -286,7 +289,7 @@
     "update_invalid_response": "Неверный формат ответа обновлений.",
     "update_parse_error": "Ошибка парсинга обновления:\n{0}",
     "auto_app_update": "Авто-проверка обновлений",
-    "cache_thumbnails": "Кеш миниатюр обложек",
+    "cache_thumbnails": "Миниатюры обложек",
     "keep_awake": "Предотвращать сон при скачивании",
     "backlight_timeout": "Отключать подсветку во время загрузки",
     "backlight_manual": "Вручную",
@@ -331,7 +334,6 @@
     "storage_calculating": "Подсчёт...",
     "cache_section": "Очистка кеша",
     "cache_clear_all": "Очистить весь кеш",
-    "cache_thumbnails": "Миниатюры обложек",
     "cache_catalog": "Каталог раздач",
     "cache_meta": "Метаданные торрентов",
     "cache_collections": "Подборки",
@@ -352,7 +354,20 @@
     "storage_placeholders_cleared": "Освобождено от прерванных установок: {0}",
     "storage_placeholder_busy": "Идёт загрузка или установка.\nОстановите загрузки перед очисткой.",
     "storage_placeholder_error": "Не удалось очистить плейсхолдеры",
-    "storage_refresh": "Обновить данные"
+    "storage_refresh": "Обновить данные",
+    "cat_retro": "Ретро-игры",
+    "retro_roms_folder": "Папка для РОМов",
+    "retro_folder_retroarch": "Папки RetroArch (sdmc:/roms/)",
+    "retro_folder_downloads": "Папка загрузок (downloads/retro/)",
+    "retro_folder_custom": "Пользовательская папка",
+    "retro_custom_folder": "Путь к папке РОМов",
+    "retro_custom_folder_dialog": "Пользовательская папка для РОМов",
+    "retro_custom_folder_hint": "Пример: sdmc:/roms/",
+    "retro_auto_extract": "Автоматически распаковывать архивы ZIP/7z",
+    "retro_romset_mode": "Режим загрузки ромсетов",
+    "retro_romset_full": "Скачивать полностью",
+    "retro_romset_select": "Выводить список файлов",
+    "retro_update_catalogs": "Обновить базы ретро-игр"
   },
   "applet": {
     "title": "Режим апплета не поддерживается",
@@ -388,5 +403,20 @@
     "folder_created": "Папка создана",
     "renamed_success": "Переименовано",
     "paste_success": "Вставка завершена"
+  },
+  "retro": {
+    "consoles_title": "Ретро-игры",
+    "consoles_subtitle": "Выберите платформу",
+    "consoles_stats": "20 систем • 8 200+ игр",
+    "consoles_footer": "Нажмите А для входа в каталог платформы",
+    "catalog_subtitle": "Каталог РОМов и образов",
+    "catalog_footer": "А - Подробнее / Скачать, Y - В избранное",
+    "loading_console": "Загрузка списка игр...",
+    "downloading_catalog": "Загрузка базы данных с GitHub...",
+    "total_games": "Всего игр: {0}",
+    "search_hint": "Поиск игры...",
+    "section_nintendo": "Nintendo (10 платформ)",
+    "section_sony": "Sony PlayStation (4 платформы)",
+    "section_sega": "Sega (6 платформ)"
   }
 }

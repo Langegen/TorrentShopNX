@@ -519,7 +519,7 @@ void DashboardSummaryView::rebuildContent() {
 
     switch (active_index_) {
         case 0: buildCatalogSection(); break;
-        case 1: buildRemoteAddSection(); break;
+        case 1: buildRetroGamesSection(); break;
         case 2: buildLibrarySection(); break;
         case 3: buildDownloadsSection(); break;
         case 4: buildToolsSection(); break;
@@ -536,6 +536,11 @@ void DashboardSummaryView::buildCatalogSection() {
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
+    headerRow->setFocusable(true);
+    headerRow->registerClickAction([this](brls::View*) {
+        if (on_open_section_) on_open_section_(0);
+        return true;
+    });
 
     brls::Label* title = new brls::Label();
     title->setText("НОВИНКИ И ПОПУЛЯРНЫЕ ИГРЫ КАТАЛОГА");
@@ -577,153 +582,270 @@ void DashboardSummaryView::buildCatalogSection() {
 // -------------------------------------------------------------
 // SECTION 1: REMOTE ADD (QR / Web) - Enhanced Fonts & Proportions
 // -------------------------------------------------------------
-void DashboardSummaryView::buildRemoteAddSection() {
+// -------------------------------------------------------------
+// SECTION 1: RETRO GAMES (Consoles & ROMs Overview)
+// -------------------------------------------------------------
+void DashboardSummaryView::buildRetroGamesSection() {
+    auto openRetro = [this](brls::View*) {
+        if (on_open_section_) on_open_section_(1);
+        return true;
+    };
+
     brls::Box* headerRow = new brls::Box();
     headerRow->setAxis(brls::Axis::ROW);
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
+    headerRow->setFocusable(true);
+    headerRow->registerClickAction(openRetro);
 
     brls::Label* title = new brls::Label();
-    title->setText("БЕСПРОВОДНОЕ ДОБАВЛЕНИЕ ТОРРЕНТОВ И MAGNET-ССЫЛОК");
+    title->setText("КАТАЛОГ РЕТРО-ИГР И РОМОВ ДЛЯ ЭМУЛЯТОРОВ");
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
 
     brls::Label* hint = new brls::Label();
-    hint->setText("Нажмите (A) для полного QR-кода на экране");
+    hint->setText("Нажмите (A) для перехода к выбору платформы");
     hint->setFontSize(11.5f);
     hint->setTextColor(nvgRGBA(150, 175, 205, 200));
     headerRow->addView(hint);
     content_container_->addView(headerRow);
 
-    brls::Box* bodyRow = new brls::Box();
-    bodyRow->setAxis(brls::Axis::ROW);
-    bodyRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    bodyRow->setWidthPercentage(100.0f);
+    brls::Box* cardsRow = new brls::Box();
+    cardsRow->setAxis(brls::Axis::ROW);
+    cardsRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    cardsRow->setWidthPercentage(100.0f);
 
-    // Left URL Box (Translucent glass with prominent large URL)
-    brls::Box* urlBox = new brls::Box();
-    urlBox->setAxis(brls::Axis::COLUMN);
-    urlBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    urlBox->setWidth(445.0f);
-    urlBox->setHeight(124.0f);
-    urlBox->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
-    urlBox->setCornerRadius(10.0f);
-    urlBox->setBackgroundColor(nvgRGBA(25, 45, 70, 85));
+    // Card 1: Retro Library & Total Games
+    brls::Box* c1 = new brls::Box();
+    c1->setAxis(brls::Axis::COLUMN);
+    c1->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    c1->setWidth(360.0f);
+    c1->setHeight(124.0f);
+    c1->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
+    c1->setCornerRadius(10.0f);
+    c1->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c1->setFocusable(true);
+    c1->registerClickAction(openRetro);
 
-    brls::Label* urlHeader = new brls::Label();
-    urlHeader->setText("АДРЕС ВЕБ-ИНТЕРФЕЙСА В ЛОКАЛЬНОЙ СЕТИ:");
-    urlHeader->setFontSize(12.0f);
-    urlHeader->setTextColor(nvgRGBA(160, 185, 215, 220));
-    urlBox->addView(urlHeader);
+    brls::Box* c1Top = new brls::Box();
+    c1Top->setAxis(brls::Axis::ROW);
+    c1Top->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    c1Top->setAlignItems(brls::AlignItems::CENTER);
 
-    brls::Label* urlLabel = new brls::Label();
-    urlLabel->setText("http://" + local_ip_ + ":" + std::to_string(remote_port_) + "/");
-    urlLabel->setFontSize(21.0f);
-    urlLabel->setTextColor(nvgRGBA(0, 235, 180, 255)); // Emerald High-Visibility
-    urlBox->addView(urlLabel);
+    brls::Label* c1Title = new brls::Label();
+    c1Title->setText("БИБЛИОТЕКА РЕТРО-ИГР");
+    c1Title->setFontSize(11.5f);
+    c1Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c1Top->addView(c1Title);
 
-    brls::Box* badgesRow = new brls::Box();
-    badgesRow->setAxis(brls::Axis::ROW);
-    badgesRow->setAlignItems(brls::AlignItems::CENTER);
+    brls::Label* c1TopTag = new brls::Label();
+    c1TopTag->setText("20 систем");
+    c1TopTag->setFontSize(11.5f);
+    c1TopTag->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
+    c1Top->addView(c1TopTag);
+    c1->addView(c1Top);
 
-    brls::Box* b1 = new brls::Box();
-    b1->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
-    b1->setCornerRadius(4.0f);
-    b1->setBackgroundColor(nvgRGBA(0, 224, 165, 32));
-    b1->setMarginRight(8.0f);
-    brls::Label* l1 = new brls::Label();
-    l1->setText("Порт 8080 (HTTP)");
-    l1->setFontSize(11.5f);
-    l1->setTextColor(nvgRGBA(0, 230, 175, 255));
-    b1->addView(l1);
-    badgesRow->addView(b1);
+    brls::Box* c1Mid = new brls::Box();
+    c1Mid->setAxis(brls::Axis::ROW);
+    c1Mid->setAlignItems(brls::AlignItems::CENTER);
 
-    brls::Box* b2 = new brls::Box();
-    b2->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
-    b2->setCornerRadius(4.0f);
-    b2->setBackgroundColor(nvgRGBA(255, 255, 255, 18));
-    brls::Label* l2 = new brls::Label();
-    l2->setText("Wi-Fi / Ethernet");
-    l2->setFontSize(11.5f);
-    l2->setTextColor(nvgRGBA(200, 220, 245, 230));
-    b2->addView(l2);
-    badgesRow->addView(b2);
+    brls::Label* c1Val = new brls::Label();
+    c1Val->setText("8 200+ игр");
+    c1Val->setFontSize(22.0f);
+    c1Val->setTextColor(nvgRGBA(255, 255, 255, 255));
+    c1Mid->addView(c1Val);
 
-    urlBox->addView(badgesRow);
-    bodyRow->addView(urlBox);
+    brls::Box* c1Badge = new brls::Box();
+    c1Badge->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
+    c1Badge->setCornerRadius(4.0f);
+    c1Badge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
+    c1Badge->setMarginLeft(12.0f);
+    brls::Label* c1BadgeLbl = new brls::Label();
+    c1BadgeLbl->setText("Полная база");
+    c1BadgeLbl->setFontSize(12.0f);
+    c1BadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
+    c1Badge->addView(c1BadgeLbl);
+    c1Mid->addView(c1Badge);
+    c1->addView(c1Mid);
 
-    // Right Steps Box (Translucent glass with clear readable steps)
-    brls::Box* stepsBox = new brls::Box();
-    stepsBox->setAxis(brls::Axis::COLUMN);
-    stepsBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    stepsBox->setWidth(670.0f);
-    stepsBox->setHeight(124.0f);
-    stepsBox->setPadding(10.0f, 16.0f, 10.0f, 16.0f);
-    stepsBox->setCornerRadius(10.0f);
-    stepsBox->setBackgroundColor(nvgRGBA(25, 45, 70, 70));
+    brls::Label* c1Sub = new brls::Label();
+    c1Sub->setText("NES • SNES • GBA • N64 • PS1 • PS2 • PSP • MD...");
+    c1Sub->setFontSize(11.0f);
+    c1Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c1->addView(c1Sub);
+    cardsRow->addView(c1);
 
-    brls::Label* stepsHeader = new brls::Label();
-    stepsHeader->setText("КАК ПЕРЕДАТЬ ФАЙЛЫ НА КОНСОЛЬ:");
-    stepsHeader->setFontSize(12.0f);
-    stepsHeader->setTextColor(nvgRGBA(160, 185, 215, 220));
-    stepsBox->addView(stepsHeader);
+    // Card 2: Ecosystems & Brand Pills
+    brls::Box* c2 = new brls::Box();
+    c2->setAxis(brls::Axis::COLUMN);
+    c2->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    c2->setWidth(360.0f);
+    c2->setHeight(124.0f);
+    c2->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
+    c2->setCornerRadius(10.0f);
+    c2->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c2->setFocusable(true);
+    c2->registerClickAction(openRetro);
 
-    struct StepInfo {
-        std::string num;
-        std::string text;
-        bool highlight;
-    };
-    StepInfo steps[3] = {
-        {"1", "Откройте указанный адрес в любом браузере на телефоне или ПК", false},
-        {"2", "Вставьте Magnet-ссылку или перетащите .torrent файл раздачи", false},
-        {"3", "Выберите нужные файлы, и загрузка начнётся прямо на Switch!", true}
-    };
+    brls::Box* c2Top = new brls::Box();
+    c2Top->setAxis(brls::Axis::ROW);
+    c2Top->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    c2Top->setAlignItems(brls::AlignItems::CENTER);
 
-    for (int i = 0; i < 3; ++i) {
-        brls::Box* stepRow = new brls::Box();
-        stepRow->setAxis(brls::Axis::ROW);
-        stepRow->setAlignItems(brls::AlignItems::CENTER);
+    brls::Label* c2Title = new brls::Label();
+    c2Title->setText("ОСНОВНЫЕ ПЛАТФОРМЫ");
+    c2Title->setFontSize(11.5f);
+    c2Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c2Top->addView(c2Title);
 
-        brls::Box* numBadge = new brls::Box();
-        numBadge->setWidth(22.0f);
-        numBadge->setHeight(22.0f);
-        numBadge->setCornerRadius(11.0f);
-        numBadge->setBackgroundColor(steps[i].highlight ? nvgRGBA(0, 224, 165, 40) : nvgRGBA(255, 255, 255, 22));
-        numBadge->setAlignItems(brls::AlignItems::CENTER);
-        numBadge->setJustifyContent(brls::JustifyContent::CENTER);
-        numBadge->setMarginRight(10.0f);
+    brls::Label* c2TopTag = new brls::Label();
+    c2TopTag->setText("RetroArch / Core");
+    c2TopTag->setFontSize(11.5f);
+    c2TopTag->setTextColor(nvgRGBA(130, 160, 195, 200));
+    c2Top->addView(c2TopTag);
+    c2->addView(c2Top);
 
-        brls::Label* numLbl = new brls::Label();
-        numLbl->setText(steps[i].num);
-        numLbl->setFontSize(12.0f);
-        numLbl->setTextColor(steps[i].highlight ? nvgRGBA(0, 235, 180, 255) : nvgRGBA(220, 235, 255, 240));
-        numBadge->addView(numLbl);
-        stepRow->addView(numBadge);
+    brls::Box* pillsRow = new brls::Box();
+    pillsRow->setAxis(brls::Axis::ROW);
+    pillsRow->setAlignItems(brls::AlignItems::CENTER);
 
-        brls::Label* sText = new brls::Label();
-        sText->setText(steps[i].text);
-        sText->setFontSize(13.5f);
-        sText->setTextColor(steps[i].highlight ? nvgRGBA(0, 235, 180, 255) : nvgRGBA(225, 238, 255, 235));
-        stepRow->addView(sText);
+    brls::Box* nPill = new brls::Box();
+    nPill->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
+    nPill->setCornerRadius(4.0f);
+    nPill->setBackgroundColor(nvgRGBA(229, 57, 53, 35));
+    nPill->setMarginRight(6.0f);
+    brls::Label* nLbl = new brls::Label();
+    nLbl->setText("Nintendo (10)");
+    nLbl->setFontSize(11.5f);
+    nLbl->setTextColor(nvgRGBA(255, 110, 110, 255));
+    nPill->addView(nLbl);
+    pillsRow->addView(nPill);
 
-        stepsBox->addView(stepRow);
+    brls::Box* sPill = new brls::Box();
+    sPill->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
+    sPill->setCornerRadius(4.0f);
+    sPill->setBackgroundColor(nvgRGBA(30, 136, 229, 35));
+    sPill->setMarginRight(6.0f);
+    brls::Label* sLbl = new brls::Label();
+    sLbl->setText("Sony (4)");
+    sLbl->setFontSize(11.5f);
+    sLbl->setTextColor(nvgRGBA(100, 185, 255, 255));
+    sPill->addView(sLbl);
+    pillsRow->addView(sPill);
+
+    brls::Box* segaPill = new brls::Box();
+    segaPill->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
+    segaPill->setCornerRadius(4.0f);
+    segaPill->setBackgroundColor(nvgRGBA(0, 172, 193, 35));
+    brls::Label* segaLbl = new brls::Label();
+    segaLbl->setText("Sega (6)");
+    segaLbl->setFontSize(11.5f);
+    segaLbl->setTextColor(nvgRGBA(75, 225, 245, 255));
+    segaPill->addView(segaLbl);
+    pillsRow->addView(segaPill);
+
+    c2->addView(pillsRow);
+
+    brls::Label* c2Sub = new brls::Label();
+    c2Sub->setText("Оригинальные образы, русификации и хаки");
+    c2Sub->setFontSize(11.0f);
+    c2Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c2->addView(c2Sub);
+    cardsRow->addView(c2);
+
+    // Card 3: Storage & Extraction Settings
+    brls::Box* c3 = new brls::Box();
+    c3->setAxis(brls::Axis::COLUMN);
+    c3->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    c3->setWidth(360.0f);
+    c3->setHeight(124.0f);
+    c3->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
+    c3->setCornerRadius(10.0f);
+    c3->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c3->setFocusable(true);
+    c3->registerClickAction(openRetro);
+
+    auto& cfg = config::ConfigManager::instance();
+    std::string romsMode = cfg.getRetroRomsMode();
+    std::string modeTag = "RetroArch";
+    if (romsMode == "downloads") modeTag = "Загрузки";
+    else if (romsMode == "custom") modeTag = "Своя папка";
+
+    brls::Box* c3Top = new brls::Box();
+    c3Top->setAxis(brls::Axis::ROW);
+    c3Top->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    c3Top->setAlignItems(brls::AlignItems::CENTER);
+
+    brls::Label* c3Title = new brls::Label();
+    c3Title->setText("ПАПКА ДЛЯ РОМОВ");
+    c3Title->setFontSize(11.5f);
+    c3Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c3Top->addView(c3Title);
+
+    brls::Label* c3TopTag = new brls::Label();
+    c3TopTag->setText(modeTag);
+    c3TopTag->setFontSize(11.5f);
+    c3TopTag->setTextColor(nvgRGBA(0, 230, 175, 255));
+    c3Top->addView(c3TopTag);
+    c3->addView(c3Top);
+
+    brls::Box* c3Mid = new brls::Box();
+    c3Mid->setAxis(brls::Axis::ROW);
+    c3Mid->setAlignItems(brls::AlignItems::CENTER);
+
+    brls::Label* c3Val = new brls::Label();
+    std::string effDir = cfg.getEffectiveRetroRomsDir();
+    if (effDir.length() > 22) {
+        effDir = effDir.substr(0, 19) + "...";
     }
-    bodyRow->addView(stepsBox);
+    c3Val->setText(effDir);
+    c3Val->setFontSize(18.0f);
+    c3Val->setTextColor(nvgRGBA(255, 255, 255, 255));
+    c3Mid->addView(c3Val);
 
-    content_container_->addView(bodyRow);
+    if (cfg.getRetroAutoExtract()) {
+        brls::Box* c3Badge = new brls::Box();
+        c3Badge->setPadding(3.0f, 6.0f, 3.0f, 6.0f);
+        c3Badge->setCornerRadius(4.0f);
+        c3Badge->setBackgroundColor(nvgRGBA(255, 180, 50, 32));
+        c3Badge->setMarginLeft(8.0f);
+        brls::Label* c3BadgeLbl = new brls::Label();
+        c3BadgeLbl->setText("Auto-ZIP");
+        c3BadgeLbl->setFontSize(11.0f);
+        c3BadgeLbl->setTextColor(nvgRGBA(255, 200, 80, 255));
+        c3Badge->addView(c3BadgeLbl);
+        c3Mid->addView(c3Badge);
+    }
+    c3->addView(c3Mid);
+
+    brls::Label* c3Sub = new brls::Label();
+    c3Sub->setText("(A) Нажмите для перехода к выбору консолей");
+    c3Sub->setFontSize(11.0f);
+    c3Sub->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald action hint
+    c3->addView(c3Sub);
+
+    cardsRow->addView(c3);
+    content_container_->addView(cardsRow);
 }
 
 // -------------------------------------------------------------
 // SECTION 2: GAME LIBRARY (2 Clean Sections: Installed & Updates)
 // -------------------------------------------------------------
 void DashboardSummaryView::buildLibrarySection() {
+    auto openLib = [this](brls::View*) {
+        if (on_open_section_) on_open_section_(2);
+        return true;
+    };
+
     brls::Box* headerRow = new brls::Box();
     headerRow->setAxis(brls::Axis::ROW);
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
+    headerRow->setFocusable(true);
+    headerRow->registerClickAction(openLib);
 
     brls::Label* title = new brls::Label();
     title->setText("МЕНЕДЖЕР УСТАНОВЛЕННЫХ ИГР И ОБНОВЛЕНИЙ");
@@ -752,6 +874,8 @@ void DashboardSummaryView::buildLibrarySection() {
     instCard->setPadding(12.0f, 18.0f, 12.0f, 18.0f);
     instCard->setCornerRadius(10.0f);
     instCard->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    instCard->setFocusable(true);
+    instCard->registerClickAction(openLib);
 
     brls::Box* instTop = new brls::Box();
     instTop->setAxis(brls::Axis::ROW);
@@ -810,6 +934,8 @@ void DashboardSummaryView::buildLibrarySection() {
     updCard->setPadding(12.0f, 18.0f, 12.0f, 18.0f);
     updCard->setCornerRadius(10.0f);
     updCard->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    updCard->setFocusable(true);
+    updCard->registerClickAction(openLib);
 
     brls::Box* updTop = new brls::Box();
     updTop->setAxis(brls::Axis::ROW);
@@ -886,6 +1012,11 @@ void DashboardSummaryView::buildLibrarySection() {
 // SECTION 3: DOWNLOADS (Active Download with Metrics & Sparkline OR Idle Recommendations)
 // -------------------------------------------------------------
 void DashboardSummaryView::buildDownloadsSection() {
+    auto openDl = [this](brls::View*) {
+        if (on_open_section_) on_open_section_(3);
+        return true;
+    };
+
     const download::DownloadItem* activeItem = nullptr;
     for (const auto& it : cached_downloads_) {
         if (it.state == download::DownloadState::Downloading ||
@@ -908,6 +1039,8 @@ void DashboardSummaryView::buildDownloadsSection() {
         headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         headerRow->setAlignItems(brls::AlignItems::CENTER);
         headerRow->setMarginBottom(6.0f);
+        headerRow->setFocusable(true);
+        headerRow->registerClickAction(openDl);
 
         brls::Label* title = new brls::Label();
         title->setText("АКТИВНАЯ ЗАГРУЗКА И УСТАНОВКА");
@@ -936,6 +1069,8 @@ void DashboardSummaryView::buildDownloadsSection() {
         mainCard->setPadding(8.0f, 14.0f, 8.0f, 14.0f);
         mainCard->setCornerRadius(10.0f);
         mainCard->setBackgroundColor(nvgRGBA(25, 45, 70, 85));
+        mainCard->setFocusable(true);
+        mainCard->registerClickAction(openDl);
 
         // Cover Box
         brls::Box* coverBox = new brls::Box();
@@ -1093,6 +1228,8 @@ void DashboardSummaryView::buildDownloadsSection() {
         graphCard->setPadding(8.0f, 12.0f, 8.0f, 12.0f);
         graphCard->setCornerRadius(10.0f);
         graphCard->setBackgroundColor(nvgRGBA(25, 45, 70, 75));
+        graphCard->setFocusable(true);
+        graphCard->registerClickAction(openDl);
 
         brls::Box* gHeader = new brls::Box();
         gHeader->setAxis(brls::Axis::ROW);
@@ -1133,6 +1270,8 @@ void DashboardSummaryView::buildDownloadsSection() {
         headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         headerRow->setAlignItems(brls::AlignItems::CENTER);
         headerRow->setMarginBottom(6.0f);
+        headerRow->setFocusable(true);
+        headerRow->registerClickAction(openDl);
 
         brls::Label* title = new brls::Label();
         title->setText("ОЧЕРЕДЬ ЗАГРУЗОК ПУСТА  •  НЕТ АКТИВНЫХ ЗАДАЧ");
@@ -1176,11 +1315,18 @@ void DashboardSummaryView::buildDownloadsSection() {
 // SECTION 4: TOOLS & SYSTEM PARAMETERS
 // -------------------------------------------------------------
 void DashboardSummaryView::buildToolsSection() {
+    auto openTools = [this](brls::View*) {
+        if (on_open_section_) on_open_section_(4);
+        return true;
+    };
+
     brls::Box* headerRow = new brls::Box();
     headerRow->setAxis(brls::Axis::ROW);
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
+    headerRow->setFocusable(true);
+    headerRow->registerClickAction(openTools);
 
     brls::Label* title = new brls::Label();
     title->setText("СИСТЕМНАЯ ИНФОРМАЦИЯ И НАСТРОЙКИ ХРАНИЛИЩА");
@@ -1209,6 +1355,8 @@ void DashboardSummaryView::buildToolsSection() {
     c1->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c1->setCornerRadius(10.0f);
     c1->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c1->setFocusable(true);
+    c1->registerClickAction(openTools);
 
     brls::Label* c1Title = new brls::Label();
     c1Title->setText("РЕЖИМ ЗАГРУЗКИ");
@@ -1238,6 +1386,8 @@ void DashboardSummaryView::buildToolsSection() {
     c2->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c2->setCornerRadius(10.0f);
     c2->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c2->setFocusable(true);
+    c2->registerClickAction(openTools);
 
     brls::Label* c2Title = new brls::Label();
     c2Title->setText("ОБЩИЙ КЭШ ПРИЛОЖЕНИЯ");
@@ -1267,6 +1417,8 @@ void DashboardSummaryView::buildToolsSection() {
     c3->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c3->setCornerRadius(10.0f);
     c3->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c3->setFocusable(true);
+    c3->registerClickAction(openTools);
 
     brls::Label* c3Title = new brls::Label();
     c3Title->setText("НЕЗАВЕРШЕННЫЕ УСТАНОВКИ");

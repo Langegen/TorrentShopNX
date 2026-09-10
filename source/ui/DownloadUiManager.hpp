@@ -22,7 +22,7 @@ public:
     download::DownloadManager& getImpl() { return impl_; }
 
     // Adds a download to the queue and instantly saves the state to downloads.json
-    void addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name);
+    void addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id = "");
     
     // Controls download states
     bool pauseDownload(const std::string& topic_id);

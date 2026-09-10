@@ -323,10 +323,8 @@ GLFWVideoContext::GLFWVideoContext(const std::string& windowTitle, uint32_t wind
 
     // Configure window
     glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
-#ifdef __APPLE__
-    // Make the touchpad click normally
+    // Make the touchpad and mouse clicks register reliably
     glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
-#endif
     glfwSetFramebufferSizeCallback(window, glfwWindowFramebufferSizeCallback);
     glfwSetWindowPosCallback(window, glfwWindowPositionCallback);
 
