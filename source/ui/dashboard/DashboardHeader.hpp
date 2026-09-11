@@ -16,7 +16,7 @@ public:
 
 private:
     std::function<void()> onFileManagerClicked_;
-    brls::Box* file_manager_btn_ = nullptr;
+    brls::Box* rightBox_ = nullptr;
     brls::Label* catalog_info_label_ = nullptr;
     brls::Label* storage_info_label_ = nullptr;
 };

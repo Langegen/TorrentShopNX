@@ -4,6 +4,7 @@
 #include "../../utils/switch_utils.h"
 #include "../../utils/app_paths.h"
 #include "../../config/config.h"
+#include "../../utils/log.h"
 #include "../../net/image_downloader.h"
 #include <cstdio>
 #include <algorithm>
@@ -536,23 +537,13 @@ void DashboardSummaryView::buildCatalogSection() {
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
-    headerRow->setFocusable(true);
-    headerRow->registerClickAction([this](brls::View*) {
-        if (on_open_section_) on_open_section_(0);
-        return true;
-    });
+    headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
     title->setText("НОВИНКИ И ПОПУЛЯРНЫЕ ИГРЫ КАТАЛОГА");
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
-
-    brls::Label* hint = new brls::Label();
-    hint->setText("Нажмите (A) для перехода в каталог");
-    hint->setFontSize(11.5f);
-    hint->setTextColor(nvgRGBA(150, 175, 205, 200));
-    headerRow->addView(hint);
     content_container_->addView(headerRow);
 
     brls::Box* cardsRow = new brls::Box();
@@ -596,20 +587,13 @@ void DashboardSummaryView::buildRetroGamesSection() {
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
-    headerRow->setFocusable(true);
-    headerRow->registerClickAction(openRetro);
+    headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
     title->setText("КАТАЛОГ РЕТРО-ИГР И РОМОВ ДЛЯ ЭМУЛЯТОРОВ");
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
-
-    brls::Label* hint = new brls::Label();
-    hint->setText("Нажмите (A) для перехода к выбору платформы");
-    hint->setFontSize(11.5f);
-    hint->setTextColor(nvgRGBA(150, 175, 205, 200));
-    headerRow->addView(hint);
     content_container_->addView(headerRow);
 
     brls::Box* cardsRow = new brls::Box();
@@ -827,6 +811,16 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3->addView(c3Sub);
 
     cardsRow->addView(c3);
+
+    if (get_active_tile_) {
+        brls::View* tile = get_active_tile_();
+        if (tile) {
+            c1->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            c2->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            c3->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+        }
+    }
+
     content_container_->addView(cardsRow);
 }
 
@@ -844,20 +838,13 @@ void DashboardSummaryView::buildLibrarySection() {
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
-    headerRow->setFocusable(true);
-    headerRow->registerClickAction(openLib);
+    headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
     title->setText("МЕНЕДЖЕР УСТАНОВЛЕННЫХ ИГР И ОБНОВЛЕНИЙ");
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
-
-    brls::Label* hint = new brls::Label();
-    hint->setText("Нажмите (A) для перехода в библиотеку");
-    hint->setFontSize(11.5f);
-    hint->setTextColor(nvgRGBA(150, 175, 205, 200));
-    headerRow->addView(hint);
     content_container_->addView(headerRow);
 
     brls::Box* cardsRow = new brls::Box();
@@ -1005,6 +992,15 @@ void DashboardSummaryView::buildLibrarySection() {
     updCard->addView(updSub);
 
     cardsRow->addView(updCard);
+
+    if (get_active_tile_) {
+        brls::View* tile = get_active_tile_();
+        if (tile) {
+            instCard->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            updCard->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+        }
+    }
+
     content_container_->addView(cardsRow);
 }
 
@@ -1039,20 +1035,13 @@ void DashboardSummaryView::buildDownloadsSection() {
         headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         headerRow->setAlignItems(brls::AlignItems::CENTER);
         headerRow->setMarginBottom(6.0f);
-        headerRow->setFocusable(true);
-        headerRow->registerClickAction(openDl);
+        headerRow->setFocusable(false);
 
         brls::Label* title = new brls::Label();
         title->setText("АКТИВНАЯ ЗАГРУЗКА И УСТАНОВКА");
         title->setFontSize(13.0f);
         title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
         headerRow->addView(title);
-
-        brls::Label* hint = new brls::Label();
-        hint->setText("Нажмите (A) для управления очередью загрузок");
-        hint->setFontSize(11.5f);
-        hint->setTextColor(nvgRGBA(150, 175, 205, 200));
-        headerRow->addView(hint);
         content_container_->addView(headerRow);
 
         brls::Box* bodyRow = new brls::Box();
@@ -1261,6 +1250,15 @@ void DashboardSummaryView::buildDownloadsSection() {
         graphCard->addView(gFooter);
 
         bodyRow->addView(graphCard);
+
+        if (get_active_tile_) {
+            brls::View* tile = get_active_tile_();
+            if (tile) {
+                mainCard->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+                graphCard->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            }
+        }
+
         content_container_->addView(bodyRow);
     } else {
         dl_active_mode_ = false;
@@ -1270,20 +1268,13 @@ void DashboardSummaryView::buildDownloadsSection() {
         headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         headerRow->setAlignItems(brls::AlignItems::CENTER);
         headerRow->setMarginBottom(6.0f);
-        headerRow->setFocusable(true);
-        headerRow->registerClickAction(openDl);
+        headerRow->setFocusable(false);
 
         brls::Label* title = new brls::Label();
         title->setText("ОЧЕРЕДЬ ЗАГРУЗОК ПУСТА  •  НЕТ АКТИВНЫХ ЗАДАЧ");
         title->setFontSize(13.0f);
         title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
         headerRow->addView(title);
-
-        brls::Label* hint = new brls::Label();
-        hint->setText("Рекомендуемые игры для загрузки из «Топ 100»:");
-        hint->setFontSize(11.5f);
-        hint->setTextColor(nvgRGBA(150, 175, 205, 200));
-        headerRow->addView(hint);
         content_container_->addView(headerRow);
 
         brls::Box* cardsRow = new brls::Box();
@@ -1325,20 +1316,13 @@ void DashboardSummaryView::buildToolsSection() {
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->setMarginBottom(6.0f);
-    headerRow->setFocusable(true);
-    headerRow->registerClickAction(openTools);
+    headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
     title->setText("СИСТЕМНАЯ ИНФОРМАЦИЯ И НАСТРОЙКИ ХРАНИЛИЩА");
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
-
-    brls::Label* hint = new brls::Label();
-    hint->setText("Нажмите (A) для открытия подробных настроек");
-    hint->setFontSize(11.5f);
-    hint->setTextColor(nvgRGBA(150, 175, 205, 200));
-    headerRow->addView(hint);
     content_container_->addView(headerRow);
 
     brls::Box* cardsRow = new brls::Box();
@@ -1443,6 +1427,15 @@ void DashboardSummaryView::buildToolsSection() {
     c3Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
     c3->addView(c3Sub);
     cardsRow->addView(c3);
+
+    if (get_active_tile_) {
+        brls::View* tile = get_active_tile_();
+        if (tile) {
+            c1->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            c2->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+            c3->setCustomNavigationRoute(brls::FocusDirection::UP, tile);
+        }
+    }
 
     content_container_->addView(cardsRow);
 }

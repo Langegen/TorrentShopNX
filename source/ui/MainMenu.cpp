@@ -194,6 +194,7 @@ void MainMenu::setupLayout() {
         tilesBox_->setDefaultFocusedIndex(0);
     }
     rootBox_->addView(tilesBox_);
+    rootBox_->setDefaultFocusedIndex(1);
 
     // 3. Bottom 1/3 Summary Drawer (Compact 175px, lifted with margin)
     summaryView_ = new ui::DashboardSummaryView();
@@ -295,6 +296,12 @@ void MainMenu::willAppear(bool resetState) {
     s_installedCountCalculated = false;
     s_settingsStatsCalculated = false;
     refreshDashboardState();
+    if (resetState) {
+        current_focused_index_ = 0;
+        if (!tiles_.empty() && tiles_[0]) {
+            brls::Application::giveFocus(tiles_[0]);
+        }
+    }
     if (summaryView_) {
         onTileFocused(current_focused_index_);
     }
@@ -561,6 +568,11 @@ void MainMenu::openFileManager() {
 void MainMenu::onContentAvailable() {
     util::logLine("MainMenu: onContentAvailable start");
     refreshDashboardState();
+
+    if (!tiles_.empty() && tiles_[0]) {
+        current_focused_index_ = 0;
+        brls::Application::giveFocus(tiles_[0]);
+    }
 
     this->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         openFileManager();
