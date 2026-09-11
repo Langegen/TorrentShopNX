@@ -38,6 +38,8 @@ public:
     BackendType type() const override { return BackendType::CustomEngine; }
     void close() override;
     void setCancelFlag(const std::atomic<bool>* flag) override { cancel_flag_ = flag; }
+    void setSchedulerEnabled(bool enabled) override;
+    bool isSchedulerEnabled() const override { return scheduler_enabled_; }
     int downloadSpeedKBps() const override;
     int pieceSize() const override;
     uint64_t fileOffsetInTorrent() const override;
@@ -74,6 +76,7 @@ private:
     mutable std::chrono::steady_clock::time_point last_scheduler_tick_{};
     std::atomic<bool> starving_{false};
     const std::atomic<bool>* cancel_flag_ = nullptr;
+    bool scheduler_enabled_ = true;
 
     std::chrono::steady_clock::time_point open_time_{};
 };

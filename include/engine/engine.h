@@ -170,6 +170,9 @@ void tsnx_engine_set_governor(tsnx_engine *eng, int on);
 // Global RAM streaming mode. Affects only torrents opened after the call.
 void tsnx_engine_set_ram_stream(tsnx_engine *eng, int on);
 
+// Strict verification mode: 1 = only return SHA-1 verified pieces (no unverified streaming reads)
+void tsnx_engine_set_strict_verify(tsnx_engine *eng, const char *hash, int on);
+
 // Force an immediate tracker re-announce for this torrent.
 bool tsnx_engine_announce_now(tsnx_engine *eng, const char *hash);
 

@@ -323,6 +323,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
             continue;
         }
 
+        source->setSchedulerEnabled(true);
         source->setCancelFlag(cancel.get());
         if (cancel->load() || !source->open(hash, idx)) {
             st->failed = true;
@@ -1768,7 +1769,10 @@ bool DownloadManager::startHybridInstall(size_t index) {
         auto cancel_flag = item.cancel_flag;
         item.open_future = std::make_shared<std::future<bool>>(
             std::async(std::launch::async, [source, hash = item.torrent_hash, idx = install_file_index, cancel_flag]() {
-                if (source) source->setCancelFlag(cancel_flag.get());
+                if (source) {
+                    source->setSchedulerEnabled(true);
+                    source->setCancelFlag(cancel_flag.get());
+                }
                 return source ? source->open(hash, idx) : false;
             })
         );

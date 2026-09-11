@@ -52,6 +52,9 @@ void torrentfs_pause(torrentfs *tfs, int on);
 // Unblock any in-progress read so playback can shut down.
 void torrentfs_cancel(torrentfs *tfs);
 
+// Strict piece verification mode (1 = wait for full SHA-1 verified pieces).
+void torrentfs_set_strict_verify(torrentfs *tfs, int on);
+
 // Snapshot of progress for on-screen/debug reporting.
 void torrentfs_stats(const torrentfs *tfs, int64_t *pieces_done,
                      int64_t *pieces_total, int64_t *playhead_piece);

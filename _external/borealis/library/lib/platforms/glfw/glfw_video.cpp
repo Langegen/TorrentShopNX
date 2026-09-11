@@ -423,10 +423,23 @@ void GLFWVideoContext::beginFrame()
 #endif
 }
 
+} // namespace brls
+
+namespace util {
+    __attribute__((weak)) void logLine(const std::string& line) {}
+}
+
+namespace brls
+{
+
 void GLFWVideoContext::endFrame()
 {
 #ifdef BOREALIS_USE_OPENGL
+    static int s_swapCount = 0;
+    s_swapCount++;
+    if (s_swapCount <= 3) ::util::logLine("glfw_video: before glfwSwapBuffers #" + std::to_string(s_swapCount));
     glfwSwapBuffers(this->window);
+    if (s_swapCount <= 3) ::util::logLine("glfw_video: after glfwSwapBuffers #" + std::to_string(s_swapCount));
 #elif defined(BOREALIS_USE_D3D11)
     D3D11_CONTEXT->endFrame();
 #endif

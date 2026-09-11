@@ -221,11 +221,13 @@ void DownloadsView::checkBacklightState() {
     }
 
     bool hasStickMoved = false;
-    if (std::abs(cState.axes[brls::LEFT_X]) > 0.6f ||
-        std::abs(cState.axes[brls::LEFT_Y]) > 0.6f ||
-        std::abs(cState.axes[brls::RIGHT_X]) > 0.6f ||
-        std::abs(cState.axes[brls::RIGHT_Y]) > 0.6f) {
-        hasStickMoved = true;
+    const int axis_indices[] = { brls::LEFT_X, brls::LEFT_Y, brls::RIGHT_X, brls::RIGHT_Y };
+    for (int ax : axis_indices) {
+        float delta = std::abs(cState.axes[ax] - prevControllerState_.axes[ax]);
+        if (delta > 0.25f && std::abs(cState.axes[ax]) > 0.35f) {
+            hasStickMoved = true;
+            break;
+        }
     }
 
     bool hasAnyHeldButton = false;

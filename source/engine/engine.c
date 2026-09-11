@@ -605,6 +605,14 @@ void tsnx_engine_set_ram_stream(tsnx_engine *eng, int on) {
     torrentfs_set_ram_stream(on);
 }
 
+void tsnx_engine_set_strict_verify(tsnx_engine *eng, const char *hash, int on) {
+    tsnx_torrent *t;
+    eng = active_engine(eng);
+    if (!eng || !hash) return;
+    t = find_by_hash(eng, hash);
+    if (t && t->fs) torrentfs_set_strict_verify(t->fs, on);
+}
+
 bool tsnx_engine_announce_now(tsnx_engine *eng, const char *hash) {
     tsnx_torrent *t;
     eng = active_engine(eng);

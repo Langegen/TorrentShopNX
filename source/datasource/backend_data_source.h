@@ -24,6 +24,9 @@ public:
         }
     }
 
+    void setSchedulerEnabled(bool enabled) override;
+    bool isSchedulerEnabled() const override { return scheduler_enabled_; }
+
     bool open(const std::string& torrent_hash, int file_index) override;
     size_t read(uint64_t offset, void* buf, size_t size) override;
     uint64_t totalSize() const override;
@@ -48,6 +51,7 @@ private:
     ContentRequest request_;
     uint64_t total_size_ = 0;
     bool opened_ = false;
+    bool scheduler_enabled_ = true;
 };
 
 } // namespace datasource

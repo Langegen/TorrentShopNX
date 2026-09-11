@@ -3,6 +3,7 @@
 #ifdef TSNX_USE_CUSTOM_ENGINE
 
 #include "../utils/log.h"
+#include "../utils/file_ops.h"
 #include "range_mapper.h"
 
 #include <engine/engine.h>
@@ -112,6 +113,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
     }
 
     file_size_ = 0;
+    std::string streamed_file_path;
     if (file_index_ >= 0 && file_index_ < TSNX_MAX_FILES) {
         // Heap-backed: tsnx_file_info is ~536 bytes; a stack array would
         // overflow the small (64 KB default) libnx pthread stacks.
@@ -120,6 +122,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
         if (file_index_ < count) {
             file_size_ = files[file_index_].size;
             file_offset_in_torrent_ = files[file_index_].offset;
+            streamed_file_path = files[file_index_].path;
         }
     }
     if (file_size_ == 0) {
@@ -137,10 +140,32 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
         file_last_piece_  = file_first_piece_;
     }
 
-    scheduler_.init(engine_, info_hash_str_, piece_size_, file_offset_in_torrent_,
-                    file_first_piece_, file_last_piece_);
+    bool is_package = true;
+    if (!streamed_file_path.empty()) {
+        is_package = util::isGamePackage(streamed_file_path);
+    }
+
+    if (!is_package || !request.use_scheduler) {
+        // High-throughput profile for non-installation downloads (ROMs, archives):
+        // Widen window to 60 pieces, keep slow-peer boosting active, and strictly verify SHA-1.
+        scheduler_.setConfig(CustomEngineScheduler::highThroughputFileConfig());
+        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 1);
+        scheduler_enabled_ = true;
+        scheduler_.init(engine_, info_hash_str_, piece_size_, file_offset_in_torrent_,
+                        file_first_piece_, file_last_piece_);
+        last_scheduler_tick_ = std::chrono::steady_clock::now();
+        util::logLine("custom_engine: high-throughput scheduler enabled (window=60, strict_verify=1) for " + info_hash_str_);
+    } else {
+        // Low-latency streaming profile for on-the-fly game package installer (NSP/NSZ/XCI):
+        scheduler_.setConfig(CustomEngineScheduler::defaultInstallerConfig());
+        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 0);
+        scheduler_enabled_ = true;
+        scheduler_.init(engine_, info_hash_str_, piece_size_, file_offset_in_torrent_,
+                        file_first_piece_, file_last_piece_);
+        last_scheduler_tick_ = std::chrono::steady_clock::now();
+        util::logLine("custom_engine: streaming installer scheduler enabled (strict_verify=0) for " + info_hash_str_);
+    }
     health_.init(engine_, info_hash_str_, nullptr);
-    last_scheduler_tick_ = std::chrono::steady_clock::now();
 
     opened_ = true;
     open_time_ = std::chrono::steady_clock::now();
@@ -150,19 +175,25 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
 
 bool CustomEngineBackend::prebuffer(std::int64_t offset, std::int64_t size) {
     if (!opened_) return false;
-    scheduler_.on_read_request(offset, size);
+    if (scheduler_enabled_) {
+        scheduler_.on_read_request(offset, size);
+    }
     return true;
 }
 
 std::int64_t CustomEngineBackend::read(std::int64_t offset, void* buffer, std::int64_t size) {
     if (!opened_ || !buffer || size <= 0) return -1;
 
-    scheduler_.on_read_request(offset, size);
+    if (scheduler_enabled_) {
+        scheduler_.on_read_request(offset, size);
+    }
 
     auto now = std::chrono::steady_clock::now();
     if (std::chrono::duration_cast<std::chrono::seconds>(now - last_scheduler_tick_).count() >= 1) {
         last_scheduler_tick_ = now;
-        scheduler_.on_tick();
+        if (scheduler_enabled_) {
+            scheduler_.on_tick();
+        }
         float kbps = static_cast<float>(downloadSpeedKBps());
         tsnx_torrent_item items[8];
         int peers = 0;
@@ -187,9 +218,9 @@ std::int64_t CustomEngineBackend::read(std::int64_t offset, void* buffer, std::i
     starving_ = false;
     set_state(StreamState::StreamingOrInstalling);
 
-    /* Keep the RAM window following the installer. */
+    /* Keep the RAM window following the installer / file writer. */
     tsnx_engine_set_min_keep_offset(engine_, info_hash_str_.c_str(),
-                                    file_offset_in_torrent_ + offset + got);
+                                    offset + got);
     return got;
 }
 
@@ -208,7 +239,7 @@ BackendStatus CustomEngineBackend::status() const {
         }
     }
 
-    if (piece_size_ > 0) {
+    if (scheduler_enabled_ && piece_size_ > 0) {
         auto urgent = scheduler_.currentUrgentPieceRange();
         s.urgent_start = urgent.first;
         s.urgent_end   = urgent.second;
@@ -216,10 +247,17 @@ BackendStatus CustomEngineBackend::status() const {
         s.readahead_end   = s.readahead_start + cfg_.readahead_pieces;
         s.tail_start = -1;
         s.tail_end = -1;
+    } else {
+        s.urgent_start = -1;
+        s.urgent_end   = -1;
+        s.readahead_start = -1;
+        s.readahead_end   = -1;
+        s.tail_start = -1;
+        s.tail_end = -1;
     }
 
     s.detail = health_.summaryString();
-    if (scheduler_.in_stall_mode()) {
+    if (scheduler_enabled_ && scheduler_.in_stall_mode()) {
         s.detail += " [STALL]";
     }
 
@@ -239,7 +277,9 @@ void CustomEngineBackend::notifyStreamingComplete(bool success) {
 void CustomEngineBackend::close() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!opened_) return;
-    scheduler_.reset();
+    if (scheduler_enabled_) {
+        scheduler_.reset();
+    }
     health_.reset();
     if (!info_hash_str_.empty()) {
         tsnx_engine_cancel_read(engine_, info_hash_str_.c_str());
@@ -272,6 +312,17 @@ int CustomEngineBackend::pieceSize() const {
 uint64_t CustomEngineBackend::fileOffsetInTorrent() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return static_cast<uint64_t>(file_offset_in_torrent_);
+}
+
+void CustomEngineBackend::setSchedulerEnabled(bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    scheduler_enabled_ = enabled;
+    if (engine_ && !info_hash_str_.empty()) {
+        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), enabled ? 0 : 1);
+        if (!enabled) {
+            tsnx_engine_clear_piece_zones(engine_, info_hash_str_.c_str());
+        }
+    }
 }
 
 } // namespace datasource
