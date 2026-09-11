@@ -24,6 +24,14 @@ void BackendDataSource::setTorrentContext(const std::string& info_hash,
     if (!torrent_file_path.empty()) request_.torrent_file_path = torrent_file_path;
 }
 
+void BackendDataSource::setSchedulerEnabled(bool enabled) {
+    scheduler_enabled_ = enabled;
+    request_.use_scheduler = enabled;
+    if (backend_) {
+        backend_->setSchedulerEnabled(enabled);
+    }
+}
+
 bool BackendDataSource::open(const std::string& torrent_hash, int file_index) {
     ensureBackend();
     if (!backend_) {
@@ -31,6 +39,7 @@ bool BackendDataSource::open(const std::string& torrent_hash, int file_index) {
     }
 
     request_.file_index = file_index;
+    request_.use_scheduler = scheduler_enabled_;
     if (!torrent_hash.empty()) {
         request_.info_hash = torrent_hash;
     }

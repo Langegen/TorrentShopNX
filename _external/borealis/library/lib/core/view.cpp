@@ -32,6 +32,7 @@
 #include <borealis/core/input.hpp>
 #include <borealis/core/util.hpp>
 #include <borealis/core/view.hpp>
+#include <borealis/core/touch/tap_gesture.hpp>
 #include <borealis/views/applet_frame.hpp>
 #include <fstream>
 
@@ -752,6 +753,22 @@ ActionIdentifier View::registerAction(const std::string& hintText, ButtonType bu
 
 ActionIdentifier View::registerAction(const std::string& hintText, const ControllerButton button, const ActionListener& actionListener, const bool hidden, const bool allowRepeating, const enum Sound sound)
 {
+    if (button == BUTTON_A)
+    {
+        bool hasTapGesture = false;
+        for (auto* recognizer : this->gestureRecognizers)
+        {
+            if (dynamic_cast<TapGestureRecognizer*>(recognizer))
+            {
+                hasTapGesture = true;
+                break;
+            }
+        }
+        if (!hasTapGesture)
+        {
+            this->addGestureRecognizer(new TapGestureRecognizer(this));
+        }
+    }
     return registerAction<ControllerButton, GamepadAction>(hintText, button, actionListener, hidden, allowRepeating, sound);
 }
 
@@ -2443,8 +2460,8 @@ View* View::getDefaultFocus()
 
 View* View::hitTest(Point point)
 {
-    // Check if can focus ourself first
-    if (!this->isFocusable() || alpha == 0.0f || visibility != Visibility::VISIBLE)
+    // Check if can focus ourself first or if we have gesture recognizers attached
+    if ((!this->isFocusable() && this->gestureRecognizers.empty()) || alpha == 0.0f || visibility != Visibility::VISIBLE)
         return nullptr;
 
     Rect frame = getFrame();

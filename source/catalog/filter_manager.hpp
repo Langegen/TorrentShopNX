@@ -47,12 +47,33 @@ inline std::vector<std::string> getLanguageFilterNames() {
     };
 }
 
+enum class PlayersFilter {
+    ALL = 0,
+    SINGLE_ONLY = 1,
+    TWO_PLAYERS = 2,
+    THREE_FOUR = 3,
+    FIVE_PLUS = 4,
+    ANY_MULTI = 5,
+};
+
+inline std::vector<std::string> getPlayerFilterNames() {
+    return {
+        "app/filter/players_all"_i18n,
+        "app/filter/players_1"_i18n,
+        "app/filter/players_2"_i18n,
+        "app/filter/players_3_4"_i18n,
+        "app/filter/players_5_plus"_i18n,
+        "app/filter/players_multi"_i18n
+    };
+}
+
 struct FilterSortState {
     SortOption sort = SortOption::DEFAULT;
     std::string genre = "";       // empty means "All genres"
     LanguageFilter lang = LanguageFilter::ALL;
     bool onlyFavorites = false;
     std::string year = "";        // empty means "All years"
+    PlayersFilter players = PlayersFilter::ALL;
     std::string searchQuery = ""; // text search
 
     bool isDefault() const {
@@ -61,6 +82,7 @@ struct FilterSortState {
                lang == LanguageFilter::ALL &&
                !onlyFavorites &&
                year.empty() &&
+               players == PlayersFilter::ALL &&
                searchQuery.empty();
     }
 
@@ -70,6 +92,7 @@ struct FilterSortState {
         lang = LanguageFilter::ALL;
         onlyFavorites = false;
         year.clear();
+        players = PlayersFilter::ALL;
         searchQuery.clear();
     }
 };
@@ -149,6 +172,48 @@ inline int parseYear(const std::string& yearStr) {
         }
     }
     return 0;
+}
+
+// Extract maximum number of players as integer (1 = singleplayer, 2+ = multiplayer)
+inline int parseMaxPlayers(const std::string& multiplayer) {
+    if (multiplayer.empty()) return 1;
+    std::string s = toLowerUtf8(multiplayer);
+    if (s == "нет" || s == "no" || s == "1") return 1;
+
+    int maxPlayers = 0;
+    int currentNum = 0;
+    bool inNum = false;
+    for (char c : s) {
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            currentNum = currentNum * 10 + (c - '0');
+            inNum = true;
+        } else {
+            if (inNum) {
+                if (currentNum > maxPlayers) maxPlayers = currentNum;
+                currentNum = 0;
+                inNum = false;
+            }
+        }
+    }
+    if (inNum && currentNum > maxPlayers) {
+        maxPlayers = currentNum;
+    }
+
+    if (maxPlayers > 0) {
+        return maxPlayers;
+    }
+
+    if (s.find("мульти") != std::string::npos ||
+        s.find("multi") != std::string::npos ||
+        s.find("да") != std::string::npos ||
+        s.find("yes") != std::string::npos ||
+        s.find("кооп") != std::string::npos ||
+        s.find("coop") != std::string::npos ||
+        s.find("сеть") != std::string::npos) {
+        return 2;
+    }
+
+    return 1;
 }
 
 // Helper to trim string
@@ -249,11 +314,66 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
         }
     }
 
-    // 5. Search query filter
+    // 5. Players filter
+    if (state.players != PlayersFilter::ALL) {
+        int maxP = parseMaxPlayers(game.multiplayer);
+        switch (state.players) {
+            case PlayersFilter::SINGLE_ONLY:
+                if (maxP != 1) return false;
+                break;
+            case PlayersFilter::TWO_PLAYERS:
+                if (maxP != 2) return false;
+                break;
+            case PlayersFilter::THREE_FOUR:
+                if (maxP < 3 || maxP > 4) return false;
+                break;
+            case PlayersFilter::FIVE_PLUS:
+                if (maxP < 5) return false;
+                break;
+            case PlayersFilter::ANY_MULTI:
+                if (maxP < 2) return false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    // 6. Search query filter
     if (!state.searchQuery.empty()) {
-        std::string lowerTitle = toLowerUtf8(game.title);
         std::string lowerQuery = toLowerUtf8(state.searchQuery);
-        if (lowerTitle.find(lowerQuery) == std::string::npos) {
+        bool match = false;
+
+        // Check Title ID (e.g. "01006F8002326000")
+        if (!game.title_id.empty()) {
+            std::string lowerTid = toLowerUtf8(game.title_id);
+            if (lowerTid.find(lowerQuery) != std::string::npos) {
+                match = true;
+            }
+        }
+
+        if (!match) {
+            std::string lowerTitle = toLowerUtf8(game.title);
+            if (lowerTitle.find(lowerQuery) != std::string::npos) {
+                match = true;
+            } else {
+                auto stripPunct = [](const std::string& str) {
+                    std::string res;
+                    for (char c : str) {
+                        if (c != ':' && c != '-' && c != ',' && c != '.' && c != '\'' && c != '\"' && c != '!' && c != '?') {
+                            res.push_back(c);
+                        }
+                    }
+                    return res;
+                };
+                std::string normQuery = stripPunct(lowerQuery);
+                std::string normTitle = stripPunct(lowerTitle);
+                if (!normQuery.empty() && normTitle.find(normQuery) != std::string::npos) {
+                    match = true;
+                }
+            }
+        }
+
+        if (!match) {
             return false;
         }
     }

@@ -511,15 +511,4 @@ std::string formatFileSize(uint64_t bytes) {
     return std::string(buf);
 }
 
-bool isGamePackage(const std::string& path) {
-    if (path.size() < 4) return false;
-    std::string lower = path;
-    std::transform(lower.begin(), lower.end(), lower.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return (lower.rfind(".nsp") == lower.size() - 4 ||
-            lower.rfind(".nsz") == lower.size() - 4 ||
-            lower.rfind(".xci") == lower.size() - 4 ||
-            lower.rfind(".xcz") == lower.size() - 4);
-}
-
 } // namespace util

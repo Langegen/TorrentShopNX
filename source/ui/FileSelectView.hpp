@@ -12,7 +12,7 @@ class FileSelectView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("file_select_view.xml");
 
-    FileSelectView(const Game& game);
+    FileSelectView(const Game& game, const std::string& retro_console_id = "");
     ~FileSelectView();
     void onContentAvailable() override;
     static brls::View* create(); // XML support stub
@@ -24,6 +24,7 @@ public:
 
 private:
     Game game_;
+    std::string retro_console_id_;
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;
     std::vector<brls::Label*> checkboxLabels_;

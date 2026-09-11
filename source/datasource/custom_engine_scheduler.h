@@ -51,6 +51,27 @@ public:
     CustomEngineScheduler();
     explicit CustomEngineScheduler(const CustomSchedulerConfig& cfg);
 
+    void setConfig(const CustomSchedulerConfig& cfg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        cfg_ = cfg;
+    }
+
+    static CustomSchedulerConfig defaultInstallerConfig() {
+        return CustomSchedulerConfig{};
+    }
+
+    static CustomSchedulerConfig highThroughputFileConfig() {
+        CustomSchedulerConfig cfg;
+        cfg.critical_pieces    = 1;
+        cfg.urgent_pieces      = 3;
+        cfg.prefetch_pieces    = 20;
+        cfg.speculative_pieces = 16;
+        cfg.normal_pieces      = 20;
+        cfg.slow_peer_speed_bps = 150.0f * 1024.0f;
+        cfg.slow_peer_count_max = 5;
+        return cfg;
+    }
+
     void init(tsnx_engine* engine,
               const std::string& hash,
               int piece_size,

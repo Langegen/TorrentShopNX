@@ -32,6 +32,9 @@ public:
                                    const std::string& /*magnet_link*/,
                                    const std::string& /*torrent_file_path*/) {}
 
+    virtual void setSchedulerEnabled(bool /*enabled*/) {}
+    virtual bool isSchedulerEnabled() const { return true; }
+
     virtual bool open(const std::string& torrent_hash, int file_index) = 0;
     virtual size_t read(uint64_t offset, void* buf, size_t size) = 0;
     virtual uint64_t totalSize() const = 0;

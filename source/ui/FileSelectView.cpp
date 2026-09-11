@@ -4,6 +4,7 @@
 #include "DownloadsView.hpp"
 #include "../datasource/custom_engine_client.h"
 #include "../config/config.h"
+#include "../catalog/retro_catalog_manager.h"
 #include "../utils/switch_utils.h"
 #include "../net/image_downloader.h"
 #include <iomanip>
@@ -28,6 +29,25 @@ static std::string formatBytes(unsigned long long bytes) {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
     return std::string(buf);
+}
+
+static bool isRomFile(const std::string& filename) {
+    std::string lower = filename;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    static const std::vector<std::string> romExts = {
+        ".zip", ".7z", ".rar", ".iso", ".chd", ".cso", ".bin", ".cue", ".img",
+        ".nes", ".fds", ".unf", ".smc", ".sfc", ".fig", ".swc", ".z64", ".n64", ".v64",
+        ".gba", ".gbc", ".gb", ".nds", ".dsi", ".3ds", ".3dsx", ".cia",
+        ".gcm", ".gcz", ".wbfs", ".wad", ".rpx", ".wud", ".wux",
+        ".pbp", ".vpk", ".smd", ".gen", ".md", ".gg", ".sg", ".sms", ".cdi", ".gdi"
+    };
+    for (const auto& ext : romExts) {
+        if (lower.size() >= ext.size() && lower.rfind(ext) == lower.size() - ext.size()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool isSwitchGameFile(const std::string& filename) {
@@ -152,8 +172,9 @@ static uint64_t parseTitleIdFromFilename(const std::string& name) {
 
 std::atomic<bool> g_file_select_view_active{false};
 
-FileSelectView::FileSelectView(const Game& game)
+FileSelectView::FileSelectView(const Game& game, const std::string& retro_console_id)
     : game_(game),
+      retro_console_id_(retro_console_id),
       alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
     g_file_select_view_active = true;
     // Background cover downloads compete for BSD sockets/sessions with the
@@ -180,37 +201,48 @@ void FileSelectView::onContentAvailable() {
 
     // Configure install location selector
     auto& cfg = config::ConfigManager::instance();
-    auto updateInstallLocationDisplay = [this, &cfg]() {
-        if (!installLocationText) return;
-        std::string loc = cfg.getInstallLocation();
-        if (loc == "sd") {
-            installLocationText->setText("app/fileselect/loc_sd"_i18n);
-            installLocationText->setTextColor(nvgRGB(46, 204, 113)); // green
-        } else if (loc == "nand") {
-            installLocationText->setText("app/fileselect/loc_nand"_i18n);
-            installLocationText->setTextColor(nvgRGB(231, 76, 60)); // red/orange
-        } else {
-            installLocationText->setText("app/fileselect/loc_auto"_i18n);
-            installLocationText->setTextColor(nvgRGB(52, 152, 219)); // blue
+    if (!retro_console_id_.empty()) {
+        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+        if (installLocationText) {
+            std::string sub = retro_console_id_;
+            const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
+            if (cInfo && !cInfo->default_rom_subfolder.empty()) sub = cInfo->default_rom_subfolder;
+            installLocationText->setText(cfg.getEffectiveRetroRomsDir(sub));
+            installLocationText->setTextColor(nvgRGB(52, 152, 219));
         }
-    };
-    updateInstallLocationDisplay();
-
-    if (installLocationBox) {
-        installLocationBox->registerClickAction([this, updateInstallLocationDisplay, &cfg](brls::View* view) {
+    } else {
+        auto updateInstallLocationDisplay = [this, &cfg]() {
+            if (!installLocationText) return;
             std::string loc = cfg.getInstallLocation();
-            if (loc == "auto") {
-                cfg.setInstallLocation("sd");
-            } else if (loc == "sd") {
-                cfg.setInstallLocation("nand");
+            if (loc == "sd") {
+                installLocationText->setText("app/fileselect/loc_sd"_i18n);
+                installLocationText->setTextColor(nvgRGB(46, 204, 113)); // green
+            } else if (loc == "nand") {
+                installLocationText->setText("app/fileselect/loc_nand"_i18n);
+                installLocationText->setTextColor(nvgRGB(231, 76, 60)); // red/orange
             } else {
-                cfg.setInstallLocation("auto");
+                installLocationText->setText("app/fileselect/loc_auto"_i18n);
+                installLocationText->setTextColor(nvgRGB(52, 152, 219)); // blue
             }
-            cfg.save();
-            updateInstallLocationDisplay();
-            updateTotalSize(); // Recheck space if we changed storage
-            return true;
-        });
+        };
+        updateInstallLocationDisplay();
+
+        if (installLocationBox) {
+            installLocationBox->registerClickAction([this, updateInstallLocationDisplay, &cfg](brls::View* view) {
+                std::string loc = cfg.getInstallLocation();
+                if (loc == "auto") {
+                    cfg.setInstallLocation("sd");
+                } else if (loc == "sd") {
+                    cfg.setInstallLocation("nand");
+                } else {
+                    cfg.setInstallLocation("auto");
+                }
+                cfg.save();
+                updateInstallLocationDisplay();
+                updateTotalSize(); // Recheck space if we changed storage
+                return true;
+            });
+        }
     }
 
     // Grab focus to prevent navigation events from reaching the background catalog view
@@ -271,13 +303,26 @@ void FileSelectView::onContentAvailable() {
             if (success && !probedFiles.empty()) {
                 files_    = probedFiles;
                 selected_.assign(files_.size(), false);
-                SwitchServiceGuard guard;
-                for (size_t i = 0; i < files_.size(); ++i) {
-                    uint64_t tid = parseTitleIdFromFilename(files_[i].name);
-                    bool isGame = isSwitchGameFile(files_[i].name);
-                    bool installed = isTitleIdInstalled(tid, guard);
-                    if (isGame && !installed) {
-                        selected_[i] = true;
+                if (!retro_console_id_.empty()) {
+                    bool anyRom = false;
+                    for (size_t i = 0; i < files_.size(); ++i) {
+                        if (isRomFile(files_[i].name)) {
+                            selected_[i] = true;
+                            anyRom = true;
+                        }
+                    }
+                    if (!anyRom) {
+                        selected_.assign(files_.size(), true);
+                    }
+                } else {
+                    SwitchServiceGuard guard;
+                    for (size_t i = 0; i < files_.size(); ++i) {
+                        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
+                        bool isGame = isSwitchGameFile(files_[i].name);
+                        bool installed = isTitleIdInstalled(tid, guard);
+                        if (isGame && !installed) {
+                            selected_[i] = true;
+                        }
                     }
                 }
                 subtitle->setText("app/fileselect/select_prompt"_i18n);
@@ -335,6 +380,32 @@ void FileSelectView::rebuildFileList() {
     };
     std::vector<DisplayItem> displayItems;
 
+    if (!retro_console_id_.empty()) {
+        displayItems.push_back({0, true, "app/fileselect/group_roms"_i18n});
+        bool hasRoms = false;
+        for (size_t i = 0; i < files_.size(); ++i) {
+            if (isRomFile(files_[i].name)) {
+                displayItems.push_back({i, false, ""});
+                hasRoms = true;
+            }
+        }
+        if (!hasRoms) {
+            for (size_t i = 0; i < files_.size(); ++i) {
+                displayItems.push_back({i, false, ""});
+            }
+        } else {
+            bool hasOther = false;
+            for (size_t i = 0; i < files_.size(); ++i) {
+                if (!isRomFile(files_[i].name)) {
+                    if (!hasOther) {
+                        displayItems.push_back({0, true, "app/fileselect/group_other"_i18n});
+                        hasOther = true;
+                    }
+                    displayItems.push_back({i, false, ""});
+                }
+            }
+        }
+    } else {
     // 1. Group: NOT INSTALLED
     displayItems.push_back({0, true, "app/fileselect/group_uninstalled"_i18n});
     bool hasUninstalled = false;
@@ -376,6 +447,7 @@ void FileSelectView::rebuildFileList() {
         displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
     }
 
+    }
     // Now render them
     brls::View* lastFocusable = nullptr;
     for (const auto& item : displayItems) {
@@ -482,6 +554,17 @@ void FileSelectView::updateTotalSize() {
     }
     totalSizeText->setText(formatBytes(total));
 
+    if (!retro_console_id_.empty()) {
+        int64_t sdFree = 0;
+        if (freeSpaceSdText) {
+            if (util::getStorageFreeSpace(1, sdFree)) {
+                freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
+            }
+        }
+        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+
     // Update free space displays
     int64_t sdFree = 0;
     int64_t nandFree = 0;
@@ -557,6 +640,23 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
+    if (!retro_console_id_.empty()) {
+        int64_t freeSpace = 0;
+        util::getStorageFreeSpace(1, freeSpace);
+        if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
+            std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", formatBytes(totalNeededSize), formatBytes(freeSpace));
+            brls::Dialog* dialog = new brls::Dialog(msg);
+            dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName]() {
+                this->executeDownloads(selectedIndices, forcedIndex, forcedName);
+            });
+            dialog->addButton("app/common/cancel"_i18n, []() {});
+            dialog->open();
+            return;
+        }
+        executeDownloads(selectedIndices, forcedIndex, forcedName);
+        return;
+    }
+
     // Check free space depending on install_location setting
     auto& cfg = config::ConfigManager::instance();
     std::string loc = cfg.getInstallLocation();
@@ -625,7 +725,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             singleGame.title = itemTitle;
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
             
-            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name);
+            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
         }
     }
 

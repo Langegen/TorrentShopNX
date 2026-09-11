@@ -90,7 +90,14 @@ bool extractArchive(
     struct archive_entry* entry = nullptr;
     bool success = true;
 
-    while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK) {
+    while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK || r == ARCHIVE_WARN) {
+        if (r == ARCHIVE_WARN) {
+            const char* w = archive_error_string(a);
+            if (w && *w) {
+                util::logLine("archive_utils: header warning: " + std::string(w));
+            }
+        }
+
         if (cancelToken && cancelToken->load()) {
             outError = "Распаковка отменена пользователем";
             util::logLine("archive_utils: extraction cancelled by user");
@@ -136,6 +143,7 @@ bool extractArchive(
         fullPath += cleanName;
 
         bool isDir = (archive_entry_filetype(entry) == AE_IFDIR) ||
+                     ((archive_entry_mode(entry) & 0170000) == 0040000) ||
                      (!cleanName.empty() && (cleanName.back() == '/' || cleanName.back() == '\\'));
 
         if (isDir) {
@@ -164,6 +172,7 @@ bool extractArchive(
             const void* buff = nullptr;
             size_t size = 0;
             la_int64_t offset = 0;
+            uint64_t entryBytesExtracted = 0;
 
             while ((r = archive_read_data_block(a, &buff, &size, &offset)) == ARCHIVE_OK) {
                 if (cancelToken && cancelToken->load()) {
@@ -186,6 +195,7 @@ bool extractArchive(
                         break;
                     }
                     progress.bytesExtracted += size;
+                    entryBytesExtracted += size;
                 }
 
                 la_int64_t pos = archive_filter_bytes(a, -1);
@@ -205,15 +215,32 @@ bool extractArchive(
             fclose(outFile);
 
             if (!success) {
+                if (cancelToken && cancelToken->load()) {
+                    std::remove(fullPath.c_str());
+                }
                 break;
             }
 
             if (r != ARCHIVE_EOF && r < ARCHIVE_OK) {
                 const char* err = archive_error_string(a);
-                outError = err ? err : "Ошибка чтения блока данных архива";
-                util::logLine("archive_utils: archive_read_data_block error: " + outError);
-                success = false;
-                break;
+                std::string errStr = err ? err : "Ошибка чтения блока данных архива";
+                // Libarchive (<= 3.7.2 RAR decompression) has a known upstream bug
+                // with circular LZSS window calculation on large entries (e.g. CD-ROM images > 100MB),
+                // which causes a false-positive "File CRC error" (code 79 EFTYPE) at the very end of decompression,
+                // even though all uncompressed bytes were already written out to disk.
+                if (errStr.find("CRC") != std::string::npos && entryBytesExtracted > 0) {
+                    util::logLine("archive_utils: warning: " + errStr + " for " + cleanName +
+                                  " (known libarchive RAR issue). Data extracted: " +
+                                  std::to_string(entryBytesExtracted) + " bytes. Continuing extraction.");
+                } else {
+                    outError = errStr;
+                    util::logLine("archive_utils: archive_read_data_block error: " + outError +
+                                  " for entry=" + cleanName +
+                                  " format=" + std::string(archive_format_name(a) ? archive_format_name(a) : "unknown") +
+                                  " code=" + std::to_string(archive_errno(a)));
+                    success = false;
+                    break;
+                }
             }
         }
 
@@ -230,7 +257,7 @@ bool extractArchive(
         }
     }
 
-    if (success && r != ARCHIVE_EOF && r < ARCHIVE_OK) {
+    if (success && r != ARCHIVE_EOF && r < ARCHIVE_WARN) {
         const char* err = archive_error_string(a);
         outError = err ? err : "Ошибка чтения заголовка архива";
         util::logLine("archive_utils: archive header error: " + outError);

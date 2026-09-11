@@ -20,6 +20,7 @@ private:
 
     brls::View* buildGeneralTab();
     brls::View* buildDownloadsTab();
+    brls::View* buildRetroTab();
     brls::View* buildStorageTab();
     brls::View* buildAboutTab();
     void showCommunityDialog();

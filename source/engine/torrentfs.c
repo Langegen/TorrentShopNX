@@ -348,6 +348,7 @@ struct torrentfs {
     // a verified piece, or NULL. Both the writer (store/evict) and the reader
     // touch it under cache_lock. ram_lo is a scan cursor for the eviction sweep.
     bool ram_mode;
+    bool strict_verify;
     uint8_t **ram_piece;
     int64_t ram_budget;
     int64_t ram_resident;
@@ -604,7 +605,7 @@ static size_t cache_read_upto(torrentfs *t, int64_t off, void *buf, size_t len) 
             p += n; off += (int64_t)n; len -= n;
             continue;
         }
-        if (!t->ram_mode) break;
+        if (!t->ram_mode || t->strict_verify) break;
         size_t m = aq_piece_read(t, idx, within, p, n);
         if (m == 0) break;
         total += m;
@@ -1356,11 +1357,12 @@ static int piece_priority(torrentfs *t, int64_t idx) {
     if (ph < t->file_first_piece) ph = t->file_first_piece;
     if (ph > t->file_last_piece) ph = t->file_last_piece;
     int64_t d = idx - ph;
-    if (d < 0 || d > 24) return 0;
+    int max_d = t->n_aq > 2 ? t->n_aq - 2 : 24;
+    if (d < 0 || d > max_d) return 0;
     if (d == 0) return 1;
     if (d == 1) return 2;
     if (d <= 5) return 3;
-    if (d <= 10) return 4;
+    if (d <= 15) return 4;
     return 5;
 }
 
@@ -2854,7 +2856,7 @@ static bool have_piece(torrentfs *t, int64_t idx) {
 // be streamed before verification like any streaming client does.
 static bool piece_ready(torrentfs *t, int64_t idx, int b0) {
     if (have_piece(t, idx)) return true;
-    if (!t->ram_mode) return false;
+    if (!t->ram_mode || t->strict_verify) return false;
     aq_entry *a = aq_find(t, idx);
     if (!a || b0 < 0 || b0 >= a->nblocks) return false;
     return __atomic_load_n(&a->have[b0], __ATOMIC_ACQUIRE) != 0;
@@ -2910,6 +2912,12 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
 void torrentfs_cancel(torrentfs *tfs) {
     if (!tfs) return;  // metadata-only slots have no torrentfs
     tfs->stop = true;
+}
+
+void torrentfs_set_strict_verify(torrentfs *tfs, int on) {
+    if (!tfs) return;
+    tfs->strict_verify = on ? true : false;
+    engine_log(ENGINE_LOG_INFO, "[torrentfs] strict_verify=%d", on ? 1 : 0);
 }
 
 //-----------------------------------------------------------------------------

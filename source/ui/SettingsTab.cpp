@@ -2,6 +2,8 @@
 #include "DownloadUiManager.hpp"
 #include "StorageTabView.hpp"
 #include "QrCodeView.hpp"
+#include "RetroUpdateDialog.hpp"
+#include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
 #include "../utils/log.h"
 #include <fstream>
@@ -321,6 +323,7 @@ void SettingsTab::onContentAvailable() {
 
     tabFrame->addTab("app/settings/cat_general"_i18n, [this]() { return buildGeneralTab(); });
     tabFrame->addTab("app/settings/cat_downloads"_i18n, [this]() { return buildDownloadsTab(); });
+    tabFrame->addTab("app/settings/cat_retro"_i18n, [this]() { return buildRetroTab(); });
     tabFrame->addTab("app/settings/cat_storage"_i18n, [this]() { return buildStorageTab(); });
     tabFrame->addTab("app/settings/cat_about"_i18n, [this]() { return buildAboutTab(); });
 }
@@ -527,6 +530,123 @@ brls::View* SettingsTab::buildDownloadsTab() {
         return true;
     });
     box->addView(remoteUrlCell);
+
+    return scroll;
+}
+
+brls::View* SettingsTab::buildRetroTab() {
+    auto& cfg = config::ConfigManager::instance();
+    brls::Box* box = nullptr;
+    brls::ScrollingFrame* scroll = makeTabBox(&box);
+
+    // 1. Base ROMs folder selection
+    std::vector<std::string> folderOptions = {
+        "app/settings/retro_folder_retroarch"_i18n,
+        "app/settings/retro_folder_downloads"_i18n,
+        "app/settings/retro_folder_custom"_i18n
+    };
+    int initialFolderIdx = 0;
+    std::string currentMode = cfg.getRetroRomsMode();
+    if (currentMode == "downloads") initialFolderIdx = 1;
+    else if (currentMode == "custom") initialFolderIdx = 2;
+    else initialFolderIdx = 0;
+
+    auto* customFolderCell = new brls::DetailCell();
+    customFolderCell->setText("app/settings/retro_custom_folder"_i18n);
+
+    auto updateCustomFolderDisplay = [customFolderCell, &cfg]() {
+        std::string p = cfg.getRetroCustomPath();
+        if (p.empty()) {
+            p = "sdmc:/roms/";
+        }
+        customFolderCell->setDetailText(p);
+    };
+    updateCustomFolderDisplay();
+
+    customFolderCell->registerClickAction([customFolderCell, updateCustomFolderDisplay, &cfg](brls::View* view) {
+        brls::Application::getImeManager()->openForText(
+            [updateCustomFolderDisplay, &cfg](std::string text) {
+                if (!text.empty()) {
+                    cfg.setRetroCustomPath(text);
+                    cfg.save();
+                    updateCustomFolderDisplay();
+                }
+            },
+            "app/settings/retro_custom_folder_dialog"_i18n,
+            "app/settings/retro_custom_folder_hint"_i18n,
+            255,
+            cfg.getRetroCustomPath(),
+            0
+        );
+        return true;
+    });
+
+    auto* folderCell = new brls::SelectorCell();
+    folderCell->init("app/settings/retro_roms_folder"_i18n, folderOptions, initialFolderIdx, [](int selected) {}, [&cfg, customFolderCell](int selected) {
+        if (selected == 1) {
+            cfg.setRetroRomsMode("downloads");
+            customFolderCell->setVisibility(brls::Visibility::GONE);
+        } else if (selected == 2) {
+            cfg.setRetroRomsMode("custom");
+            customFolderCell->setVisibility(brls::Visibility::VISIBLE);
+        } else {
+            cfg.setRetroRomsMode("retroarch");
+            customFolderCell->setVisibility(brls::Visibility::GONE);
+        }
+        cfg.save();
+    });
+    box->addView(folderCell);
+
+    customFolderCell->setVisibility((initialFolderIdx == 2) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    box->addView(customFolderCell);
+
+    // 2. Auto-extract toggle
+    auto* autoExtractCell = new brls::BooleanCell();
+    autoExtractCell->init("app/settings/retro_auto_extract"_i18n, cfg.getRetroAutoExtract(), [&cfg](bool value) {
+        cfg.setRetroAutoExtract(value);
+        cfg.save();
+    });
+    box->addView(autoExtractCell);
+
+    // 3. Romset download mode
+    std::vector<std::string> romsetOptions = {
+        "app/settings/retro_romset_full"_i18n,
+        "app/settings/retro_romset_select"_i18n
+    };
+    int initialRomsetIdx = (cfg.getRetroRomsetMode() == "select") ? 1 : 0;
+
+    auto* romsetModeCell = new brls::SelectorCell();
+    romsetModeCell->init("app/settings/retro_romset_mode"_i18n, romsetOptions, initialRomsetIdx, [](int selected) {}, [&cfg](int selected) {
+        if (selected == 1) {
+            cfg.setRetroRomsetMode("select");
+        } else {
+            cfg.setRetroRomsetMode("full");
+        }
+        cfg.save();
+    });
+    box->addView(romsetModeCell);
+
+    // 4. Update retro game databases
+    auto* updateCatalogsCell = new brls::DetailCell();
+    updateCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
+
+    auto updateDetailText = [updateCatalogsCell]() {
+        int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
+        if (count > 0) {
+            updateCatalogsCell->setDetailText("Кэш: " + std::to_string(count) + " игр (A - обновить)");
+        } else {
+            updateCatalogsCell->setDetailText("Нажмите A для обновления");
+        }
+    };
+    updateDetailText();
+
+    updateCatalogsCell->registerClickAction([updateDetailText](brls::View* view) {
+        showRetroCatalogUpdateDialog([updateDetailText](int updatedCount) {
+            updateDetailText();
+        });
+        return true;
+    });
+    box->addView(updateCatalogsCell);
 
     return scroll;
 }

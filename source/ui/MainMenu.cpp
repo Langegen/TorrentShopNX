@@ -6,6 +6,7 @@
 #include "DownloadsView.hpp"
 #include "SettingsTab.hpp"
 #include "RemoteAddView.hpp"
+#include "RetroConsolesView.hpp"
 #include "FileManagerView.hpp"
 #include "CatalogProgressNotification.hpp"
 #include "FavoritesManager.hpp"
@@ -129,11 +130,11 @@ void MainMenu::setupLayout() {
     };
 
     TileDef defs[5] = {
-        {0, "img/tile_catalog.png",   "app/menu/catalog",    "Каталог"},
-        {1, "img/tile_qr.png",        "app/menu/remote_add", "Добавить по QR"},
-        {2, "img/tile_library.png",   "app/menu/library",    "Менеджер игр"},
-        {3, "img/tile_downloads.png", "app/menu/downloads",  "Загрузки"},
-        {4, "img/tile_tools.png",     "app/menu/settings",   "Настройки"}
+        {0, "img/tile_catalog.png",   "app/menu/catalog",     "Каталог"},
+        {1, "img/tile_retro.png",     "app/menu/retro_games", "Ретро-игры"},
+        {2, "img/tile_library.png",   "app/menu/library",     "Менеджер игр"},
+        {3, "img/tile_downloads.png", "app/menu/downloads",   "Загрузки"},
+        {4, "img/tile_tools.png",     "app/menu/settings",    "Настройки"}
     };
 
     for (int i = 0; i < 5; ++i) {
@@ -147,6 +148,15 @@ void MainMenu::setupLayout() {
             [this](int idx) { onTileFocused(idx); },
             [this](int idx) { onTileClicked(idx); }
         );
+
+        tile->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+            brls::Application::pushActivity(new ui::RemoteAddView());
+            return true;
+        });
+        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
+            brls::Application::pushActivity(new ui::RemoteAddView());
+            return true;
+        });
 
         tile->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
             openFileManager();
@@ -184,10 +194,14 @@ void MainMenu::setupLayout() {
         tilesBox_->setDefaultFocusedIndex(0);
     }
     rootBox_->addView(tilesBox_);
+    rootBox_->setDefaultFocusedIndex(1);
 
     // 3. Bottom 1/3 Summary Drawer (Compact 175px, lifted with margin)
     summaryView_ = new ui::DashboardSummaryView();
     summaryView_->setMarginBottom(18.0f);
+    summaryView_->setOnOpenSectionCallback([this](int idx) {
+        onTileClicked(idx);
+    });
     summaryView_->setOnDefocusCallback([this]() {
         if (current_focused_index_ >= 0 && current_focused_index_ < static_cast<int>(tiles_.size()) && tiles_[current_focused_index_]) {
             brls::Application::giveFocus(tiles_[current_focused_index_]);
@@ -219,12 +233,28 @@ void MainMenu::setupLayout() {
         openFileManager();
         return true;
     });
+    summaryView_->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        brls::Application::pushActivity(new ui::RemoteAddView());
+        return true;
+    });
+    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
+        brls::Application::pushActivity(new ui::RemoteAddView());
+        return true;
+    });
     summaryView_->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         refreshDashboardState();
         return true;
     }, true);
     rootBox_->addView(summaryView_);
 
+    rootBox_->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        brls::Application::pushActivity(new ui::RemoteAddView());
+        return true;
+    });
+    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
+        brls::Application::pushActivity(new ui::RemoteAddView());
+        return true;
+    });
     rootBox_->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         openFileManager();
         return true;
@@ -266,6 +296,12 @@ void MainMenu::willAppear(bool resetState) {
     s_installedCountCalculated = false;
     s_settingsStatsCalculated = false;
     refreshDashboardState();
+    if (resetState) {
+        current_focused_index_ = 0;
+        if (!tiles_.empty() && tiles_[0]) {
+            brls::Application::giveFocus(tiles_[0]);
+        }
+    }
     if (summaryView_) {
         onTileFocused(current_focused_index_);
     }
@@ -437,7 +473,7 @@ void MainMenu::onTileClicked(int index) {
             brls::Application::pushActivity(new ui::CollectionsView());
             break;
         case 1:
-            brls::Application::pushActivity(new ui::RemoteAddView());
+            brls::Application::pushActivity(new ui::RetroConsolesView());
             break;
         case 2:
             brls::Application::pushActivity(new ui::LibraryView());
@@ -532,6 +568,11 @@ void MainMenu::openFileManager() {
 void MainMenu::onContentAvailable() {
     util::logLine("MainMenu: onContentAvailable start");
     refreshDashboardState();
+
+    if (!tiles_.empty() && tiles_[0]) {
+        current_focused_index_ = 0;
+        brls::Application::giveFocus(tiles_[0]);
+    }
 
     this->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         openFileManager();

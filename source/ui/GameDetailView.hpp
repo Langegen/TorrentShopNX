@@ -9,7 +9,7 @@ class GameDetailView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("game_detail_view.xml");
 
-    GameDetailView(const Game& game);
+    GameDetailView(const Game& game, const std::string& retro_console_id = "");
     ~GameDetailView();
     void onContentAvailable() override;
     void willAppear(bool resetState = false) override;
@@ -20,6 +20,7 @@ public:
 
 private:
     Game game_;
+    std::string retro_console_id_;
     std::shared_ptr<bool> imageToken;
 
     BRLS_BIND(brls::ScrollingFrame, scroll, "scroll");

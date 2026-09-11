@@ -300,32 +300,44 @@ void ImageDownloader::processTask(const ImageTask& task) {
     if (task.token && !*task.token) return;
 
     bool cacheEnabled = config::ConfigManager::instance().getCacheCoverThumbnails() && !task.bypassCache;
-    std::string thumbPath;
-    if (cacheEnabled && !task.url.empty()) {
+    std::string thumbPath = task.url.empty() ? "" : getThumbnailCachePath(task.url);
+    if (cacheEnabled && !thumbPath.empty()) {
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
             util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
             brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(cachedBody), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-                if (g_appExiting.load()) return;
+                util::logLine("ImageDownloader: sync lambda START url=" + url);
+                if (g_appExiting.load()) {
+                    util::logLine("ImageDownloader: sync lambda ABORT (app exiting) url=" + url);
+                    return;
+                }
 
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
+                    util::logLine("ImageDownloader: sync lambda before nvgCreateImageMem for " + url);
                     tex = nvgCreateImageMem(
                         brls::Application::getNVGContext(),
                         NVG_IMAGE_GENERATE_MIPMAPS,
                         const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
                         body.size()
                     );
+                    util::logLine("ImageDownloader: sync lambda after nvgCreateImageMem tex=" + std::to_string(tex) + " for " + url);
                     if (tex > 0) {
                         brls::TextureCache::instance().addCache(cacheKey, tex);
                     } else {
                         util::logLine("ImageDownloader: nvgCreateImageMem failed for disk cached " + url);
                     }
                 }
-                if (token && !*token) return;
-                if (tex > 0) {
-                    img->innerSetImage(tex);
+                if (token && !*token) {
+                    util::logLine("ImageDownloader: sync lambda token invalidated for " + url);
+                    return;
                 }
+                if (tex > 0) {
+                    util::logLine("ImageDownloader: sync lambda before innerSetImage for " + url);
+                    img->innerSetImage(tex);
+                    util::logLine("ImageDownloader: sync lambda after innerSetImage for " + url);
+                }
+                util::logLine("ImageDownloader: sync lambda END url=" + url);
             });
             return;
         }
@@ -463,6 +475,14 @@ void ImageDownloader::processTask(const ImageTask& task) {
         if (!task.fallbackUrl.empty()) {
             if (task.token && !*task.token) return;
             enqueue(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+        } else if (!task.placeholder.empty()) {
+            brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
+                if (g_appExiting.load()) return;
+                if (token && !*token) return;
+                if (img) {
+                    img->setImageFromFile(placeholder);
+                }
+            });
         }
     }
 }

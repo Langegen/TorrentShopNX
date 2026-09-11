@@ -33,6 +33,8 @@
 #include "ui/DownloadUiManager.hpp"
 #include "ui/AppletWarningView.hpp"
 #include "ui/QrCodeView.hpp"
+#include "ui/RetroCatalogView.hpp"
+#include "catalog/retro_catalog_manager.h"
 #include "config/config.h"
 #include "utils/log.h"
 #include "utils/switch_utils.h"
@@ -322,10 +324,31 @@ int main(int argc, char** argv) {
         brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
         // Bootstrap activity
+#ifndef __SWITCH__
+        if (argc > 1 && std::string(argv[1]) == "--retro") {
+            auto& mgr = catalog::RetroCatalogManager::instance();
+            const auto* info = mgr.findConsole("ps1");
+            if (info) {
+                util::logLine("main: launching directly into RetroCatalogView for ps1");
+                brls::Application::pushActivity(new ui::RetroCatalogView(*info));
+            } else {
+                util::logLine("main: instantiating and pushing MainMenu...");
+                MainMenu* menu = new MainMenu();
+                util::logLine("main: MainMenu instantiated, pushing...");
+                brls::Application::pushActivity(menu);
+            }
+        } else {
+            util::logLine("main: instantiating and pushing MainMenu...");
+            MainMenu* menu = new MainMenu();
+            util::logLine("main: MainMenu instantiated, pushing...");
+            brls::Application::pushActivity(menu);
+        }
+#else
         util::logLine("main: instantiating and pushing MainMenu...");
         MainMenu* menu = new MainMenu();
         util::logLine("main: MainMenu instantiated, pushing...");
         brls::Application::pushActivity(menu);
+#endif
     }
 
     util::logLine("main: entering mainLoop");

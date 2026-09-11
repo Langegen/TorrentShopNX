@@ -145,6 +145,18 @@ void FileManagerView::onContentAvailable() {
         recycler->setDataSource(new FileManagerDataSource(this));
     }
 
+    if (selectionBar) {
+        selectionBar->addGestureRecognizer(new brls::TapGestureRecognizer(selectionBar, [this]() {
+            showActionsMenu();
+        }));
+    }
+
+    if (currentPath) {
+        currentPath->addGestureRecognizer(new brls::TapGestureRecognizer(currentPath, [this]() {
+            if (hasParentDir_) navigateUp();
+        }));
+    }
+
     // Register Activity Level Actions for Borealis Hints (compact text to avoid wrapping the clock)
     this->registerAction("Действия", brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         showActionsMenu();

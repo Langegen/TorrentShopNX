@@ -1,5 +1,7 @@
 #include "DashboardHeader.hpp"
+#include "../StorageTabView.hpp"
 #include "../../config/config.h"
+#include "../../utils/log.h"
 
 namespace ui {
 
@@ -63,12 +65,12 @@ DashboardHeader::DashboardHeader() {
     this->addView(leftBox);
 
     // ================= RIGHT: Catalog Info & Storage (SD & NAND) =================
-    brls::Box* rightBox = new brls::Box();
-    rightBox->setAxis(brls::Axis::COLUMN);
-    rightBox->setAlignItems(brls::AlignItems::FLEX_END);
-    rightBox->setPadding(8.0f, 16.0f, 8.0f, 16.0f);
-    rightBox->setCornerRadius(10.0f);
-    rightBox->setBackgroundColor(nvgRGBA(20, 38, 55, 110)); // Translucent glass
+    rightBox_ = new brls::Box();
+    rightBox_->setAxis(brls::Axis::COLUMN);
+    rightBox_->setAlignItems(brls::AlignItems::FLEX_END);
+    rightBox_->setPadding(8.0f, 16.0f, 8.0f, 16.0f);
+    rightBox_->setCornerRadius(10.0f);
+    rightBox_->setBackgroundColor(nvgRGBA(20, 38, 55, 110)); // Translucent glass
 
     // Row 1: Catalog Count & Last Update Date
     catalog_info_label_ = new brls::Label();
@@ -76,7 +78,7 @@ DashboardHeader::DashboardHeader() {
     catalog_info_label_->setFontSize(13.0f);
     catalog_info_label_->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald Turquoise
     catalog_info_label_->setSingleLine(true);
-    rightBox->addView(catalog_info_label_);
+    rightBox_->addView(catalog_info_label_);
 
     // Row 2: SD & NAND Storage (free / total)
     storage_info_label_ = new brls::Label();
@@ -85,9 +87,18 @@ DashboardHeader::DashboardHeader() {
     storage_info_label_->setTextColor(nvgRGBA(180, 205, 225, 220));
     storage_info_label_->setMarginTop(4.0f);
     storage_info_label_->setSingleLine(true);
-    rightBox->addView(storage_info_label_);
+    rightBox_->addView(storage_info_label_);
 
-    this->addView(rightBox);
+    rightBox_->setFocusable(false);
+    rightBox_->addGestureRecognizer(new brls::TapGestureRecognizer(rightBox_, []() {
+        auto* scroll = new brls::ScrollingFrame();
+        scroll->setContentView(new StorageTabView());
+        auto* applet = new brls::AppletFrame(scroll);
+        applet->setTitle("Управление хранилищем");
+        brls::Application::pushActivity(new brls::Activity(applet));
+    }));
+
+    this->addView(rightBox_);
 }
 
 void DashboardHeader::updateStats(int game_count, const std::string& catalog_updated_str,

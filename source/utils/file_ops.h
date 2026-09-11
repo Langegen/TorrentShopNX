@@ -74,6 +74,16 @@ void clearClipboard();
 std::string formatFileSize(uint64_t bytes);
 
 // Returns true if path ends with .nsp, .nsz, .xci, or .xcz (case-insensitive)
-bool isGamePackage(const std::string& path);
+inline bool isGamePackage(const std::string& path) {
+    if (path.size() < 4) return false;
+    std::string lower = path;
+    for (char& c : lower) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+    }
+    return (lower.rfind(".nsp") == lower.size() - 4 ||
+            lower.rfind(".nsz") == lower.size() - 4 ||
+            lower.rfind(".xci") == lower.size() - 4 ||
+            lower.rfind(".xcz") == lower.size() - 4);
+}
 
 } // namespace util

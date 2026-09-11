@@ -127,6 +127,28 @@ brls::View* TextViewerActivity::createContentView() {
     headerCol->addView(subLbl);
 
     headerBox->addView(headerCol);
+
+    auto* closeBtn = new brls::Box();
+    closeBtn->setAxis(brls::Axis::ROW);
+    closeBtn->setAlignItems(brls::AlignItems::CENTER);
+    closeBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    closeBtn->setPadding(6.0f, 14.0f, 6.0f, 14.0f);
+    closeBtn->setCornerRadius(8.0f);
+    closeBtn->setBackgroundColor(nvgRGBA(255, 255, 255, 20));
+    closeBtn->setFocusable(true);
+
+    auto* closeLbl = new brls::Label();
+    closeLbl->setText("✕ Закрыть");
+    closeLbl->setFontSize(14.0f);
+    closeLbl->setTextColor(nvgRGB(220, 225, 235));
+    closeBtn->addView(closeLbl);
+
+    closeBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    headerBox->addView(closeBtn);
+
     root->addView(headerBox);
 
     // ── Content Area: Scrolling Frame ─────────────────────────────────────

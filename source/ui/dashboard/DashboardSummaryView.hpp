@@ -24,6 +24,7 @@ public:
     void setSettingsStats(const std::string& engine_mode, uint64_t cache_size_bytes, uint64_t leftover_size_bytes);
     void setOnDefocusCallback(std::function<void()> cb) { on_defocus_ = std::move(cb); }
     void setGetActiveTileCallback(std::function<brls::View*()> cb) { get_active_tile_ = std::move(cb); }
+    void setOnOpenSectionCallback(std::function<void(int)> cb) { on_open_section_ = std::move(cb); }
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;
@@ -31,7 +32,7 @@ public:
 private:
     void rebuildContent();
     void buildCatalogSection();
-    void buildRemoteAddSection();
+    void buildRetroGamesSection();
     void buildLibrarySection();
     void buildDownloadsSection();
     void buildToolsSection();
@@ -73,6 +74,7 @@ private:
 
     std::function<void()> on_defocus_;
     std::function<brls::View*()> get_active_tile_;
+    std::function<void(int)> on_open_section_;
 };
 
 } // namespace ui

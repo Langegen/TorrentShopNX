@@ -24,7 +24,10 @@ TapGestureRecognizer::TapGestureRecognizer(View* view, TapGestureConfig config)
     this->tapEvent.subscribe([view, config](TapGestureStatus status, Sound* soundToPlay)
         {
         if (status.state != GestureState::INTERRUPTED && status.state != GestureState::FAILED)
-            Application::giveFocus(view);
+        {
+            if (view->isFocusable() || view->getDefaultFocus() != nullptr)
+                Application::giveFocus(view);
+        }
         for (auto& action : view->getActions())
         {
             if (action->getType() != ACTION_GAMEPAD || action->getButton() != BUTTON_A)
@@ -60,7 +63,10 @@ TapGestureRecognizer::TapGestureRecognizer(View* view, std::function<void()> res
     this->tapEvent.subscribe([view, respond, config](TapGestureStatus status, Sound* soundToPlay)
         {
         if (status.state != GestureState::INTERRUPTED && status.state != GestureState::FAILED)
-            Application::giveFocus(view);
+        {
+            if (view->isFocusable() || view->getDefaultFocus() != nullptr)
+                Application::giveFocus(view);
+        }
         if (config.highlightOnSelect)
             view->playClickAnimation(status.state != GestureState::UNSURE);
 
@@ -132,7 +138,14 @@ GestureState TapGestureRecognizer::recognitionLoop(TouchState touch, MouseState 
             }
             break;
         case TouchPhase::END:
-            this->state = GestureState::END;
+            if (position.x < view->getX() || position.x > view->getX() + view->getWidth() || position.y < view->getY() || position.y > view->getY() + view->getHeight())
+            {
+                this->state = GestureState::FAILED;
+            }
+            else
+            {
+                this->state = GestureState::END;
+            }
             this->tapEvent.fire(getCurrentStatus(), soundToPlay);
             break;
         case TouchPhase::NONE:

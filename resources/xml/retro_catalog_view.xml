@@ -1,0 +1,43 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    grow="1.0"
+    axis="column"
+    paddingTop="16"
+    paddingRight="36"
+    paddingBottom="10"
+    paddingLeft="36">
+
+    <!-- Topbar -->
+    <brls:Box width="auto" height="48px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+        <brls:Box axis="row" alignItems="center">
+            <brls:Label id="titleLabel" text="Ретро-игры" fontSize="28" />
+        </brls:Box>
+        <brls:Label id="statsHint" text="Загрузка..." fontSize="14" textColor="#90caf9" />
+    </brls:Box>
+
+    <!-- Loading / Progress view -->
+    <brls:Box
+        id="loadingBox"
+        width="100%"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        justifyContent="center"
+        marginTop="120px">
+        <brls:Label id="loadingLabel" text="Загрузка базы игр..." fontSize="22" marginBottom="14" textColor="#00e6af" />
+        <brls:ProgressSpinner id="progressSpinner" width="48px" height="48px" size="large" />
+    </brls:Box>
+
+    <!-- Games recycler -->
+    <brls:RecyclerFrame
+        id="recycler"
+        width="auto"
+        height="auto"
+        grow="1.0"
+        paddingBottom="20"
+        marginBottom="10" />
+
+</brls:Box>
+</brls:AppletFrame>

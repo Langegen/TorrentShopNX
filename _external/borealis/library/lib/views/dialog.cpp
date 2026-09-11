@@ -19,6 +19,7 @@
 #include <borealis/core/i18n.hpp>
 #include <borealis/views/dialog.hpp>
 #include <borealis/views/label.hpp>
+#include <borealis/core/touch/tap_gesture.hpp>
 
 using namespace brls::literals;
 
@@ -148,6 +149,14 @@ Dialog::Dialog(Box* contentView)
             return cancelable;
         },
         false, false, SOUND_BACK);
+
+    this->addGestureRecognizer(new TapGestureRecognizer([this](TapGestureStatus status, Sound* soundToPlay) {
+        if (status.state == GestureState::END && this->cancelable) {
+            if (this->appletFrame && !this->appletFrame->getFrame().pointInside(status.position)) {
+                this->dismiss();
+            }
+        }
+    }));
 }
 
 Dialog::Dialog(std::string text)
@@ -176,6 +185,14 @@ Dialog::Dialog(std::string text)
             return cancelable;
         },
         false, false, SOUND_BACK);
+
+    this->addGestureRecognizer(new TapGestureRecognizer([this](TapGestureStatus status, Sound* soundToPlay) {
+        if (status.state == GestureState::END && this->cancelable) {
+            if (this->appletFrame && !this->appletFrame->getFrame().pointInside(status.position)) {
+                this->dismiss();
+            }
+        }
+    }));
 }
 
 void Dialog::addButton(std::string label, VoidEvent::Callback cb)

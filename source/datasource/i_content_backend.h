@@ -34,6 +34,7 @@ struct ContentRequest {
     std::string magnet_link;
     std::string torrent_file_path;
     int file_index = -1;
+    bool use_scheduler = true;
 };
 
 struct BackendStatus {
@@ -93,6 +94,9 @@ public:
     /// Флаг отмены (опрашивается во время открытия потока / загрузки
     /// метаданных). NULL = отмена не требуется.
     virtual void setCancelFlag(const std::atomic<bool>* /*flag*/) {}
+
+    virtual void setSchedulerEnabled(bool /*enabled*/) {}
+    virtual bool isSchedulerEnabled() const { return true; }
 
     virtual void close() = 0;
 };

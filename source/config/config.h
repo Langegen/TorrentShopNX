@@ -49,7 +49,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.6"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.7"; // Keep in sync with Makefile APP_VERSION
 
     const std::string& getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
@@ -68,6 +68,21 @@ public:
     const std::string& getLanguage() const;
     void setLanguage(const std::string& lang);
 
+    // Retro Games settings
+    const std::string& getRetroRomsMode() const; // "retroarch" (default), "downloads", "custom"
+    void setRetroRomsMode(const std::string& mode);
+
+    const std::string& getRetroCustomPath() const;
+    void setRetroCustomPath(const std::string& path);
+
+    bool getRetroAutoExtract() const; // default false
+    void setRetroAutoExtract(bool enabled);
+
+    const std::string& getRetroRomsetMode() const; // "full" (default), "select"
+    void setRetroRomsetMode(const std::string& mode);
+
+    std::string getEffectiveRetroRomsDir(const std::string& console_default_subfolder = "") const;
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -85,6 +100,10 @@ private:
     bool auto_app_update_;
     std::string last_app_update_check_date_;
     std::string language_;
+    std::string retro_roms_mode_;
+    std::string retro_custom_path_;
+    bool retro_auto_extract_;
+    std::string retro_romset_mode_;
     std::string config_path_;
     std::string legacy_config_path_;
 };

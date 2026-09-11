@@ -16,11 +16,17 @@ public:
 
 private:
     void loadCurrent();
+    void nextImage();
+    void prevImage();
 
     std::vector<std::string> urls_;
     size_t currentIndex_;
-    brls::Image* image_;
+    brls::Image* image_ = nullptr;
     std::shared_ptr<bool> imageToken_;
+
+    brls::Label* counterLabel_ = nullptr;
+    brls::Box* prevBtn_ = nullptr;
+    brls::Box* nextBtn_ = nullptr;
 };
 
 } // namespace ui

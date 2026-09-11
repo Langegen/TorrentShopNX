@@ -282,6 +282,11 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
     state->buttons[BUTTON_START] |= (glfwGetKey(this->window, GLFW_KEY_EQUAL) != 0);
     state->buttons[BUTTON_START] |= (glfwGetKey(this->window, GLFW_KEY_KP_ADD) != 0);
     state->buttons[BUTTON_START] |= (glfwGetKey(this->window, GLFW_KEY_F1) != 0);
+    state->buttons[BUTTON_BACK] |= (glfwGetKey(this->window, GLFW_KEY_MINUS) != 0);
+    state->buttons[BUTTON_BACK] |= (glfwGetKey(this->window, GLFW_KEY_KP_SUBTRACT) != 0);
+    state->buttons[BUTTON_BACK] |= (glfwGetKey(this->window, GLFW_KEY_F2) != 0);
+    state->buttons[BUTTON_LSB] |= (glfwGetKey(this->window, GLFW_KEY_F3) != 0);
+    state->buttons[BUTTON_LSB] |= (glfwGetKey(this->window, GLFW_KEY_TAB) != 0);
     state->buttons[BUTTON_LB] |= (glfwGetKey(this->window, GLFW_KEY_LEFT_BRACKET) != 0);
     state->buttons[BUTTON_RB] |= (glfwGetKey(this->window, GLFW_KEY_RIGHT_BRACKET) != 0);
 

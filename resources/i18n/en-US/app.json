@@ -6,7 +6,8 @@
     "downloads": "Downloads",
     "settings": "Tools",
     "footer": "TorrentShopNX v2.4 | Games in catalog: {0}",
-    "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse."
+    "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
+    "retro_games": "Retro Games"
   },
   "common": {
     "loading": "Loading...",
@@ -108,7 +109,7 @@
     "state_preparing": "Preparing install",
     "state_installing": "Installing",
     "state_no_peers": "Installing: no peers",
-    "state_completed": "Completed \uE5CA",
+    "state_completed": "Completed ",
     "state_cancelled": "Cancelled",
     "state_failed": "Error",
     "state_paused": "Paused",
@@ -143,7 +144,8 @@
     "remove_favorite_btn": "Remove Favorite",
     "torrent_link_btn": "Torrent Link",
     "qr_hint": "Scan the QR code with your phone to open the torrent page",
-    "qr_no_url": "No torrent page link for this game"
+    "qr_no_url": "No torrent page link for this game",
+    "download_rom": "Download ROM"
   },
   "fileselect": {
     "title": "File Selection",
@@ -171,7 +173,8 @@
     "low_space_prompt": "Warning: Not enough free space on {0}!\nRequired: {1}\nAvailable: {2}\n\nProceed with installation?",
     "storage_sd": "SD Card",
     "storage_nand": "Console Memory (NAND)",
-    "storage_auto": "System (SD or NAND)"
+    "storage_auto": "System (SD or NAND)",
+    "group_roms": "ROM FILES & IMAGES"
   },
   "remote": {
     "title": "Remote Add",
@@ -200,7 +203,7 @@
     "col_title": "Game",
     "col_status": "Status",
     "badge_update": "UPDATE",
-    "badge_update_mod_warn": "UPDATE \uE002",
+    "badge_update_mod_warn": "UPDATE ",
     "badge_uptodate": "UP TO DATE",
     "badge_unknown": "NO DATA",
     "badge_ignored": "IGNORED",
@@ -220,7 +223,7 @@
     "action_enable_update": "Enable Updates",
     "notify_update_disabled": "Update check disabled for \"{0}\"",
     "notify_update_enabled": "Update check enabled for \"{0}\"",
-    "section_mods_updates": "\uE002 UPDATES WITH MODS (Warning: mods may break) — {0}",
+    "section_mods_updates": " UPDATES WITH MODS (Warning: mods may break) — {0}",
     "section_updates": "AVAILABLE UPDATES — {0}",
     "section_ignored": "UPDATE CHECK DISABLED (FROZEN) — {0}",
     "section_uptodate": "UP TO DATE GAMES — {0}",
@@ -248,7 +251,14 @@
     "lang_eng": "English only (ENG)",
     "only_favorites": "Only favorites",
     "year_label": "Release year",
-    "all_years": "All years"
+    "all_years": "All years",
+    "players_label": "Number of players",
+    "players_all": "All",
+    "players_1": "1 Player (Singleplayer)",
+    "players_2": "2 Players",
+    "players_3_4": "3-4 Players",
+    "players_5_plus": "5+ Players",
+    "players_multi": "Any Multiplayer"
   },
   "settings": {
     "title": "Tools",
@@ -279,7 +289,7 @@
     "update_invalid_response": "Invalid update response format.",
     "update_parse_error": "Update parse error:\n{0}",
     "auto_app_update": "Auto-check for app updates",
-    "cache_thumbnails": "Cache cover thumbnails",
+    "cache_thumbnails": "Cover thumbnails",
     "keep_awake": "Prevent sleep during downloads",
     "backlight_timeout": "Turn off backlight during download",
     "backlight_manual": "Manual",
@@ -324,7 +334,6 @@
     "storage_calculating": "Calculating...",
     "cache_section": "Cache cleanup",
     "cache_clear_all": "Clear all cache",
-    "cache_thumbnails": "Cover thumbnails",
     "cache_catalog": "Torrent catalog",
     "cache_meta": "Torrent metadata",
     "cache_collections": "Collections",
@@ -345,7 +354,20 @@
     "storage_placeholders_cleared": "Freed from interrupted installs: {0}",
     "storage_placeholder_busy": "A download or install is in progress.\nStop downloads before cleaning.",
     "storage_placeholder_error": "Failed to clean placeholders",
-    "storage_refresh": "Refresh"
+    "storage_refresh": "Refresh",
+    "cat_retro": "Retro Games",
+    "retro_roms_folder": "ROMs Directory",
+    "retro_folder_retroarch": "RetroArch folders (sdmc:/roms/)",
+    "retro_folder_downloads": "Downloads folder (downloads/retro/)",
+    "retro_folder_custom": "Custom folder",
+    "retro_custom_folder": "ROMs Directory Path",
+    "retro_custom_folder_dialog": "Custom ROMs Directory",
+    "retro_custom_folder_hint": "Example: sdmc:/roms/",
+    "retro_auto_extract": "Automatically extract ZIP/7z archives",
+    "retro_romset_mode": "Romset download mode",
+    "retro_romset_full": "Download entire romset",
+    "retro_romset_select": "Select files from romset",
+    "retro_update_catalogs": "Update retro game databases"
   },
   "applet": {
     "title": "Applet Mode Not Supported",
@@ -381,5 +403,20 @@
     "folder_created": "Folder created",
     "renamed_success": "Renamed successfully",
     "paste_success": "Paste completed"
+  },
+  "retro": {
+    "consoles_title": "Retro Games",
+    "consoles_subtitle": "Select platform",
+    "consoles_stats": "20 systems • 8,200+ games",
+    "consoles_footer": "Press A to open platform catalog",
+    "catalog_subtitle": "ROMs & disk images catalog",
+    "catalog_footer": "A - Details / Download, Y - Favorite",
+    "loading_console": "Loading game list...",
+    "downloading_catalog": "Downloading database from GitHub...",
+    "total_games": "Total games: {0}",
+    "search_hint": "Search game...",
+    "section_nintendo": "Nintendo (10 platforms)",
+    "section_sony": "Sony PlayStation (4 platforms)",
+    "section_sega": "Sega (6 platforms)"
   }
 }

@@ -13,6 +13,8 @@
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
 #include "../utils/app_paths.h"
+#include "../catalog/retro_catalog_manager.h"
+#include "../utils/archive_utils.h"
 
 #include <engine/engine.h>
 
@@ -213,6 +215,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                            int file_index,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
+                           const std::string& retro_console_id,
                            const std::shared_ptr<std::atomic<bool>>& cancel,
                            const std::shared_ptr<FileDownloadState>& st) {
     if (!source || hash.empty()) {
@@ -247,9 +250,20 @@ static void fileCopyWorker(datasource::IDataSource* source,
         return;
     }
 
-    // Папка конкретной раздачи внутри downloads/
-    std::string release_folder = extractReleaseFolderName(release_title);
-    std::filesystem::path release_base = downloadsBaseDir() / release_folder;
+    // Папка конкретной раздачи (для ретро-игр - целевая папка РОМов)
+    std::filesystem::path release_base;
+    if (!retro_console_id.empty()) {
+        std::string subfolder = retro_console_id;
+        const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id);
+        if (cInfo && !cInfo->default_rom_subfolder.empty()) {
+            subfolder = cInfo->default_rom_subfolder;
+        }
+        std::string destDir = config::ConfigManager::instance().getEffectiveRetroRomsDir(subfolder);
+        release_base = std::filesystem::path(destDir);
+    } else {
+        std::string release_folder = extractReleaseFolderName(release_title);
+        release_base = downloadsBaseDir() / release_folder;
+    }
 
     // Определяем список индексов файлов для скачивания
     std::vector<int> target_indices;
@@ -293,7 +307,13 @@ static void fileCopyWorker(datasource::IDataSource* source,
 
         uint64_t file_size = static_cast<uint64_t>(files[idx].size);
         std::string rel_path = files[idx].path;
-        std::string file_dest = (release_base / sanitizeTorrentPath(rel_path)).string();
+        std::filesystem::path dest_rel;
+        if (!retro_console_id.empty() && target_indices.size() == 1) {
+            dest_rel = sanitizePathComponent(std::filesystem::path(rel_path).filename().string());
+        } else {
+            dest_rel = sanitizeTorrentPath(rel_path);
+        }
+        std::string file_dest = (release_base / dest_rel).string();
         if (first_dest.empty()) first_dest = file_dest;
 
         if (file_size == 0) {
@@ -303,6 +323,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
             continue;
         }
 
+        source->setSchedulerEnabled(true);
         source->setCancelFlag(cancel.get());
         if (cancel->load() || !source->open(hash, idx)) {
             st->failed = true;
@@ -364,6 +385,32 @@ static void fileCopyWorker(datasource::IDataSource* source,
         st->dest = release_base.string();
         st->done = true;
         st->written.store(total_size);
+
+        if (!retro_console_id.empty() && config::ConfigManager::instance().getRetroAutoExtract()) {
+            for (int idx : target_indices) {
+                if (cancel->load()) break;
+                if (idx < 0 || idx >= n) continue;
+                std::string rel_path = files[idx].path;
+                std::filesystem::path dest_rel = (target_indices.size() == 1) ?
+                    std::filesystem::path(sanitizePathComponent(std::filesystem::path(rel_path).filename().string())) :
+                    sanitizeTorrentPath(rel_path);
+                std::string file_dest = (release_base / dest_rel).string();
+
+                if (util::isArchiveFile(file_dest)) {
+                    std::string outErr;
+                    std::string targetDir = std::filesystem::path(file_dest).parent_path().string();
+                    util::logLine("download: auto-extracting retro archive: " + file_dest + " -> " + targetDir);
+                    bool extractOk = util::extractArchive(file_dest, targetDir, nullptr, cancel, outErr);
+                    if (extractOk) {
+                        util::logLine("download: auto-extract succeeded for " + file_dest);
+                        std::error_code ec;
+                        std::filesystem::remove(file_dest, ec);
+                    } else {
+                        util::logLine("download: auto-extract failed: " + outErr);
+                    }
+                }
+            }
+        }
     } else {
         st->failed = true;
         if (st->error.empty()) st->error = "download cancelled";
@@ -504,13 +551,15 @@ size_t DownloadManager::addToQueue(const std::string& title,
                                    const std::string& magnet,
                                    int forced_file_index,
                                    const std::string& forced_stream_name,
-                                   bool is_homebrew) {
+                                   bool is_homebrew,
+                                   const std::string& retro_console_id) {
     DownloadItem item;
     item.title = title;
     item.magnet = magnet;
     item.forced_file_index = forced_file_index;
     item.forced_stream_name = forced_stream_name;
     item.is_homebrew = is_homebrew;
+    item.retro_console_id = retro_console_id;
     item.state = DownloadState::Queued;
     item.installer = installer::StreamInstaller(64 * 1024 * 1024);
     queue_.push_back(std::move(item));
@@ -988,15 +1037,17 @@ void DownloadManager::handleFileDownload(size_t index,
         const int idx = item.forced_file_index;
         const auto sel_files = item.selected_files;
         const bool is_hb = item.is_homebrew;
+        const std::string retro_cid = item.retro_console_id;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, cancel, st]() {
-                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, cancel, st);
+            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, st]() {
+                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +
                       " title='" + title + "' index=" + std::to_string(idx) +
-                      " is_homebrew=" + (is_hb ? "true" : "false"));
+                      " is_homebrew=" + (is_hb ? "true" : "false") +
+                      " retro=" + retro_cid);
         return;
     }
 
@@ -1278,10 +1329,11 @@ void DownloadManager::trackProgress() {
             continue;
         }
 
-        // Homebrew/ports or non-game files: download directly to downloads/ without installation
+        // Homebrew/ports, retro ROMs, or non-game files: download directly to downloads/ or retro folder without installation
         if (isLocalBackend() &&
             item.state == DownloadState::Downloading &&
             (item.is_homebrew ||
+             !item.retro_console_id.empty() ||
              (item.forced_file_index >= 0 && !isSwitchGameFile(item.forced_stream_name)))) {
             handleFileDownload(i, list, now);
             continue;
@@ -1290,6 +1342,7 @@ void DownloadManager::trackProgress() {
         if (isLocalBackend() &&
             item.state == DownloadState::Downloading &&
             !item.is_homebrew &&
+            item.retro_console_id.empty() &&
             item.forced_file_index >= 0 &&
             isSwitchGameFile(item.forced_stream_name) &&
             !item.auto_hybrid_started &&
@@ -1519,6 +1572,7 @@ void DownloadManager::trackProgress() {
             if (!matched &&
                 item.state == DownloadState::Downloading &&
                 !item.is_homebrew &&
+                item.retro_console_id.empty() &&
                 !item.auto_hybrid_started &&
                 !item.hybrid_installer &&
                 ds_manager_.mode() != datasource::DataSourceMode::LocalClient) {
@@ -1606,7 +1660,7 @@ bool DownloadManager::hasActiveTransfers() const {
 bool DownloadManager::startHybridInstall(size_t index) {
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
-    if (item.is_homebrew) {
+    if (item.is_homebrew || !item.retro_console_id.empty()) {
         return false;
     }
 
@@ -1715,7 +1769,10 @@ bool DownloadManager::startHybridInstall(size_t index) {
         auto cancel_flag = item.cancel_flag;
         item.open_future = std::make_shared<std::future<bool>>(
             std::async(std::launch::async, [source, hash = item.torrent_hash, idx = install_file_index, cancel_flag]() {
-                if (source) source->setCancelFlag(cancel_flag.get());
+                if (source) {
+                    source->setSchedulerEnabled(true);
+                    source->setCancelFlag(cancel_flag.get());
+                }
                 return source ? source->open(hash, idx) : false;
             })
         );

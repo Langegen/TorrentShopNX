@@ -43,6 +43,10 @@
 #include <borealis/views/hint.hpp>
 #include <borealis/views/image.hpp>
 #include <borealis/views/progress_spinner.hpp>
+
+namespace util {
+    void logLine(const std::string& line);
+}
 #include <borealis/views/rectangle.hpp>
 #include <borealis/views/recycler.hpp>
 #include <borealis/views/sidebar.hpp>
@@ -168,11 +172,16 @@ bool Application::mainLoop()
 
 bool Application::internalMainLoop()
 {
+    static int s_loopCount = 0;
+    s_loopCount++;
+    if (s_loopCount <= 3) util::logLine("brls: internalMainLoop START frame=" + std::to_string(s_loopCount));
+
     Application::updateFPS();
     Application::frameStartTime = getCPUTimeUsec();
     Application::setActiveEvent(false);
 
     // Main loop callback
+    if (s_loopCount <= 3) util::logLine("brls: before mainLoopIteration");
     if (!Application::platform->mainLoopIteration() || Application::quitRequested)
     {
         Application::getWindowShouldCloseEvent()->fire();
@@ -181,22 +190,29 @@ bool Application::internalMainLoop()
     }
 
     // Mouse and touch
+    if (s_loopCount <= 3) util::logLine("brls: before processInput");
     Application::processInput();
 
     // Animations
 #ifndef SIMPLE_HIGHLIGHT
+    if (s_loopCount <= 3) util::logLine("brls: before updateHighlightAnimation");
     updateHighlightAnimation();
 #endif
+    if (s_loopCount <= 3) util::logLine("brls: before updateTickings");
     Ticking::updateTickings();
 
     // Render
+    if (s_loopCount <= 3) util::logLine("brls: before frame");
     Application::frame();
 
     // Run sync functions
+    if (s_loopCount <= 3) util::logLine("brls: before performSyncTasks");
     Threading::performSyncTasks();
 
     // Trigger RunLoop subscribers
+    if (s_loopCount <= 3) util::logLine("brls: before runLoopEvent");
     runLoopEvent.fire();
+    if (s_loopCount <= 3) util::logLine("brls: internalMainLoop END frame=" + std::to_string(s_loopCount));
 
     // Free views deletion pool.
     // A view deletion might inserts other views to deletionPool
@@ -753,6 +769,10 @@ bool Application::handleAction(const ActionType type, const int button, const bo
 
 void Application::frame()
 {
+    static int s_fc = 0;
+    s_fc++;
+    if (s_fc <= 3) util::logLine("brls: frame() enter #" + std::to_string(s_fc));
+
     VideoContext* videoContext = Application::platform->getVideoContext();
 
     // Frame context
@@ -764,17 +784,22 @@ void Application::frame()
     frameContext.theme      = Application::getTheme();
 
     // Begin frame and clear
+    if (s_fc <= 3) util::logLine("brls: frame() before beginFrame");
     videoContext->beginFrame();
+    if (s_fc <= 3) util::logLine("brls: frame() before clear");
     videoContext->clear(Application::getTheme().getColor("brls/clear"));
     float scaleFactor = videoContext->getScaleFactor();
 
+    if (s_fc <= 3) util::logLine("brls: frame() before nvgBeginFrame");
     nvgBeginFrame(frameContext.vg, Application::windowWidth, Application::windowHeight, scaleFactor);
     nvgScale(frameContext.vg, Application::windowScale, Application::windowScale);
 
     // Global Wallpaper background for all activities and windows
     static int globalBgImage = 0;
     if (globalBgImage == 0) {
+        if (s_fc <= 3) util::logLine("brls: frame() loading globalBgImage: " + std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg");
         globalBgImage = nvgCreateImage(frameContext.vg, (std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg").c_str(), 0);
+        if (s_fc <= 3) util::logLine("brls: frame() globalBgImage=" + std::to_string(globalBgImage));
     }
     if (globalBgImage > 0) {
         NVGpaint bgPaint = nvgImagePattern(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f, 0.0f, globalBgImage, 1.0f);
@@ -800,18 +825,23 @@ void Application::frame()
             break;
     }
 
+    if (s_fc <= 3) util::logLine("brls: frame() before drawing views (count=" + std::to_string(viewsToDraw.size()) + ")");
     for (size_t i = 0; i < viewsToDraw.size(); i++)
     {
         View* view = viewsToDraw[viewsToDraw.size() - 1 - i];
+        if (s_fc <= 3) util::logLine("brls: frame() drawing view #" + std::to_string(i) + " " + view->describe());
         view->frame(&frameContext);
     }
+    if (s_fc <= 3) util::logLine("brls: frame() after drawing views");
 
     if (currentFocus && Application::getInputType() != InputType::TOUCH)
     {
+        if (s_fc <= 3) util::logLine("brls: frame() before highlight for " + currentFocus->describe());
         currentFocus->frameHighlight(&frameContext);
     }
 
     // Notifications
+    if (s_fc <= 3) util::logLine("brls: frame() before notificationManager->frame");
     Application::notificationManager->frame(&frameContext);
 
     if (isDrawCursor())
@@ -829,9 +859,12 @@ void Application::frame()
 
     // End frame
     nvgResetTransform(Application::getNVGContext()); // scale
+    if (s_fc <= 3) util::logLine("brls: frame() before nvgEndFrame");
     nvgEndFrame(Application::getNVGContext());
 
+    if (s_fc <= 3) util::logLine("brls: frame() before videoContext->endFrame");
     Application::platform->getVideoContext()->endFrame();
+    if (s_fc <= 3) util::logLine("brls: frame() after videoContext->endFrame");
 }
 
 void Application::exit()

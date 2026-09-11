@@ -113,6 +113,7 @@ struct DownloadItem {
     std::shared_ptr<FileDownloadState> file_dl_state;
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
     bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
+    std::string retro_console_id;
 };
 
 class DownloadManager {
@@ -124,7 +125,8 @@ public:
                       const std::string& magnet,
                       int forced_file_index = -1,
                       const std::string& forced_stream_name = "",
-                      bool is_homebrew = false);
+                      bool is_homebrew = false,
+                      const std::string& retro_console_id = "");
     bool startDownload(size_t index);
     void startNextDownload();
     void trackProgress();
