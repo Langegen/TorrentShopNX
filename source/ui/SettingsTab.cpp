@@ -6,12 +6,16 @@
 #include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
 #include "../utils/log.h"
+#include "../utils/switch_utils.h"
+#include "../net/http_client.h"
+#include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
 #include <curl/curl.h>
 #include <atomic>
 #ifdef __SWITCH__
 #include <switch.h>
+#include <unistd.h>
 #endif
 
 extern std::string g_nroPath;
@@ -100,7 +104,13 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     return (copied >= 100 * 1024);
 }
 
-[[maybe_unused]] static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
+static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
+    struct stat st;
+    if (stat(srcPath.c_str(), &st) != 0 || st.st_size < 100 * 1024) {
+        util::logLine("replaceNroFile: src invalid or too small (" + srcPath + ")");
+        return false;
+    }
+
     std::string oldPath = dstPath + ".old";
     std::remove(oldPath.c_str());
     
@@ -112,15 +122,31 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     
     if (r2 == 0) {
         std::remove(oldPath.c_str());
+#ifdef __SWITCH__
+        fsdevCommitDevice("sdmc");
+#endif
+        util::logLine("replaceNroFile: successfully replaced NRO via rename");
         return true;
     }
     
+    if (r1 == 0 && stat(dstPath.c_str(), &st) != 0) {
+        ::rename(oldPath.c_str(), dstPath.c_str());
+    }
+
+    util::logLine("replaceNroFile: rename failed, falling back to copyFileOverwrite");
+    std::remove(dstPath.c_str());
     bool ok = copyFileOverwrite(srcPath, dstPath);
     if (ok) {
         std::remove(srcPath.c_str());
         std::remove(oldPath.c_str());
+#ifdef __SWITCH__
+        fsdevCommitDevice("sdmc");
+#endif
+        util::logLine("replaceNroFile: successfully replaced NRO via copy");
+        return true;
     }
-    return ok;
+    util::logLine("replaceNroFile: copyFileOverwrite also failed!");
+    return false;
 }
 
 void downloadAndInstallAppUpdate(const std::string& url, const std::string& version) {
@@ -143,12 +169,10 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         progressObj->aborted.store(true);
     });
     
-    brls::RepeatingTimer* timer = new brls::RepeatingTimer();
+    auto timer = std::make_shared<brls::RepeatingTimer>();
     timer->setPeriod(200);
-    timer->setCallback([progressObj, statusLabel, timer, version]() {
+    timer->setCallback([progressObj, statusLabel, version]() {
         if (progressObj->aborted.load()) {
-            timer->stop();
-            delete timer;
             return;
         }
         
@@ -213,7 +237,8 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         bool userCancelled = progressObj->aborted.load();
         progressObj->aborted.store(true);
         
-        brls::sync([res, http_code, tmpPath, progressDialog, userCancelled]() {
+        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled]() {
+            timer->stop();
             progressDialog->close([res, http_code, tmpPath, userCancelled]() {
                 if (userCancelled) {
                     std::error_code ec;
@@ -244,14 +269,29 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                         }
                         
                         if (updateSaved) {
-                            brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
-                            pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
 #ifdef __SWITCH__
-                                if (envHasNextLoad()) {
-                                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
-                                }
+                            fsdevCommitDevice("sdmc");
 #endif
+                            brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
+                            pendingDialog->addButton("app/settings/restart_btn"_i18n, [updatePath]() {
+#ifdef __SWITCH__
+                                util::unmountRomfs();
+
+                                bool ok = replaceNroFile(updatePath, g_nroPath);
+                                util::logLine("restart_btn: replaceNroFile to " + g_nroPath + " res=" + std::to_string(ok));
+
+                                if (envHasNextLoad()) {
+                                    std::string quotedArg = "\"" + g_nroPath + "\"";
+                                    envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
+                                    util::logLine("restart_btn: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
+                                }
+                                fsdevCommitDevice("sdmc");
+                                util::logLine("restart_btn: closing log and exiting to HBMenu via _exit(0)");
+                                util::logClose();
+                                _exit(0);
+#else
                                 brls::Application::quit();
+#endif
                             });
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
                             pendingDialog->open();
@@ -368,10 +408,16 @@ brls::View* SettingsTab::buildGeneralTab() {
             restartDialog->addButton("app/settings/restart_btn"_i18n, []() {
 #ifdef __SWITCH__
                 if (envHasNextLoad()) {
-                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                    std::string quotedArg = "\"" + g_nroPath + "\"";
+                    envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
                 }
-#endif
+                fsdevCommitDevice("sdmc");
+                util::logLine("language_restart: closing log and exiting to HBMenu via _exit(0)");
+                util::logClose();
+                _exit(0);
+#else
                 brls::Application::quit();
+#endif
             });
             restartDialog->addButton("app/settings/later_btn"_i18n, []() {});
             restartDialog->open();
@@ -386,6 +432,68 @@ brls::View* SettingsTab::buildGeneralTab() {
         cfg.save();
     });
     box->addView(autoAppUpdateCell);
+
+    // Принудительная переустановка приложения
+    auto* forceAppUpdateCell = new brls::DetailCell();
+    forceAppUpdateCell->setText("app/settings/force_app_update"_i18n);
+    forceAppUpdateCell->setDetailText("app/settings/force_app_update_desc"_i18n);
+    forceAppUpdateCell->registerClickAction([&cfg](brls::View* view) {
+        brls::Application::notify("app/settings/force_app_update_fetch"_i18n);
+        std::string updateUrl = cfg.getEffectiveAppUpdateUrl();
+        brls::async([updateUrl]() {
+            net::HttpClient http;
+            auto res = http.httpGet(updateUrl);
+            if (res.status_code == 200 && !res.body.empty()) {
+                try {
+                    auto j = nlohmann::json::parse(res.body);
+                    std::string version;
+                    std::string url;
+
+                    if (j.contains("tag_name")) {
+                        version = j.value("tag_name", "");
+                        if (j.contains("assets") && j["assets"].is_array()) {
+                            for (const auto& asset : j["assets"]) {
+                                std::string assetName = asset.value("name", "");
+                                if (assetName.size() >= 4 && assetName.rfind(".nro") == assetName.size() - 4) {
+                                    url = asset.value("browser_download_url", "");
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        version = j.value("version", "");
+                        url = j.value("url", "");
+                    }
+
+                    if (!url.empty()) {
+                        brls::sync([url, version]() {
+                            std::string promptVer = !version.empty() ? version : "latest";
+                            std::string msg = brls::getStr("app/settings/force_app_update_confirm", promptVer);
+                            brls::Dialog* dialog = new brls::Dialog(msg);
+                            dialog->addButton("app/common/yes"_i18n, [url, version]() {
+                                downloadAndInstallAppUpdate(url, version);
+                            });
+                            dialog->addButton("app/common/no"_i18n, []() {});
+                            dialog->open();
+                        });
+                        return;
+                    }
+                } catch (const std::exception& e) {
+                    util::logLine("forceAppUpdate: parse error: " + std::string(e.what()));
+                }
+            } else {
+                util::logLine("forceAppUpdate: fetch failed, status=" + std::to_string(res.status_code));
+            }
+
+            brls::sync([]() {
+                brls::Dialog* errDialog = new brls::Dialog("app/settings/update_check_failed"_i18n);
+                errDialog->addButton("app/common/ok"_i18n, []() {});
+                errDialog->open();
+            });
+        });
+        return true;
+    });
+    box->addView(forceAppUpdateCell);
 
     // Кэширование миниатюр обложек
     auto* cacheThumbnailsCell = new brls::BooleanCell();

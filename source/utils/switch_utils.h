@@ -29,4 +29,7 @@ void cpuBoostEnd();
 void setBacklightOff(bool off);
 bool isBacklightOff();
 
+// Safely unmount RomFS and update tracking state
+void unmountRomfs();
+
 } // namespace util
