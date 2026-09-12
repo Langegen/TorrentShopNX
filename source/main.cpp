@@ -135,7 +135,6 @@ extern "C" {
         bool is_applet = (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet);
 
         if (!is_applet) {
-            net::ImageDownloader::instance().stop();
             util::setBacklightOff(false);
             lblExit();
             nifmExit();
@@ -223,6 +222,9 @@ static bool replaceNroFile(const std::string& srcPath, const std::string& dstPat
 
     if (r2 == 0) {
         std::remove(oldPath.c_str());
+#ifdef __SWITCH__
+        fsdevCommitDevice("sdmc");
+#endif
         util::logLine("replaceNroFile: successfully replaced NRO via rename");
         return true;
     }
@@ -239,6 +241,9 @@ static bool replaceNroFile(const std::string& srcPath, const std::string& dstPat
     if (ok) {
         std::remove(srcPath.c_str());
         std::remove(oldPath.c_str());
+#ifdef __SWITCH__
+        fsdevCommitDevice("sdmc");
+#endif
         util::logLine("replaceNroFile: successfully replaced NRO via copy");
         return true;
     }
@@ -269,7 +274,8 @@ static bool checkAndApplyPendingUpdate() {
         
 #ifdef __SWITCH__
         if (envHasNextLoad()) {
-            envSetNextLoad(mainNroPath.c_str(), mainNroPath.c_str());
+            std::string quotedArg = "\"" + mainNroPath + "\"";
+            envSetNextLoad(mainNroPath.c_str(), quotedArg.c_str());
             util::logLine("main: relaunching main NRO via envSetNextLoad: " + mainNroPath);
             return true; // Signal main to exit so HBL chainloads mainNroPath
         }
@@ -305,7 +311,8 @@ static bool checkAndApplyPendingUpdate() {
                     g_nroPath = targetNro;
 #ifdef __SWITCH__
                     if (envHasNextLoad()) {
-                        envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                        std::string quotedArg = "\"" + g_nroPath + "\"";
+                        envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
                         util::logLine("main: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
                     }
 #endif
@@ -339,8 +346,9 @@ int main(int argc, char** argv) {
 #ifdef __SWITCH__
     if (checkAndApplyPendingUpdate()) {
         util::logLine("main: exiting for update relaunch");
+        fsdevCommitDevice("sdmc");
         util::logClose();
-        return 0;
+        _exit(0);
     }
 #endif
 
@@ -516,9 +524,10 @@ int main(int argc, char** argv) {
     // svcExitProcess() was killing the ENTIRE HBMenu process because NROs share
     // HBMenu's address space. _exit() is the correct way to return to HBMenu.
 #ifdef __SWITCH__
-    util::logLine("main: closing log and returning 0 to HBMenu. Goodbye!");
+    fsdevCommitDevice("sdmc");
+    util::logLine("main: closing log and returning to HBMenu via _exit(0). Goodbye!");
     util::logClose();  // close log file before __appExit calls fsExit
-    return 0;
+    _exit(0);
 #else
     util::logLine("main: closing log and exiting. Goodbye!");
     util::logClose();

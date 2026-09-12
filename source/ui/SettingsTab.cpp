@@ -6,6 +6,8 @@
 #include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
 #include "../utils/log.h"
+#include "../net/http_client.h"
+#include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
 #include <curl/curl.h>
@@ -244,11 +246,15 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                         }
                         
                         if (updateSaved) {
+#ifdef __SWITCH__
+                            fsdevCommitDevice("sdmc");
+#endif
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
                             pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
 #ifdef __SWITCH__
                                 if (envHasNextLoad()) {
-                                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                                    std::string quotedArg = "\"" + g_nroPath + "\"";
+                                    envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
                                 }
 #endif
                                 brls::Application::quit();
@@ -368,7 +374,8 @@ brls::View* SettingsTab::buildGeneralTab() {
             restartDialog->addButton("app/settings/restart_btn"_i18n, []() {
 #ifdef __SWITCH__
                 if (envHasNextLoad()) {
-                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                    std::string quotedArg = "\"" + g_nroPath + "\"";
+                    envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
                 }
 #endif
                 brls::Application::quit();
@@ -386,6 +393,68 @@ brls::View* SettingsTab::buildGeneralTab() {
         cfg.save();
     });
     box->addView(autoAppUpdateCell);
+
+    // Принудительная переустановка приложения
+    auto* forceAppUpdateCell = new brls::DetailCell();
+    forceAppUpdateCell->setText("app/settings/force_app_update"_i18n);
+    forceAppUpdateCell->setDetailText("app/settings/force_app_update_desc"_i18n);
+    forceAppUpdateCell->registerClickAction([&cfg](brls::View* view) {
+        brls::Application::notify("app/settings/force_app_update_fetch"_i18n);
+        std::string updateUrl = cfg.getEffectiveAppUpdateUrl();
+        brls::async([updateUrl]() {
+            net::HttpClient http;
+            auto res = http.httpGet(updateUrl);
+            if (res.status_code == 200 && !res.body.empty()) {
+                try {
+                    auto j = nlohmann::json::parse(res.body);
+                    std::string version;
+                    std::string url;
+
+                    if (j.contains("tag_name")) {
+                        version = j.value("tag_name", "");
+                        if (j.contains("assets") && j["assets"].is_array()) {
+                            for (const auto& asset : j["assets"]) {
+                                std::string assetName = asset.value("name", "");
+                                if (assetName.size() >= 4 && assetName.rfind(".nro") == assetName.size() - 4) {
+                                    url = asset.value("browser_download_url", "");
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        version = j.value("version", "");
+                        url = j.value("url", "");
+                    }
+
+                    if (!url.empty()) {
+                        brls::sync([url, version]() {
+                            std::string promptVer = !version.empty() ? version : "latest";
+                            std::string msg = brls::getStr("app/settings/force_app_update_confirm", promptVer);
+                            brls::Dialog* dialog = new brls::Dialog(msg);
+                            dialog->addButton("app/common/yes"_i18n, [url, version]() {
+                                downloadAndInstallAppUpdate(url, version);
+                            });
+                            dialog->addButton("app/common/no"_i18n, []() {});
+                            dialog->open();
+                        });
+                        return;
+                    }
+                } catch (const std::exception& e) {
+                    util::logLine("forceAppUpdate: parse error: " + std::string(e.what()));
+                }
+            } else {
+                util::logLine("forceAppUpdate: fetch failed, status=" + std::to_string(res.status_code));
+            }
+
+            brls::sync([]() {
+                brls::Dialog* errDialog = new brls::Dialog("app/settings/update_check_failed"_i18n);
+                errDialog->addButton("app/common/ok"_i18n, []() {});
+                errDialog->open();
+            });
+        });
+        return true;
+    });
+    box->addView(forceAppUpdateCell);
 
     // Кэширование миниатюр обложек
     auto* cacheThumbnailsCell = new brls::BooleanCell();
