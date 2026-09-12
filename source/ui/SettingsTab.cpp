@@ -6,6 +6,7 @@
 #include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
 #include "../utils/log.h"
+#include "../utils/switch_utils.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
@@ -14,6 +15,7 @@
 #include <atomic>
 #ifdef __SWITCH__
 #include <switch.h>
+#include <unistd.h>
 #endif
 
 extern std::string g_nroPath;
@@ -102,7 +104,13 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     return (copied >= 100 * 1024);
 }
 
-[[maybe_unused]] static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
+static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
+    struct stat st;
+    if (stat(srcPath.c_str(), &st) != 0 || st.st_size < 100 * 1024) {
+        util::logLine("replaceNroFile: src invalid or too small (" + srcPath + ")");
+        return false;
+    }
+
     std::string oldPath = dstPath + ".old";
     std::remove(oldPath.c_str());
     
@@ -114,15 +122,31 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     
     if (r2 == 0) {
         std::remove(oldPath.c_str());
+#ifdef __SWITCH__
+        fsdevCommitDevice("sdmc");
+#endif
+        util::logLine("replaceNroFile: successfully replaced NRO via rename");
         return true;
     }
     
+    if (r1 == 0 && stat(dstPath.c_str(), &st) != 0) {
+        ::rename(oldPath.c_str(), dstPath.c_str());
+    }
+
+    util::logLine("replaceNroFile: rename failed, falling back to copyFileOverwrite");
+    std::remove(dstPath.c_str());
     bool ok = copyFileOverwrite(srcPath, dstPath);
     if (ok) {
         std::remove(srcPath.c_str());
         std::remove(oldPath.c_str());
+#ifdef __SWITCH__
+        fsdevCommitDevice("sdmc");
+#endif
+        util::logLine("replaceNroFile: successfully replaced NRO via copy");
+        return true;
     }
-    return ok;
+    util::logLine("replaceNroFile: copyFileOverwrite also failed!");
+    return false;
 }
 
 void downloadAndInstallAppUpdate(const std::string& url, const std::string& version) {
@@ -145,12 +169,10 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         progressObj->aborted.store(true);
     });
     
-    brls::RepeatingTimer* timer = new brls::RepeatingTimer();
+    auto timer = std::make_shared<brls::RepeatingTimer>();
     timer->setPeriod(200);
-    timer->setCallback([progressObj, statusLabel, timer, version]() {
+    timer->setCallback([progressObj, statusLabel, version]() {
         if (progressObj->aborted.load()) {
-            timer->stop();
-            delete timer;
             return;
         }
         
@@ -215,7 +237,8 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         bool userCancelled = progressObj->aborted.load();
         progressObj->aborted.store(true);
         
-        brls::sync([res, http_code, tmpPath, progressDialog, userCancelled]() {
+        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled]() {
+            timer->stop();
             progressDialog->close([res, http_code, tmpPath, userCancelled]() {
                 if (userCancelled) {
                     std::error_code ec;
@@ -250,14 +273,25 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                             fsdevCommitDevice("sdmc");
 #endif
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
-                            pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
+                            pendingDialog->addButton("app/settings/restart_btn"_i18n, [updatePath]() {
 #ifdef __SWITCH__
+                                util::unmountRomfs();
+
+                                bool ok = replaceNroFile(updatePath, g_nroPath);
+                                util::logLine("restart_btn: replaceNroFile to " + g_nroPath + " res=" + std::to_string(ok));
+
                                 if (envHasNextLoad()) {
                                     std::string quotedArg = "\"" + g_nroPath + "\"";
                                     envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
+                                    util::logLine("restart_btn: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
                                 }
-#endif
+                                fsdevCommitDevice("sdmc");
+                                util::logLine("restart_btn: closing log and exiting to HBMenu via _exit(0)");
+                                util::logClose();
+                                _exit(0);
+#else
                                 brls::Application::quit();
+#endif
                             });
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
                             pendingDialog->open();
@@ -377,8 +411,13 @@ brls::View* SettingsTab::buildGeneralTab() {
                     std::string quotedArg = "\"" + g_nroPath + "\"";
                     envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
                 }
-#endif
+                fsdevCommitDevice("sdmc");
+                util::logLine("language_restart: closing log and exiting to HBMenu via _exit(0)");
+                util::logClose();
+                _exit(0);
+#else
                 brls::Application::quit();
+#endif
             });
             restartDialog->addButton("app/settings/later_btn"_i18n, []() {});
             restartDialog->open();

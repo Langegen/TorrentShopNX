@@ -128,7 +128,7 @@ extern "C" {
         }
     }
 
-    static bool g_romfs_mounted = false;
+    bool g_romfs_mounted = false;
 
     void userAppExit(void) {
         AppletType applet_type = appletGetAppletType();
@@ -151,6 +151,20 @@ extern "C" {
         }
         socketExit();
     }
+}
+
+namespace util {
+void unmountRomfs() {
+    if (g_romfs_mounted) {
+        romfsExit();
+        g_romfs_mounted = false;
+        util::logLine("romfs: unmounted successfully");
+    }
+}
+}
+#else
+namespace util {
+void unmountRomfs() {}
 }
 #endif
 
@@ -255,11 +269,7 @@ static bool replaceNroFile(const std::string& srcPath, const std::string& dstPat
 static bool checkAndApplyPendingUpdate() {
 #ifdef __SWITCH__
     // Ensure RomFS is not mounted while we manipulate NRO files
-    if (g_romfs_mounted) {
-        romfsExit();
-        g_romfs_mounted = false;
-        util::logLine("checkAndApplyPendingUpdate: unmounted RomFS before update check");
-    }
+    util::unmountRomfs();
 #endif
 
     // 1. If we are running AS the .update file (e.g. TorrentShopNX.nro.update)
@@ -502,11 +512,7 @@ int main(int argc, char** argv) {
 #ifdef __SWITCH__
     // Unmount RomFS now that UI and all threads have stopped.
     // This releases the file lock on g_nroPath so any pending update can be applied right now!
-    if (g_romfs_mounted) {
-        romfsExit();
-        g_romfs_mounted = false;
-        util::logLine("main: unmounted RomFS during shutdown");
-    }
+    util::unmountRomfs();
 
     // Apply pending update if one was downloaded during this session
     if (checkAndApplyPendingUpdate()) {
