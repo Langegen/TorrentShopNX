@@ -425,23 +425,13 @@ brls::View* SettingsTab::buildGeneralTab() {
             cfg.setLastCatalogUpdateDate(""); // Force catalog refresh for new language
             cfg.save();
 
-            brls::Dialog* restartDialog = new brls::Dialog("app/settings/lang_changed_restart"_i18n);
-            restartDialog->addButton("app/settings/restart_btn"_i18n, []() {
-#ifdef __SWITCH__
-                if (envHasNextLoad()) {
-                    std::string quotedArg = "\"" + g_nroPath + "\"";
-                    envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
-                }
-                fsdevCommitDevice("sdmc");
-                util::logLine("language_restart: closing log and exiting to HBMenu via _exit(0)");
-                util::logClose();
-                _exit(0);
-#else
-                brls::Application::quit();
-#endif
+            // Switch locale in Borealis engine immediately
+            brls::Application::setLocale(newLang);
+
+            // Instantly recreate SettingsTab in the new locale
+            brls::Application::popActivity(brls::TransitionAnimation::NONE, []() {
+                brls::Application::pushActivity(new ui::SettingsTab(), brls::TransitionAnimation::NONE);
             });
-            restartDialog->addButton("app/settings/later_btn"_i18n, []() {});
-            restartDialog->open();
         }
     });
     box->addView(languageCell);

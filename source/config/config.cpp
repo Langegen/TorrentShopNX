@@ -301,6 +301,11 @@ void ConfigManager::save() {
     file << "retro_custom_path=" << retro_custom_path_ << "\n";
     file << "retro_auto_extract=" << (retro_auto_extract_ ? "true" : "false") << "\n";
     file << "retro_romset_mode=" << retro_romset_mode_ << "\n";
+    file.flush();
+    file.close();
+#ifdef __SWITCH__
+    fsdevCommitDevice("sdmc");
+#endif
     util::logLine("config: saved config.ini");
 }
 
@@ -522,7 +527,7 @@ const std::string& ConfigManager::getLanguage() const {
 }
 
 void ConfigManager::setLanguage(const std::string& lang) {
-    if (lang != "ru" && lang != "en-US" && lang != "en") {
+    if (!isValidLanguage(lang)) {
         language_ = "auto";
     } else {
         language_ = lang;

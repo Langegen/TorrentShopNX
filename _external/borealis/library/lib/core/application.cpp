@@ -1118,6 +1118,13 @@ std::string Application::getLocale()
     return Application::getPlatform()->getLocale();
 }
 
+void Application::setLocale(const std::string& locale)
+{
+    if (Application::platform)
+        Application::platform->setLocale(locale);
+    reloadTranslations(locale);
+}
+
 void Application::addToFreeQueue(View* view)
 {
     if (std::binary_search(deletionPool.cbegin(), deletionPool.cend(), view))

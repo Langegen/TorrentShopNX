@@ -265,6 +265,28 @@ std::string SwitchPlatform::getLocale()
     return this->locale;
 }
 
+void SwitchPlatform::setLocale(const std::string& locale)
+{
+    if (locale == LOCALE_AUTO || locale.empty())
+    {
+        uint64_t languageCode = 0;
+        Result rc             = setGetSystemLanguage(&languageCode);
+        if (R_SUCCEEDED(rc))
+        {
+            char* languageName = (char*)&languageCode;
+            this->locale       = std::string(languageName);
+        }
+        else
+        {
+            this->locale = LOCALE_DEFAULT;
+        }
+    }
+    else
+    {
+        this->locale = locale;
+    }
+}
+
 AudioPlayer* SwitchPlatform::getAudioPlayer()
 {
     return this->audioPlayer;

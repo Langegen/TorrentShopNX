@@ -293,6 +293,16 @@ static std::atomic<bool> s_calculatingSettingsStats{false};
 
 void MainMenu::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
+
+    // Update tile titles to reflect the currently active locale
+    if (tiles_.size() >= 5) {
+        tiles_[0]->setTitle("app/menu/catalog"_i18n);
+        tiles_[1]->setTitle("app/menu/retro_games"_i18n);
+        tiles_[2]->setTitle("app/menu/library"_i18n);
+        tiles_[3]->setTitle("app/menu/downloads"_i18n);
+        tiles_[4]->setTitle("app/menu/settings"_i18n);
+    }
+
     s_installedCountCalculated = false;
     s_settingsStatsCalculated = false;
     refreshDashboardState();
