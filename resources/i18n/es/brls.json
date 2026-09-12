@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "Aceptar",
+        "back": "Atrás",
+        "exit": "Salir",
+        "cancel": "Cancelar",
+        "on": "Act.",
+        "off": "Desact."
+    },
+    "crash_frame": {
+        "button": "Aceptar"
+    },
+    "thumbnail_sidebar": {
+        "save": "Guardar"
+    }
+}

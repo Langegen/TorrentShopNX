@@ -168,6 +168,19 @@ bool readWholeFile(const std::string& path, std::string& out) {
     return true;
 }
 
+bool isValidLanguage(const std::string& lang) {
+    return lang == "auto" ||
+           lang == "ru" ||
+           lang == "en-US" || lang == "en" ||
+           lang == "es" ||
+           lang == "fr" ||
+           lang == "de" ||
+           lang == "it" ||
+           lang == "pt-BR" || lang == "pt" ||
+           lang == "zh-Hans" || lang == "zh-CN" || lang == "zh-Hant" || lang == "zh" ||
+           lang == "ja";
+}
+
 } // namespace
 
 ConfigManager& ConfigManager::instance() {
@@ -218,7 +231,7 @@ void ConfigManager::load() {
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
-        if (language_ != "ru" && language_ != "en-US" && language_ != "en") language_ = "auto";
+        if (!isValidLanguage(language_)) language_ = "auto";
         if (retro_roms_mode_ != "retroarch" && retro_roms_mode_ != "downloads" && retro_roms_mode_ != "custom") {
             retro_roms_mode_ = "retroarch";
         }
@@ -238,7 +251,7 @@ void ConfigManager::load() {
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
-        if (language_ != "ru" && language_ != "en-US" && language_ != "en") language_ = "auto";
+        if (!isValidLanguage(language_)) language_ = "auto";
         if (retro_roms_mode_ != "retroarch" && retro_roms_mode_ != "downloads" && retro_roms_mode_ != "custom") {
             retro_roms_mode_ = "retroarch";
         }
@@ -307,16 +320,22 @@ const std::string& ConfigManager::getCatalogSourceUrl() const {
 std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
     std::string url = normalizeCatalogUrl(catalog_source_url_);
 
-    bool isCustom = !url.empty() &&
-                    url != DEFAULT_CATALOG_URL_RU &&
-                    url != DEFAULT_CATALOG_URL_EN &&
-                    url != LEGACY_CATALOG_URL &&
-                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/main/RU_catalog.json" &&
-                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/main/EN_catalog.json" &&
-                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json" &&
-                    url != "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
+    bool isDefault = url.empty() ||
+                     url == DEFAULT_CATALOG_URL_RU ||
+                     url == DEFAULT_CATALOG_URL_EN ||
+                     url == DEFAULT_CATALOG_URL_ES ||
+                     url == DEFAULT_CATALOG_URL_FR ||
+                     url == DEFAULT_CATALOG_URL_DE ||
+                     url == DEFAULT_CATALOG_URL_IT ||
+                     url == DEFAULT_CATALOG_URL_PT_BR ||
+                     url == DEFAULT_CATALOG_URL_ZH_HANS ||
+                     url == LEGACY_CATALOG_URL ||
+                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-game-collection/", 0) == 0 ||
+                     url.rfind("https://github.com/Langegen/switch-game-collection/", 0) == 0 ||
+                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-games/", 0) == 0 ||
+                     url.rfind("https://github.com/Langegen/switch-games/", 0) == 0;
 
-    if (isCustom) {
+    if (!isDefault) {
         return url;
     }
 
@@ -338,7 +357,20 @@ std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
 
     if (lang == "ru" || lang.rfind("ru", 0) == 0) {
         return DEFAULT_CATALOG_URL_RU;
+    } else if (lang == "es" || lang.rfind("es", 0) == 0) {
+        return DEFAULT_CATALOG_URL_ES;
+    } else if (lang == "fr" || lang.rfind("fr", 0) == 0) {
+        return DEFAULT_CATALOG_URL_FR;
+    } else if (lang == "de" || lang.rfind("de", 0) == 0) {
+        return DEFAULT_CATALOG_URL_DE;
+    } else if (lang == "it" || lang.rfind("it", 0) == 0) {
+        return DEFAULT_CATALOG_URL_IT;
+    } else if (lang == "pt-BR" || lang.rfind("pt", 0) == 0) {
+        return DEFAULT_CATALOG_URL_PT_BR;
+    } else if (lang == "zh-Hans" || lang.rfind("zh", 0) == 0) {
+        return DEFAULT_CATALOG_URL_ZH_HANS;
     }
+
     return DEFAULT_CATALOG_URL_EN;
 }
 

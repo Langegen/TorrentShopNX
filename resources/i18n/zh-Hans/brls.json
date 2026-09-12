@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "确定",
+        "back": "返回",
+        "exit": "退出",
+        "cancel": "取消",
+        "on": "开",
+        "off": "关"
+    },
+    "crash_frame": {
+        "button": "确定"
+    },
+    "thumbnail_sidebar": {
+        "save": "保存"
+    }
+}

@@ -37,13 +37,29 @@ enum class LanguageFilter {
     ALL = 0,
     RUSSIAN_ONLY = 1,
     ENGLISH_ONLY = 2,
+    SPANISH_ONLY = 3,
+    FRENCH_ONLY = 4,
+    GERMAN_ONLY = 5,
+    ITALIAN_ONLY = 6,
+    JAPANESE_ONLY = 7,
+    CHINESE_ONLY = 8,
+    PORTUGUESE_ONLY = 9,
+    MULTI_ONLY = 10,
 };
 
 inline std::vector<std::string> getLanguageFilterNames() {
     return {
         "app/filter/lang_all"_i18n,
         "app/filter/lang_rus"_i18n,
-        "app/filter/lang_eng"_i18n
+        "app/filter/lang_eng"_i18n,
+        "app/filter/lang_spa"_i18n,
+        "app/filter/lang_fra"_i18n,
+        "app/filter/lang_ger"_i18n,
+        "app/filter/lang_ita"_i18n,
+        "app/filter/lang_jpn"_i18n,
+        "app/filter/lang_zho"_i18n,
+        "app/filter/lang_por"_i18n,
+        "app/filter/lang_multi"_i18n
     };
 }
 
@@ -294,15 +310,83 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
     // 3. Language filter
     if (state.lang != LanguageFilter::ALL) {
         std::string lowerLang = toLowerUtf8(game.interface_lang + " " + game.voice_lang + " " + game.title);
-        bool hasRussian = (lowerLang.find("rus") != std::string::npos ||
-                           lowerLang.find("рус") != std::string::npos);
-        if (state.lang == LanguageFilter::RUSSIAN_ONLY && !hasRussian) {
-            return false;
-        }
-        if (state.lang == LanguageFilter::ENGLISH_ONLY) {
-            bool hasEnglish = (lowerLang.find("eng") != std::string::npos ||
-                               lowerLang.find("англ") != std::string::npos);
-            if (!hasEnglish) return false;
+        switch (state.lang) {
+            case LanguageFilter::RUSSIAN_ONLY: {
+                bool hasRussian = (lowerLang.find("rus") != std::string::npos ||
+                                   lowerLang.find("рус") != std::string::npos);
+                if (!hasRussian) return false;
+                break;
+            }
+            case LanguageFilter::ENGLISH_ONLY: {
+                bool hasEnglish = (lowerLang.find("eng") != std::string::npos ||
+                                   lowerLang.find("англ") != std::string::npos);
+                if (!hasEnglish) return false;
+                break;
+            }
+            case LanguageFilter::SPANISH_ONLY: {
+                bool hasSpanish = (lowerLang.find("spa") != std::string::npos ||
+                                   lowerLang.find("esp") != std::string::npos ||
+                                   lowerLang.find("исп") != std::string::npos ||
+                                   lowerLang.find("castellano") != std::string::npos);
+                if (!hasSpanish) return false;
+                break;
+            }
+            case LanguageFilter::FRENCH_ONLY: {
+                bool hasFrench = (lowerLang.find("fra") != std::string::npos ||
+                                  lowerLang.find("fre") != std::string::npos ||
+                                  lowerLang.find("фран") != std::string::npos ||
+                                  lowerLang.find("french") != std::string::npos);
+                if (!hasFrench) return false;
+                break;
+            }
+            case LanguageFilter::GERMAN_ONLY: {
+                bool hasGerman = (lowerLang.find("ger") != std::string::npos ||
+                                  lowerLang.find("deu") != std::string::npos ||
+                                  lowerLang.find("нем") != std::string::npos ||
+                                  lowerLang.find("deutsch") != std::string::npos ||
+                                  lowerLang.find("german") != std::string::npos);
+                if (!hasGerman) return false;
+                break;
+            }
+            case LanguageFilter::ITALIAN_ONLY: {
+                bool hasItalian = (lowerLang.find("ita") != std::string::npos ||
+                                   lowerLang.find("ита") != std::string::npos ||
+                                   lowerLang.find("italiano") != std::string::npos ||
+                                   lowerLang.find("italian") != std::string::npos);
+                if (!hasItalian) return false;
+                break;
+            }
+            case LanguageFilter::JAPANESE_ONLY: {
+                bool hasJapanese = (lowerLang.find("jpn") != std::string::npos ||
+                                    lowerLang.find("jap") != std::string::npos ||
+                                    lowerLang.find("япон") != std::string::npos ||
+                                    lowerLang.find("japanese") != std::string::npos);
+                if (!hasJapanese) return false;
+                break;
+            }
+            case LanguageFilter::CHINESE_ONLY: {
+                bool hasChinese = (lowerLang.find("chi") != std::string::npos ||
+                                   lowerLang.find("zho") != std::string::npos ||
+                                   lowerLang.find("кит") != std::string::npos ||
+                                   lowerLang.find("chinese") != std::string::npos);
+                if (!hasChinese) return false;
+                break;
+            }
+            case LanguageFilter::PORTUGUESE_ONLY: {
+                bool hasPortuguese = (lowerLang.find("por") != std::string::npos ||
+                                      lowerLang.find("порт") != std::string::npos ||
+                                      lowerLang.find("portug") != std::string::npos);
+                if (!hasPortuguese) return false;
+                break;
+            }
+            case LanguageFilter::MULTI_ONLY: {
+                bool hasMulti = (lowerLang.find("multi") != std::string::npos ||
+                                 lowerLang.find("мульти") != std::string::npos);
+                if (!hasMulti) return false;
+                break;
+            }
+            default:
+                break;
         }
     }
 

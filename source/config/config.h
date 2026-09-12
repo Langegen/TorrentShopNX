@@ -16,6 +16,12 @@ public:
 
     static constexpr const char* DEFAULT_CATALOG_URL_RU = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_EN = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
+    static constexpr const char* DEFAULT_CATALOG_URL_ES = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/ES_catalog.json";
+    static constexpr const char* DEFAULT_CATALOG_URL_FR = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/FR_catalog.json";
+    static constexpr const char* DEFAULT_CATALOG_URL_DE = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/DE_catalog.json";
+    static constexpr const char* DEFAULT_CATALOG_URL_IT = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/IT_catalog.json";
+    static constexpr const char* DEFAULT_CATALOG_URL_PT_BR = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/PT_BR_catalog.json";
+    static constexpr const char* DEFAULT_CATALOG_URL_ZH_HANS = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/ZH_Hans_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL = DEFAULT_CATALOG_URL_RU;
     static constexpr const char* LEGACY_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
 

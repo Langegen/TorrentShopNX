@@ -684,19 +684,31 @@ inline std::vector<Game> loadGamesFromFile(const std::string& path) {
 inline std::string getCatalogPath() {
     auto& cfg = config::ConfigManager::instance();
     std::string effUrl = cfg.getEffectiveCatalogSourceUrl();
-    if (effUrl.find("EN_catalog") != std::string::npos) {
-        return TSNX_CATALOG_JSON_EN;
-    }
-    return TSNX_CATALOG_JSON_RU;
+    if (effUrl.find("EN_catalog") != std::string::npos) return TSNX_CATALOG_JSON_EN;
+    if (effUrl.find("ES_catalog") != std::string::npos) return TSNX_CATALOG_JSON_ES;
+    if (effUrl.find("FR_catalog") != std::string::npos) return TSNX_CATALOG_JSON_FR;
+    if (effUrl.find("DE_catalog") != std::string::npos) return TSNX_CATALOG_JSON_DE;
+    if (effUrl.find("IT_catalog") != std::string::npos) return TSNX_CATALOG_JSON_IT;
+    if (effUrl.find("PT_BR_catalog") != std::string::npos) return TSNX_CATALOG_JSON_PT_BR;
+    if (effUrl.find("ZH_Hans_catalog") != std::string::npos) return TSNX_CATALOG_JSON_ZH_HANS;
+    if (effUrl.find("RU_catalog") != std::string::npos) return TSNX_CATALOG_JSON_RU;
+    if (effUrl.find("switch_games.json") != std::string::npos) return TSNX_CATALOG_JSON_RU;
+    return TSNX_CATALOG_JSON_CUSTOM;
 }
 
 inline std::string getCatalogBinPath() {
     auto& cfg = config::ConfigManager::instance();
     std::string effUrl = cfg.getEffectiveCatalogSourceUrl();
-    if (effUrl.find("EN_catalog") != std::string::npos) {
-        return TSNX_CATALOG_BIN_EN;
-    }
-    return TSNX_CATALOG_BIN_RU;
+    if (effUrl.find("EN_catalog") != std::string::npos) return TSNX_CATALOG_BIN_EN;
+    if (effUrl.find("ES_catalog") != std::string::npos) return TSNX_CATALOG_BIN_ES;
+    if (effUrl.find("FR_catalog") != std::string::npos) return TSNX_CATALOG_BIN_FR;
+    if (effUrl.find("DE_catalog") != std::string::npos) return TSNX_CATALOG_BIN_DE;
+    if (effUrl.find("IT_catalog") != std::string::npos) return TSNX_CATALOG_BIN_IT;
+    if (effUrl.find("PT_BR_catalog") != std::string::npos) return TSNX_CATALOG_BIN_PT_BR;
+    if (effUrl.find("ZH_Hans_catalog") != std::string::npos) return TSNX_CATALOG_BIN_ZH_HANS;
+    if (effUrl.find("RU_catalog") != std::string::npos) return TSNX_CATALOG_BIN_RU;
+    if (effUrl.find("switch_games.json") != std::string::npos) return TSNX_CATALOG_BIN_RU;
+    return TSNX_CATALOG_BIN_CUSTOM;
 }
 
 inline const char* kCatalogPath = TSNX_CATALOG_JSON_RU;

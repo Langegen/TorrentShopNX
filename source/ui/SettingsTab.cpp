@@ -386,18 +386,39 @@ brls::View* SettingsTab::buildGeneralTab() {
     std::vector<std::string> languages = {
         "app/settings/lang_auto"_i18n,
         "app/settings/lang_ru"_i18n,
-        "app/settings/lang_en"_i18n
+        "app/settings/lang_en"_i18n,
+        "app/settings/lang_es"_i18n,
+        "app/settings/lang_fr"_i18n,
+        "app/settings/lang_de"_i18n,
+        "app/settings/lang_it"_i18n,
+        "app/settings/lang_pt_br"_i18n,
+        "app/settings/lang_zh_hans"_i18n,
+        "app/settings/lang_ja"_i18n
     };
     int initialLang = 0;
     std::string curLang = cfg.getLanguage();
     if (curLang == "ru") initialLang = 1;
     else if (curLang == "en-US" || curLang == "en") initialLang = 2;
+    else if (curLang == "es") initialLang = 3;
+    else if (curLang == "fr") initialLang = 4;
+    else if (curLang == "de") initialLang = 5;
+    else if (curLang == "it") initialLang = 6;
+    else if (curLang == "pt-BR" || curLang == "pt") initialLang = 7;
+    else if (curLang == "zh-Hans" || curLang == "zh-CN" || curLang == "zh") initialLang = 8;
+    else if (curLang == "ja") initialLang = 9;
 
     auto* languageCell = new brls::SelectorCell();
     languageCell->init("app/settings/language"_i18n, languages, initialLang, [](int selected) {}, [&cfg](int selected) {
         std::string newLang = "auto";
         if (selected == 1) newLang = "ru";
         else if (selected == 2) newLang = "en-US";
+        else if (selected == 3) newLang = "es";
+        else if (selected == 4) newLang = "fr";
+        else if (selected == 5) newLang = "de";
+        else if (selected == 6) newLang = "it";
+        else if (selected == 7) newLang = "pt-BR";
+        else if (selected == 8) newLang = "zh-Hans";
+        else if (selected == 9) newLang = "ja";
 
         if (newLang != cfg.getLanguage()) {
             cfg.setLanguage(newLang);
@@ -521,7 +542,11 @@ brls::View* SettingsTab::buildGeneralTab() {
         brls::Application::getImeManager()->openForText(
             [updateCatalogUrlDisplay, &cfg](std::string text) {
                 if (!text.empty()) {
-                    cfg.setCatalogSourceUrl(text);
+                    if (text == "default" || text == "reset") {
+                        cfg.setCatalogSourceUrl("");
+                    } else {
+                        cfg.setCatalogSourceUrl(text);
+                    }
                     cfg.setLastCatalogUpdateDate(""); // Force catalog refresh with new URL
                     cfg.save();
                     brls::Application::notify("app/settings/catalog_url_updated"_i18n);

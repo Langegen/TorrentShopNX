@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "決定",
+        "back": "戻る",
+        "exit": "終了",
+        "cancel": "キャンセル",
+        "on": "オン",
+        "off": "オフ"
+    },
+    "crash_frame": {
+        "button": "決定"
+    },
+    "thumbnail_sidebar": {
+        "save": "保存"
+    }
+}
