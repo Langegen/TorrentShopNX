@@ -1078,6 +1078,39 @@ void HybridNspInstaller::installerThreadFunc() {
                             goto cleanup_sha;
                         }
 
+                        if (config_.verify_sha256 && hashing_active) {
+                            uint8_t hash[32];
+                            sha256ContextGetHash(&sha_ctx, hash);
+                            hashing_active = false;
+
+                            bool is_zero_id = true;
+                            for (int i = 0; i < 16; ++i) {
+                                if (current_entry->content_id.c[i] != 0) {
+                                    is_zero_id = false;
+                                    break;
+                                }
+                            }
+
+                            if (!is_zero_id) {
+                                char hash_hex[33] = {0};
+                                char exp_hex[33] = {0};
+                                for (int i = 0; i < 16; ++i) {
+                                    snprintf(hash_hex + i * 2, 3, "%02x", hash[i]);
+                                    snprintf(exp_hex + i * 2, 3, "%02x", current_entry->content_id.c[i]);
+                                }
+
+                                if (std::memcmp(hash, current_entry->content_id.c, 16) != 0) {
+                                    util::logLine("installer: NCZ SHA256 mismatch for " + current_entry->name +
+                                                  " got=" + hash_hex + " exp=" + exp_hex);
+                                    setError("NCZ hash mismatch: " + current_entry->name);
+                                    ring_buffer_.setEof();
+                                    goto cleanup_sha;
+                                } else {
+                                    util::logLine("installer: NCZ SHA256 verified OK: " + current_entry->name + " (" + hash_hex + ")");
+                                }
+                            }
+                        }
+
                         if (!ncm_.finalizePlaceHolder(current_entry->content_id)) {
                             setError("NCZ: Failed to finalize NCA: " + current_entry->name);
                             ring_buffer_.setEof();
@@ -1138,6 +1171,39 @@ void HybridNspInstaller::installerThreadFunc() {
                     }
 
                     if (offset_in_file + to_process >= current_entry->size) {
+                        if (config_.verify_sha256 && hashing_active) {
+                            uint8_t hash[32];
+                            sha256ContextGetHash(&sha_ctx, hash);
+                            hashing_active = false;
+
+                            bool is_zero_id = true;
+                            for (int i = 0; i < 16; ++i) {
+                                if (current_entry->content_id.c[i] != 0) {
+                                    is_zero_id = false;
+                                    break;
+                                }
+                            }
+
+                            if (!is_zero_id) {
+                                char hash_hex[33] = {0};
+                                char exp_hex[33] = {0};
+                                for (int i = 0; i < 16; ++i) {
+                                    snprintf(hash_hex + i * 2, 3, "%02x", hash[i]);
+                                    snprintf(exp_hex + i * 2, 3, "%02x", current_entry->content_id.c[i]);
+                                }
+
+                                if (std::memcmp(hash, current_entry->content_id.c, 16) != 0) {
+                                    util::logLine("installer: NCA SHA256 mismatch for " + current_entry->name +
+                                                  " got=" + hash_hex + " exp=" + exp_hex);
+                                    setError("NCA hash mismatch: " + current_entry->name);
+                                    ring_buffer_.setEof();
+                                    goto cleanup_sha;
+                                } else {
+                                    util::logLine("installer: NCA SHA256 verified OK: " + current_entry->name + " (" + hash_hex + ")");
+                                }
+                            }
+                        }
+
                         util::logLine("installer: [NcaFinalize] start content=" + current_entry->name);
                         if (!ncm_.finalizePlaceHolder(current_entry->content_id)) {
                             setError("Failed to finalize NCA: " + current_entry->name);
@@ -1146,7 +1212,6 @@ void HybridNspInstaller::installerThreadFunc() {
                         }
                         util::logLine("installer: [NcaFinalize] success");
                         util::logLine("installer: NCA installed: " + current_entry->name);
-                        hashing_active = false;
                     }
 #else
                     (void)offset_in_file;
@@ -1333,20 +1398,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     std::vector<NcmContentInfo> content_infos;
     content_infos.reserve(cnmt.contents.size() + 1);
 
-    // Контент из CNMT (Awoo отбрасывает delta fragments > 5)
-    for (const auto& ce : cnmt.contents) {
-        if (static_cast<uint8_t>(ce.type) > 5) {
-            continue;
-        }
-        NcmContentInfo ci = {};
-        std::memcpy(ci.content_id.c, ce.content_id, 16);
-        ncmU64ToContentInfoSize(ce.size, &ci);
-        ci.content_type = static_cast<NcmContentType>(static_cast<uint8_t>(ce.type));
-        ci.id_offset = 0;
-        content_infos.push_back(ci);
-    }
-
-    // Запись для самой CNMT NCA (Meta) по стандарту Awoo/HOS добавляется В КОНЕЦ массива NcmContentInfo.
+    // 1. По стандарту Awoo/HOS запись для самой CNMT NCA (Meta) ВСЕГДА идет ПЕРВОЙ!
     {
         const NspFileEntry* e = is_xci_ ? xci_header_.findByType(NspEntryType::CnmtNca)
                                         : nsp_header_.findByType(NspEntryType::CnmtNca);
@@ -1362,6 +1414,19 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         }
     }
 
+    // 2. Контент из CNMT (Awoo отбрасывает delta fragments > 5)
+    for (const auto& ce : cnmt.contents) {
+        if (static_cast<uint8_t>(ce.type) > 5) {
+            continue;
+        }
+        NcmContentInfo ci = {};
+        std::memcpy(ci.content_id.c, ce.content_id, 16);
+        ncmU64ToContentInfoSize(ce.size, &ci);
+        ci.content_type = static_cast<NcmContentType>(static_cast<uint8_t>(ce.type));
+        ci.id_offset = 0;
+        content_infos.push_back(ci);
+    }
+
     uint16_t ext_hdr_size = cnmt.extended_header_size;
     if (cnmt.raw_data.size() < (0x20u + ext_hdr_size)) {
         util::logLine("hybrid: CNMT raw data is too small for extended header, dropping ext header");
@@ -1373,23 +1438,44 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         return true;
     }
 
-    // Буфер: NcmContentMetaHeader + ExtendedHeader + NcmContentInfo[]
+    // Для патчей (0x81) выделяем дополнительное место под extended_data_size
+    size_t patch_ext_data_size = 0;
+    if (cnmt.meta_type == 0x81 && ext_hdr_size >= sizeof(NcmPatchMetaExtendedHeader)) {
+        const auto* patch_hdr = reinterpret_cast<const NcmPatchMetaExtendedHeader*>(cnmt.raw_data.data() + 0x20);
+        patch_ext_data_size = patch_hdr->extended_data_size;
+    }
+
+    // Буфер: NcmContentMetaHeader + ExtendedHeader + NcmContentInfo[] + [patch_ext_data]
     size_t buf_size = sizeof(NcmContentMetaHeader)
                     + ext_hdr_size
-                    + content_infos.size() * sizeof(NcmContentInfo);
+                    + content_infos.size() * sizeof(NcmContentInfo)
+                    + patch_ext_data_size;
     std::vector<uint8_t> meta_buf(buf_size, 0);
     auto* hdr = reinterpret_cast<NcmContentMetaHeader*>(meta_buf.data());
     hdr->extended_header_size = ext_hdr_size;
     hdr->content_count      = static_cast<uint16_t>(content_infos.size());
     hdr->content_meta_count = cnmt.content_meta_count;
     hdr->attributes         = cnmt.attributes;
-    hdr->storage_id         = static_cast<uint8_t>(config_.storage);
+    hdr->storage_id         = 0; // В HOS базе ContentMetaHeader::storage_id ВСЕГДА 0 (None)
 
     size_t write_off = sizeof(NcmContentMetaHeader);
     if (ext_hdr_size > 0) {
         std::memcpy(meta_buf.data() + write_off,
                     cnmt.raw_data.data() + 0x20,
                     ext_hdr_size);
+
+        // ВАЖНО: Сбрасываем required_system_version в 0 (как в Awoo-Installer),
+        // чтобы игры запускались даже если версия прошивки консоли ниже требуемой игрой!
+        // В NcmApplicationMetaExtendedHeader и NcmPatchMetaExtendedHeader
+        // required_system_version находится по смещению +8 от начала extended header.
+        if ((cnmt.meta_type == 0x80 || cnmt.meta_type == 0x81) && ext_hdr_size >= 12) {
+            uint32_t* req_sys_ver = reinterpret_cast<uint32_t*>(meta_buf.data() + write_off + 8);
+            if (*req_sys_ver != 0) {
+                util::logLine("hybrid: zeroing required_system_version (was " + std::to_string(*req_sys_ver) + ")");
+                *req_sys_ver = 0;
+            }
+        }
+
         write_off += ext_hdr_size;
     }
 
@@ -1444,60 +1530,24 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         }
         // Application (0x80): base_tid без изменений
 
-#ifdef __SWITCH__
         std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
-#endif
         Result ns_rc = nsInitialize();
         if (R_SUCCEEDED(ns_rc)) {
-            // 1. Читаем существующие записи для base_tid из NS
-            s32 existing_count = 0;
-            nsCountApplicationContentMeta(base_tid, &existing_count);
+            // Как в Awoo-Installer: пушим единичную запись для текущего мета-ключа,
+            // не трогая и не удаляя существующие записи base/dlc через nsDeleteApplicationRecord!
+            ContentStorageRecord rec = {};
+            rec.key = key;
+            rec.storage_id = static_cast<u64>(config_.storage);
 
-            std::vector<ContentStorageRecord> records;
-
-            if (existing_count > 0) {
-                records.resize(existing_count);
-                u32 entries_read = 0;
-                Result list_rc = nsListApplicationRecordContentMetaCustom(0, base_tid, records.data(),
-                                    existing_count * sizeof(ContentStorageRecord), &entries_read);
-                if (R_SUCCEEDED(list_rc)) {
-                    records.resize(entries_read);
-                    util::logLine("hybrid: read " + std::to_string(entries_read) + " existing NS records");
-                } else {
-                    records.clear();
-                }
-            }
-
-            // Ищем или добавляем текущий контент в список
-            bool found = false;
-            for (auto& r : records) {
-                if (r.key.id == key.id && r.key.type == key.type) {
-                    r.storage_id = static_cast<u64>(config_.storage);
-                    r.key.version = cnmt.version;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                ContentStorageRecord new_rec = {};
-                new_rec.key.id = key.id;
-                new_rec.key.version = cnmt.version;
-                new_rec.key.type = cnmt.meta_type;
-                new_rec.key.install_type = 0; // 0 = Full
-                new_rec.storage_id = static_cast<u64>(config_.storage);
-                records.push_back(new_rec);
-            }
-
-            nsDeleteApplicationRecordCustom(base_tid);
             ns_rc = nsPushApplicationRecordCustom(base_tid,
                                                   NsApplicationRecordType_Installed,
-                                                  records.data(),
-                                                  static_cast<s32>(records.size()));
+                                                  &rec,
+                                                  1);
             if (R_SUCCEEDED(ns_rc)) {
                 char base_hex[32];
                 std::snprintf(base_hex, sizeof(base_hex), "0x%016llX", (unsigned long long)base_tid);
                 util::logLine("hybrid: nsPushApplicationRecord OK, base_tid="
-                               + std::string(base_hex) + " total_records=" + std::to_string(records.size()));
+                               + std::string(base_hex));
             } else {
                 util::logLine("hybrid: nsPushApplicationRecord FAILED, rc=" + std::to_string(ns_rc));
             }
@@ -1534,6 +1584,13 @@ bool HybridNspInstaller::registerContentMetaPhase() {
             nsExit();
         } else {
             util::logLine("hybrid: nsInitialize failed, rc=" + std::to_string(ns_rc));
+        }
+
+        // Инвалидируем кэш прав доступа NCM
+        if (R_SUCCEEDED(ncmInitialize())) {
+            ncmInvalidateRightsIdCache();
+            ncmExit();
+            util::logLine("hybrid: invalidated NCM rights ID cache");
         }
     }
 

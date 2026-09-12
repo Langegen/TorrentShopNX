@@ -714,19 +714,36 @@ void FileSelectView::startDownloadAndGoToDownloads() {
 void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
     (void)forcedIndex;
     (void)forcedName;
+
+    std::vector<size_t> chosen;
     for (size_t i = 0; i < files_.size(); ++i) {
         if (i < selected_.size() && selected_[i]) {
-            std::vector<int> singleSelected = { files_[i].index };
-            std::string itemTitle = cleanTitle(game_.title);
-            if (selectedIndices.size() > 1) {
-                itemTitle += " (" + files_[i].name + ")";
-            }
-            Game singleGame = game_;
-            singleGame.title = itemTitle;
-            singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
-            
-            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
+            chosen.push_back(i);
         }
+    }
+
+    // Сортируем выбранные файлы по приоритету установки:
+    // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
+    std::stable_sort(chosen.begin(), chosen.end(), [this](size_t a, size_t b) {
+        int prio_a = download::installFilePriority(files_[a].name);
+        int prio_b = download::installFilePriority(files_[b].name);
+        if (prio_a != prio_b) {
+            return prio_a > prio_b; // наивысший приоритет (v0) в начало очереди
+        }
+        return files_[a].size > files_[b].size; // при равном приоритете больший файл первым
+    });
+
+    for (size_t i : chosen) {
+        std::vector<int> singleSelected = { files_[i].index };
+        std::string itemTitle = cleanTitle(game_.title);
+        if (selectedIndices.size() > 1) {
+            itemTitle += " (" + files_[i].name + ")";
+        }
+        Game singleGame = game_;
+        singleGame.title = itemTitle;
+        singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
+        
+        ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
     }
 
     brls::sync([]() {

@@ -80,6 +80,11 @@ private:
     void applyAesCtrIfNeed(void* buf, size_t size, uint64_t global_offset);
     void seekAesCtr(uint64_t offset, const NczSection& sec, unsigned char nonce_counter[16], size_t& nc_off);
 
+    bool ctr_initialized_ = false;
+    uint64_t ctr_next_offset_ = 0;
+    const NczSection* ctr_current_sec_ = nullptr;
+    Aes128CtrContext ctr_ctx_;
+
 #endif // __SWITCH__
 };
 
