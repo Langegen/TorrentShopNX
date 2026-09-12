@@ -3,8 +3,24 @@ import re
 import glob
 import os
 
-ru = json.load(open('resources/i18n/ru/app.json', encoding='utf-8'))
-en = json.load(open('resources/i18n/en-US/app.json', encoding='utf-8'))
+LANGUAGES = {
+    'RU': 'resources/i18n/ru/app.json',
+    'EN': 'resources/i18n/en-US/app.json',
+    'ES': 'resources/i18n/es/app.json',
+    'FR': 'resources/i18n/fr/app.json',
+    'DE': 'resources/i18n/de/app.json',
+    'IT': 'resources/i18n/it/app.json',
+    'PT-BR': 'resources/i18n/pt-BR/app.json',
+    'ZH-HANS': 'resources/i18n/zh-Hans/app.json',
+    'JA': 'resources/i18n/ja/app.json'
+}
+
+loaded_langs = {}
+for code, path in LANGUAGES.items():
+    if os.path.exists(path):
+        loaded_langs[code] = json.load(open(path, encoding='utf-8'))
+    else:
+        print(f"Warning: File {path} not found!")
 
 def key_exists(d, path):
     parts = path.strip('/').split('/')
@@ -41,12 +57,15 @@ for f in all_files:
         found_keys.add((k, f))
 
 for k, f in sorted(found_keys):
-    if not key_exists(ru, k):
-        missing.append((k, f, 'RU'))
-    if not key_exists(en, k):
-        missing.append((k, f, 'EN'))
+    for lang_code, data in loaded_langs.items():
+        if not key_exists(data, k):
+            missing.append((k, f, lang_code))
 
+print(f"Total languages checked: {len(loaded_langs)} ({', '.join(loaded_langs.keys())})")
 print(f"Total referenced keys: {len(found_keys)}")
 print(f"Missing keys: {len(missing)}")
 for k, f, lang in missing:
     print(f"  [{lang}] Missing key \"{k}\" referenced in {f}")
+
+if missing:
+    exit(1)

@@ -984,6 +984,19 @@ std::string DesktopPlatform::getLocale()
     return this->locale;
 }
 
+void DesktopPlatform::setLocale(const std::string& locale)
+{
+    if (locale == LOCALE_AUTO || locale.empty())
+    {
+        char* langEnv = getenv("BOREALIS_LANG");
+        this->locale  = langEnv ? std::string(langEnv) : LOCALE_DEFAULT;
+    }
+    else
+    {
+        this->locale = locale;
+    }
+}
+
 std::string DesktopPlatform::getHomeDirectory(std::string appName) 
 {
     std::string home(getenv("HOME"));

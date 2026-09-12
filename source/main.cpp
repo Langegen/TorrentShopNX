@@ -378,6 +378,20 @@ int main(int argc, char** argv) {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_RU;
     } else if (userLang == "en-US" || userLang == "en") {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_EN_US;
+    } else if (userLang == "es") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_ES;
+    } else if (userLang == "fr") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_FR;
+    } else if (userLang == "de") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_DE;
+    } else if (userLang == "it") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_IT;
+    } else if (userLang == "pt-BR" || userLang == "pt") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_PT_BR;
+    } else if (userLang == "zh-Hans" || userLang == "zh-CN" || userLang == "zh") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_ZH_HANS;
+    } else if (userLang == "ja") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_JA;
     } else {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     }

@@ -85,6 +85,11 @@ std::string getStr(std::string stringName, Args&&... args)
  */
 void loadTranslations();
 
+/**
+ * Reloads translations for the given locale (or platform locale if empty or auto).
+ */
+void reloadTranslations(std::string locale = "");
+
 inline namespace literals
 {
     /**

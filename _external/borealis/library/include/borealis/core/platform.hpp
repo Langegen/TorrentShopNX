@@ -203,6 +203,11 @@ class Platform
     virtual std::string getLocale() = 0;
 
     /**
+     * Sets the active locale on the platform (enabling dynamic locale switching).
+     */
+    virtual void setLocale(const std::string& locale) {}
+
+    /**
      * Returns the AudioPlayer for the platform.
      * Cannot return nullptr.
      */

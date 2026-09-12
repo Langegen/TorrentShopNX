@@ -17,6 +17,7 @@
 #include <borealis/core/application.hpp>
 #include <borealis/core/assets.hpp>
 #include <borealis/core/i18n.hpp>
+#include <borealis/core/util.hpp>
 #ifdef USE_BOOST_FILESYSTEM
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
@@ -68,6 +69,39 @@ static void loadLocale(std::string locale, nlohmann::json* target)
 
     if (!fs::exists(localePath))
     {
+        std::string fallbackLocale;
+        if (startsWith(locale, "zh"))
+            fallbackLocale = LOCALE_ZH_HANS;
+        else if (startsWith(locale, "es"))
+            fallbackLocale = LOCALE_ES;
+        else if (startsWith(locale, "pt"))
+            fallbackLocale = LOCALE_PT_BR;
+        else if (startsWith(locale, "fr"))
+            fallbackLocale = LOCALE_FR;
+        else if (startsWith(locale, "de"))
+            fallbackLocale = LOCALE_DE;
+        else if (startsWith(locale, "it"))
+            fallbackLocale = LOCALE_IT;
+        else if (startsWith(locale, "ru"))
+            fallbackLocale = LOCALE_RU;
+        else if (startsWith(locale, "ja"))
+            fallbackLocale = LOCALE_JA;
+        else if (startsWith(locale, "en"))
+            fallbackLocale = LOCALE_EN_US;
+
+        if (!fallbackLocale.empty() && fallbackLocale != locale)
+        {
+            std::string fallbackPath = BRLS_ASSET("i18n/" + fallbackLocale);
+            if (fs::exists(fallbackPath))
+            {
+                locale = fallbackLocale;
+                localePath = fallbackPath;
+            }
+        }
+    }
+
+    if (!fs::exists(localePath))
+    {
         Logger::error("Cannot load locale {}: directory {} doesn't exist", locale, localePath);
         return;
     }
@@ -111,15 +145,29 @@ static void loadLocale(std::string locale, nlohmann::json* target)
 #endif /* USE_LIBROMFS */
 }
 
-void loadTranslations()
+void reloadTranslations(std::string locale)
 {
-    loadLocale(LOCALE_DEFAULT, &defaultLocale);
+    currentLocale = nlohmann::json::object();
 
-    std::string currentLocaleName = Application::getLocale();
+    if (defaultLocale.empty())
+        loadLocale(LOCALE_DEFAULT, &defaultLocale);
+
+    std::string currentLocaleName = locale;
+    if (currentLocaleName.empty() || currentLocaleName == LOCALE_AUTO)
+    {
+        currentLocaleName = Application::getLocale();
+    }
+
     if (currentLocaleName != LOCALE_DEFAULT)
         loadLocale(currentLocaleName, &currentLocale);
     else
         currentLocale = defaultLocale;
+}
+
+void loadTranslations()
+{
+    loadLocale(LOCALE_DEFAULT, &defaultLocale);
+    reloadTranslations(Application::getLocale());
 }
 
 namespace internal

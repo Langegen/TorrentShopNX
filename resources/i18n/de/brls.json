@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "OK",
+        "back": "Zurück",
+        "exit": "Beenden",
+        "cancel": "Abbrechen",
+        "on": "Ein",
+        "off": "Aus"
+    },
+    "crash_frame": {
+        "button": "OK"
+    },
+    "thumbnail_sidebar": {
+        "save": "Speichern"
+    }
+}

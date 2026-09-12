@@ -313,6 +313,11 @@ class Application
      */
     static std::string getLocale();
 
+    /**
+     * Sets the application locale dynamically and reloads translations.
+     */
+    static void setLocale(const std::string& locale);
+
     static void addToFreeQueue(View* view);
 
     /**

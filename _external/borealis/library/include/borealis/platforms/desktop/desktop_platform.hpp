@@ -44,6 +44,7 @@ class DesktopPlatform : public Platform
     ThemeVariant getThemeVariant() override;
     void setThemeVariant(ThemeVariant theme) override;
     std::string getLocale() override;
+    void setLocale(const std::string& locale) override;
     ImeManager* getImeManager() override;
 
     FontLoader* getFontLoader() override;
