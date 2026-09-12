@@ -186,4 +186,7 @@ private:
     std::atomic<bool> has_open_pending_{false};  // true while any item is in StreamPreparing
 };
 
+int installFilePriority(const std::string& name);
+uint64_t parseTitleIdFromFileName(const std::string& name);
+
 } // namespace download

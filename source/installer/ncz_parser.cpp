@@ -81,7 +81,7 @@ bool decryptNcaHeader(const uint8_t header_bytes[0x4000], const uint8_t header_k
     return true;
 }
 
-void encryptNcaHeader(const NcaHeader& header, const uint8_t header_key[0x20], uint8_t header_bytes[0x4000]) {
+[[maybe_unused]] void encryptNcaHeader(const NcaHeader& header, const uint8_t header_key[0x20], uint8_t header_bytes[0x4000]) {
     Aes128XtsContext xts;
     aes128XtsContextCreate(&xts, header_key, header_key + 0x10, true);
     for (size_t offset = 0; offset < sizeof(header); offset += 0x200) {
@@ -148,12 +148,6 @@ bool NczDecompressor::init() {
     if (deriveNcaHeaderKey(header_key) && decryptNcaHeader(nca_header_, header_key, header)) {
         header_nca_size = header.nca_size;
         have_header_nca_size = true;
-
-        if (header.distribution == 1) {
-            header.distribution = 0;
-            encryptNcaHeader(header, header_key, nca_header_);
-            util::logLine("ncz: normalized NCA header distribution for install");
-        }
     }
 
     char magic[8];
@@ -279,6 +273,9 @@ bool NczDecompressor::init() {
     current_output_offset_ = 0;
     current_block_id_ = 0;
     block_decomp_off_ = 0;
+    ctr_initialized_ = false;
+    ctr_next_offset_ = 0;
+    ctr_current_sec_ = nullptr;
 
     return true;
 }
@@ -322,30 +319,38 @@ void NczDecompressor::applyAesCtrIfNeed(void* buf, size_t size, uint64_t global_
         if (chunk_size == 0) {
             break;
         }
-        if (active_sec) {
-            if (active_sec->crypto_type == 3 || active_sec->crypto_type == 4) {
-                // ARMv8 CE hardware AES-CTR (libnx crypto): the software
-                // mbedTLS path burned one CPU core for the whole NSZ body.
+        if (active_sec && (active_sec->crypto_type == 3 || active_sec->crypto_type == 4)) {
+            // ARMv8 CE hardware AES-CTR (libnx crypto).
+            // Инициализируем/позиционируем контекст только при первой встрече секции или нелинейном смещении.
+            // При последовательном чтении контекст непрерывно сохраняет поток шифра без сбросов.
+            if (!ctr_initialized_ || ctr_current_sec_ != active_sec || ctr_next_offset_ != current_off) {
                 unsigned char nonce_counter[16] = {0};
                 size_t nc_off = 0;
 
                 seekAesCtr(current_off, *active_sec, nonce_counter, nc_off);
 
-                Aes128CtrContext ctr;
-                aes128CtrContextCreate(&ctr, active_sec->crypto_key, nonce_counter);
+                aes128CtrContextCreate(&ctr_ctx_, active_sec->crypto_key, nonce_counter);
+                ctr_initialized_ = true;
+                ctr_current_sec_ = active_sec;
+                ctr_next_offset_ = current_off;
 
-                // If nc_off > 0 we resume inside the current 16-byte stream
-                // block: encrypt one full block so enc_ctr_buffer holds
-                // AES(counter) (the old mbedtls stream_block), then jump the
-                // context's block offset to nc_off.
+                // Если nc_off > 0 (смещение внутри 16-байтового блока):
+                // aes128CtrCrypt на 16 байт с пустым буфером генерирует keystream блока и сдвигает внутренний ctr.
+                // В libnx aes128CtrCrypt не заполняет enc_ctr_buffer при вызове на полный блок,
+                // поэтому явно копируем keystream в enc_ctr_buffer и выставляем buffer_offset = nc_off.
                 if (nc_off > 0) {
                     uint8_t scratch[16] = {0};
-                    aes128CtrCrypt(&ctr, scratch, scratch, 16);
-                    ctr.buffer_offset = nc_off;
+                    aes128CtrCrypt(&ctr_ctx_, scratch, scratch, 16);
+                    std::memcpy(ctr_ctx_.enc_ctr_buffer, scratch, 16);
+                    ctr_ctx_.buffer_offset = nc_off;
                 }
-
-                aes128CtrCrypt(&ctr, ptr, ptr, chunk_size);
             }
+
+            aes128CtrCrypt(&ctr_ctx_, ptr, ptr, chunk_size);
+            ctr_next_offset_ += chunk_size;
+        } else {
+            ctr_initialized_ = false;
+            ctr_current_sec_ = nullptr;
         }
         ptr += chunk_size;
         current_off += chunk_size;

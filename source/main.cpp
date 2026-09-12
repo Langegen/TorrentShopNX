@@ -109,7 +109,10 @@ extern "C" {
         }
         g_socket_mem_size_used = __nx_socket_mem_size;
 
-        romfsInit();
+        // Note: romfsInit() is deliberately NOT called here in userAppInit().
+        // Calling romfsInit() here locks the running .nro file on SD card before main()
+        // can execute and replace it during auto-updates. romfsInit() is called in main()
+        // right before Borealis UI initialization.
         plInitialize(PlServiceType_User);
         setsysInitialize();
         setInitialize();
@@ -124,6 +127,8 @@ extern "C" {
             lblInitialize();
         }
     }
+
+    static bool g_romfs_mounted = false;
 
     void userAppExit(void) {
         AppletType applet_type = appletGetAppletType();
@@ -141,7 +146,10 @@ extern "C" {
         setExit();
         setsysExit();
         plExit();
-        romfsExit();
+        if (g_romfs_mounted) {
+            romfsExit();
+            g_romfs_mounted = false;
+        }
         socketExit();
     }
 }
@@ -149,6 +157,23 @@ extern "C" {
 
 
 std::string g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
+
+static void normalizeNroPath() {
+    if (g_nroPath.empty()) {
+        g_nroPath = "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro";
+    }
+    if (g_nroPath.rfind("sdmc:/", 0) != 0) {
+        if (g_nroPath.rfind("sdmc:", 0) == 0) {
+            std::string sub = g_nroPath.substr(5);
+            if (!sub.empty() && sub.front() == '/') sub = sub.substr(1);
+            g_nroPath = "sdmc:/" + sub;
+        } else if (g_nroPath.front() == '/') {
+            g_nroPath = "sdmc:" + g_nroPath;
+        } else {
+            g_nroPath = "sdmc:/" + g_nroPath;
+        }
+    }
+}
 
 static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     std::ifstream in(src, std::ios::binary | std::ios::ate);
@@ -178,16 +203,68 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     return (copied >= 100 * 1024);
 }
 
+static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
+    struct stat st;
+    if (stat(srcPath.c_str(), &st) != 0 || st.st_size < 100 * 1024) {
+        util::logLine("replaceNroFile: src invalid or too small (" + srcPath + ")");
+        return false;
+    }
+
+    std::string oldPath = dstPath + ".old";
+    std::remove(oldPath.c_str());
+
+    // Rename dst -> old first to vacate destination slot on FAT32
+    int r1 = ::rename(dstPath.c_str(), oldPath.c_str());
+    util::logLine("replaceNroFile: rename dst -> old (" + dstPath + " -> " + oldPath + ") res=" + std::to_string(r1));
+
+    // Rename src -> dst
+    int r2 = ::rename(srcPath.c_str(), dstPath.c_str());
+    util::logLine("replaceNroFile: rename src -> dst (" + srcPath + " -> " + dstPath + ") res=" + std::to_string(r2));
+
+    if (r2 == 0) {
+        std::remove(oldPath.c_str());
+        util::logLine("replaceNroFile: successfully replaced NRO via rename");
+        return true;
+    }
+
+    // If rename src -> dst failed, try restoring oldPath back to dstPath
+    if (r1 == 0 && stat(dstPath.c_str(), &st) != 0) {
+        ::rename(oldPath.c_str(), dstPath.c_str());
+    }
+
+    // Fallback: copyFileOverwrite
+    util::logLine("replaceNroFile: rename failed, falling back to copyFileOverwrite");
+    std::remove(dstPath.c_str());
+    bool ok = copyFileOverwrite(srcPath, dstPath);
+    if (ok) {
+        std::remove(srcPath.c_str());
+        std::remove(oldPath.c_str());
+        util::logLine("replaceNroFile: successfully replaced NRO via copy");
+        return true;
+    }
+
+    util::logLine("replaceNroFile: copyFileOverwrite also failed!");
+    return false;
+}
+
 static bool checkAndApplyPendingUpdate() {
+#ifdef __SWITCH__
+    // Ensure RomFS is not mounted while we manipulate NRO files
+    if (g_romfs_mounted) {
+        romfsExit();
+        g_romfs_mounted = false;
+        util::logLine("checkAndApplyPendingUpdate: unmounted RomFS before update check");
+    }
+#endif
+
     // 1. If we are running AS the .update file (e.g. TorrentShopNX.nro.update)
     if (g_nroPath.find(".update") != std::string::npos) {
         std::string mainNroPath = g_nroPath.substr(0, g_nroPath.find(".update"));
         util::logLine("main: running as update NRO (" + g_nroPath + "). Overwriting main NRO: " + mainNroPath);
         
-        bool ok = copyFileOverwrite(g_nroPath, mainNroPath);
-        util::logLine("main: copy result=" + std::to_string(ok));
+        bool ok = replaceNroFile(g_nroPath, mainNroPath);
+        util::logLine("main: replace result=" + std::to_string(ok));
         
-        // Remove the .update file so we NEVER enter a bootloop
         std::remove(g_nroPath.c_str());
         
 #ifdef __SWITCH__
@@ -197,13 +274,12 @@ static bool checkAndApplyPendingUpdate() {
             return true; // Signal main to exit so HBL chainloads mainNroPath
         }
 #endif
-        return false;
+        return ok;
     }
 
     // 2. We are running as regular TorrentShopNX.nro. Check for pending .update files.
-    std::string updatePath = g_nroPath + ".update";
     std::vector<std::string> possibleUpdates = {
-        updatePath,
+        g_nroPath + ".update",
         "sdmc:/switch/TorrentShopNX/TorrentShopNX.nro.update",
         "sdmc:/switch/TorrentShopNX.nro.update"
     };
@@ -212,22 +288,31 @@ static bool checkAndApplyPendingUpdate() {
         struct stat st;
         if (stat(upPath.c_str(), &st) == 0) {
             if (st.st_size >= 100 * 1024) {
-                util::logLine("main: found pending update at " + upPath + " (" + std::to_string(st.st_size) + " bytes), applying...");
-                
-                // Copy the update over main NRO. Since no RomFS is mounted yet at top of main(), this succeeds
-                bool ok = copyFileOverwrite(upPath, g_nroPath);
-                util::logLine("main: copyFileOverwrite to " + g_nroPath + " result=" + std::to_string(ok));
-                
-                // CRITICAL: ALWAYS delete the .update file after processing it
-                std::remove(upPath.c_str());
-                
-#ifdef __SWITCH__
-                if (ok && envHasNextLoad()) {
-                    envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
-                    util::logLine("main: relaunching updated NRO via envSetNextLoad");
-                    return true; // Signal main to exit so HBL chainloads the freshly updated NRO
+                // Determine target NRO path for this update file
+                std::string targetNro = upPath;
+                if (targetNro.size() > 7 && targetNro.rfind(".update") == targetNro.size() - 7) {
+                    targetNro = targetNro.substr(0, targetNro.size() - 7);
+                } else {
+                    targetNro = g_nroPath;
                 }
+
+                util::logLine("main: found pending update at " + upPath + " (" + std::to_string(st.st_size) + " bytes), target=" + targetNro);
+                
+                bool ok = replaceNroFile(upPath, targetNro);
+                util::logLine("main: replaceNroFile to " + targetNro + " result=" + std::to_string(ok));
+                
+                if (ok) {
+                    g_nroPath = targetNro;
+#ifdef __SWITCH__
+                    if (envHasNextLoad()) {
+                        envSetNextLoad(g_nroPath.c_str(), g_nroPath.c_str());
+                        util::logLine("main: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
+                    }
 #endif
+                    return true; // Signal main to exit so HBL chainloads the freshly updated NRO
+                } else {
+                    util::logLine("main: failed to replace NRO with update from " + upPath);
+                }
             } else {
                 util::logLine("main: removing invalid/small update file at " + upPath + " (" + std::to_string(st.st_size) + " bytes)");
                 std::remove(upPath.c_str());
@@ -246,6 +331,7 @@ int main(int argc, char** argv) {
     if (argc > 0 && argv[0] && std::string(argv[0]).find(".nro") != std::string::npos) {
         g_nroPath = argv[0];
     }
+    normalizeNroPath();
 
     util::logInit();
     util::logLine("main: start g_nroPath=" + g_nroPath);
@@ -277,6 +363,16 @@ int main(int argc, char** argv) {
     } else {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     }
+
+    // Initialize RomFS before Borealis UI loads resources
+#ifdef __SWITCH__
+    if (R_SUCCEEDED(romfsInit())) {
+        g_romfs_mounted = true;
+        util::logLine("main: romfsInit succeeded");
+    } else {
+        util::logLine("main: romfsInit failed");
+    }
+#endif
 
     // Initialize Borealis UI
     if (!brls::Application::init()) {
@@ -394,6 +490,21 @@ int main(int argc, char** argv) {
         
         util::logLine("main: all threads requested to stop");
     }
+
+#ifdef __SWITCH__
+    // Unmount RomFS now that UI and all threads have stopped.
+    // This releases the file lock on g_nroPath so any pending update can be applied right now!
+    if (g_romfs_mounted) {
+        romfsExit();
+        g_romfs_mounted = false;
+        util::logLine("main: unmounted RomFS during shutdown");
+    }
+
+    // Apply pending update if one was downloaded during this session
+    if (checkAndApplyPendingUpdate()) {
+        util::logLine("main: pending update applied during shutdown");
+    }
+#endif
 
     // Do NOT call curl_global_cleanup() because it might crash if curl threads are alive
 

@@ -231,8 +231,17 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                     try {
                         std::string updatePath = g_nroPath + ".update";
                         
-                        bool updateSaved = copyFileOverwrite(tmpPath, updatePath);
-                        std::remove(tmpPath.c_str());
+                        std::remove(updatePath.c_str());
+                        int renRes = ::rename(tmpPath.c_str(), updatePath.c_str());
+                        bool updateSaved = false;
+                        if (renRes == 0) {
+                            updateSaved = true;
+                            util::logLine("downloadAndInstallAppUpdate: successfully renamed tmp to " + updatePath);
+                        } else {
+                            util::logLine("downloadAndInstallAppUpdate: rename failed (res=" + std::to_string(renRes) + "), falling back to copyFileOverwrite");
+                            updateSaved = copyFileOverwrite(tmpPath, updatePath);
+                            std::remove(tmpPath.c_str());
+                        }
                         
                         if (updateSaved) {
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);

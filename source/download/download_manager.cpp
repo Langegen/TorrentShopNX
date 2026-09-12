@@ -636,18 +636,152 @@ static bool equalsIgnoreCase(const std::string& a, const std::string& b) {
     return true;
 }
 
-static int installFilePriority(const std::string& name) {
-    std::string lower = name;
+uint64_t parseTitleIdFromFileName(const std::string& name) {
+    size_t start = name.find('[');
+    while (start != std::string::npos) {
+        size_t end = name.find(']', start);
+        if (end != std::string::npos && (end - start) == 17) {
+            std::string tid_str = name.substr(start + 1, 16);
+            try {
+                return std::stoull(tid_str, nullptr, 16);
+            } catch (...) {}
+        }
+        start = name.find('[', start + 1);
+    }
+    return 0;
+}
+
+int installFilePriority(const std::string& name) {
+    std::string basename = name;
+    size_t slash = basename.find_last_of("/\\");
+    if (slash != std::string::npos) {
+        basename = basename.substr(slash + 1);
+    }
+
+    std::string lower = basename;
     std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
 
-    if (lower.size() >= 4 && lower.rfind(".nsp") == lower.size() - 4) return 4;
-    if (lower.size() >= 4 && lower.rfind(".nsz") == lower.size() - 4) return 3;
-    if (lower.size() >= 4 && lower.rfind(".xci") == lower.size() - 4) return 2;
-    if (lower.size() >= 4 && lower.rfind(".xcz") == lower.size() - 4) return 2;
-    if (lower.size() >= 5 && lower.rfind(".pfs0") == lower.size() - 5) return 1;
-    return 0;
+    int format_score = 0;
+    bool is_xci = false;
+    if (lower.size() >= 4 && lower.rfind(".nsp") == lower.size() - 4) {
+        format_score = 4;
+    } else if (lower.size() >= 4 && lower.rfind(".nsz") == lower.size() - 4) {
+        format_score = 4; // Равный приоритет с .nsp: формат не должен перебивать базовую игру!
+    } else if (lower.size() >= 4 && lower.rfind(".xci") == lower.size() - 4) {
+        format_score = 3;
+        is_xci = true;
+    } else if (lower.size() >= 4 && lower.rfind(".xcz") == lower.size() - 4) {
+        format_score = 3;
+        is_xci = true;
+    } else if (lower.size() >= 5 && lower.rfind(".pfs0") == lower.size() - 5) {
+        format_score = 1;
+    } else {
+        return 0; // Не поддерживаемый формат Switch пакета
+    }
+
+    // 1. Проверяем Title ID в имени файла
+    uint64_t tid = parseTitleIdFromFileName(basename);
+    bool is_base_tid = false;
+    bool is_update_tid = false;
+    bool is_dlc_tid = false;
+
+    if (tid != 0) {
+        uint64_t type_bits = tid & 0xFFFULL;
+        if (type_bits == 0) {
+            is_base_tid = true; // Application / Base game
+        } else if (type_bits == 0x800) {
+            is_update_tid = true; // Patch / Update
+        } else {
+            is_dlc_tid = true; // AddOnContent / DLC
+        }
+    }
+
+    // 2. Текстовые маркеры v0 / Base
+    bool is_explicit_v0 = false;
+    if (lower.find("[v0]") != std::string::npos ||
+        lower.find("(v0)") != std::string::npos ||
+        lower.find("[v0.") != std::string::npos ||
+        lower.find("(v0.") != std::string::npos ||
+        lower.find("_v0.") != std::string::npos ||
+        lower.find("_v0_") != std::string::npos ||
+        lower.find("_v0 ") != std::string::npos ||
+        lower.find(" v0.") != std::string::npos ||
+        lower.find(" v0 ") != std::string::npos ||
+        lower.find(" v0]") != std::string::npos ||
+        lower.find("[base]") != std::string::npos ||
+        lower.find("(base)") != std::string::npos ||
+        lower.find("_base_") != std::string::npos ||
+        lower.find("_base.") != std::string::npos ||
+        lower.find(" base ") != std::string::npos ||
+        lower.find("[base game]") != std::string::npos ||
+        lower.find("(base game)") != std::string::npos) {
+        is_explicit_v0 = true;
+    }
+
+    // 3. Текстовые маркеры Update
+    bool is_explicit_update = false;
+    if (lower.find("[upd") != std::string::npos ||
+        lower.find("(upd") != std::string::npos ||
+        lower.find("[update") != std::string::npos ||
+        lower.find("(update") != std::string::npos ||
+        lower.find("_upd") != std::string::npos ||
+        lower.find("_update") != std::string::npos ||
+        lower.find(" update ") != std::string::npos ||
+        lower.find("[patch") != std::string::npos ||
+        lower.find("(patch") != std::string::npos ||
+        lower.find("_patch") != std::string::npos ||
+        lower.find(" patch ") != std::string::npos) {
+        is_explicit_update = true;
+    }
+
+    // Проверяем [vXXXXX] где версия > 0 (патчи часто имеют [v65536], [v131072] и т.д.)
+    if (!is_explicit_v0 && !is_explicit_update) {
+        size_t vpos = lower.find("[v");
+        if (vpos != std::string::npos && vpos + 2 < lower.size()) {
+            if (std::isdigit(static_cast<unsigned char>(lower[vpos + 2])) && lower[vpos + 2] != '0') {
+                is_explicit_update = true;
+            }
+        }
+    }
+
+    // 4. Текстовые маркеры DLC
+    bool is_explicit_dlc = false;
+    if (lower.find("[dlc") != std::string::npos ||
+        lower.find("(dlc") != std::string::npos ||
+        lower.find("_dlc") != std::string::npos ||
+        lower.find(" dlc ") != std::string::npos ||
+        lower.find("[addon") != std::string::npos) {
+        is_explicit_dlc = true;
+    }
+
+    // Приоритезация:
+    // 1. DLC (даже если помечен как v0, DLC не является исполняемой базовой игрой)
+    if (is_explicit_dlc || (is_dlc_tid && !is_base_tid)) {
+        return 100 + format_score;
+    }
+
+    // 2. Обновление (патч не может быть базовой игрой)
+    if (is_explicit_update || (is_update_tid && !is_base_tid)) {
+        return 200 + format_score;
+    }
+
+    // 3. Базовая игра (v0 / Application) — ВСЕГДА на первом месте!
+    if (is_explicit_v0 && is_base_tid) {
+        return 1100 + format_score;
+    }
+    if (is_explicit_v0 || is_base_tid) {
+        return 1000 + format_score;
+    }
+
+    // 4. Картридж XCI/XCZ обычно содержит базовую игру
+    if (is_xci) {
+        return 900 + format_score;
+    }
+
+    // 5. Неизвестный файл (нет явных признаков ни v0, ни update, ни DLC)
+    return 500 + format_score;
 }
 
 static std::string ensureHttpUrl(std::string url) {
@@ -675,21 +809,6 @@ static std::string urlEncodeLocal(const std::string& value) {
         }
     }
     return out;
-}
-
-static uint64_t parseTitleIdFromFileName(const std::string& name) {
-    size_t start = name.find('[');
-    while (start != std::string::npos) {
-        size_t end = name.find(']', start);
-        if (end != std::string::npos && (end - start) == 17) {
-            std::string tid_str = name.substr(start + 1, 16);
-            try {
-                return std::stoull(tid_str, nullptr, 16);
-            } catch (...) {}
-        }
-        start = name.find('[', start + 1);
-    }
-    return 0;
 }
 
 static bool isSwitchGameFile(const std::string& filename) {
