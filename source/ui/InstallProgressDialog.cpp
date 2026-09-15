@@ -33,28 +33,28 @@ uint64_t extractTitleId(const std::string& name) {
     return 0;
 }
 
-std::string getRussianPhaseText(installer::InstallState state) {
+std::string getLocalizedPhaseText(installer::InstallState state) {
     switch (state) {
         case installer::InstallState::Idle:
-            return "Инициализация...";
+            return "app/installer/step_init"_i18n;
         case installer::InstallState::ParsingHeader:
-            return "Чтение заголовка пакета...";
+            return "app/installer/step_header"_i18n;
         case installer::InstallState::CreatingPlaceHolders:
-            return "Подготовка хранилища (NCM)...";
+            return "app/installer/step_storage"_i18n;
         case installer::InstallState::Streaming:
-            return "Установка контента...";
+            return "app/installer/step_content"_i18n;
         case installer::InstallState::InstallingTickets:
-            return "Установка тикетов (ES)...";
+            return "app/installer/step_tickets"_i18n;
         case installer::InstallState::RegisteringMeta:
-            return "Регистрация в системе...";
+            return "app/installer/step_register"_i18n;
         case installer::InstallState::Completed:
-            return "Установка успешно завершена!";
+            return "app/installer/step_success"_i18n;
         case installer::InstallState::Failed:
-            return "Ошибка при установке";
+            return "app/installer/step_error"_i18n;
         case installer::InstallState::Cancelled:
-            return "Отмена установки...";
+            return "app/installer/step_cancelling"_i18n;
         default:
-            return "Обработка...";
+            return "app/installer/step_processing"_i18n;
     }
 }
 
@@ -133,8 +133,8 @@ InstallProgressDialog::InstallProgressDialog(
 
     targetStorageLabel_ = new brls::Label();
     std::string storageText = (storageId_ == 1)
-        ? "Целевое хранилище: SD-карта"
-        : "Целевое хранилище: Память консоли (NAND)";
+        ? "app/installer/target_sd"_i18n
+        : "app/installer/target_nand"_i18n;
     targetStorageLabel_->setText(storageText);
     targetStorageLabel_->setFontSize(13.0f);
     targetStorageLabel_->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald subtitle
@@ -146,7 +146,7 @@ InstallProgressDialog::InstallProgressDialog(
 
     // ── 2. Status Label ────────────────────────────────────────────────────
     statusLabel_ = new brls::Label();
-    statusLabel_->setText("Инициализация установки...");
+    statusLabel_->setText("app/installer/init_install"_i18n);
     statusLabel_->setFontSize(14.0f);
     statusLabel_->setTextColor(nvgRGB(190, 195, 205));
     statusLabel_->setMarginBottom(12.0f);
@@ -178,7 +178,7 @@ InstallProgressDialog::InstallProgressDialog(
 
     // Cancel Button
     std::string cancelText = brls::getStr("app/common/cancel");
-    if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Отмена";
+    if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
     this->addButton(cancelText, [this]() {
         if (cancelToken_) {
@@ -188,7 +188,7 @@ InstallProgressDialog::InstallProgressDialog(
             installer_->cancel();
         }
         if (statusLabel_) {
-            statusLabel_->setText("Отмена установки...");
+            statusLabel_->setText("app/installer/step_cancelling"_i18n);
         }
     });
 
@@ -267,11 +267,11 @@ void InstallProgressDialog::updateUi(
         std::string speedStr;
         if (speedKbps > 1024.0) {
             char sBuf[32];
-            std::snprintf(sBuf, sizeof(sBuf), "%.1f МБ/с", speedKbps / 1024.0);
+            std::snprintf(sBuf, sizeof(sBuf), "%.1f%s", speedKbps / 1024.0, "app/installer/unit_mb_s"_i18n.c_str());
             speedStr = sBuf;
         } else if (speedKbps > 0.0) {
             char sBuf[32];
-            std::snprintf(sBuf, sizeof(sBuf), "%.0f КБ/с", speedKbps);
+            std::snprintf(sBuf, sizeof(sBuf), "%.0f%s", speedKbps, "app/installer/unit_kb_s"_i18n.c_str());
             speedStr = sBuf;
         }
 
@@ -281,11 +281,11 @@ void InstallProgressDialog::updateUi(
             double secRemain = remainBytes / (speedKbps * 1024.0);
             int s = static_cast<int>(secRemain);
             if (s < 60) {
-                etaStr = " · Ост. " + std::to_string(s) + "с";
+                etaStr = "app/installer/rem_prefix"_i18n + std::to_string(s) + "app/installer/unit_sec"_i18n;
             } else {
                 int m = s / 60;
                 int remS = s % 60;
-                etaStr = " · Ост. " + std::to_string(m) + "м " + std::to_string(remS) + "с";
+                etaStr = "app/installer/rem_prefix"_i18n + std::to_string(m) + "app/installer/unit_min_space"_i18n + std::to_string(remS) + "app/installer/unit_sec"_i18n;
             }
         }
 
@@ -346,7 +346,7 @@ void InstallProgressDialog::runInstallation() {
             if (!alive || !alive->load()) return;
             if (!closed_.exchange(true)) {
                 this->close([onComplete]() {
-                    if (onComplete) onComplete(false, "Не удалось открыть файл пакета");
+                    if (onComplete) onComplete(false, "app/installer/err_open_pkg"_i18n);
                 });
             }
         });
@@ -374,7 +374,7 @@ void InstallProgressDialog::runInstallation() {
 
     if (!installer_->start(dataSource_.get(), config)) {
         std::string errMsg = installer_->errorMessage();
-        if (errMsg.empty()) errMsg = "Не удалось запустить установщик пакета";
+        if (errMsg.empty()) errMsg = "app/installer/err_start_installer"_i18n;
         util::logLine("InstallProgressDialog: installer start failed: " + errMsg);
 
         if (dataSource_) dataSource_->close();
@@ -408,7 +408,7 @@ void InstallProgressDialog::runInstallation() {
             uint64_t totalBytes = installer_->totalBytes();
             if (totalBytes == 0) totalBytes = fileTotalSize;
             double speed = installer_->downloadSpeedKbps();
-            std::string statusText = getRussianPhaseText(installer_->state());
+            std::string statusText = getLocalizedPhaseText(installer_->state());
 
             brls::sync([this, alive, prog, instBytes, totalBytes, speed, statusText]() {
                 if (alive && alive->load() && !closed_.load()) {
@@ -433,12 +433,12 @@ void InstallProgressDialog::runInstallation() {
     bool success = (installer_->state() == installer::InstallState::Completed);
     std::string finalMsg;
     if (cancel->load()) {
-        finalMsg = "Установка отменена";
+        finalMsg = "app/installer/install_cancelled"_i18n;
     } else if (success) {
-        finalMsg = "Установка успешно завершена!";
+        finalMsg = "app/installer/step_success"_i18n;
     } else {
         finalMsg = installer_->errorMessage();
-        if (finalMsg.empty()) finalMsg = "Произошла ошибка при установке пакета";
+        if (finalMsg.empty()) finalMsg = "app/installer/install_generic_err"_i18n;
     }
 
     util::logLine("InstallProgressDialog: finished, success=" + std::string(success ? "yes" : "no") + " msg=" + finalMsg);

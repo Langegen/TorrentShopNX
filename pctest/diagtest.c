@@ -305,8 +305,8 @@ ips[np] = ((ip & 0xFF) << 24) | ((ip & 0xFF00) << 8) |
                 printf("DiagTest: duration reached\n");
                 break;
             }
-            if (no_data_sec >= 60) {
-                printf("DiagTest: no data for 60s, giving up\n");
+            if (no_data_sec >= duration_sec) {
+                printf("DiagTest: no data for %ds, giving up\n", duration_sec);
                 break;
             }
         }

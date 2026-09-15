@@ -116,7 +116,7 @@ void CollectionsView::onContentAvailable() {
             size_t count = entries.size();
             brls::sync([flag, card, count, cInfo]() {
                 if (flag->load() && card) {
-                    card->setCountText(std::to_string(count) + " игр");
+                    card->setCountText(brls::getStr("app/collections/games_count", std::to_string(count)));
                 }
             });
         });
@@ -132,8 +132,8 @@ void CollectionsView::rebuildGrid() {
     const auto& collections = catalog::CollectionsManager::instance().collections();
 
     // Find "new_release" and "top_100" collections
-    catalog::CollectionInfo newReleaseInfo{"new_release", "Новые релизы", "Свежие игры и новинки"};
-    catalog::CollectionInfo top100Info{"top_100", "Топ-100", "Лучшие игры по Metacritic"};
+    catalog::CollectionInfo newReleaseInfo{"new_release", "app/collections/item_new_release_name"_i18n, "app/collections/item_new_release_desc"_i18n};
+    catalog::CollectionInfo top100Info{"top_100", "app/collections/item_top_100_name"_i18n, "app/collections/item_top_100_desc"_i18n};
     for (const auto& c : collections) {
         if (c.id == "new_release") newReleaseInfo = c;
         if (c.id == "top_100") top100Info = c;
@@ -142,7 +142,7 @@ void CollectionsView::rebuildGrid() {
     // ============================================================
     // SECTION 1: ОСНОВНЫЕ РАЗДЕЛЫ (Row 0: 4 cards)
     // ============================================================
-    listBox->addView(createSectionDivider("ОСНОВНЫЕ РАЗДЕЛЫ"));
+    listBox->addView(createSectionDivider("app/collections/section_main"_i18n));
 
     brls::Box* mainRow = new brls::Box();
     mainRow->setAxis(brls::Axis::ROW);
@@ -159,11 +159,11 @@ void CollectionsView::rebuildGrid() {
         for (const auto& g : *catalog) {
             if (!isHomebrewGame(g)) ++officialCount;
         }
-        std::string totalCount = std::to_string(officialCount) + " игр";
+        std::string totalCount = brls::getStr("app/collections/games_count", std::to_string(officialCount));
         CollectionCard* cardAll = new CollectionCard(
             "all_catalog",
-            "Весь каталог",
-            "Полная база доступных игр",
+            "app/collections/all_catalog"_i18n,
+            "app/collections/all_catalog_desc"_i18n,
             totalCount,
             getGenreColor("all_catalog"),
             []() { brls::Application::pushActivity(new CatalogView()); }
@@ -178,9 +178,9 @@ void CollectionsView::rebuildGrid() {
         size_t favCount = catalog::FavoritesManager::instance().getFavorites().size();
         CollectionCard* cardFav = new CollectionCard(
             "favorites",
-            "Избранное",
-            "Ваши сохранённые игры",
-            std::to_string(favCount) + " игр",
+            "app/collections/favorites"_i18n,
+            "app/collections/favorites_desc"_i18n,
+            brls::getStr("app/collections/games_count", std::to_string(favCount)),
             getGenreColor("favorites"),
             []() { brls::Application::pushActivity(new FavoritesView()); }
         );
@@ -192,7 +192,7 @@ void CollectionsView::rebuildGrid() {
     // 1.3 Новые релизы
     {
         int nrCount = cachedCount(newReleaseInfo);
-        std::string nrText = (nrCount >= 0) ? (std::to_string(nrCount) + " новинок") : "Свежие игры";
+        std::string nrText = (nrCount >= 0) ? (std::to_string(nrCount) + " " + "app/collections/new_releases_count"_i18n) : "app/collections/fresh_games"_i18n;
         CollectionCard* cardNew = new CollectionCard(
             "new_release",
             newReleaseInfo.getName(),
@@ -210,7 +210,7 @@ void CollectionsView::rebuildGrid() {
     // 1.4 Топ-100
     {
         int topCount = cachedCount(top100Info);
-        std::string topText = (topCount >= 0) ? (std::to_string(topCount) + " игр") : "★ Топ-100";
+        std::string topText = (topCount >= 0) ? brls::getStr("app/collections/games_count", std::to_string(topCount)) : "★ " + "app/collections/item_top_100_name"_i18n;
         CollectionCard* cardTop = new CollectionCard(
             "top_100",
             top100Info.getName(),
@@ -230,7 +230,7 @@ void CollectionsView::rebuildGrid() {
     // ============================================================
     // SECTION 2: ЖАНРОВЫЕ И ТЕМАТИЧЕСКИЕ ПОДБОРКИ (4xN Grid)
     // ============================================================
-    listBox->addView(createSectionDivider("ЖАНРОВЫЕ И ТЕМАТИЧЕСКИЕ ПОДБОРКИ"));
+    listBox->addView(createSectionDivider("app/collections/section_genres"_i18n));
 
     brls::Box* currentRow = nullptr;
     std::vector<CollectionCard*> currentGridRow;
@@ -249,7 +249,7 @@ void CollectionsView::rebuildGrid() {
         }
 
         int cached = cachedCount(info);
-        std::string countStr = (cached >= 0) ? (std::to_string(cached) + " игр") : "Подборка";
+        std::string countStr = (cached >= 0) ? brls::getStr("app/collections/games_count", std::to_string(cached)) : "app/collections/badge_collection"_i18n;
 
         CollectionCard* card = new CollectionCard(
             info.id,

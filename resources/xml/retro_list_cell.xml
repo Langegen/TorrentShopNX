@@ -68,7 +68,7 @@
             justifyContent="center">
             <brls:Label
                 id="actionLabel"
-                text="(A) Скачать РОМ"
+                text="@i18n/app/retro/btn_download_rom"
                 fontSize="11"
                 textColor="#00e6af" />
         </brls:Box>

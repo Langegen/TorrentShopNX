@@ -12,9 +12,12 @@
     <!-- Topbar -->
     <brls:Box width="auto" height="48px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
         <brls:Box axis="row" alignItems="center">
-            <brls:Label id="titleLabel" text="Ретро-игры" fontSize="28" />
+            <brls:Label id="titleLabel" text="@i18n/app/menu/retro_games" fontSize="28" />
+            <brls:Box id="emuBadge" axis="row" alignItems="center" marginLeft="16" padding="4 10 4 10" cornerRadius="6" visibility="gone">
+                <brls:Label id="emuBadgeText" text="" fontSize="13" />
+            </brls:Box>
         </brls:Box>
-        <brls:Label id="statsHint" text="Загрузка..." fontSize="14" textColor="#90caf9" />
+        <brls:Label id="statsHint" text="@i18n/app/common/loading" fontSize="14" textColor="#90caf9" />
     </brls:Box>
 
     <!-- Loading / Progress view -->
@@ -26,7 +29,7 @@
         alignItems="center"
         justifyContent="center"
         marginTop="120px">
-        <brls:Label id="loadingLabel" text="Загрузка базы игр..." fontSize="22" marginBottom="14" textColor="#00e6af" />
+        <brls:Label id="loadingLabel" text="@i18n/app/retro/loading_console" fontSize="22" marginBottom="14" textColor="#00e6af" />
         <brls:ProgressSpinner id="progressSpinner" width="48px" height="48px" size="large" />
     </brls:Box>
 

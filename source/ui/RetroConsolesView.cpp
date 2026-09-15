@@ -1,6 +1,8 @@
 #include "RetroConsolesView.hpp"
 #include "RetroCatalogView.hpp"
 #include "RetroUpdateDialog.hpp"
+#include "RetroEmulatorsView.hpp"
+#include "../catalog/retro_emulator_manager.h"
 #include "../utils/log.h"
 #include <algorithm>
 
@@ -53,18 +55,30 @@ void RetroConsolesView::onContentAvailable() {
         titleLabel->setText(brls::getStr("app/retro/consoles_title"));
     }
     if (statsHint) {
-        statsHint->setText(brls::getStr("app/retro/consoles_stats") + "  (-) Обновить базы");
+        statsHint->setText(brls::getStr("app/retro/consoles_stats") + "app/retro/consoles_stats_suffix"_i18n);
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {
             showUpdateDialog();
         }));
     }
 
+    // Register emulators manager action (Y)
+    this->registerAction("app/retro/emulators_action"_i18n, brls::ControllerButton::BUTTON_Y, [](brls::View*) {
+        brls::Application::pushActivity(new RetroEmulatorsView());
+        return true;
+    });
+
     // Register update action (-)
-    this->registerAction("Обновить базы", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+    this->registerAction("app/retro/action_update_bases"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
         showUpdateDialog();
         return true;
     });
 
+    rebuildGrid();
+    refreshGameCounts();
+}
+
+void RetroConsolesView::willAppear(bool resetState) {
+    brls::Activity::willAppear(resetState);
     rebuildGrid();
     refreshGameCounts();
 }
@@ -91,9 +105,9 @@ void RetroConsolesView::refreshGameCounts() {
                 brls::sync([flag, card, count]() {
                     if (flag->load() && card) {
                         if (count > 0) {
-                            card->setCountText(std::to_string(count) + " игр");
+                            card->setCountText(std::to_string(count) + " " + "app/retro/unit_games"_i18n);
                         } else {
-                            card->setCountText("Каталог");
+                            card->setCountText("app/retro/catalog_badge"_i18n);
                         }
                     }
                 });
@@ -118,11 +132,11 @@ void RetroConsolesView::rebuildGrid() {
     };
 
     std::string nintendoTitle = brls::getStr("app/retro/section_nintendo");
-    if (nintendoTitle.empty() || nintendoTitle == "app/retro/section_nintendo") nintendoTitle = "Nintendo (10 платформ)";
+    if (nintendoTitle.empty() || nintendoTitle == "app/retro/section_nintendo") nintendoTitle = "Nintendo";
     std::string sonyTitle = brls::getStr("app/retro/section_sony");
-    if (sonyTitle.empty() || sonyTitle == "app/retro/section_sony") sonyTitle = "Sony PlayStation (4 платформы)";
+    if (sonyTitle.empty() || sonyTitle == "app/retro/section_sony") sonyTitle = "Sony PlayStation";
     std::string segaTitle = brls::getStr("app/retro/section_sega");
-    if (segaTitle.empty() || segaTitle == "app/retro/section_sega") segaTitle = "Sega (6 платформ)";
+    if (segaTitle.empty() || segaTitle == "app/retro/section_sega") segaTitle = "Sega";
 
     std::vector<BrandSection> sections = {
         {"Nintendo", nintendoTitle, nvgRGBA(230, 0, 18, 240)},
@@ -149,9 +163,14 @@ void RetroConsolesView::rebuildGrid() {
             }
 
             int cached = mgr.getCachedGameCount(c.id);
-            std::string countStr = (cached > 0) ? (std::to_string(cached) + " игр") : "Каталог";
+            std::string countStr = (cached > 0) ? (std::to_string(cached) + " " + "app/retro/unit_games"_i18n) : "app/retro/catalog_badge"_i18n;
 
+            bool emuInstalled = !c.recommended_emulator_id.empty() &&
+                                catalog::RetroEmulatorManager::instance().isInstalled(c.recommended_emulator_id);
             std::string desc = c.release_year + " • " + c.recommended_emulator;
+            if (emuInstalled) {
+                desc += "app/retro/emu_ready_badge"_i18n;
+            }
 
             catalog::RetroConsoleInfo cInfo = c;
             CollectionCard* card = new CollectionCard(
@@ -164,6 +183,10 @@ void RetroConsolesView::rebuildGrid() {
                     brls::Application::pushActivity(new RetroCatalogView(cInfo));
                 }
             );
+
+            if (emuInstalled) {
+                card->setDescColor(nvgRGBA(76, 217, 100, 255));
+            }
 
             if (currentGridRow.size() < 3) {
                 card->setMarginRight(16.0f);

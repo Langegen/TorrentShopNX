@@ -25,6 +25,7 @@ public:
     void setOnDefocusCallback(std::function<void()> cb) { on_defocus_ = std::move(cb); }
     void setGetActiveTileCallback(std::function<brls::View*()> cb) { get_active_tile_ = std::move(cb); }
     void setOnOpenSectionCallback(std::function<void(int)> cb) { on_open_section_ = std::move(cb); }
+    void refreshLocale() { rebuildContent(); }
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;

@@ -18,6 +18,7 @@ struct RetroConsoleInfo {
     std::string release_year;
     std::string default_rom_subfolder;
     std::string recommended_emulator;
+    std::string recommended_emulator_id;
     std::vector<std::string> known_extensions;
     NVGcolor color;
 };

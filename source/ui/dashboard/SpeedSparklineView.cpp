@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <string>
 
+using namespace brls::literals;
+
 namespace ui {
 
 static std::string formatSpeedShort(float bytes_per_sec) {
@@ -77,7 +79,8 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
         nvgFontFace(vg, "default");
         nvgFillColor(vg, nvgRGBA(140, 165, 195, 180));
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgText(vg, x + width * 0.5f, y + height * 0.5f, "Сбор данных скорости...", nullptr);
+        std::string collStr = "app/dashboard/sparkline_collecting"_i18n;
+        nvgText(vg, x + width * 0.5f, y + height * 0.5f, collStr.c_str(), nullptr);
         return;
     }
 
@@ -89,7 +92,7 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     max_val_ = peak * 1.15f; // Add 15% headroom for aesthetic curve
 
     // Draw Peak Label in top-right
-    std::string peakStr = "Пик: " + formatSpeedShort(peak);
+    std::string peakStr = "app/dashboard/sparkline_peak"_i18n + formatSpeedShort(peak);
     nvgFontSize(vg, 10.0f);
     nvgFontFace(vg, "default");
     nvgFillColor(vg, nvgRGBA(0, 230, 175, 220)); // Emerald

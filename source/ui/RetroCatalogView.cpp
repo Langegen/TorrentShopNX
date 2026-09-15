@@ -2,6 +2,9 @@
 #include "GameDetailView.hpp"
 #include "FilterSortDialog.hpp"
 #include "FavoritesManager.hpp"
+#include "EmulatorInstallDialog.hpp"
+#include "RetroEmulatorsView.hpp"
+#include "../catalog/retro_emulator_manager.h"
 #include "../utils/log.h"
 #include <algorithm>
 
@@ -11,11 +14,11 @@ namespace {
 
 #ifdef __SWITCH__
 #include <switch.h>
-static std::string showRetroKeyboard(const char* hint) {
+static std::string showRetroKeyboard(const std::string& hint) {
     SwkbdConfig kbd;
     swkbdCreate(&kbd, 0);
     swkbdConfigMakePresetDefault(&kbd);
-    swkbdConfigSetGuideText(&kbd, hint);
+    swkbdConfigSetGuideText(&kbd, hint.c_str());
     char out[256] = {0};
     Result rc = swkbdShow(&kbd, out, sizeof(out));
     swkbdClose(&kbd);
@@ -23,7 +26,7 @@ static std::string showRetroKeyboard(const char* hint) {
     return std::string(out);
 }
 #else
-static std::string showRetroKeyboard(const char* hint) {
+static std::string showRetroKeyboard(const std::string& hint) {
     return "";
 }
 #endif
@@ -134,17 +137,55 @@ RetroCatalogView::~RetroCatalogView() {
     *alive_flag_ = false;
 }
 
+void RetroCatalogView::updateEmulatorBadge() {
+    if (consoleInfo_.recommended_emulator_id.empty() || !emuBadge || !emuBadgeText) return;
+
+    const auto* emuPkg = catalog::RetroEmulatorManager::instance().findPackage(consoleInfo_.recommended_emulator_id);
+    if (!emuPkg) return;
+
+    bool installed = catalog::RetroEmulatorManager::instance().isInstalled(consoleInfo_.recommended_emulator_id);
+    emuBadge->setVisibility(brls::Visibility::VISIBLE);
+
+    if (installed) {
+        emuBadge->setBackgroundColor(nvgRGBA(38, 166, 91, 45));
+        emuBadgeText->setTextColor(nvgRGB(46, 204, 113));
+        emuBadgeText->setText("app/retro/emu_prefix"_i18n + emuPkg->name + "app/retro/emu_ready_badge"_i18n);
+    } else {
+        emuBadge->setBackgroundColor(nvgRGBA(255, 152, 0, 40));
+        emuBadgeText->setTextColor(nvgRGB(255, 183, 77));
+        emuBadgeText->setText("app/retro/emu_prefix"_i18n + emuPkg->name + "app/retro/emu_not_installed_badge"_i18n);
+    }
+}
+
+void RetroCatalogView::triggerEmulatorAction() {
+    if (consoleInfo_.recommended_emulator_id.empty()) return;
+    const auto* emuPkg = catalog::RetroEmulatorManager::instance().findPackage(consoleInfo_.recommended_emulator_id);
+    if (!emuPkg) return;
+
+    bool isNowInstalled = catalog::RetroEmulatorManager::instance().isInstalled(emuPkg->id);
+    if (isNowInstalled) {
+        brls::Application::pushActivity(new RetroEmulatorsView());
+    } else {
+        showEmulatorInstallDialog(*emuPkg, [this](bool ok) {
+            if (ok) {
+                brls::Application::notify("app/retro/emu_ready_notify"_i18n);
+                updateEmulatorBadge();
+            }
+        });
+    }
+}
+
 void RetroCatalogView::onContentAvailable() {
     if (titleLabel) {
         titleLabel->setText(consoleInfo_.name);
         titleLabel->addGestureRecognizer(new brls::TapGestureRecognizer(titleLabel, [this]() {
-            std::string query = showRetroKeyboard("Поиск по названию игры...");
+            std::string query = showRetroKeyboard("app/retro/search_by_title"_i18n);
             filterState_.searchQuery = query;
             filterCatalog();
         }));
     }
     if (statsHint) {
-        statsHint->setText("Загрузка базы данных...");
+        statsHint->setText("app/retro/loading_db"_i18n);
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {
             FilterSortDialog::show(filterState_, allGames_, [this](const catalog::FilterSortState& newState) {
                 filterState_ = newState;
@@ -157,7 +198,7 @@ void RetroCatalogView::onContentAvailable() {
 
     // Register search/filter action keys
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        std::string query = showRetroKeyboard("Поиск по названию игры...");
+        std::string query = showRetroKeyboard("app/retro/search_by_title"_i18n);
         filterState_.searchQuery = query;
         filterCatalog();
         return true;
@@ -178,13 +219,13 @@ void RetroCatalogView::onContentAvailable() {
         return true;
     }, true);
 
-    this->registerAction("В избранное / Убрать", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+    this->registerAction("app/retro/action_fav"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
         if (focusedSection_ < sections_.size() && sections_[focusedSection_].games &&
             focusedGameIndex_ < sections_[focusedSection_].games->size()) {
             const auto& game = (*sections_[focusedSection_].games)[focusedGameIndex_];
             bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
-            brls::Application::notify(fav ? "Добавлено в избранное: " + cleanRetroTitle(game.title)
-                                          : "Удалено из избранного: " + cleanRetroTitle(game.title));
+            brls::Application::notify(fav ? ("app/retro/fav_added"_i18n + cleanRetroTitle(game.title))
+                                          : ("app/retro/fav_removed"_i18n + cleanRetroTitle(game.title)));
         }
         return true;
     });
@@ -200,6 +241,20 @@ void RetroCatalogView::onContentAvailable() {
         refreshCatalog();
         return true;
     }, true);
+
+    // (+) Emulator action (shortened to avoid footer overflow, rich info shown in topbar badge)
+    if (!consoleInfo_.recommended_emulator_id.empty()) {
+        updateEmulatorBadge();
+        if (emuBadge) {
+            emuBadge->addGestureRecognizer(new brls::TapGestureRecognizer(emuBadge, [this]() {
+                triggerEmulatorAction();
+            }));
+        }
+        this->registerAction("app/retro/action_emulator"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+            triggerEmulatorAction();
+            return true;
+        });
+    }
 
     // Register recycler cells
     recycler->registerCell("GridRow", []() { return RetroGridRowCell::create(); });
@@ -242,8 +297,8 @@ void RetroCatalogView::onContentAvailable() {
             util::logLine("RetroCatalogView: loadConsoleGames returned ok=" + std::to_string(ok) + " count=" + std::to_string(games.size()));
 
             if (!ok || games.empty()) {
-                if (loadingLabel) loadingLabel->setText("Не удалось загрузить базу игр");
-                if (statsHint) statsHint->setText("Ошибка загрузки");
+                if (loadingLabel) loadingLabel->setText("app/retro/db_load_failed"_i18n);
+                if (statsHint) statsHint->setText("app/retro/load_error"_i18n);
                 return;
             }
 
@@ -276,13 +331,13 @@ void RetroCatalogView::toggleViewMode() {
     RetroGridRowCell::s_lastFocusedColumn = isListView_ ? 0 : static_cast<int>(targetIdx % 6);
 
     if (statsHint) {
-        std::string modeStr = isListView_ ? "Список" : "Сетка";
+        std::string modeStr = isListView_ ? "app/retro/mode_list"_i18n : "app/retro/mode_grid"_i18n;
         size_t total = filteredRomsets_.size() + filteredStandalone_.size();
-        std::string countStr = "Игр: " + std::to_string(total);
+        std::string countStr = "app/retro/games_prefix"_i18n + std::to_string(total);
         if (!filteredRomsets_.empty()) {
-            countStr += " (сборников: " + std::to_string(filteredRomsets_.size()) + ")";
+            countStr += "app/retro/romsets_prefix"_i18n + std::to_string(filteredRomsets_.size()) + ")";
         }
-        statsHint->setText(countStr + " | " + modeStr + "  (LS) Вид  (-) Обновить  R Фильтр");
+        statsHint->setText(countStr + " | " + modeStr + "app/retro/retro_nav_hint"_i18n);
     }
 
     recycler->setDefaultCellFocus(brls::IndexPath(static_cast<int>(targetSection), targetRow));
@@ -308,8 +363,8 @@ void RetroCatalogView::refreshCatalog() {
         loadingBox->setVisibility(brls::Visibility::VISIBLE);
         if (progressSpinner) progressSpinner->setVisibility(brls::Visibility::VISIBLE);
     }
-    if (loadingLabel) loadingLabel->setText("Обновление базы с GitHub...");
-    if (statsHint) statsHint->setText("Загрузка обновления базы...");
+    if (loadingLabel) loadingLabel->setText("app/retro/updating_from_github"_i18n);
+    if (statsHint) statsHint->setText("app/retro/downloading_db_update"_i18n);
 
     std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
     std::string cid = consoleInfo_.id;
@@ -341,7 +396,7 @@ void RetroCatalogView::refreshCatalog() {
             if (loadingBox) loadingBox->setVisibility(brls::Visibility::GONE);
 
             if (!ok || games.empty()) {
-                brls::Application::notify("Не удалось обновить базу (проверьте интернет)");
+                brls::Application::notify("app/retro/update_db_failed"_i18n);
                 filterCatalog();
                 return;
             }
@@ -352,7 +407,7 @@ void RetroCatalogView::refreshCatalog() {
             if (recycler) {
                 recycler->reloadData();
             }
-            brls::Application::notify("База обновлена! Игр: " + std::to_string(allGames_.size()));
+            brls::Application::notify("app/retro/db_updated_count"_i18n + std::to_string(allGames_.size()));
         });
     });
 }
@@ -384,23 +439,23 @@ void RetroCatalogView::filterCatalog() {
     }
 
     if (!filteredRomsets_.empty()) {
-        sections_.push_back({ "Сборники и ромсеты", true, &filteredRomsets_ });
+        sections_.push_back({ "app/retro/sec_romsets"_i18n, true, &filteredRomsets_ });
     }
     if (!filteredStandalone_.empty()) {
-        sections_.push_back({ "Отдельные игры", false, &filteredStandalone_ });
+        sections_.push_back({ "app/retro/sec_standalone"_i18n, false, &filteredStandalone_ });
     }
 
     if (statsHint) {
-        std::string modeStr = isListView_ ? "Список" : "Сетка";
+        std::string modeStr = isListView_ ? "app/retro/mode_list"_i18n : "app/retro/mode_grid"_i18n;
         size_t totalFiltered = filteredRomsets_.size() + filteredStandalone_.size();
-        std::string countStr = "Игр: " + std::to_string(totalFiltered);
+        std::string countStr = "app/retro/games_prefix"_i18n + std::to_string(totalFiltered);
         if (totalFiltered != allGames_.size()) {
-            countStr += " из " + std::to_string(allGames_.size());
+            countStr += "app/retro/of_prefix"_i18n + std::to_string(allGames_.size());
         }
         if (!filteredRomsets_.empty()) {
-            countStr += " (сборников: " + std::to_string(filteredRomsets_.size()) + ")";
+            countStr += "app/retro/romsets_prefix"_i18n + std::to_string(filteredRomsets_.size()) + ")";
         }
-        statsHint->setText(countStr + " | " + modeStr + "  (LS) Вид  (-) Обновить  R Фильтр");
+        statsHint->setText(countStr + " | " + modeStr + "app/retro/retro_nav_hint"_i18n);
     }
 
     if (recycler) {
@@ -426,6 +481,7 @@ void RetroCatalogView::resetFilters() {
 
 void RetroCatalogView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
+    updateEmulatorBadge();
 }
 
 void RetroCatalogView::willDisappear(bool resetState) {
@@ -468,7 +524,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForHeader(brls::Recyc
         header->setTitle(title);
         const auto* gList = parent_->sections_[section].games;
         size_t count = gList ? gList->size() : 0;
-        std::string countStr = std::to_string(count) + " " + (parent_->sections_[section].isRomset ? "раздач" : "игр");
+        std::string countStr = std::to_string(count) + " " + (parent_->sections_[section].isRomset ? "app/retro/unit_torrents"_i18n : "app/retro/unit_games"_i18n);
         header->setSubtitle(countStr);
         header->setVisibility(brls::Visibility::VISIBLE);
         header->setHeight(brls::View::AUTO);
@@ -530,14 +586,14 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cell->actionLabel->setTextColor(nvgRGBA(255, 170, 0, 255));
             const auto& cfg = config::ConfigManager::instance();
             if (cfg.getRetroRomsetMode() == "select") {
-                cell->actionLabel->setText("(A) Выбрать");
+                cell->actionLabel->setText("app/retro/btn_select"_i18n);
             } else {
-                cell->actionLabel->setText("(A) Скачать сет");
+                cell->actionLabel->setText("app/retro/btn_download_set"_i18n);
             }
         } else {
             cell->actionBox->setBackgroundColor(nvgRGBA(0, 224, 165, 32));
             cell->actionLabel->setTextColor(nvgRGBA(0, 230, 175, 255));
-            cell->actionLabel->setText("(A) Скачать РОМ");
+            cell->actionLabel->setText("app/retro/btn_download_rom"_i18n);
         }
 
         cell->cover->setClipsToBounds(false);
@@ -624,7 +680,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             // Badge styling: ROMSET vs ROM
             bool isRom = isRomsetGame(game);
             if (isRom) {
-                cards[i].romBadge->setText("СБОРНИК");
+                cards[i].romBadge->setText("app/retro/badge_romset"_i18n);
                 cards[i].romBadge->setTextColor(nvgRGBA(255, 170, 0, 255));
             } else {
                 cards[i].romBadge->setText("ROM");

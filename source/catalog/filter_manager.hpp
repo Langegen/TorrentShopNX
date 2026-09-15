@@ -299,7 +299,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
     }
 
     // 2. Genre filter
-    if (!state.genre.empty() && state.genre != "Все жанры") {
+    if (!state.genre.empty() && state.genre != "Все жанры" && state.genre != "app/filter/all_genres"_i18n) {
         std::string lowerGameGenre = toLowerUtf8(game.genre);
         std::string lowerFilterGenre = toLowerUtf8(state.genre);
         if (lowerGameGenre.find(lowerFilterGenre) == std::string::npos) {
@@ -391,7 +391,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
     }
 
     // 4. Year filter
-    if (!state.year.empty() && state.year != "Все годы") {
+    if (!state.year.empty() && state.year != "Все годы" && state.year != "app/filter/all_years"_i18n) {
         int targetYear = std::atoi(state.year.c_str());
         if (targetYear > 0 && parseYear(game.year) != targetYear) {
             return false;

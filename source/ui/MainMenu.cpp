@@ -44,6 +44,7 @@ static std::string formatBytesLocal(unsigned long long bytes) {
 
 MainMenu::MainMenu() {
     util::logLine("MainMenu: constructor start (Modern Dashboard)");
+    current_locale_ = brls::Application::getLocale();
 
     refreshTimer_ = new brls::RepeatingTimer();
     refreshTimer_->setPeriod(1000);
@@ -130,11 +131,11 @@ void MainMenu::setupLayout() {
     };
 
     TileDef defs[5] = {
-        {0, "img/tile_catalog.png",   "app/menu/catalog",     "Каталог"},
-        {1, "img/tile_retro.png",     "app/menu/retro_games", "Ретро-игры"},
-        {2, "img/tile_library.png",   "app/menu/library",     "Менеджер игр"},
-        {3, "img/tile_downloads.png", "app/menu/downloads",   "Загрузки"},
-        {4, "img/tile_tools.png",     "app/menu/settings",    "Настройки"}
+        {0, "img/tile_catalog.png",   "app/menu/catalog",     "Catalog"},
+        {1, "img/tile_retro.png",     "app/menu/retro_games", "Retro Games"},
+        {2, "img/tile_library.png",   "app/menu/library",     "Library"},
+        {3, "img/tile_downloads.png", "app/menu/downloads",   "Downloads"},
+        {4, "img/tile_tools.png",     "app/menu/settings",    "Settings"}
     };
 
     for (int i = 0; i < 5; ++i) {
@@ -294,6 +295,10 @@ static std::atomic<bool> s_calculatingSettingsStats{false};
 void MainMenu::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
 
+    std::string newLocale = brls::Application::getLocale();
+    bool localeChanged = (newLocale != current_locale_);
+    current_locale_ = newLocale;
+
     // Update tile titles to reflect the currently active locale
     if (tiles_.size() >= 5) {
         tiles_[0]->setTitle("app/menu/catalog"_i18n);
@@ -301,6 +306,10 @@ void MainMenu::willAppear(bool resetState) {
         tiles_[2]->setTitle("app/menu/library"_i18n);
         tiles_[3]->setTitle("app/menu/downloads"_i18n);
         tiles_[4]->setTitle("app/menu/settings"_i18n);
+    }
+
+    if (localeChanged && summaryView_) {
+        summaryView_->refreshLocale();
     }
 
     s_installedCountCalculated = false;

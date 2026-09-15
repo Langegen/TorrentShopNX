@@ -198,8 +198,8 @@ int main(int argc, char **argv) {
                 printf("StreamTest: duration reached\n");
                 break;
             }
-            if (no_data_sec >= 30) {
-                printf("StreamTest: no data for 30s, giving up\n");
+            if (no_data_sec >= duration_sec) {
+                printf("StreamTest: no data for %ds, giving up\n", duration_sec);
                 break;
             }
         }

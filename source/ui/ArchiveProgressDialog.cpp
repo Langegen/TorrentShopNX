@@ -84,14 +84,14 @@ ArchiveProgressDialog::ArchiveProgressDialog(
     contentBox_->addView(statsLabel_);
 
     std::string cancelText = brls::getStr("app/common/cancel");
-    if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Отмена";
+    if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
     this->addButton(cancelText, [this]() {
         if (cancelToken_) {
             cancelToken_->store(true);
         }
         if (currentFileLabel_) {
-            currentFileLabel_->setText("Отмена распаковки...");
+            currentFileLabel_->setText("app/archive/cancelling"_i18n);
         }
     });
 
@@ -101,7 +101,7 @@ ArchiveProgressDialog::ArchiveProgressDialog(
             cancelToken_->store(true);
         }
         if (currentFileLabel_) {
-            currentFileLabel_->setText("Отмена распаковки...");
+            currentFileLabel_->setText("app/archive/cancelling"_i18n);
         }
         this->dismiss();
         return true;
@@ -247,11 +247,11 @@ void ArchiveProgressDialog::runExtraction() {
             err
         );
     } catch (const std::exception& e) {
-        err = std::string("Исключение при распаковке: ") + e.what();
+        err = "app/archive/exception_prefix"_i18n + e.what();
         util::logLine("ArchiveProgressDialog: exception in extractArchive: " + err);
         ok = false;
     } catch (...) {
-        err = "Неизвестная ошибка при распаковке";
+        err = "app/archive/unknown_error"_i18n;
         util::logLine("ArchiveProgressDialog: unknown exception in extractArchive");
         ok = false;
     }
@@ -267,7 +267,7 @@ void ArchiveProgressDialog::runExtraction() {
                     progressFill_->setWidth(maxW);
                 }
                 if (statsLabel_) {
-                    statsLabel_->setText("100.0% · Готово");
+                    statsLabel_->setText("app/archive/done_100"_i18n);
                 }
             }
         });
@@ -277,7 +277,7 @@ void ArchiveProgressDialog::runExtraction() {
     brls::sync([this, alive, ok, err, onComplete]() {
         if (!alive || !alive->load()) {
             if (onComplete) {
-                onComplete(ok, err.empty() ? "Распаковка отменена пользователем" : err);
+                onComplete(ok, err.empty() ? "app/archive/cancelled_by_user"_i18n : err);
             }
             return;
         }

@@ -23,61 +23,61 @@ void RetroCatalogManager::initConsoles() {
         // Nintendo Family
         {
             "nes", "nes_games.json", "NES / Famicom", "Nintendo", "1983",
-            "nes", "FCEUMM / Nestopia",
+            "nes", "pNES", "pnes",
             {".nes", ".fds", ".zip", ".7z"},
             nvgRGBA(230, 0, 18, 255)
         },
         {
             "snes", "snes_games.json", "Super Nintendo", "Nintendo", "1990",
-            "snes", "Snes9x",
+            "snes", "pSNES", "psnes",
             {".smc", ".sfc", ".fig", ".zip", ".7z"},
             nvgRGBA(124, 77, 255, 255)
         },
         {
             "n64", "n64_games.json", "Nintendo 64", "Nintendo", "1996",
-            "n64", "Mupen64Plus-Next",
+            "n64", "Mupen64Plus-Next", "mupen64plus_next",
             {".z64", ".n64", ".v64", ".zip", ".7z"},
             nvgRGBA(0, 160, 75, 255)
         },
         {
             "gbc", "gbc_games.json", "Game Boy / Color", "Nintendo", "1998",
-            "gbc", "Gambatte / mGBA",
+            "gbc", "mGBA", "mgba",
             {".gb", ".gbc", ".zip", ".7z"},
             nvgRGBA(156, 39, 176, 255)
         },
         {
             "gba", "gba_games.json", "Game Boy Advance", "Nintendo", "2001",
-            "gba", "mGBA",
+            "gba", "mGBA / pGBA", "mgba",
             {".gba", ".zip", ".7z"},
             nvgRGBA(63, 81, 181, 255)
         },
         {
             "nds", "nds_games.json", "Nintendo DS", "Nintendo", "2004",
-            "nds", "MelonDS",
+            "nds", "DraStic DS", "drasticds",
             {".nds", ".zip", ".7z"},
             nvgRGBA(0, 188, 212, 255)
         },
         {
             "3ds", "3ds_games.json", "Nintendo 3DS", "Nintendo", "2011",
-            "3ds", "Citra",
+            "3ds", "Dekopon (Citra)", "dekopon",
             {".3ds", ".cia", ".cxi", ".zip"},
             nvgRGBA(244, 67, 54, 255)
         },
         {
             "gamecube", "gamecube_games.json", "Nintendo GameCube", "Nintendo", "2001",
-            "gamecube", "Dolphin",
+            "gamecube", "Dolphin", "dolphin",
             {".iso", ".gcm", ".rvz", ".ciso"},
             nvgRGBA(103, 58, 183, 255)
         },
         {
             "wii", "wii_games.json", "Nintendo Wii", "Nintendo", "2006",
-            "wii", "Dolphin",
+            "wii", "Dolphin", "dolphin",
             {".wbfs", ".iso", ".rvz"},
             nvgRGBA(33, 150, 243, 255)
         },
         {
             "wiiu", "wiiu_games.json", "Nintendo Wii U", "Nintendo", "2012",
-            "wiiu", "NUS / WUP Installer",
+            "wiiu", "Cemu", "cemu",
             {".wup", ".rpx", ".zip"},
             nvgRGBA(0, 172, 237, 255)
         },
@@ -85,25 +85,25 @@ void RetroCatalogManager::initConsoles() {
         // Sony PlayStation Family
         {
             "ps1", "ps1_games.json", "PlayStation 1", "Sony", "1994",
-            "psx", "DuckStation / PCSX",
+            "psx", "DuckStation", "duckstation",
             {".chd", ".bin", ".cue", ".pbp", ".iso", ".img"},
             nvgRGBA(0, 55, 145, 255)
         },
         {
             "ps2", "ps2_games.json", "PlayStation 2", "Sony", "2000",
-            "ps2", "Play! / AetherSX2",
+            "ps2", "NetherSX2", "nethersx2",
             {".iso", ".chd", ".bin", ".cso"},
             nvgRGBA(0, 36, 100, 255)
         },
         {
             "psp", "psp_games.json", "PlayStation Portable", "Sony", "2004",
-            "psp", "PPSSPP",
+            "psp", "PPSSPP", "ppsspp",
             {".iso", ".cso", ".pbp"},
             nvgRGBA(30, 136, 229, 255)
         },
         {
             "psvita", "psvita_games.json", "PlayStation Vita", "Sony", "2011",
-            "psvita", "Vita3K",
+            "psvita", "Vita3K", "vita3k",
             {".vpk", ".zip"},
             nvgRGBA(0, 150, 214, 255)
         },
@@ -111,37 +111,37 @@ void RetroCatalogManager::initConsoles() {
         // Sega Ecosystem
         {
             "sega_ms", "sega_ms_games.json", "Master System", "Sega", "1985",
-            "mastersystem", "Genesis Plus GX",
+            "mastersystem", "pGEN", "pgen",
             {".sms", ".zip", ".7z"},
             nvgRGBA(233, 30, 99, 255)
         },
         {
             "sega_gg", "sega_gg_games.json", "Game Gear", "Sega", "1990",
-            "gamegear", "Genesis Plus GX",
+            "gamegear", "pGEN", "pgen",
             {".gg", ".zip", ".7z"},
             nvgRGBA(0, 150, 136, 255)
         },
         {
             "sega_md", "sega_md_games.json", "Mega Drive / Genesis", "Sega", "1988",
-            "megadrive", "Genesis Plus GX / BlastEm",
+            "megadrive", "pGEN", "pgen",
             {".md", ".bin", ".gen", ".smd", ".zip", ".7z"},
             nvgRGBA(55, 71, 79, 255)
         },
         {
             "sega_cd", "sega_cd_games.json", "Sega CD / Mega CD", "Sega", "1991",
-            "segacd", "Genesis Plus GX",
+            "segacd", "pGEN", "pgen",
             {".bin", ".cue", ".chd", ".iso"},
             nvgRGBA(76, 175, 80, 255)
         },
         {
             "sega_32x", "sega_32x_games.json", "Sega 32X", "Sega", "1994",
-            "32x", "Picodrive",
+            "32x", "Picodrive", "picodrive",
             {".32x", ".bin", ".zip", ".7z"},
             nvgRGBA(255, 152, 0, 255)
         },
         {
             "dreamcast", "dreamcast_games.json", "Sega Dreamcast", "Sega", "1998",
-            "dreamcast", "Flycast",
+            "dreamcast", "Flycast", "flycast",
             {".cdi", ".gdi", ".chd"},
             nvgRGBA(255, 87, 34, 255)
         }

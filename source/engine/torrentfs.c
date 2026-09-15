@@ -90,69 +90,44 @@
 #define MAX_CONNECTING   48     // slots allowed to sit in a pending connect
 #define DIAL_STOP_LIVE   80     // enough live sessions: stop dialing new peers
 #else
-// PC can hold more concurrent BSD sockets; use them to stress-test the engine.
 #define MAX_SESS         96
 #define MAX_CONNECTING   48
 #define DIAL_STOP_LIVE   80
 #endif
 #define CONNECT_SECS     2      // outbound SYN patience
-// When the swarm is starved the old code dropped the connect budget to 1 s to
-// churn through dead DHT addresses faster. That is self-defeating: slow-but-
-// alive seeders (home NAT, long SYN queues, high RTT) cannot complete TCP in
-// 1 s, so the starved state sustained itself. The floor is now 3 s; a peer
-// whose previous failure was a connect timeout gets 5 s on retry, which gives
-// exactly those slow seeds a real chance. The dial-rate cap below keeps the
-// churn (and the home router's NAT table) bounded instead.
-#define CONNECT_STARVED_SECS 3
+#define CONNECT_STARVED_SECS 3  // slow-but-alive seeders (home NAT, high RTT) need 3s floor
 #define CONNECT_RETRY_SECS  5
-// New outbound dials per 250 ms upkeep tick (~8-12/s): a SYN storm of failed
-// connects accumulates half-open entries in the home router's NAT table and
-// starts dropping EVERYTHING, including the healthy sessions.
+// Dial budgets: bootstrap burst connects rapidly, upkeep maintains
 #define DIAL_BUDGET_PER_TICK 4
+#define DIAL_BUDGET_BOOTSTRAP 12
 #define PREHS_SECS       10     // connected but no handshake yet
 #define IDLE_SECS        130    // handshaked, nothing received (see header)
 #define KEEPALIVE_SECS   60
-// A peer can dodge STALL_SECS forever by dribbling one block every few
-// seconds: last_block keeps resetting while the piece it holds never lands.
-// Rather than ban it, the request scheduler below just stops waiting for it:
-// its undelivered blocks are re-requested from other peers after 1 s.
 #define STALL_SECS       25     // requested blocks but nothing came: drop peer (with strike tolerance)
 #define DUP_REQ_SECS     1      // anacrolix duplicateRequestTimeout: re-request an undelivered block after this long
-#define MAX_DUP          4      // outstanding copies of one block (anacrolix caps re-requests similarly)
+#define MAX_DUP          4      // outstanding copies of one block
 
 #define REQ_RING         512    // per-session outstanding-request capacity
-// Per-session in-flight request budget, cloned from anacrolix/torrent
-// (requestStrategy 3: nominalMaxRequests = clamp(1, PeerMaxRequests=250,
-// max(2, delivered_rate * duplicateRequestTimeout / 2))). Requests are never
-// expired: stale ones on a dead peer are simply duplicated by other sessions
-// after DUP_REQ_SECS, and the peer itself is strike-timed out by STALL_SECS.
 #define MAX_REQ_PER_CONN 250
 #define REQ_MIN          2
+#define REQ_INITIAL      16     // Fast start: new unchoked peers immediately get 16 blocks (256 KB)
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
-// Raised to 512 MB (AQ_MAX 64, AQ_MIN 4): on Title mode Switch we have ample RAM,
-// allowing 30-32 active pieces for 16 MB pieces (or 64 for 8 MB pieces), ensuring
-// full utilization of all 60+ swarm sessions.
 #define RAM_BUDGET       (512LL << 20)
 #define AQ_MAX           64
 #define AQ_MIN           4
 
-// Streaming window: raised to 384 MB to match the enlarged in-flight buffer pool
-// and ensure scheduler Urgent/Prefetch zones are visible to the peer picker.
+// Streaming window
 #define STREAM_WINDOW    (384LL * 1024 * 1024)
 #define STREAM_MIN_PIECES 2
 
-// Startup criticals: mpv probes the container head and tail (moov atom) first,
-// so we speculatively pre-fetch both ends in parallel rather than let mpv's
-// blocking reads discover them one seek at a time. Budgeted in BYTES, not
-// pieces: it is a latency hedge over the region mpv is about to read, so with a
-// 64 MB piece one piece already covers it -- pre-fetching a fixed 3 tail pieces
-// there was 192 MB of speculation. The piece count is ceil(budget / piece_len),
-// clamped so tiny pieces do not explode and every torrent still probes >=1 each.
-#define CRIT_HEAD_BYTES  (1LL << 20)   // ~1 MB at the head (ftyp / start)
-#define CRIT_TAIL_BYTES  (4LL << 20)   // ~4 MB at the tail (where moov usually is)
-#define CRIT_HEAD_MAX    2
-#define CRIT_TAIL_MAX    3
+// Package installation: Focus 100% on container header (PFS0/HFS0).
+// Tail speculation is completely disabled (crit_tail = 0): games have no moov tail.
+#define CRIT_HEAD_BYTES  (4LL << 20)   // ~4 MB at the head (PFS0/HFS0 header & NCA tables)
+#define CRIT_TAIL_BYTES  0             // 0 for package streaming
+#define CRIT_HEAD_MAX    4
+#define CRIT_TAIL_MAX    0
+#define PIN_HEAD_BYTES   (8LL << 20)   // Pin first 8 MB in RAM so package headers never evict
 
 // FAT32 caps a file at 4 GB: the cache is chunked.
 #define CACHE_CHUNK      (1LL << 30)
@@ -373,6 +348,8 @@ struct torrentfs {
 
     wjob wq[AQ_MAX + 2];
     int wq_head, wq_n;
+    int64_t writing_idx;
+    uint8_t *writing_buf;
 
     sess S[MAX_SESS];
 
@@ -527,7 +504,29 @@ static bool cache_piece_read(torrentfs *t, int64_t idx, int64_t within,
         // player path tolerates (and the read moves the playhead here, pulling
         // the piece back into the window).
         uint8_t *src = t->ram_piece[idx];
-        if (!src) return false;
+        if (!src) {
+            if (!t->strict_verify) {
+                mutexLock(&t->lock);
+                if (t->writing_idx == idx && t->writing_buf) {
+                    src = t->writing_buf;
+                } else {
+                    for (int i = 0; i < t->wq_n; i++) {
+                        int slot = (t->wq_head + i) % (AQ_MAX + 2);
+                        if (t->wq[slot].idx == idx && t->wq[slot].buf) {
+                            src = t->wq[slot].buf;
+                            break;
+                        }
+                    }
+                }
+                if (src) {
+                    memcpy(buf, src + within, len);
+                    mutexUnlock(&t->lock);
+                    return true;
+                }
+                mutexUnlock(&t->lock);
+            }
+            return false;
+        }
         memcpy(buf, src + within, len);
         return true;
     }
@@ -631,6 +630,9 @@ static size_t cache_read_upto(torrentfs *t, int64_t off, void *buf, size_t len) 
 // touches t->lock), so the nesting cannot deadlock.
 static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
     int64_t ph = t->playhead_piece;
+    int64_t pin_limit = t->file_first_piece +
+        ((PIN_HEAD_BYTES + t->meta.piece_len - 1) / t->meta.piece_len);
+    if (t->ram_lo < pin_limit) t->ram_lo = pin_limit;
     while (t->ram_resident > t->ram_budget) {
         while (t->ram_lo < ph && !t->ram_piece[t->ram_lo]) t->ram_lo++;
         if (t->ram_lo >= ph) break;     // nothing strictly behind left to drop
@@ -960,6 +962,8 @@ static void writer_main(void *arg) {
             j = t->wq[t->wq_head];
             t->wq_head = (t->wq_head + 1) % (AQ_MAX + 2);
             t->wq_n--;
+            t->writing_idx = j.idx;
+            t->writing_buf = j.buf;
             has = true;
         }
         bool stopping = t->stop;
@@ -1040,6 +1044,8 @@ static void writer_main(void *arg) {
             engine_log(ENGINE_LOG_WARN, "[writer] sha fail piece %lld", (long long)j.idx);
         }
         t->st_blocks_have -= nb;
+        t->writing_idx = -1;
+        t->writing_buf = NULL;
         // Return the buffer to a bufferless slot for reuse.
         for (int i = 0; i < t->n_aq; i++)
             if (t->aq[i].idx < 0 && !t->aq[i].buf) { t->aq[i].buf = j.buf; j.buf = NULL; break; }
@@ -1349,6 +1355,7 @@ static void sess_drop_requests(torrentfs *t, sess *s) {
 // the first read), the playhead-relative fallback below takes over.
 static int piece_priority(torrentfs *t, int64_t idx) {
     if (idx < t->file_first_piece || idx > t->file_last_piece) return 0;
+    if (idx == t->read_blocked_piece) return 1;
     int z = t->piece_zone[idx];
     if (z != 0) return z;
     if (is_critical(t, idx))
@@ -1368,9 +1375,10 @@ static int piece_priority(torrentfs *t, int64_t idx) {
 
 // Per-session in-flight request budget (anacrolix nominalMaxRequests,
 // requestStrategy 3): ~0.5 s of this session's measured useful delivery,
-// clamped 2..250. A fresh session starts with 2 and grows as its blocks land.
+// clamped 2..250. A fresh unchoked session starts with 16 (256 KB) immediately,
+// giving fast swarms immediate high speed, while slow peers settle down to REQ_MIN.
 static int nominal_depth(torrentfs *t, sess *s) {
-    if (s->expect_ticks <= t->freq) return REQ_MIN;   // under a second of history
+    if (s->expect_ticks <= t->freq) return REQ_INITIAL;   // initial aggressive pipeline
     double blocks_per_sec =
         (double)s->useful * (double)t->freq / (double)s->expect_ticks;
     int d = (int)(blocks_per_sec * DUP_REQ_SECS / 2.0);
@@ -1671,6 +1679,10 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             engine_log(ENGINE_LOG_DEBUG, "[sess %d] unchoke from %u.%u.%u.%u:%d",
                        (int)(s - t->S), s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
                        (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff, s->addr.port);
+            if (!t->paused) {
+                request_scan(t, s, now);
+                if (peer_nb_tx_pending(&s->nb)) peer_nb_flush(&s->nb);
+            }
             break;
         case MSG_INTERESTED:
             t->st_interested_recv++;
@@ -2446,7 +2458,7 @@ static void netloop_main(void *arg) {
             }
 
             // One uTP hole-punch retry per wave, ahead of the regular dials.
-            int dial_budget = (t->st_live < 12) ? (DIAL_BUDGET_PER_TICK * 2) : DIAL_BUDGET_PER_TICK;
+            int dial_budget = (t->st_live < 12) ? DIAL_BUDGET_BOOTSTRAP : DIAL_BUDGET_PER_TICK;
             {
                 peer_addr rpa;
                 int rp = take_utp_retry_peer(t, &rpa);
@@ -2663,6 +2675,8 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
         (t->stream_offset + t->stream_size - 1) / t->meta.piece_len;
     t->playhead_piece   = t->file_first_piece;
     t->read_blocked_piece = -1;
+    t->writing_idx = -1;
+    t->writing_buf = NULL;
 
     t->blocks_per_piece =
         (int)((t->meta.piece_len + BLOCK_LEN - 1) / BLOCK_LEN);
@@ -2857,6 +2871,7 @@ static bool have_piece(torrentfs *t, int64_t idx) {
 static bool piece_ready(torrentfs *t, int64_t idx, int b0) {
     if (have_piece(t, idx)) return true;
     if (!t->ram_mode || t->strict_verify) return false;
+    if (t->status[idx] == PIECE_WRITING) return true;
     aq_entry *a = aq_find(t, idx);
     if (!a || b0 < 0 || b0 >= a->nblocks) return false;
     return __atomic_load_n(&a->have[b0], __ATOMIC_ACQUIRE) != 0;

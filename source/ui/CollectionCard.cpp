@@ -98,6 +98,14 @@ void CollectionCard::setCountText(const std::string& text) {
     if (count_label_) count_label_->setText(text);
 }
 
+void CollectionCard::setDesc(const std::string& text) {
+    if (desc_label_) desc_label_->setText(text);
+}
+
+void CollectionCard::setDescColor(NVGcolor color) {
+    if (desc_label_) desc_label_->setTextColor(color);
+}
+
 void CollectionCard::onFocusGained() {
     Box::onFocusGained();
     if (title_label_) title_label_->setTextColor(nvgRGBA(0, 230, 175, 255));
