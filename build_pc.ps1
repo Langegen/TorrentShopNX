@@ -28,4 +28,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+Write-Host "Syncing resources to build directory..." -ForegroundColor Cyan
+Copy-Item -Path "resources\*" -Destination "$buildDir\resources" -Recurse -Force
+
 Write-Host "Build succeeded: $buildDir\TorrentShopNX.exe" -ForegroundColor Green

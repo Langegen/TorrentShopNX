@@ -101,6 +101,8 @@ public:
     void refreshCatalog();
 
     BRLS_BIND(brls::Label, titleLabel, "titleLabel");
+    BRLS_BIND(brls::Box, emuBadge, "emuBadge");
+    BRLS_BIND(brls::Label, emuBadgeText, "emuBadgeText");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
     BRLS_BIND(brls::Box, loadingBox, "loadingBox");
     BRLS_BIND(brls::Label, loadingLabel, "loadingLabel");
@@ -108,6 +110,8 @@ public:
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
 
 private:
+    void updateEmulatorBadge();
+    void triggerEmulatorAction();
     catalog::RetroConsoleInfo consoleInfo_;
     catalog::FilterSortState filterState_;
     std::vector<Game> allGames_;

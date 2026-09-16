@@ -158,7 +158,7 @@ void FileManagerView::onContentAvailable() {
     }
 
     // Register Activity Level Actions for Borealis Hints (compact text to avoid wrapping the clock)
-    this->registerAction("Действия", brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
+    this->registerAction("app/file_manager/action_btn"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         showActionsMenu();
         return true;
     });
@@ -324,18 +324,23 @@ void FileManagerView::updateSelectionBar() {
 
         char buf[128];
         if (filesCount == 0) {
-            std::snprintf(buf, sizeof(buf), "%zu %s", dirsCount, dirsCount == 1 ? "папка" : (dirsCount < 5 ? "папки" : "папок"));
+            std::string word = dirsCount == 1 ? "app/file_manager/item_folder_1"_i18n : (dirsCount < 5 ? "app/file_manager/item_folder_few"_i18n : "app/file_manager/item_folder_many"_i18n);
+            std::snprintf(buf, sizeof(buf), "%zu %s", dirsCount, word.c_str());
         } else if (dirsCount == 0) {
             std::string sizeStr = util::formatFileSize(totalSize);
-            std::snprintf(buf, sizeof(buf), "%zu %s · %s", filesCount, filesCount == 1 ? "файл" : (filesCount < 5 ? "файла" : "файлов"), sizeStr.c_str());
+            std::string word = filesCount == 1 ? "app/file_manager/item_file_1"_i18n : (filesCount < 5 ? "app/file_manager/item_file_few"_i18n : "app/file_manager/item_file_many"_i18n);
+            std::snprintf(buf, sizeof(buf), "%zu %s · %s", filesCount, word.c_str(), sizeStr.c_str());
         } else {
             std::string sizeStr = util::formatFileSize(totalSize);
-            std::snprintf(buf, sizeof(buf), "%zu (файлов: %zu, папок: %zu) · %s",
-                          selectedPaths_.size(), filesCount, dirsCount, sizeStr.c_str());
+            std::string formatted = brls::getStr("app/file_manager/selected_summary_format",
+                                                 std::to_string(selectedPaths_.size()),
+                                                 std::to_string(filesCount),
+                                                 std::to_string(dirsCount),
+                                                 sizeStr);
+            std::snprintf(buf, sizeof(buf), "%s", formatted.c_str());
         }
 
-        std::string selPrefix = brls::getStr("app/file_manager/selected_count");
-        if (selPrefix.empty() || selPrefix == "app/file_manager/selected_count") selPrefix = "Выбрано: ";
+        std::string selPrefix = "app/file_manager/selected_count"_i18n;
         selectionText->setText(selPrefix + buf);
     }
 }
@@ -446,7 +451,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     headerTextCol->addView(titleLbl);
 
     auto* subLbl = new brls::Label();
-    subLbl->setText("Архив · " + util::formatFileSize(item.size));
+    subLbl->setText("app/file_manager/type_archive"_i18n + util::formatFileSize(item.size));
     subLbl->setFontSize(13.0f);
     subLbl->setTextColor(nvgRGBA(255, 110, 64, 210));
     subLbl->setSingleLine(true);
@@ -530,7 +535,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     };
 
     // Option 1: Extract here
-    addOption("\uE2C6", nvgRGB(255, 110, 64), "Распаковать в текущую папку", [this, item]() {
+    addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_here"_i18n, [this, item]() {
         // Extract into a hidden temp folder first, then merge up, so a failed
         // extraction never leaves partial files in the real destination.
         const std::string tmpDir = joinPath(currentDir_, ".tsnx_extract_tmp");
@@ -554,16 +559,16 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
                 std::string delErr;
                 util::deletePathRecursive(tmpDir, delErr);
                 if (merged) {
-                    brls::Application::notify("Распаковка завершена!");
+                    brls::Application::notify("app/file_manager/archive_complete"_i18n);
                     refresh(item.name);
                 } else {
-                    brls::Application::notify("Распаковка завершена, но часть файлов не удалось перенести");
+                    brls::Application::notify("app/file_manager/extract_partial_fail"_i18n);
                     refresh(item.name);
                 }
             } else {
                 std::string delErr;
                 util::deletePathRecursive(tmpDir, delErr);
-                brls::Application::notify(msg.empty() ? "Ошибка распаковки" : msg);
+                brls::Application::notify(msg.empty() ? "app/file_manager/extract_error"_i18n : msg);
                 refresh(item.name);
             }
         });
@@ -575,7 +580,8 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     std::string folderName = p.stem().generic_string();
     std::string targetDir = joinPath(currentDir_, folderName);
     const std::string tmpDir = targetDir + ".tsnx_tmp";
-    addOption("\uE2CC", nvgRGB(0, 224, 165), "Распаковать в папку /" + folderName, [this, targetDir, folderName, item, tmpDir]() {
+    std::string optText = brls::getStr("app/file_manager/extract_to_folder_named", folderName);
+    addOption("\uE2CC", nvgRGB(0, 224, 165), optText, [this, targetDir, folderName, item, tmpDir]() {
         // Extract into a sibling temp folder, then atomically move it over the
         // real destination, so a failed extraction leaves no partial content.
         {
@@ -588,17 +594,17 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
                 std::string delErr;
                 util::deletePathRecursive(targetDir, delErr);
                 if (util::movePath(tmpDir, targetDir, err)) {
-                    brls::Application::notify("Распаковка завершена!");
+                    brls::Application::notify("app/file_manager/archive_complete"_i18n);
                     refresh(folderName);
                 } else {
                     util::logLine("FileManagerView: finalize move failed: " + tmpDir + " -> " + targetDir + " (" + err + ")");
-                    brls::Application::notify("Файлы распакованы во временную папку, перенос не удался");
+                    brls::Application::notify("app/file_manager/extract_temp_fail"_i18n);
                     refresh(item.name);
                 }
             } else {
                 std::string delErr;
                 util::deletePathRecursive(tmpDir, delErr);
-                brls::Application::notify(msg.empty() ? "Ошибка распаковки" : msg);
+                brls::Application::notify(msg.empty() ? "app/file_manager/extract_error"_i18n : msg);
                 refresh(item.name);
             }
         });
@@ -614,7 +620,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     content->addView(cancelSep);
 
     // Cancel option
-    addOption("\uE5CD", nvgRGB(239, 83, 80), "Отмена", nullptr);
+    addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, nullptr);
 
     if (firstOption) {
         dialog->setLastFocusedView(firstOption);
@@ -679,7 +685,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     headerTextCol->addView(titleLbl);
 
     auto* subLbl = new brls::Label();
-    subLbl->setText("Пакет установки · " + util::formatFileSize(item.size));
+    subLbl->setText("app/file_manager/type_package"_i18n + util::formatFileSize(item.size));
     subLbl->setFontSize(13.0f);
     subLbl->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald subtitle
     subLbl->setSingleLine(true);
@@ -782,18 +788,18 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     util::getStorageFreeSpace(1, sdFree);
     util::getStorageFreeSpace(0, nandFree);
 
-    std::string sdFreeStr = "Свободно: " + util::formatFileSize(sdFree > 0 ? static_cast<uint64_t>(sdFree) : 0);
-    std::string nandFreeStr = "Свободно: " + util::formatFileSize(nandFree > 0 ? static_cast<uint64_t>(nandFree) : 0);
+    std::string sdFreeStr = "app/file_manager/free_prefix"_i18n + util::formatFileSize(sdFree > 0 ? static_cast<uint64_t>(sdFree) : 0);
+    std::string nandFreeStr = "app/file_manager/free_prefix"_i18n + util::formatFileSize(nandFree > 0 ? static_cast<uint64_t>(nandFree) : 0);
 
     // Option 1: SD Card (Emerald)
-    addOption("\uE1DB", nvgRGB(0, 224, 165), "Установить на SD-карту", sdFreeStr, [this, item]() {
+    addOption("\uE1DB", nvgRGB(0, 224, 165), "app/file_manager/install_to_sd"_i18n, sdFreeStr, [this, item]() {
         auto* progressDlg = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& msg) {
             if (ok) {
                 brls::sync([this, item]() {
                     promptDeleteSourceFile(item.path, item.name);
                 });
             } else {
-                brls::Application::notify(msg.empty() ? "Ошибка установки" : msg);
+                brls::Application::notify(msg.empty() ? "app/file_manager/install_error"_i18n : msg);
                 refresh(item.name);
             }
         });
@@ -801,14 +807,14 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     });
 
     // Option 2: NAND System Storage (Emerald)
-    addOption("\uE318", nvgRGB(0, 224, 165), "Установить в память консоли (NAND)", nandFreeStr, [this, item]() {
+    addOption("\uE318", nvgRGB(0, 224, 165), "app/file_manager/install_to_nand"_i18n, nandFreeStr, [this, item]() {
         auto* progressDlg = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& msg) {
             if (ok) {
                 brls::sync([this, item]() {
                     promptDeleteSourceFile(item.path, item.name);
                 });
             } else {
-                brls::Application::notify(msg.empty() ? "Ошибка установки" : msg);
+                brls::Application::notify(msg.empty() ? "app/file_manager/install_error"_i18n : msg);
                 refresh(item.name);
             }
         });
@@ -824,7 +830,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     content->addView(cancelSep);
 
     // Option 3: Cancel
-    addOption("\uE5CD", nvgRGB(239, 83, 80), "Отмена", "", nullptr);
+    addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, "", nullptr);
 
     if (firstOption) {
         dialog->setLastFocusedView(firstOption);
@@ -879,14 +885,14 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     headerTextCol->setGrow(1.0f);
 
     auto* titleLbl = new brls::Label();
-    titleLbl->setText("Установка завершена!");
+    titleLbl->setText("app/file_manager/install_success"_i18n);
     titleLbl->setFontSize(18.0f);
     titleLbl->setTextColor(nvgRGB(255, 255, 255));
     titleLbl->setSingleLine(true);
     headerTextCol->addView(titleLbl);
 
     auto* subLbl = new brls::Label();
-    subLbl->setText("Освободить место на накопителе?");
+    subLbl->setText("app/file_manager/free_space_prompt"_i18n);
     subLbl->setFontSize(13.0f);
     subLbl->setTextColor(nvgRGBA(0, 224, 165, 220));
     subLbl->setSingleLine(true);
@@ -896,7 +902,7 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     content->addView(headerBox);
 
     auto* descLbl = new brls::Label();
-    descLbl->setText("Удалить исходный файл:\n" + fileName + "?");
+    descLbl->setText("app/file_manager/delete_source_prompt"_i18n + fileName + "?");
     descLbl->setFontSize(14.0f);
     descLbl->setTextColor(nvgRGB(200, 205, 215));
     descLbl->setMarginBottom(16.0f);
@@ -912,17 +918,17 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
         applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
     }
 
-    dialog->addButton("Удалить файл", [this, filePath]() {
+    dialog->addButton("app/file_manager/delete_file_btn"_i18n, [this, filePath]() {
         std::string err;
         if (util::deletePathRecursive(filePath, err)) {
-            brls::Application::notify("Исходный файл удален!");
+            brls::Application::notify("app/file_manager/source_deleted"_i18n);
         } else {
-            brls::Application::notify(err.empty() ? "Не удалось удалить файл" : err);
+            brls::Application::notify(err.empty() ? "app/file_manager/delete_failed"_i18n : err);
         }
         refresh();
     });
 
-    dialog->addButton("Оставить", [this, fileName]() {
+    dialog->addButton("app/file_manager/keep_file_btn"_i18n, [this, fileName]() {
         refresh(fileName);
     });
 
@@ -932,10 +938,9 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
 void FileManagerView::showDeleteConfirmDialog() {
     if (selectedPaths_.empty()) return;
 
-    char msg[128];
-    std::snprintf(msg, sizeof(msg), "Удалить выбранные элементы (%zu) навсегда?", selectedPaths_.size());
+    std::string msg = brls::getStr("app/file_manager/confirm_delete_selected", std::to_string(selectedPaths_.size()));
 
-    auto* dialog = new brls::Dialog(std::string(msg));
+    auto* dialog = new brls::Dialog(msg);
     dialog->setCancelable(true);
 
     dialog->addButton("app/common/yes"_i18n, [this]() {
@@ -1089,33 +1094,33 @@ void FileManagerView::showActionsMenu() {
         iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
         badgeIcon->setText("\uE834"); // Multiple select icon
         badgeIcon->setTextColor(nvgRGB(0, 224, 165));
-        titleText = "Выбрано элементов: " + std::to_string(selectedPaths_.size());
-        subtitleText = "Групповые операции";
+        titleText = "app/file_manager/selected_items_count"_i18n + std::to_string(selectedPaths_.size());
+        subtitleText = "app/file_manager/bulk_operations"_i18n;
     } else if (targetSingleItem) {
         if (targetSingleItem->isDir) {
             iconBadge->setBackgroundColor(nvgRGBA(255, 193, 7, 40));
             badgeIcon->setText("\uE2C7"); // Folder
             badgeIcon->setTextColor(nvgRGB(255, 193, 7));
             titleText = targetSingleItem->name;
-            subtitleText = "Папка";
+            subtitleText = "app/file_manager/folder_type"_i18n;
         } else if (util::isArchiveFile(targetSingleItem->path)) {
             iconBadge->setBackgroundColor(nvgRGBA(255, 110, 64, 40));
             badgeIcon->setText("\uE2C6"); // Archive
             badgeIcon->setTextColor(nvgRGB(255, 110, 64));
             titleText = targetSingleItem->name;
-            subtitleText = "Архив · " + util::formatFileSize(targetSingleItem->size);
+            subtitleText = "app/file_manager/type_archive"_i18n + util::formatFileSize(targetSingleItem->size);
         } else if (util::isGamePackage(targetSingleItem->path)) {
             iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
             badgeIcon->setText("\uE0E0"); // Gamepad
             badgeIcon->setTextColor(nvgRGB(0, 224, 165)); // Emerald
             titleText = targetSingleItem->name;
-            subtitleText = "Пакет игры · " + util::formatFileSize(targetSingleItem->size);
+            subtitleText = "app/file_manager/type_game_pkg"_i18n + util::formatFileSize(targetSingleItem->size);
         } else if (isTextFile(targetSingleItem->path)) {
             iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
             badgeIcon->setText("\uE873"); // Document
             badgeIcon->setTextColor(nvgRGB(0, 224, 165));
             titleText = targetSingleItem->name;
-            subtitleText = "Текстовый файл · " + util::formatFileSize(targetSingleItem->size);
+            subtitleText = "app/file_manager/type_text"_i18n + util::formatFileSize(targetSingleItem->size);
         } else {
             iconBadge->setBackgroundColor(nvgRGBA(33, 150, 243, 40));
             badgeIcon->setText("\uE24D"); // File
@@ -1127,7 +1132,7 @@ void FileManagerView::showActionsMenu() {
         iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
         badgeIcon->setText("\uE2C7");
         badgeIcon->setTextColor(nvgRGB(0, 224, 165));
-        titleText = "Действия с файлами";
+        titleText = "app/file_manager/action_menu"_i18n;
         subtitleText = currentDir_;
     }
     iconBadge->addView(badgeIcon);
@@ -1228,29 +1233,30 @@ void FileManagerView::showActionsMenu() {
 
     // Install Game (if target is game package)
     if (targetSingleItem && util::isGamePackage(targetSingleItem->path)) {
-        addOption("\uE0E0", nvgRGB(0, 224, 165), "Установить игру", [this, item = *targetSingleItem]() {
+        addOption("\uE0E0", nvgRGB(0, 224, 165), "app/file_manager/install_game_btn"_i18n, [this, item = *targetSingleItem]() {
             showInstallDialog(item);
         }, true);
     }
 
     // 1. Unarchive (if target is archive)
     if (targetSingleItem && util::isArchiveFile(targetSingleItem->path)) {
-        addOption("\uE2C6", nvgRGB(255, 110, 64), "Распаковать архив", [this, item = *targetSingleItem]() {
+        addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_archive_btn"_i18n, [this, item = *targetSingleItem]() {
             showArchiveDialog(item);
         }, true);
     }
 
     // View as text (if single file)
     if (targetSingleItem && !targetSingleItem->isDir) {
-        addOption("\uE873", nvgRGB(0, 224, 165), "Просмотреть как текст", [this, item = *targetSingleItem]() {
+        addOption("\uE873", nvgRGB(0, 224, 165), "app/file_manager/view_as_text_btn"_i18n, [this, item = *targetSingleItem]() {
             openTextViewer(item.path, item.name);
         }, true);
     }
 
     // 2. Paste (if clipboard active)
     if (hasClipboard) {
-        std::string pasteText = (clip.op == util::ClipboardOp::Cut ? "Вставить перемещенное (" : "Вставить копию (") +
-                                std::to_string(clip.paths.size()) + ")";
+        std::string pasteText = (clip.op == util::ClipboardOp::Cut ?
+                                brls::getStr("app/file_manager/paste_cut", std::to_string(clip.paths.size())) :
+                                brls::getStr("app/file_manager/paste_copy", std::to_string(clip.paths.size())));
         addOption("\uE14F", nvgRGB(0, 224, 165), pasteText, [this]() {
             pasteClipboard();
         });
@@ -1258,52 +1264,52 @@ void FileManagerView::showActionsMenu() {
 
     // 3. Copy
     if (hasSelection) {
-        addOption("\uE14D", nvgRGB(64, 196, 255), "Копировать (" + std::to_string(selectedPaths_.size()) + ")", [this]() {
+        addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/copy_count", std::to_string(selectedPaths_.size())), [this]() {
             auto& c = util::getClipboard();
             c.op = util::ClipboardOp::Copy;
             c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
-            brls::Application::notify("Скопировано (" + std::to_string(c.paths.size()) + ")");
+            brls::Application::notify(brls::getStr("app/file_manager/copied_count", std::to_string(c.paths.size())));
         });
     } else if (targetSingleItem) {
-        addOption("\uE14D", nvgRGB(64, 196, 255), "Копировать", [this, item = *targetSingleItem]() {
+        addOption("\uE14D", nvgRGB(64, 196, 255), "app/file_manager/copy_single"_i18n, [this, item = *targetSingleItem]() {
             auto& c = util::getClipboard();
             c.op = util::ClipboardOp::Copy;
             c.paths = { item.path };
-            brls::Application::notify("Скопировано: " + item.name);
+            brls::Application::notify("app/file_manager/copied_single"_i18n + item.name);
         });
     }
 
     // 4. Cut
     if (hasSelection) {
-        addOption("\uE14E", nvgRGB(255, 179, 0), "Вырезать (" + std::to_string(selectedPaths_.size()) + ")", [this]() {
+        addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/cut_count", std::to_string(selectedPaths_.size())), [this]() {
             auto& c = util::getClipboard();
             c.op = util::ClipboardOp::Cut;
             c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
-            brls::Application::notify("Вырезано (" + std::to_string(c.paths.size()) + ")");
+            brls::Application::notify(brls::getStr("app/file_manager/cut_done_count", std::to_string(c.paths.size())));
         });
     } else if (targetSingleItem) {
-        addOption("\uE14E", nvgRGB(255, 179, 0), "Вырезать", [this, item = *targetSingleItem]() {
+        addOption("\uE14E", nvgRGB(255, 179, 0), "app/file_manager/cut_single"_i18n, [this, item = *targetSingleItem]() {
             auto& c = util::getClipboard();
             c.op = util::ClipboardOp::Cut;
             c.paths = { item.path };
-            brls::Application::notify("Вырезано: " + item.name);
+            brls::Application::notify("app/file_manager/cut_done_single"_i18n + item.name);
         });
     }
 
     // 5. Rename
     if (targetSingleItem) {
-        addOption("\uE254", nvgRGB(179, 136, 255), "Переименовать", [this, item = *targetSingleItem]() {
+        addOption("\uE254", nvgRGB(179, 136, 255), "app/file_manager/rename"_i18n, [this, item = *targetSingleItem]() {
             showRenameDialog(item);
         }, true);
     }
 
     // 6. Delete
     if (hasSelection) {
-        addOption("\uE872", nvgRGB(255, 82, 82), "Удалить (" + std::to_string(selectedPaths_.size()) + ")", [this]() {
+        addOption("\uE872", nvgRGB(255, 82, 82), brls::getStr("app/file_manager/delete_count", std::to_string(selectedPaths_.size())), [this]() {
             showDeleteConfirmDialog();
         }, true);
     } else if (targetSingleItem) {
-        addOption("\uE872", nvgRGB(255, 82, 82), "Удалить", [this, item = *targetSingleItem]() {
+        addOption("\uE872", nvgRGB(255, 82, 82), "app/file_manager/delete_single"_i18n, [this, item = *targetSingleItem]() {
             selectedPaths_.clear();
             selectedPaths_.insert(item.path);
             showDeleteConfirmDialog();
@@ -1311,23 +1317,23 @@ void FileManagerView::showActionsMenu() {
     }
 
     // 7. New Folder (always available)
-    addOption("\uE2CC", nvgRGB(38, 198, 218), "Новая папка", [this]() {
+    addOption("\uE2CC", nvgRGB(38, 198, 218), "app/file_manager/new_folder"_i18n, [this]() {
         showNewFolderDialog();
     }, true);
 
     // 8. Selection helpers
     if (hasSelection) {
-        addOption("\uE835", nvgRGB(180, 190, 200), "Снять всё выделение", [this]() {
+        addOption("\uE835", nvgRGB(180, 190, 200), "app/file_manager/deselect_all"_i18n, [this]() {
             clearSelection();
         });
     } else if (targetSingleItem && currentFocusedRow_ >= 0) {
-        addOption("\uE834", nvgRGB(0, 224, 165), "Выделить этот элемент", [this, row = currentFocusedRow_]() {
+        addOption("\uE834", nvgRGB(0, 224, 165), "app/file_manager/select_this_item"_i18n, [this, row = currentFocusedRow_]() {
             toggleSelection(row);
         });
     }
 
     if (!items_.empty()) {
-        addOption("\uE834", nvgRGB(100, 181, 246), "Выбрать всё (" + std::to_string(items_.size()) + ")", [this]() {
+        addOption("\uE834", nvgRGB(100, 181, 246), brls::getStr("app/file_manager/select_all_count", std::to_string(items_.size())), [this]() {
             selectAll();
         });
     }
@@ -1341,7 +1347,7 @@ void FileManagerView::showActionsMenu() {
     content->addView(cancelSep);
 
     // Clean Cancel option for mouse / touch users
-    addOption("\uE5CD", nvgRGB(239, 83, 80), "Отмена", nullptr);
+    addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, nullptr);
 
     if (firstOption) {
         dialog->setLastFocusedView(firstOption);

@@ -108,12 +108,134 @@ static std::filesystem::path downloadsBaseDir() {
     return std::filesystem::path(TSNX_DOWNLOADS_DIR);
 }
 
+// Транслитерация кириллицы (UTF-8) в латиницу для безопасной записи на FAT32/exFAT в Switch FatFs
+static std::string transliterateCyrillicToAscii(const std::string& input) {
+    std::string out;
+    out.reserve(input.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+        unsigned char c1 = static_cast<unsigned char>(input[i]);
+        if (c1 < 0x80) {
+            out.push_back(static_cast<char>(c1));
+            continue;
+        }
+        if ((c1 == 0xD0 || c1 == 0xD1) && (i + 1 < input.size())) {
+            unsigned char c2 = static_cast<unsigned char>(input[++i]);
+            uint16_t code = (static_cast<uint16_t>(c1) << 8) | c2;
+            switch (code) {
+                // Заглавные русские
+                case 0xD090: out += "A"; break;
+                case 0xD091: out += "B"; break;
+                case 0xD092: out += "V"; break;
+                case 0xD093: out += "G"; break;
+                case 0xD094: out += "D"; break;
+                case 0xD095: out += "E"; break;
+                case 0xD081: out += "Yo"; break; // Ё
+                case 0xD096: out += "Zh"; break;
+                case 0xD097: out += "Z"; break;
+                case 0xD098: out += "I"; break;
+                case 0xD099: out += "Y"; break;
+                case 0xD09A: out += "K"; break;
+                case 0xD09B: out += "L"; break;
+                case 0xD09C: out += "M"; break;
+                case 0xD09D: out += "N"; break;
+                case 0xD09E: out += "O"; break;
+                case 0xD09F: out += "P"; break;
+                case 0xD0A0: out += "R"; break;
+                case 0xD0A1: out += "S"; break;
+                case 0xD0A2: out += "T"; break;
+                case 0xD0A3: out += "U"; break;
+                case 0xD0A4: out += "F"; break;
+                case 0xD0A5: out += "Kh"; break;
+                case 0xD0A6: out += "Ts"; break;
+                case 0xD0A7: out += "Ch"; break;
+                case 0xD0A8: out += "Sh"; break;
+                case 0xD0A9: out += "Shch"; break;
+                case 0xD0AA: break; // Ъ
+                case 0xD0AB: out += "Y"; break;
+                case 0xD0AC: break; // Ь
+                case 0xD0AD: out += "E"; break;
+                case 0xD0AE: out += "Yu"; break;
+                case 0xD0AF: out += "Ya"; break;
+
+                // Строчные русские
+                case 0xD0B0: out += "a"; break;
+                case 0xD0B1: out += "b"; break;
+                case 0xD0B2: out += "v"; break;
+                case 0xD0B3: out += "g"; break;
+                case 0xD0B4: out += "d"; break;
+                case 0xD0B5: out += "e"; break;
+                case 0xD191: out += "yo"; break; // ё
+                case 0xD0B6: out += "zh"; break;
+                case 0xD0B7: out += "z"; break;
+                case 0xD0B8: out += "i"; break;
+                case 0xD0B9: out += "y"; break;
+                case 0xD0BA: out += "k"; break;
+                case 0xD0BB: out += "l"; break;
+                case 0xD0BC: out += "m"; break;
+                case 0xD0BD: out += "n"; break;
+                case 0xD0BE: out += "o"; break;
+                case 0xD0BF: out += "p"; break;
+                case 0xD180: out += "r"; break;
+                case 0xD181: out += "s"; break;
+                case 0xD182: out += "t"; break;
+                case 0xD183: out += "u"; break;
+                case 0xD184: out += "f"; break;
+                case 0xD185: out += "kh"; break;
+                case 0xD186: out += "ts"; break;
+                case 0xD187: out += "ch"; break;
+                case 0xD188: out += "sh"; break;
+                case 0xD189: out += "shch"; break;
+                case 0xD18A: break; // ъ
+                case 0xD18B: out += "y"; break;
+                case 0xD18C: break; // ь
+                case 0xD18D: out += "e"; break;
+                case 0xD18E: out += "yu"; break;
+                case 0xD18F: out += "ya"; break;
+
+                // Украинские / белорусские
+                case 0xD084: out += "Ye"; break;
+                case 0xD194: out += "ye"; break;
+                case 0xD086: out += "I"; break;
+                case 0xD196: out += "i"; break;
+                case 0xD087: out += "Yi"; break;
+                case 0xD197: out += "yi"; break;
+                case 0xD08E: out += "U"; break;
+                case 0xD19E: out += "u"; break;
+
+                default: out += "_"; break;
+            }
+            continue;
+        }
+
+        // Тире и кавычки UTF-8
+        if (c1 == 0xE2 && i + 2 < input.size()) {
+            unsigned char c2 = static_cast<unsigned char>(input[i + 1]);
+            unsigned char c3 = static_cast<unsigned char>(input[i + 2]);
+            if (c2 == 0x80 && (c3 == 0x93 || c3 == 0x94)) { // en-dash, em-dash
+                out += "-";
+                i += 2;
+                continue;
+            }
+            if (c2 == 0x80 && (c3 == 0x98 || c3 == 0x99 || c3 == 0x9C || c3 == 0x9D)) { // quotes
+                out += "_";
+                i += 2;
+                continue;
+            }
+        }
+
+        // Прочие non-ASCII символы заменяем на безопасный символ
+        out.push_back('_');
+    }
+    return out;
+}
+
 // Очистка компонента пути (имени файла или папки) от недопустимых символов ФС
 static std::string sanitizePathComponent(const std::string& raw) {
+    std::string converted = transliterateCyrillicToAscii(raw);
     std::string out;
-    out.reserve(raw.size());
-    for (size_t i = 0; i < raw.size(); ++i) {
-        unsigned char c = static_cast<unsigned char>(raw[i]);
+    out.reserve(converted.size());
+    for (size_t i = 0; i < converted.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(converted[i]);
         if (c < 0x20) continue; // control characters
         if (c == ':' || c == '/') {
             out.push_back(' ');

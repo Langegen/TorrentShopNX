@@ -17,6 +17,7 @@ public:
     RetroConsolesView();
     ~RetroConsolesView() override;
     void onContentAvailable() override;
+    void willAppear(bool resetState = false) override;
 
 private:
     void rebuildGrid();

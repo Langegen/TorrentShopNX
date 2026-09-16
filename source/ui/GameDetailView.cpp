@@ -116,7 +116,7 @@ void GameDetailView::onContentAvailable() {
             setBadge->setCornerRadius(6);
 
             brls::Label* setLabel = new brls::Label();
-            setLabel->setText("СБОРНИК / РОМСЕТ");
+            setLabel->setText("app/detail/compilation_badge"_i18n);
             setLabel->setFontSize(14);
             setLabel->setTextColor(nvgRGB(255, 255, 255));
             setBadge->addView(setLabel);
@@ -125,9 +125,9 @@ void GameDetailView::onContentAvailable() {
 
             const auto& cfg = config::ConfigManager::instance();
             if (cfg.getRetroRomsetMode() == "select") {
-                btnDownload->setText("Выбрать файлы");
+                btnDownload->setText("app/detail/select_files_btn"_i18n);
             } else {
-                btnDownload->setText("Скачать ромсет");
+                btnDownload->setText("app/detail/download_romset_btn"_i18n);
             }
         } else {
             btnDownload->setText("app/detail/download_rom"_i18n);
@@ -181,7 +181,7 @@ void GameDetailView::onContentAvailable() {
     if (!game_.multiplayer.empty()) {
         std::string mp = game_.multiplayer;
         std::string lowerMp = catalog::toLowerUtf8(mp);
-        if (lowerMp != "нет" && lowerMp != "no" && lowerMp != "1") {
+        if (lowerMp != "\xd0\xbd\xd0\xb5\xd1\x82" && lowerMp != "no" && lowerMp != "1") {
             brls::Box* mpBadge = new brls::Box();
             mpBadge->setPadding(5, 10, 5, 10);
             mpBadge->setMarginRight(10);

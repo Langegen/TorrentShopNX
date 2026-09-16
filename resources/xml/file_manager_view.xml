@@ -32,7 +32,7 @@
             cornerRadius="5"
             backgroundColor="#203a43">
 
-            <brls:Label id="selectionText" text="Выбрано: 0" fontSize="14" textColor="#00e676" />
+            <brls:Label id="selectionText" text="" fontSize="14" textColor="#00e676" />
             <brls:Label id="selectionHint" text="@i18n/app/file_manager/selection_actions_hint" fontSize="12" textColor="#b0bec5" />
         </brls:Box>
 

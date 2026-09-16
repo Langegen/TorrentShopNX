@@ -765,9 +765,9 @@ brls::View* SettingsTab::buildRetroTab() {
     auto updateDetailText = [updateCatalogsCell]() {
         int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
         if (count > 0) {
-            updateCatalogsCell->setDetailText("Кэш: " + std::to_string(count) + " игр (A - обновить)");
+            updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
         } else {
-            updateCatalogsCell->setDetailText("Нажмите A для обновления");
+            updateCatalogsCell->setDetailText("app/settings/retro_update_catalogs_empty"_i18n);
         }
     };
     updateDetailText();

@@ -133,7 +133,7 @@ public:
         actPill_->setJustifyContent(brls::JustifyContent::CENTER);
 
         actLbl_ = new brls::Label();
-        actLbl_->setText("Загрузить");
+        actLbl_->setText("app/dashboard/btn_download"_i18n);
         actLbl_->setFontSize(11.5f);
         actLbl_->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald text
         actPill_->addView(actLbl_);
@@ -326,7 +326,7 @@ void DashboardSummaryView::updateDownloads(const std::vector<download::DownloadI
                 if (dl_titleLbl_) dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
 
                 std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
-                                     ? "Установка..." : "Загрузка...";
+                                     ? "app/dashboard/downloads_status_installing"_i18n : "app/dashboard/downloads_status_downloading"_i18n;
                 if (dl_stLbl_) dl_stLbl_->setText(stText);
 
                 if (dl_barFill_) dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
@@ -347,21 +347,19 @@ void DashboardSummaryView::updateDownloads(const std::vector<download::DownloadI
                 std::string szStr = formatBytes(inst_written) + " / " + formatBytes(inst_total);
                 if (dl_szLbl_) dl_szLbl_->setText(szStr);
 
-                std::string peersStr = "Пиры: " + std::to_string(activeItem->peers) + " / Сиды: " + std::to_string(activeItem->seeds);
+                std::string peersStr = "app/dashboard/downloads_peers"_i18n + std::to_string(activeItem->peers) + "app/dashboard/downloads_seeds"_i18n + std::to_string(activeItem->seeds);
                 if (dl_peersLbl_) dl_peersLbl_->setText(peersStr);
 
-                std::string etaStr = "В процессе";
+                std::string etaStr = "app/dashboard/downloads_in_progress"_i18n;
                 if (activeItem->download_speed_kbps > 10.0f && inst_total > inst_written) {
                     unsigned long long remBytes = inst_total - inst_written;
                     unsigned long long rate = static_cast<unsigned long long>(activeItem->download_speed_kbps * 1024.0f);
                     unsigned long long sec = remBytes / rate;
-                    char etaBuf[32];
-                    std::snprintf(etaBuf, sizeof(etaBuf), "~%llu мин", (sec / 60) + 1);
-                    etaStr = std::string(etaBuf);
+                    etaStr = brls::getStr("app/dashboard/downloads_eta_min", std::to_string((sec / 60) + 1));
                 }
-                if (dl_etaLbl_) dl_etaLbl_->setText("Осталось: " + etaStr);
+                if (dl_etaLbl_) dl_etaLbl_->setText("app/dashboard/downloads_eta_prefix"_i18n + etaStr);
 
-                if (dl_qCountLbl_) dl_qCountLbl_->setText("В очереди: " + std::to_string(items.size()));
+                if (dl_qCountLbl_) dl_qCountLbl_->setText("app/dashboard/downloads_queue_prefix"_i18n + std::to_string(items.size()));
                 if (dl_sparkline_) dl_sparkline_->setSamples(speed_history_);
 
                 // If cover URL was not resolved initially (e.g. catalog loaded asynchronously), try to resolve and set it now
@@ -540,7 +538,7 @@ void DashboardSummaryView::buildCatalogSection() {
     headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
-    title->setText("НОВИНКИ И ПОПУЛЯРНЫЕ ИГРЫ КАТАЛОГА");
+    title->setText("app/dashboard/catalog_title"_i18n);
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
@@ -553,7 +551,7 @@ void DashboardSummaryView::buildCatalogSection() {
 
     if (catalog_sample_.empty()) {
         brls::Label* emptyLbl = new brls::Label();
-        emptyLbl->setText("Загрузка базы игр каталога...");
+        emptyLbl->setText("app/dashboard/catalog_loading"_i18n);
         emptyLbl->setFontSize(13.0f);
         emptyLbl->setTextColor(nvgRGBA(160, 180, 205, 200));
         cardsRow->addView(emptyLbl);
@@ -590,7 +588,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
-    title->setText("КАТАЛОГ РЕТРО-ИГР И РОМОВ ДЛЯ ЭМУЛЯТОРОВ");
+    title->setText("app/dashboard/retro_title"_i18n);
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
@@ -619,13 +617,13 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c1Top->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c1Title = new brls::Label();
-    c1Title->setText("БИБЛИОТЕКА РЕТРО-ИГР");
+    c1Title->setText("app/dashboard/retro_c1_title"_i18n);
     c1Title->setFontSize(11.5f);
     c1Title->setTextColor(nvgRGBA(160, 185, 215, 220));
     c1Top->addView(c1Title);
 
     brls::Label* c1TopTag = new brls::Label();
-    c1TopTag->setText("20 систем");
+    c1TopTag->setText("app/dashboard/retro_c1_tag"_i18n);
     c1TopTag->setFontSize(11.5f);
     c1TopTag->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
     c1Top->addView(c1TopTag);
@@ -636,7 +634,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c1Mid->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c1Val = new brls::Label();
-    c1Val->setText("8 200+ игр");
+    c1Val->setText("app/dashboard/retro_c1_val"_i18n);
     c1Val->setFontSize(22.0f);
     c1Val->setTextColor(nvgRGBA(255, 255, 255, 255));
     c1Mid->addView(c1Val);
@@ -647,7 +645,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c1Badge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
     c1Badge->setMarginLeft(12.0f);
     brls::Label* c1BadgeLbl = new brls::Label();
-    c1BadgeLbl->setText("Полная база");
+    c1BadgeLbl->setText("app/dashboard/retro_c1_badge"_i18n);
     c1BadgeLbl->setFontSize(12.0f);
     c1BadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
     c1Badge->addView(c1BadgeLbl);
@@ -679,7 +677,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c2Top->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c2Title = new brls::Label();
-    c2Title->setText("ОСНОВНЫЕ ПЛАТФОРМЫ");
+    c2Title->setText("app/dashboard/retro_c2_title"_i18n);
     c2Title->setFontSize(11.5f);
     c2Title->setTextColor(nvgRGBA(160, 185, 215, 220));
     c2Top->addView(c2Title);
@@ -733,7 +731,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c2->addView(pillsRow);
 
     brls::Label* c2Sub = new brls::Label();
-    c2Sub->setText("Оригинальные образы, русификации и хаки");
+    c2Sub->setText("app/dashboard/retro_c2_sub"_i18n);
     c2Sub->setFontSize(11.0f);
     c2Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
     c2->addView(c2Sub);
@@ -754,8 +752,8 @@ void DashboardSummaryView::buildRetroGamesSection() {
     auto& cfg = config::ConfigManager::instance();
     std::string romsMode = cfg.getRetroRomsMode();
     std::string modeTag = "RetroArch";
-    if (romsMode == "downloads") modeTag = "Загрузки";
-    else if (romsMode == "custom") modeTag = "Своя папка";
+    if (romsMode == "downloads") modeTag = "app/dashboard/retro_mode_downloads"_i18n;
+    else if (romsMode == "custom") modeTag = "app/dashboard/retro_mode_custom"_i18n;
 
     brls::Box* c3Top = new brls::Box();
     c3Top->setAxis(brls::Axis::ROW);
@@ -763,7 +761,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3Top->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c3Title = new brls::Label();
-    c3Title->setText("ПАПКА ДЛЯ РОМОВ");
+    c3Title->setText("app/dashboard/retro_c3_title"_i18n);
     c3Title->setFontSize(11.5f);
     c3Title->setTextColor(nvgRGBA(160, 185, 215, 220));
     c3Top->addView(c3Title);
@@ -805,7 +803,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3->addView(c3Mid);
 
     brls::Label* c3Sub = new brls::Label();
-    c3Sub->setText("(A) Нажмите для перехода к выбору консолей");
+    c3Sub->setText("app/dashboard/retro_c3_sub"_i18n);
     c3Sub->setFontSize(11.0f);
     c3Sub->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald action hint
     c3->addView(c3Sub);
@@ -841,7 +839,7 @@ void DashboardSummaryView::buildLibrarySection() {
     headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
-    title->setText("МЕНЕДЖЕР УСТАНОВЛЕННЫХ ИГР И ОБНОВЛЕНИЙ");
+    title->setText("app/dashboard/library_title"_i18n);
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
@@ -870,13 +868,13 @@ void DashboardSummaryView::buildLibrarySection() {
     instTop->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* instTitle = new brls::Label();
-    instTitle->setText("УСТАНОВЛЕННЫЕ ИГРЫ");
+    instTitle->setText("app/dashboard/library_inst_title"_i18n);
     instTitle->setFontSize(12.0f);
     instTitle->setTextColor(nvgRGBA(160, 185, 215, 220));
     instTop->addView(instTitle);
 
     brls::Label* instStorage = new brls::Label();
-    instStorage->setText("Память SD + NAND");
+    instStorage->setText("app/dashboard/library_inst_storage"_i18n);
     instStorage->setFontSize(11.5f);
     instStorage->setTextColor(nvgRGBA(130, 160, 195, 200));
     instTop->addView(instStorage);
@@ -887,7 +885,7 @@ void DashboardSummaryView::buildLibrarySection() {
     instMid->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* instCountLbl = new brls::Label();
-    instCountLbl->setText(std::to_string(installed_count_) + " игр");
+    instCountLbl->setText(brls::getStr("app/dashboard/library_inst_count", std::to_string(installed_count_)));
     instCountLbl->setFontSize(26.0f);
     instCountLbl->setTextColor(nvgRGBA(255, 255, 255, 255));
     instMid->addView(instCountLbl);
@@ -898,7 +896,7 @@ void DashboardSummaryView::buildLibrarySection() {
     instBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
     instBadge->setMarginLeft(14.0f);
     brls::Label* instBadgeLbl = new brls::Label();
-    instBadgeLbl->setText("Готовы к запуску");
+    instBadgeLbl->setText("app/dashboard/library_inst_badge"_i18n);
     instBadgeLbl->setFontSize(12.0f);
     instBadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
     instBadge->addView(instBadgeLbl);
@@ -906,7 +904,7 @@ void DashboardSummaryView::buildLibrarySection() {
     instCard->addView(instMid);
 
     brls::Label* instSub = new brls::Label();
-    instSub->setText("(A) Управление установленными играми, DLC и удаление");
+    instSub->setText("app/dashboard/library_inst_sub"_i18n);
     instSub->setFontSize(11.5f);
     instSub->setTextColor(nvgRGBA(140, 170, 200, 200));
     instCard->addView(instSub);
@@ -930,13 +928,13 @@ void DashboardSummaryView::buildLibrarySection() {
     updTop->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* updTitle = new brls::Label();
-    updTitle->setText("ДОСТУПНЫЕ ОБНОВЛЕНИЯ");
+    updTitle->setText("app/dashboard/library_upd_title"_i18n);
     updTitle->setFontSize(12.0f);
     updTitle->setTextColor(nvgRGBA(160, 185, 215, 220));
     updTop->addView(updTitle);
 
     brls::Label* updSync = new brls::Label();
-    updSync->setText("Сверка с каталогом");
+    updSync->setText("app/dashboard/library_upd_sync"_i18n);
     updSync->setFontSize(11.5f);
     updSync->setTextColor(nvgRGBA(130, 160, 195, 200));
     updTop->addView(updSync);
@@ -948,7 +946,7 @@ void DashboardSummaryView::buildLibrarySection() {
 
     if (updates_count_ > 0) {
         brls::Label* updCountLbl = new brls::Label();
-        updCountLbl->setText(std::to_string(updates_count_) + " обновлений");
+        updCountLbl->setText(brls::getStr("app/dashboard/library_upd_count", std::to_string(updates_count_)));
         updCountLbl->setFontSize(26.0f);
         updCountLbl->setTextColor(nvgRGBA(255, 185, 70, 255)); // Amber
         updMid->addView(updCountLbl);
@@ -959,14 +957,14 @@ void DashboardSummaryView::buildLibrarySection() {
         updBadge->setBackgroundColor(nvgRGBA(255, 180, 50, 32));
         updBadge->setMarginLeft(14.0f);
         brls::Label* updBadgeLbl = new brls::Label();
-        updBadgeLbl->setText("Доступны новые патчи");
+        updBadgeLbl->setText("app/dashboard/library_upd_badge_avail"_i18n);
         updBadgeLbl->setFontSize(12.0f);
         updBadgeLbl->setTextColor(nvgRGBA(255, 200, 80, 255));
         updBadge->addView(updBadgeLbl);
         updMid->addView(updBadge);
     } else {
         brls::Label* updCountLbl = new brls::Label();
-        updCountLbl->setText("Все игры обновлены");
+        updCountLbl->setText("app/dashboard/library_upd_all_updated"_i18n);
         updCountLbl->setFontSize(22.0f);
         updCountLbl->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
         updMid->addView(updCountLbl);
@@ -977,7 +975,7 @@ void DashboardSummaryView::buildLibrarySection() {
         updBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
         updBadge->setMarginLeft(14.0f);
         brls::Label* updBadgeLbl = new brls::Label();
-        updBadgeLbl->setText("Все версии актуальны");
+        updBadgeLbl->setText("app/dashboard/library_upd_badge_ok"_i18n);
         updBadgeLbl->setFontSize(12.0f);
         updBadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
         updBadge->addView(updBadgeLbl);
@@ -986,7 +984,7 @@ void DashboardSummaryView::buildLibrarySection() {
     updCard->addView(updMid);
 
     brls::Label* updSub = new brls::Label();
-    updSub->setText("(A) Просмотр списка обновлений и быстрая загрузка");
+    updSub->setText("app/dashboard/library_upd_sub"_i18n);
     updSub->setFontSize(11.5f);
     updSub->setTextColor(nvgRGBA(140, 170, 200, 200));
     updCard->addView(updSub);
@@ -1038,7 +1036,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         headerRow->setFocusable(false);
 
         brls::Label* title = new brls::Label();
-        title->setText("АКТИВНАЯ ЗАГРУЗКА И УСТАНОВКА");
+        title->setText("app/dashboard/downloads_title"_i18n);
         title->setFontSize(13.0f);
         title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
         headerRow->addView(title);
@@ -1119,7 +1117,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         topRow->addView(dl_titleLbl_);
 
         std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
-                             ? "Установка..." : "Загрузка...";
+                             ? "app/dashboard/downloads_status_installing"_i18n : "app/dashboard/downloads_status_downloading"_i18n;
         dl_stLbl_ = new brls::Label();
         dl_stLbl_->setText(stText);
         dl_stLbl_->setFontSize(12.0f);
@@ -1182,24 +1180,22 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_szLbl_->setTextColor(nvgRGBA(180, 205, 230, 220));
         metricsRow->addView(dl_szLbl_);
 
-        std::string peersStr = "Пиры: " + std::to_string(activeItem->peers) + " / Сиды: " + std::to_string(activeItem->seeds);
+        std::string peersStr = "app/dashboard/downloads_peers"_i18n + std::to_string(activeItem->peers) + "app/dashboard/downloads_seeds"_i18n + std::to_string(activeItem->seeds);
         dl_peersLbl_ = new brls::Label();
         dl_peersLbl_->setText(peersStr);
         dl_peersLbl_->setFontSize(11.5f);
         dl_peersLbl_->setTextColor(nvgRGBA(150, 175, 205, 200));
         metricsRow->addView(dl_peersLbl_);
 
-        std::string etaStr = "В процессе";
+        std::string etaStr = "app/dashboard/downloads_in_progress"_i18n;
         if (activeItem->download_speed_kbps > 10.0f && inst_total > inst_written) {
             unsigned long long remBytes = inst_total - inst_written;
             unsigned long long rate = static_cast<unsigned long long>(activeItem->download_speed_kbps * 1024.0f);
             unsigned long long sec = remBytes / rate;
-            char etaBuf[32];
-            std::snprintf(etaBuf, sizeof(etaBuf), "~%llu мин", (sec / 60) + 1);
-            etaStr = std::string(etaBuf);
+            etaStr = brls::getStr("app/dashboard/downloads_eta_min", std::to_string((sec / 60) + 1));
         }
         dl_etaLbl_ = new brls::Label();
-        dl_etaLbl_->setText("Осталось: " + etaStr);
+        dl_etaLbl_->setText("app/dashboard/downloads_eta_prefix"_i18n + etaStr);
         dl_etaLbl_->setFontSize(11.5f);
         dl_etaLbl_->setTextColor(nvgRGBA(150, 175, 205, 200));
         metricsRow->addView(dl_etaLbl_);
@@ -1225,13 +1221,13 @@ void DashboardSummaryView::buildDownloadsSection() {
         gHeader->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
 
         brls::Label* gLbl = new brls::Label();
-        gLbl->setText("ГРАФИК СКОРОСТИ");
+        gLbl->setText("app/dashboard/downloads_speed_graph"_i18n);
         gLbl->setFontSize(11.5f);
         gLbl->setTextColor(nvgRGBA(160, 185, 215, 220));
         gHeader->addView(gLbl);
 
         dl_qCountLbl_ = new brls::Label();
-        dl_qCountLbl_->setText("В очереди: " + std::to_string(cached_downloads_.size()));
+        dl_qCountLbl_->setText("app/dashboard/downloads_queue_prefix"_i18n + std::to_string(cached_downloads_.size()));
         dl_qCountLbl_->setFontSize(11.5f);
         dl_qCountLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
         gHeader->addView(dl_qCountLbl_);
@@ -1244,7 +1240,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         graphCard->addView(dl_sparkline_);
 
         brls::Label* gFooter = new brls::Label();
-        gFooter->setText("Прямая запись на носитель NAND / SD");
+        gFooter->setText("app/dashboard/downloads_storage_dest"_i18n);
         gFooter->setFontSize(11.0f);
         gFooter->setTextColor(nvgRGBA(130, 160, 190, 200));
         graphCard->addView(gFooter);
@@ -1271,7 +1267,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         headerRow->setFocusable(false);
 
         brls::Label* title = new brls::Label();
-        title->setText("ОЧЕРЕДЬ ЗАГРУЗОК ПУСТА  •  НЕТ АКТИВНЫХ ЗАДАЧ");
+        title->setText("app/dashboard/downloads_empty_title"_i18n);
         title->setFontSize(13.0f);
         title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
         headerRow->addView(title);
@@ -1284,7 +1280,7 @@ void DashboardSummaryView::buildDownloadsSection() {
 
         if (catalog_sample_.empty()) {
             brls::Label* emptyLbl = new brls::Label();
-            emptyLbl->setText("Загрузка базы игр каталога...");
+            emptyLbl->setText("app/dashboard/catalog_loading"_i18n);
             emptyLbl->setFontSize(13.0f);
             emptyLbl->setTextColor(nvgRGBA(160, 180, 205, 200));
             cardsRow->addView(emptyLbl);
@@ -1319,7 +1315,7 @@ void DashboardSummaryView::buildToolsSection() {
     headerRow->setFocusable(false);
 
     brls::Label* title = new brls::Label();
-    title->setText("СИСТЕМНАЯ ИНФОРМАЦИЯ И НАСТРОЙКИ ХРАНИЛИЩА");
+    title->setText("app/dashboard/tools_title"_i18n);
     title->setFontSize(13.0f);
     title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
     headerRow->addView(title);
@@ -1343,7 +1339,7 @@ void DashboardSummaryView::buildToolsSection() {
     c1->registerClickAction(openTools);
 
     brls::Label* c1Title = new brls::Label();
-    c1Title->setText("РЕЖИМ ЗАГРУЗКИ");
+    c1Title->setText("app/dashboard/tools_c1_title"_i18n);
     c1Title->setFontSize(11.5f);
     c1Title->setTextColor(nvgRGBA(160, 185, 215, 220));
     c1->addView(c1Title);
@@ -1355,7 +1351,7 @@ void DashboardSummaryView::buildToolsSection() {
     c1->addView(c1Val);
 
     brls::Label* c1Sub = new brls::Label();
-    c1Sub->setText("Порт: 6881 (DHT)  •  Keep-Awake");
+    c1Sub->setText("app/dashboard/tools_c1_sub"_i18n);
     c1Sub->setFontSize(11.0f);
     c1Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
     c1->addView(c1Sub);
@@ -1374,7 +1370,7 @@ void DashboardSummaryView::buildToolsSection() {
     c2->registerClickAction(openTools);
 
     brls::Label* c2Title = new brls::Label();
-    c2Title->setText("ОБЩИЙ КЭШ ПРИЛОЖЕНИЯ");
+    c2Title->setText("app/dashboard/tools_c2_title"_i18n);
     c2Title->setFontSize(11.5f);
     c2Title->setTextColor(nvgRGBA(160, 185, 215, 220));
     c2->addView(c2Title);
@@ -1386,7 +1382,7 @@ void DashboardSummaryView::buildToolsSection() {
     c2->addView(c2Val);
 
     brls::Label* c2Sub = new brls::Label();
-    c2Sub->setText("Обложки, торренты, метаданные, DHT");
+    c2Sub->setText("app/dashboard/tools_c2_sub"_i18n);
     c2Sub->setFontSize(11.0f);
     c2Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
     c2->addView(c2Sub);
@@ -1405,7 +1401,7 @@ void DashboardSummaryView::buildToolsSection() {
     c3->registerClickAction(openTools);
 
     brls::Label* c3Title = new brls::Label();
-    c3Title->setText("НЕЗАВЕРШЕННЫЕ УСТАНОВКИ");
+    c3Title->setText("app/dashboard/tools_c3_title"_i18n);
     c3Title->setFontSize(11.5f);
     c3Title->setTextColor(nvgRGBA(160, 185, 215, 220));
     c3->addView(c3Title);
@@ -1415,14 +1411,14 @@ void DashboardSummaryView::buildToolsSection() {
         c3Val->setText(formatBytes(leftover_size_bytes_));
         c3Val->setTextColor(nvgRGBA(255, 185, 70, 255)); // Amber
     } else {
-        c3Val->setText("0 B (Чисто)");
+        c3Val->setText("app/dashboard/tools_c3_clean"_i18n);
         c3Val->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
     }
     c3Val->setFontSize(21.0f);
     c3->addView(c3Val);
 
     brls::Label* c3Sub = new brls::Label();
-    c3Sub->setText("Плейсхолдеры NCM и временные файлы");
+    c3Sub->setText("app/dashboard/tools_c3_sub"_i18n);
     c3Sub->setFontSize(11.0f);
     c3Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
     c3->addView(c3Sub);

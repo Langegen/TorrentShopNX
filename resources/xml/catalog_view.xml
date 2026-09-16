@@ -14,7 +14,7 @@
         
         <!-- Search and Filter triggers -->
         <brls:Box width="auto" height="auto" axis="row" alignItems="center">
-            <brls:Label id="statsHint" text="Игр: 0 | Обновлено: Никогда" fontSize="16" textColor="#AAAAAA" />
+            <brls:Label id="statsHint" text="@i18n/app/catalog/never_updated" fontSize="16" textColor="#AAAAAA" />
         </brls:Box>
     </brls:Box>
 

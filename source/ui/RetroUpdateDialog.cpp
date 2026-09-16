@@ -13,11 +13,11 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
     auto& mgr = catalog::RetroCatalogManager::instance();
     int cachedCount = mgr.getTotalCachedGamesCount();
 
-    std::string msg = "Обновление баз данных ретро-игр с GitHub.\n";
+    std::string msg = "app/retro/update_dialog_msg_header"_i18n + "\n";
     if (cachedCount > 0) {
-        msg += "В кэше сохранено игр: " + std::to_string(cachedCount) + ".\n";
+        msg += "app/retro/cached_games_count"_i18n + std::to_string(cachedCount) + ".\n";
     }
-    msg += "Выберите режим:";
+    msg += "app/retro/select_mode"_i18n;
 
     auto* chooseDialog = new brls::Dialog(msg);
     chooseDialog->setCancelable(true);
@@ -30,14 +30,14 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         content->setAlignItems(brls::AlignItems::STRETCH);
 
         auto* titleLabel = new brls::Label();
-        titleLabel->setText("Обновление баз ретро-игр");
+        titleLabel->setText("app/retro/update_db_title"_i18n);
         titleLabel->setFontSize(20.0f);
         titleLabel->setTextColor(nvgRGB(255, 255, 255));
         titleLabel->setMarginBottom(10.0f);
         content->addView(titleLabel);
 
         auto* statusLabel = new brls::Label();
-        statusLabel->setText("Подготовка...");
+        statusLabel->setText("app/retro/preparing"_i18n);
         statusLabel->setFontSize(14.0f);
         statusLabel->setTextColor(nvgRGB(180, 180, 190));
         statusLabel->setMarginBottom(14.0f);
@@ -73,11 +73,11 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         auto closedFlag = std::make_shared<std::atomic<bool>>(false);
 
         std::string cancelText = brls::getStr("app/common/cancel");
-        if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Отмена";
+        if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
         progressDialog->addButton(cancelText, [cancelFlag, statusLabel]() {
             cancelFlag->store(true);
-            statusLabel->setText("Отмена обновления...");
+            statusLabel->setText("app/retro/cancelling_update"_i18n);
         });
 
         progressDialog->open();
@@ -96,7 +96,7 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
                 brls::sync([progressDialog, closedFlag, onComplete]() {
                     if (!closedFlag->exchange(true)) {
                         progressDialog->close([onComplete]() {
-                            brls::Application::notify("Нет сохраненных баз для обновления");
+                            brls::Application::notify("app/retro/no_cached_bases"_i18n);
                             if (onComplete) onComplete(0);
                         });
                     }
@@ -132,11 +132,11 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
                 if (!closedFlag->exchange(true)) {
                     progressDialog->close([cancelled, successCount, total, onComplete]() {
                         if (cancelled) {
-                            brls::Application::notify("Обновление прервано (" + std::to_string(successCount) + "/" + std::to_string(total) + ")");
+                            brls::Application::notify("app/retro/update_interrupted"_i18n + std::to_string(successCount) + "/" + std::to_string(total) + ")");
                         } else if (successCount > 0) {
-                            brls::Application::notify("Обновлено платформ: " + std::to_string(successCount) + " из " + std::to_string(total));
+                            brls::Application::notify("app/retro/platforms_updated"_i18n + std::to_string(successCount) + "app/retro/of_prefix"_i18n + std::to_string(total));
                         } else {
-                            brls::Application::notify("Ошибка обновления (проверьте интернет)");
+                            brls::Application::notify("app/retro/update_error_offline"_i18n);
                         }
                         if (onComplete) onComplete(successCount);
                     });
@@ -145,11 +145,11 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         });
     };
 
-    chooseDialog->addButton("Кэшированные", [runUpdate]() {
+    chooseDialog->addButton("app/retro/btn_cached"_i18n, [runUpdate]() {
         runUpdate(true);
     });
 
-    chooseDialog->addButton("Все 20 платформ", [runUpdate]() {
+    chooseDialog->addButton("app/retro/btn_all_platforms"_i18n, [runUpdate]() {
         runUpdate(false);
     });
 

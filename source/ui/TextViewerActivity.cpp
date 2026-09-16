@@ -13,7 +13,7 @@ namespace {
 bool readTextFileContent(const std::string& path, std::string& outText, size_t& outLines, uint64_t& outTotalSize, bool& outTruncated, std::string& outError) {
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
-        outError = "Файл не найден: " + path;
+        outError = "app/text_viewer/file_not_found"_i18n + path;
         return false;
     }
 
@@ -21,7 +21,7 @@ bool readTextFileContent(const std::string& path, std::string& outText, size_t& 
 
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
-        outError = "Не удалось открыть файл для чтения";
+        outError = "app/text_viewer/cant_open_read"_i18n;
         return false;
     }
 
@@ -45,7 +45,7 @@ bool readTextFileContent(const std::string& path, std::string& outText, size_t& 
     }
 
     if (outTruncated) {
-        outText += "\n\n--- [Файл слишком большой. Показаны первые 512 КБ] ---";
+        outText += "app/text_viewer/too_large_warning"_i18n;
     }
 
     return true;
@@ -117,7 +117,7 @@ brls::View* TextViewerActivity::createContentView() {
 
     std::string metaStr = filePath_ + " · " + util::formatFileSize(totalSize);
     if (ok) {
-        metaStr += " · " + std::to_string(lineCount) + " строк";
+        metaStr += " · " + std::to_string(lineCount) + "app/text_viewer/lines_suffix"_i18n;
     }
     auto* subLbl = new brls::Label();
     subLbl->setText(metaStr);
@@ -138,7 +138,7 @@ brls::View* TextViewerActivity::createContentView() {
     closeBtn->setFocusable(true);
 
     auto* closeLbl = new brls::Label();
-    closeLbl->setText("✕ Закрыть");
+    closeLbl->setText("app/text_viewer/close_btn"_i18n);
     closeLbl->setFontSize(14.0f);
     closeLbl->setTextColor(nvgRGB(220, 225, 235));
     closeBtn->addView(closeLbl);
@@ -173,10 +173,10 @@ brls::View* TextViewerActivity::createContentView() {
 
     if (!ok) {
         textLabel_->setTextColor(nvgRGB(255, 100, 100));
-        textLabel_->setText("Ошибка чтения файла: " + err);
+        textLabel_->setText("app/text_viewer/read_error"_i18n + err);
     } else if (textContent.empty()) {
         textLabel_->setTextColor(nvgRGB(140, 145, 155));
-        textLabel_->setText("<Файл пуст>");
+        textLabel_->setText("app/text_viewer/file_empty"_i18n);
     } else {
         textLabel_->setTextColor(nvgRGB(228, 232, 240));
         textLabel_->setText(textContent);
@@ -196,7 +196,7 @@ void TextViewerActivity::onContentAvailable() {
         return true;
     });
 
-    this->registerAction("Стр. Вверх", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
+    this->registerAction("app/text_viewer/page_up"_i18n, brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
         if (scrollingFrame_) {
             float cur = scrollingFrame_->getContentOffsetY();
             scrollingFrame_->setContentOffsetY(std::max(0.0f, cur - 400.0f), true);
@@ -204,7 +204,7 @@ void TextViewerActivity::onContentAvailable() {
         return true;
     });
 
-    this->registerAction("Стр. Вниз", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+    this->registerAction("app/text_viewer/page_down"_i18n, brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
         if (scrollingFrame_) {
             float cur = scrollingFrame_->getContentOffsetY();
             scrollingFrame_->setContentOffsetY(cur + 400.0f, true);

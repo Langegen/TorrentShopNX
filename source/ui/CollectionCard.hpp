@@ -17,6 +17,8 @@ public:
                    std::function<void()> on_click);
 
     void setCountText(const std::string& text);
+    void setDesc(const std::string& desc);
+    void setDescColor(NVGcolor color);
 
     void onFocusGained() override;
     void onFocusLost() override;

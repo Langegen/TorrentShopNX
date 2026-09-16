@@ -106,6 +106,7 @@ brls::View* GameRowCell::getDefaultFocus() {
 
 // CATALOGVIEW IMPLEMENTATION
 CatalogView::CatalogView(const std::string& searchQuery) {
+    filterState_.sort = catalog::SortOption::TITLE_ASC;
     if (!searchQuery.empty()) {
         filterState_.searchQuery = searchQuery;
     }
@@ -116,7 +117,7 @@ void CatalogView::onContentAvailable() {
 
     auto catalog = getCatalogSnapshot();
 
-    // Pre-populate filteredGames_ with non-homebrew games
+    // Pre-populate filteredGames_ with non-homebrew games, sorted alphabetically by default
     filteredGames_.clear();
     filteredGames_.reserve(catalog->size());
     for (const auto& g : *catalog) {
@@ -125,8 +126,16 @@ void CatalogView::onContentAvailable() {
         }
     }
 
-    std::string countStr = "Игр: " + std::to_string(filteredGames_.size());
-    statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
+    catalog::SortOption sortOpt = (filterState_.sort == catalog::SortOption::DEFAULT)
+        ? catalog::SortOption::TITLE_ASC
+        : filterState_.sort;
+
+    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game& a, const Game& b) {
+        return catalog::compareGames(a, b, sortOpt);
+    });
+
+    std::string countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
+    statsHint->setText(countStr + "app/catalog/stats_hint_suffix"_i18n);
 
     if (headerTitle) {
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
@@ -195,7 +204,13 @@ void CatalogView::onContentAvailable() {
     recycler->setDataSource(ds);
     brls::Logger::info("CatalogView: data source set, constructor done");
     // RecyclerFrame will call reloadData() on its first onLayout()
-    if (!filterState_.isDefault()) {
+    bool hasFilters = !filterState_.searchQuery.empty() ||
+                      !filterState_.genre.empty() ||
+                      filterState_.lang != catalog::LanguageFilter::ALL ||
+                      filterState_.onlyFavorites ||
+                      !filterState_.year.empty() ||
+                      filterState_.players != catalog::PlayersFilter::ALL;
+    if (hasFilters) {
         filterCatalog();
     }
 }
@@ -215,18 +230,22 @@ void CatalogView::filterCatalog() {
         }
     }
 
-    if (filterState_.sort != catalog::SortOption::DEFAULT) {
-        std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [this](const Game& a, const Game& b) {
-            return catalog::compareGames(a, b, filterState_.sort);
-        });
-    }
+    catalog::SortOption sortOpt = (filterState_.sort == catalog::SortOption::DEFAULT)
+        ? catalog::SortOption::TITLE_ASC
+        : filterState_.sort;
+
+    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game& a, const Game& b) {
+        return catalog::compareGames(a, b, sortOpt);
+    });
 
     if (statsHint) {
-        std::string countStr = "Игр: " + std::to_string(filteredGames_.size());
+        std::string countStr;
         if (filteredGames_.size() != totalNonHomebrew) {
-            countStr += " из " + std::to_string(totalNonHomebrew);
+            countStr = brls::getStr("app/catalog/shown_of", std::to_string(filteredGames_.size()), std::to_string(totalNonHomebrew));
+        } else {
+            countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
         }
-        statsHint->setText(countStr + " | R - Фильтр/Сортировка  L - Сброс");
+        statsHint->setText(countStr + "app/catalog/stats_hint_suffix"_i18n);
     }
 
     GameRowCell::s_lastFocusedColumn = 0;
@@ -241,6 +260,7 @@ void CatalogView::filterCatalog() {
 
 void CatalogView::resetFilters() {
     filterState_.reset();
+    filterState_.sort = catalog::SortOption::TITLE_ASC;
     filterCatalog();
     brls::Application::notify("app/catalog/filters_reset"_i18n);
 }
