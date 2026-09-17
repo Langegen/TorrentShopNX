@@ -124,7 +124,7 @@ std::string HttpClient::buildRangeHeader(uint64_t offset, uint64_t length) const
 #if TSNX_HAVE_CURL
 
 static CURLSH* g_curlShareHandle = nullptr;
-static std::mutex g_shareMutexes[CURL_LOCK_DATA_LAST];
+static std::recursive_mutex g_shareMutexes[CURL_LOCK_DATA_LAST];
 
 static void curlShareLock(CURL*, curl_lock_data data, curl_lock_access, void*) {
     if (data < CURL_LOCK_DATA_LAST) {
@@ -145,7 +145,10 @@ static void initGlobalCurlShare() {
         if (g_curlShareHandle) {
             curl_share_setopt(g_curlShareHandle, CURLSHOPT_LOCKFUNC, curlShareLock);
             curl_share_setopt(g_curlShareHandle, CURLSHOPT_UNLOCKFUNC, curlShareUnlock);
-            curl_share_setopt(g_curlShareHandle, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+            // Share SSL sessions across connections, but DO NOT share CURL_LOCK_DATA_DNS.
+            // On Nintendo Switch (devkitPro), libcurl relies on synchronous getaddrinfo().
+            // Sharing DNS locks g_shareMutexes[CURL_LOCK_DATA_DNS] for the entire duration
+            // of the DNS query, serializing all network worker threads and causing freezes.
             curl_share_setopt(g_curlShareHandle, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
         }
     });
@@ -268,9 +271,9 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_HEADERDATA, &resp.headers);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec_));
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout_sec_, 10)));
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout_sec_, 30)));
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
         curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
         curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
@@ -485,9 +488,10 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
     curl_easy_setopt(curl, CURLOPT_HTTP_CONTENT_DECODING, 0L);
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
     curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+    CurlXferContext xfer_ctx{effective_flag, nullptr};
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, effective_flag);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &xfer_ctx);
 
     if (keep_alive_) {
         curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -547,20 +551,26 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
     curl_easy_reset(curl);
 
     struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.6)");
+    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.11)");
 
     FileWriteCtx file_ctx{fp, 0};
-    CurlXferContext xfer_ctx{cancel_flag ? cancel_flag : cancel_flag_, progress_cb_};
+    const std::atomic<bool>* eff_cancel = cancel_flag ? cancel_flag : (cancel_flag_ ? cancel_flag_ : &g_appExiting);
+    CurlXferContext xfer_ctx{eff_cancel, progress_cb_};
+
+    int eff_timeout = timeout_sec > 0 ? timeout_sec : (timeout_sec_ > 0 ? timeout_sec_ : 180);
+
+    char errbuf[CURL_ERROR_SIZE];
+    errbuf[0] = '\0';
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteToFile);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file_ctx);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec > 0 ? timeout_sec : 180));
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(eff_timeout));
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);  // 1 KB/s
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);    // 15 seconds stall timeout
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);    // 30 seconds stall timeout
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");    // automatic gzip/deflate decompression!
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
@@ -568,6 +578,7 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlXferInfoCb);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &xfer_ctx);
 
@@ -586,8 +597,9 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
         return true;
     }
 
+    std::string errStr = (errbuf[0] != '\0') ? errbuf : curl_easy_strerror(res);
     util::logLine("HttpClient: downloadToFile failed for " + url + " res=" + std::to_string(res) +
-                  " (" + curl_easy_strerror(res) + ") http_code=" + std::to_string(http_code) +
+                  " (" + errStr + ") http_code=" + std::to_string(http_code) +
                   " written=" + std::to_string(file_ctx.written));
     std::remove(dest_path.c_str());
     return false;

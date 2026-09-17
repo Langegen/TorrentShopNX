@@ -32,13 +32,15 @@ inline std::shared_ptr<const std::vector<Game>> getCatalogSnapshot() {
     return g_catalogSnapshot;
 }
 
+inline void setCatalogSnapshot(std::shared_ptr<const std::vector<Game>> snapshot) {
+    std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+    g_catalogSnapshot = snapshot ? snapshot : std::make_shared<const std::vector<Game>>();
+}
+
 inline void setCatalogSnapshot(std::vector<Game> games) {
     auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(games));
-    {
-        std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
-        g_catalogSnapshot = newSnapshot;
-        g_games = *newSnapshot;
-    }
+    std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+    g_catalogSnapshot = newSnapshot;
 }
 
 struct Game {

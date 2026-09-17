@@ -41,8 +41,9 @@ void FavoritesView::willDisappear(bool resetState) {
 
 void FavoritesView::filterFavorites() {
     auto& fm = catalog::FavoritesManager::instance();
-    if (!g_games.empty()) {
-        fm.syncLegacyFavorites(g_games);
+    auto snap = getCatalogSnapshot();
+    if (snap && !snap->empty()) {
+        fm.syncLegacyFavorites(*snap);
     }
     const auto& newFavorited = fm.getFavorites();
 
