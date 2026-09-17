@@ -5,6 +5,7 @@
 #include "../utils/switch_utils.h"
 #include "../utils/app_paths.h"
 #include "../utils/file_ops.h"
+#include <engine/engine.h>
 #include <iomanip>
 #include <chrono>
 #include <cmath>
@@ -55,6 +56,8 @@ void openDownloadsFolderForItem(const download::DownloadItem& item) {
 
 } // namespace
 
+static void showPeerInspector(const download::DownloadItem& item);
+
 // DOWNLOADCELL IMPLEMENTATION
 DownloadCell::DownloadCell() {
     this->inflateFromXMLRes("xml/download_cell.xml");
@@ -89,6 +92,15 @@ void DownloadsView::onContentAvailable() {
         return true;
     });
 
+    this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_I, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
+        std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+        const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+        if (focusedRow_ >= 0 && static_cast<size_t>(focusedRow_) < queue.size()) {
+            showPeerInspector(queue[focusedRow_]);
+        }
+        return true;
+    });
+
     // Start repeating timer for auto-sleep / backlight timeout monitoring
     backlightTimer_ = new brls::RepeatingTimer();
     backlightTimer_->setPeriod(200);
@@ -100,6 +112,7 @@ void DownloadsView::onContentAvailable() {
     // Register callback for auto-refreshing the view when progress updates
     ui::DownloadManager::instance().setProgressCallback([this]() {
         brls::sync([this]() {
+            std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
             const auto& queue = ui::DownloadManager::instance().getImpl().queue();
             
             if (queue.empty()) {
@@ -176,6 +189,7 @@ DownloadsView::~DownloadsView() {
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     lastInputTime_ = std::chrono::steady_clock::now();
+    std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     if (!queue.empty()) {
         int validRow = std::clamp(focusedRow_, 0, static_cast<int>(queue.size()) - 1);
@@ -350,8 +364,189 @@ static std::string formatProgressBytes(unsigned long long written, unsigned long
     return formatBytes(written) + " / " + formatBytes(total);
 }
 
+static void showPeerInspector(const download::DownloadItem& item) {
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::COLUMN);
+    content->setWidth(680.0f);
+    content->setPadding(20.0f);
+
+    // Header: Title
+    auto* headerTitle = new brls::Label();
+    headerTitle->setText("app/downloads/peers_title"_i18n);
+    headerTitle->setFontSize(22.0f);
+    headerTitle->setTextColor(nvgRGB(255, 255, 255));
+    headerTitle->setMarginBottom(4.0f);
+    content->addView(headerTitle);
+
+    auto* subTitle = new brls::Label();
+    subTitle->setText(cleanTitle(item.title));
+    subTitle->setFontSize(14.0f);
+    subTitle->setTextColor(nvgRGB(180, 180, 180));
+    subTitle->setSingleLine(true);
+    subTitle->setMarginBottom(16.0f);
+    content->addView(subTitle);
+
+    std::string hash = item.torrent_hash;
+    if (hash.empty()) {
+        hash = item.topic_id;
+    }
+
+    tsnx_engine_diag diag{};
+    bool hasDiag = false;
+    if (!hash.empty()) {
+        hasDiag = tsnx_engine_get_diag(nullptr, hash.c_str(), &diag);
+    }
+
+    // Diagnostics stats box
+    auto* statsBox = new brls::Box();
+    statsBox->setAxis(brls::Axis::COLUMN);
+    statsBox->setBackgroundColor(nvgRGBA(36, 39, 46, 180));
+    statsBox->setCornerRadius(8.0f);
+    statsBox->setPadding(12.0f);
+    statsBox->setMarginBottom(16.0f);
+
+    auto addStatRow = [statsBox](const std::string& label, const std::string& val) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        row->setMarginBottom(4.0f);
+
+        auto* l = new brls::Label();
+        l->setText(label);
+        l->setFontSize(14.0f);
+        l->setTextColor(nvgRGB(180, 180, 180));
+
+        auto* v = new brls::Label();
+        v->setText(val);
+        v->setFontSize(14.0f);
+        v->setTextColor(nvgRGB(255, 255, 255));
+
+        row->addView(l);
+        row->addView(v);
+        statsBox->addView(row);
+    };
+
+    if (hasDiag) {
+        std::string peersStr = std::to_string(diag.live) + " live (" + std::to_string(diag.connecting) + " connecting, " + std::to_string(diag.peak) + " peak)";
+        addStatRow("Peers / Connections", peersStr);
+
+        std::string workStr = std::to_string(diag.claiming) + " downloading, " + std::to_string(diag.idle) + " idle / choked";
+        addStatRow("Session Activity", workStr);
+
+        if (diag.pieces_total > 0) {
+            std::string pieceStr = std::to_string(diag.pieces_done) + " / " + std::to_string(diag.pieces_total) +
+                                   " (" + std::to_string((int)((diag.pieces_done * 100) / diag.pieces_total)) + "%)";
+            addStatRow("Pieces Resident", pieceStr);
+        }
+
+        std::string dataStr = formatBytes(diag.bytes_recv);
+        if (diag.dup_bytes > 0) {
+            dataStr += " (dup " + formatBytes(diag.dup_bytes) + ")";
+        }
+        addStatRow("Data Received", dataStr);
+
+        std::string errorsStr = "Timeouts: " + std::to_string(diag.timeouts) + " · Sock: " + std::to_string(diag.sock_fail) + " · Handshake: " + std::to_string(diag.hs_fail);
+        addStatRow("Connection Issues", errorsStr);
+    } else {
+        std::string seedsPeers = "Seeds: " + std::to_string(item.seeds) + " · Peers: " + std::to_string(item.peers) + " · DHT: " + std::to_string(item.dht);
+        addStatRow("Swarm Summary", seedsPeers);
+        if (!hash.empty()) {
+            addStatRow("Info Hash", hash);
+        }
+    }
+    content->addView(statsBox);
+
+    // Peer List Header
+    auto* peerListHeader = new brls::Label();
+    peerListHeader->setText("Active Peer Sessions");
+    peerListHeader->setFontSize(15.0f);
+    peerListHeader->setTextColor(nvgRGB(200, 200, 200));
+    peerListHeader->setMarginBottom(8.0f);
+    content->addView(peerListHeader);
+
+    // Scrollable peer list box
+    auto* peerListBox = new brls::Box();
+    peerListBox->setAxis(brls::Axis::COLUMN);
+    peerListBox->setHeight(180.0f);
+    peerListBox->setBackgroundColor(nvgRGBA(24, 26, 32, 200));
+    peerListBox->setCornerRadius(8.0f);
+    peerListBox->setPadding(8.0f);
+
+    tsnx_peer_info peers[32];
+    int peerCount = 0;
+    if (!hash.empty()) {
+        peerCount = tsnx_engine_get_peers(nullptr, hash.c_str(), peers, 32);
+    }
+
+    if (peerCount > 0) {
+        for (int i = 0; i < peerCount; i++) {
+            const auto& p = peers[i];
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setHeight(26.0f);
+            row->setMarginBottom(4.0f);
+
+            char ipBuf[64];
+            const uint8_t* b = reinterpret_cast<const uint8_t*>(&p.ip);
+            std::snprintf(ipBuf, sizeof(ipBuf), "%u.%u.%u.%u:%u", b[0], b[1], b[2], b[3], p.port);
+
+            auto* ipLabel = new brls::Label();
+            ipLabel->setText(ipBuf);
+            ipLabel->setFontSize(13.0f);
+            ipLabel->setTextColor(nvgRGB(220, 220, 220));
+
+            std::string statusStr;
+            NVGcolor statusCol = nvgRGB(180, 180, 180);
+            if (p.connecting) {
+                statusStr = "Connecting...";
+                statusCol = nvgRGB(255, 193, 7);
+            } else if (p.claim_piece >= 0) {
+                char speedBuf[32];
+                std::snprintf(speedBuf, sizeof(speedBuf), "%.1f KB/s", p.rate_bps / 1024.0);
+                statusStr = "Piece #" + std::to_string(p.claim_piece) + " (" + speedBuf + ")";
+                statusCol = nvgRGB(76, 175, 80);
+            } else if (p.choked) {
+                statusStr = "Choked";
+                statusCol = nvgRGB(244, 67, 54);
+            } else {
+                statusStr = "Idle (Unchoked)";
+                statusCol = nvgRGB(33, 150, 243);
+            }
+
+            if (p.rtt_ms >= 0) {
+                statusStr += " · " + std::to_string(p.rtt_ms) + "ms";
+            }
+
+            auto* statusLabel = new brls::Label();
+            statusLabel->setText(statusStr);
+            statusLabel->setFontSize(13.0f);
+            statusLabel->setTextColor(statusCol);
+
+            row->addView(ipLabel);
+            row->addView(statusLabel);
+            peerListBox->addView(row);
+        }
+    } else {
+        auto* emptyLabel = new brls::Label();
+        emptyLabel->setText("app/downloads/peers_no_active"_i18n);
+        emptyLabel->setFontSize(14.0f);
+        emptyLabel->setTextColor(nvgRGB(140, 140, 140));
+        emptyLabel->setMarginTop(16.0f);
+        peerListBox->addView(emptyLabel);
+    }
+    content->addView(peerListBox);
+
+    auto* dialog = new brls::Dialog(content);
+    dialog->setCancelable(true);
+    dialog->addButton("common/ok"_i18n, []() {});
+    dialog->open();
+}
+
 // DATASOURCE IMPLEMENTATION
 int DownloadsView::DownloadsDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {
+    std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     return ui::DownloadManager::instance().getImpl().queue().size();
 }
 
@@ -551,6 +746,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
                 openDownloadsFolderForItem(item);
                 return true;
             }, false, false, brls::SOUND_CLICK);
+        } else if (item.state == download::DownloadState::Failed || item.state == download::DownloadState::Cancelled) {
+            cell->registerAction("app/downloads/action_retry"_i18n, brls::ControllerButton::BUTTON_A, [topic_id = item.topic_id](brls::View* view) {
+                ui::DownloadManager::instance().retryDownload(topic_id);
+                return true;
+            }, false, false, brls::SOUND_CLICK);
         }
     } else {
         cell->registerAction(item.state == download::DownloadState::Paused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n, 
@@ -569,6 +769,12 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         });
     }
 
+    // Swarm inspector action for all items
+    cell->registerAction("app/downloads/action_peers"_i18n, brls::ControllerButton::BUTTON_LB, [item](brls::View* view) {
+        showPeerInspector(item);
+        return true;
+    }, false, false, brls::SOUND_CLICK);
+
     // If this cell is currently focused, trigger hint refresh so bottom hints update immediately
     if (brls::Application::getCurrentFocus() == cell) {
         brls::Application::getGlobalHintsUpdateEvent()->fire();
@@ -585,6 +791,7 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
     if (cell->imageToken) *(cell->imageToken) = false;
     cell->imageToken = std::make_shared<bool>(true);
 
+    std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     if (static_cast<size_t>(row) < queue.size()) {
         parent_->updateCell(cell, queue[row]);
@@ -600,11 +807,14 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
 }
 
 void DownloadsView::DownloadsDataSource::didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath index) {
+    std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     if (static_cast<size_t>(index.row) < queue.size()) {
         const auto& item = queue[index.row];
         if (item.state == download::DownloadState::Completed && isFileDownloadItem(item)) {
             openDownloadsFolderForItem(item);
+        } else if (item.state == download::DownloadState::Failed || item.state == download::DownloadState::Cancelled) {
+            ui::DownloadManager::instance().retryDownload(item.topic_id);
         }
     }
 }

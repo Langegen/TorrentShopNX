@@ -28,6 +28,7 @@ public:
     bool pauseDownload(const std::string& topic_id);
     bool resumeDownload(const std::string& topic_id);
     bool cancelDownload(const std::string& topic_id);
+    bool retryDownload(const std::string& topic_id);
     bool deleteDownload(const std::string& topic_id); // Deletes from list if completed/failed/cancelled
 
     // Checks active transfers count

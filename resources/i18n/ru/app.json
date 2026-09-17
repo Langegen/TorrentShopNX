@@ -49,7 +49,8 @@
         "stats_hint_suffix": " | R - Фильтр/Сортировка  L - Сброс",
         "never_updated": "Игр: 0 | Обновлено: Никогда",
         "games_count": "Игр: {0}",
-        "shown_of": "Игр: {0} из {1}"
+        "shown_of": "Игр: {0} из {1}",
+        "jump_letter": "Переход (A-Z)"
     },
     "collections": {
         "title": "Каталог",
@@ -182,7 +183,11 @@
         "status_prefix": "Статус: ",
         "stop_seed": "Остановить раздачу",
         "download_label": "Загрузка: ",
-        "install_label": "Установка: "
+        "install_label": "Установка: ",
+        "action_retry": "Повторить загрузку",
+        "action_peers": "Инспектор пиров",
+        "peers_title": "Состояние сети и пиры",
+        "peers_no_active": "Нет активных подключений к пирам"
     },
     "detail": {
         "developer": "Разработчик: {0}",

@@ -713,6 +713,10 @@ inline std::string getCatalogBinPath() {
     return TSNX_CATALOG_BIN_CUSTOM;
 }
 
+inline std::string getCatalogEtagPath() {
+    return getCatalogPath() + ".etag";
+}
+
 inline const char* kCatalogPath = TSNX_CATALOG_JSON_RU;
 inline const char* kCatalogBinPath = TSNX_CATALOG_BIN_RU;
 
@@ -801,6 +805,13 @@ inline bool writeTextFile(const std::string& path, const std::string& body) {
     if (!out.is_open()) return false;
     out.write(body.data(), body.size());
     return true;
+}
+
+inline std::string readTextFile(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) return {};
+    std::string s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return s;
 }
 
 inline std::string extractBtihHashLocal(std::string magnet) {

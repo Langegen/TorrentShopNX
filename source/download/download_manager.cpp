@@ -629,6 +629,8 @@ void DownloadManager::shutdown() {
         }
     }
 
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+
     for (auto& item : queue_) {
         if (item.cancel_flag) {
             item.cancel_flag->store(true);
@@ -675,6 +677,7 @@ size_t DownloadManager::addToQueue(const std::string& title,
                                    const std::string& forced_stream_name,
                                    bool is_homebrew,
                                    const std::string& retro_console_id) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     DownloadItem item;
     item.title = title;
     item.magnet = magnet;
@@ -1341,6 +1344,7 @@ void DownloadManager::handleFileDownload(size_t index,
 }
 
 bool DownloadManager::startDownload(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
     if (item.state != DownloadState::Queued) return false;
@@ -1435,6 +1439,7 @@ bool DownloadManager::startDownload(size_t index) {
 }
 
 void DownloadManager::startNextDownload() {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     for (size_t i = 0; i < queue_.size(); ++i) {
         if (queue_[i].state != DownloadState::Queued) continue;
         if (startDownload(i)) return;
@@ -1442,6 +1447,7 @@ void DownloadManager::startNextDownload() {
 }
 
 void DownloadManager::trackProgress() {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     auto now = std::chrono::steady_clock::now();
     bool refreshed_torrent_list = false;
     const bool is_local_client = (isLocalBackend());
@@ -1890,6 +1896,7 @@ void DownloadManager::trackProgress() {
 }
 
 bool DownloadManager::hasActiveTransfers() const {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     for (const auto& item : queue_) {
         if (isTransferActive(item.state)) {
             return true;
@@ -1899,6 +1906,7 @@ bool DownloadManager::hasActiveTransfers() const {
 }
 
 bool DownloadManager::startHybridInstall(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
     if (item.is_homebrew || !item.retro_console_id.empty()) {
@@ -2115,6 +2123,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
 }
 
 bool DownloadManager::cancelDownload(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
     if (item.state == DownloadState::Completed ||
@@ -2200,7 +2209,115 @@ bool DownloadManager::cancelDownload(size_t index) {
     return true;
 }
 
+bool DownloadManager::retryDownload(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.state != DownloadState::Failed && item.state != DownloadState::Cancelled) {
+        return false;
+    }
+
+    if (item.cancel_flag) {
+        item.cancel_flag->store(false);
+    }
+    if (item.file_dl_cancel) {
+        item.file_dl_cancel->store(false);
+    }
+
+    if (item.hybrid_installer) {
+        item.hybrid_installer->cancel();
+        item.hybrid_installer.reset();
+    }
+    if (item.open_future) {
+        item.open_future.reset();
+    }
+    if (item.start_future) {
+        item.start_future.reset();
+    }
+    if (item.file_dl_worker) {
+        item.file_dl_worker.reset();
+    }
+    item.file_dl_dispatched = false;
+    item.file_dl_state.reset();
+    item.file_dl_dest.clear();
+    item.open_done.reset();
+    item.open_success.reset();
+
+    item.error_message.clear();
+    item.progress = 0.0f;
+    item.install_progress = 0.0f;
+    item.download_speed_kbps = 0.0f;
+    item.install_written = 0;
+    item.install_total = 0;
+    item.start_time = std::chrono::steady_clock::now();
+    item.auto_hybrid_started = false;
+    item.stream_consumer_started = false;
+    item.preload_started = false;
+    item.state = DownloadState::Queued;
+
+    util::logLine("download: retry triggered for index=" + std::to_string(index) + " (" + item.title + ")");
+
+    if (!hasActiveTransfers()) {
+        startDownload(index);
+    }
+    return true;
+}
+
+bool DownloadManager::deleteFromQueue(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    cancelDownload(index);
+    queue_.erase(queue_.begin() + index);
+    return true;
+}
+
+bool DownloadManager::pauseDownload(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.state == DownloadState::Downloading ||
+        item.state == DownloadState::StreamPreparing ||
+        item.state == DownloadState::StreamInstalling) {
+
+        if (item.cancel_flag) {
+            item.cancel_flag->store(true);
+        }
+        if (!item.torrent_hash.empty()) {
+            tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
+        }
+
+        item.state = DownloadState::Paused;
+        item.download_speed_kbps = 0.0f;
+        util::logLine("download: paused index=" + std::to_string(index) + " title=" + item.title);
+        return true;
+    }
+    return false;
+}
+
+bool DownloadManager::resumeDownload(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    auto& item = queue_[index];
+    if (item.state == DownloadState::Paused || item.state == DownloadState::Installing) {
+        if (item.cancel_flag) {
+            item.cancel_flag->store(false);
+        }
+        if (!item.torrent_hash.empty()) {
+            tsnx_engine_resume_torrent(nullptr, item.torrent_hash.c_str());
+        }
+        if (item.hybrid_installer && item.auto_hybrid_started) {
+            item.state = DownloadState::StreamInstalling;
+        } else {
+            item.state = DownloadState::Downloading;
+        }
+        util::logLine("download: resumed index=" + std::to_string(index) + " title=" + item.title);
+        return true;
+    }
+    return false;
+}
+
 bool DownloadManager::getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
 
@@ -2301,6 +2418,7 @@ bool DownloadManager::probeTorrentFiles(const std::string& magnet,
 }
 
 bool DownloadManager::setFileWanted(size_t index, int file_index, bool wanted) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
 

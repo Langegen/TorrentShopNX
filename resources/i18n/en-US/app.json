@@ -49,7 +49,8 @@
         "stats_hint_suffix": " | R - Filter/Sort  L - Reset",
         "never_updated": "Games: 0 | Updated: Never",
         "games_count": "Games: {0}",
-        "shown_of": "Games: {0} of {1}"
+        "shown_of": "Games: {0} of {1}",
+        "jump_letter": "Jump (A-Z)"
     },
     "collections": {
         "title": "Collections",
@@ -182,7 +183,11 @@
         "status_prefix": "Status: ",
         "stop_seed": "Stop Seeding",
         "download_label": "Download: ",
-        "install_label": "Install: "
+        "install_label": "Install: ",
+        "action_retry": "Retry download",
+        "action_peers": "Swarm Inspector",
+        "peers_title": "Swarm & Peer Status",
+        "peers_no_active": "No active peer connections"
     },
     "detail": {
         "developer": "Developer: {0}",

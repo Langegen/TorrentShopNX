@@ -115,9 +115,11 @@ static void watchdog_main(void *arg) {
         fprintf(f, "t=%llu", (unsigned long long)(now / freq));
         for (int i = 0; i < 8; i++) {
             u64 tick = tsnx_engine_wd_last(i);
-            fprintf(f, " %s=%llu", names[i],
-                    tick ? (unsigned long long)((now - tick) / freq)
-                         : 99999ULL);
+            unsigned long long elapsed = 99999ULL;
+            if (tick) {
+                elapsed = (now >= tick) ? (unsigned long long)((now - tick) / freq) : 0ULL;
+            }
+            fprintf(f, " %s=%llu", names[i], elapsed);
         }
         fprintf(f, "\n");
         fflush(f);

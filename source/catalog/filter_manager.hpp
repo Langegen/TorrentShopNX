@@ -457,6 +457,20 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
             }
         }
 
+        if (!match && !game.developer.empty()) {
+            std::string lowerDev = toLowerUtf8(game.developer);
+            if (lowerDev.find(lowerQuery) != std::string::npos) {
+                match = true;
+            }
+        }
+
+        if (!match && !game.publisher.empty()) {
+            std::string lowerPub = toLowerUtf8(game.publisher);
+            if (lowerPub.find(lowerQuery) != std::string::npos) {
+                match = true;
+            }
+        }
+
         if (!match) {
             return false;
         }

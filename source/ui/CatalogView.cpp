@@ -191,6 +191,36 @@ void CatalogView::onContentAvailable() {
         return true;
     }, true);
 
+    this->registerAction("app/catalog/jump_letter"_i18n, brls::ControllerButton::BUTTON_RT, [this](brls::View* view) {
+        jumpToNextLetter(true);
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_LT, [this](brls::View* view) {
+        jumpToNextLetter(false);
+        return true;
+    }, true /* hidden */);
+
+    this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_RIGHT_BRACKET, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
+        jumpToNextLetter(true);
+        return true;
+    });
+
+    this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_LEFT_BRACKET, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
+        jumpToNextLetter(false);
+        return true;
+    });
+
+    this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_PAGE_DOWN, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
+        jumpToNextLetter(true);
+        return true;
+    });
+
+    this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_PAGE_UP, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
+        jumpToNextLetter(false);
+        return true;
+    });
+
     // Configure recycler
     brls::Logger::info("CatalogView: registering recycler cell");
     recycler->registerCell("Row", []() { return GameRowCell::create(); });
@@ -333,8 +363,10 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cardBox->getFocusLostEvent()->clear();
 
                 // On focus → switch to full title and start scrolling animation (scissor-clipped by Borealis)
-                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([this, titleLabel, fullTitle, row, i](brls::View* v) {
                     if (v->isFocused()) {
+                        parent_->focusedRow_ = row;
+                        parent_->focusedCol_ = i;
                         GameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
                     }
@@ -388,6 +420,85 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
     }
     
     return rowCell;
+}
+
+static char getGameInitial(const std::string& title) {
+    std::string cleaned = cleanTitle(title);
+    for (size_t i = 0; i < cleaned.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(cleaned[i]);
+        if (c <= 32) continue;
+        if (c == '[' || c == '(' || c == '"' || c == '\'' || c == '-' || c == '.' || c == '_' || c == '#' || c == '!') continue;
+        if (std::isalpha(c)) {
+            return static_cast<char>(std::toupper(c));
+        }
+        if (std::isdigit(c)) {
+            return '#';
+        }
+        if (c >= 0x80) {
+            return '?';
+        }
+    }
+    return '#';
+}
+
+void CatalogView::jumpToNextLetter(bool forward) {
+    if (filteredGames_.empty()) return;
+
+    int currentIdx = std::clamp(focusedRow_ * 6 + focusedCol_, 0, static_cast<int>(filteredGames_.size()) - 1);
+    char currentInitial = getGameInitial(filteredGames_[currentIdx].title);
+    int targetIdx = -1;
+
+    if (forward) {
+        for (size_t i = currentIdx + 1; i < filteredGames_.size(); ++i) {
+            char init = getGameInitial(filteredGames_[i].title);
+            if (init != currentInitial) {
+                targetIdx = static_cast<int>(i);
+                break;
+            }
+        }
+        if (targetIdx == -1 && currentIdx > 0) {
+            targetIdx = 0;
+        }
+    } else {
+        size_t firstOfCurrent = currentIdx;
+        while (firstOfCurrent > 0 && getGameInitial(filteredGames_[firstOfCurrent - 1].title) == currentInitial) {
+            firstOfCurrent--;
+        }
+        if (currentIdx > static_cast<int>(firstOfCurrent) + 5) {
+            targetIdx = static_cast<int>(firstOfCurrent);
+        } else if (firstOfCurrent > 0) {
+            char prevInitial = getGameInitial(filteredGames_[firstOfCurrent - 1].title);
+            size_t firstOfPrev = firstOfCurrent - 1;
+            while (firstOfPrev > 0 && getGameInitial(filteredGames_[firstOfPrev - 1].title) == prevInitial) {
+                firstOfPrev--;
+            }
+            targetIdx = static_cast<int>(firstOfPrev);
+        } else {
+            targetIdx = static_cast<int>(filteredGames_.size() - 1);
+            char lastInitial = getGameInitial(filteredGames_[targetIdx].title);
+            while (targetIdx > 0 && getGameInitial(filteredGames_[targetIdx - 1].title) == lastInitial) {
+                targetIdx--;
+            }
+        }
+    }
+
+    if (targetIdx >= 0 && targetIdx < static_cast<int>(filteredGames_.size())) {
+        int targetRow = targetIdx / 6;
+        int targetCol = targetIdx % 6;
+        focusedRow_ = targetRow;
+        focusedCol_ = targetCol;
+        GameRowCell::s_lastFocusedColumn = targetCol;
+
+        if (recycler) {
+            recycler->setDefaultCellFocus(brls::IndexPath(0, targetRow));
+            recycler->selectRowAt(brls::IndexPath(0, targetRow), true);
+            brls::Application::giveFocus(recycler);
+        }
+
+        char targetInit = getGameInitial(filteredGames_[targetIdx].title);
+        std::string toast = "[" + std::string(1, targetInit) + "]";
+        brls::Application::notify(toast);
+    }
 }
 
 void CatalogView::willAppear(bool resetState) {

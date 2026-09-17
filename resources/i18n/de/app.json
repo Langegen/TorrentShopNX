@@ -49,7 +49,8 @@
         "stats_hint_suffix": " | R - Filter/Sortierung  L - Zurücksetzen",
         "never_updated": "Spiele: 0 | Aktualisiert: Nie",
         "games_count": "Spiele: {0}",
-        "shown_of": "Spiele: {0} von {1}"
+        "shown_of": "Spiele: {0} von {1}",
+        "jump_letter": "Sprung (A-Z)"
     },
     "collections": {
         "title": "Katalog",
@@ -182,7 +183,11 @@
         "action_turn_off_backlight": "Bildschirm ausschalten",
         "action_turn_off_backlight_hint": "Beliebige Taste drücken zum Einschalten",
         "download_label": "Download: ",
-        "install_label": "Installation: "
+        "install_label": "Installation: ",
+        "action_retry": "Download wiederholen",
+        "action_peers": "Schwarm-Inspektor",
+        "peers_title": "Schwarm- & Peer-Status",
+        "peers_no_active": "Keine aktiven Peer-Verbindungen"
     },
     "detail": {
         "unknown_publisher": "Unbekannter Publisher",

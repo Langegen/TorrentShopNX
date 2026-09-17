@@ -47,6 +47,21 @@ public:
     int httpGetStream(const std::string& url, uint64_t offset, uint64_t length,
                       StreamCallback cb, const std::atomic<bool>* cancel_flag = nullptr);
 
+    struct DownloadResult {
+        bool success = false;
+        int http_code = 0;
+        bool not_modified = false; // true if HTTP 304
+        std::string etag;
+        std::string last_modified;
+        uint64_t bytes_written = 0;
+    };
+
+    /// Расширенная потоковая загрузка с поддержкой conditional headers (If-None-Match, If-Modified-Since)
+    DownloadResult downloadToFileEx(const std::string& url, const std::string& dest_path,
+                                    const std::vector<std::string>& extra_headers = {},
+                                    const std::atomic<bool>* cancel_flag = nullptr,
+                                    int timeout_sec = 0);
+
     /// Потоковая загрузка файла напрямую на диск без промежуточной буферизации в памяти.
     /// @param url         адрес загружаемого файла
     /// @param dest_path   путь к локальному файлу назначения

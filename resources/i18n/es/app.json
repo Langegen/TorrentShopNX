@@ -49,7 +49,8 @@
         "stats_hint_suffix": " | R - Filtrar/Ordenar  L - Restablecer",
         "never_updated": "Juegos: 0 | Actualizado: Nunca",
         "games_count": "Juegos: {0}",
-        "shown_of": "Juegos: {0} de {1}"
+        "shown_of": "Juegos: {0} de {1}",
+        "jump_letter": "Saltar (A-Z)"
     },
     "collections": {
         "title": "Catálogo",
@@ -182,7 +183,11 @@
         "action_turn_off_backlight": "Apagar pantalla",
         "action_turn_off_backlight_hint": "Presione cualquier botón para encender",
         "download_label": "Descarga: ",
-        "install_label": "Instalación: "
+        "install_label": "Instalación: ",
+        "action_retry": "Reintentar descarga",
+        "action_peers": "Inspector de pares",
+        "peers_title": "Estado de pares y enjambre",
+        "peers_no_active": "Sin conexiones activas con pares"
     },
     "detail": {
         "unknown_publisher": "Editor desconocido",

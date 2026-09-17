@@ -523,11 +523,48 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
 #endif
 }
 
+#if TSNX_HAVE_CURL
+struct HeaderCaptureCtx {
+    std::string etag;
+    std::string last_modified;
+};
+
+static size_t curlCaptureHeader(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    auto* ctx = static_cast<HeaderCaptureCtx*>(userdata);
+    if (!ctx) return size * nmemb;
+    std::string_view line(static_cast<const char*>(ptr), size * nmemb);
+    
+    auto startsWithCi = [](std::string_view str, std::string_view prefix) {
+        if (str.size() < prefix.size()) return false;
+        for (size_t i = 0; i < prefix.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>(str[i])) != std::tolower(static_cast<unsigned char>(prefix[i])))
+                return false;
+        }
+        return true;
+    };
+
+    if (startsWithCi(line, "etag:")) {
+        auto val = line.substr(5);
+        while (!val.empty() && (val.front() == ' ' || val.front() == '\t')) val.remove_prefix(1);
+        while (!val.empty() && (val.back() == '\r' || val.back() == '\n' || val.back() == ' ')) val.remove_suffix(1);
+        ctx->etag = std::string(val);
+    } else if (startsWithCi(line, "last-modified:")) {
+        auto val = line.substr(14);
+        while (!val.empty() && (val.front() == ' ' || val.front() == '\t')) val.remove_prefix(1);
+        while (!val.empty() && (val.back() == '\r' || val.back() == '\n' || val.back() == ' ')) val.remove_suffix(1);
+        ctx->last_modified = std::string(val);
+    }
+    return size * nmemb;
+}
+#endif
+
 // =============================================================================
-// downloadToFile — потоковая загрузка прямо в файл на диске
+// downloadToFileEx — потоковая загрузка с поддержкой conditional headers
 // =============================================================================
-bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_path,
-                                const std::atomic<bool>* cancel_flag, int timeout_sec) {
+HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, const std::string& dest_path,
+                                                        const std::vector<std::string>& extra_headers,
+                                                        const std::atomic<bool>* cancel_flag, int timeout_sec) {
+    DownloadResult result;
     std::filesystem::path p(dest_path);
     if (p.has_parent_path()) {
         std::error_code ec;
@@ -537,7 +574,7 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
     FILE* fp = std::fopen(dest_path.c_str(), "wb");
     if (!fp) {
         util::logLine("HttpClient: failed to open dest file for writing: " + dest_path);
-        return false;
+        return result;
     }
 
 #if TSNX_HAVE_CURL
@@ -545,15 +582,19 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
     if (!curl) {
         std::fclose(fp);
         std::remove(dest_path.c_str());
-        return false;
+        return result;
     }
 
     curl_easy_reset(curl);
 
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.11)");
+    for (const auto& h : extra_headers) {
+        headers = curl_slist_append(headers, h.c_str());
+    }
 
     FileWriteCtx file_ctx{fp, 0};
+    HeaderCaptureCtx hdr_ctx;
     const std::atomic<bool>* eff_cancel = cancel_flag ? cancel_flag : (cancel_flag_ ? cancel_flag_ : &g_appExiting);
     CurlXferContext xfer_ctx{eff_cancel, progress_cb_};
 
@@ -564,6 +605,8 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curlCaptureHeader);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &hdr_ctx);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curlWriteToFile);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &file_ctx);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -592,30 +635,59 @@ bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_
     std::fflush(fp);
     std::fclose(fp);
 
+    result.http_code = static_cast<int>(http_code);
+    result.etag = hdr_ctx.etag;
+    result.last_modified = hdr_ctx.last_modified;
+    result.bytes_written = file_ctx.written;
+
+    if (res == CURLE_OK && http_code == 304) {
+        result.not_modified = true;
+        result.success = true;
+        std::remove(dest_path.c_str());
+        util::logLine("HttpClient: downloadToFileEx 304 Not Modified for " + url);
+        return result;
+    }
+
     if (res == CURLE_OK && http_code == 200 && file_ctx.written > 0) {
-        util::logLine("HttpClient: downloadToFile succeeded for " + url + " bytes=" + std::to_string(file_ctx.written));
-        return true;
+        result.success = true;
+        util::logLine("HttpClient: downloadToFileEx succeeded for " + url + " bytes=" + std::to_string(file_ctx.written) + " etag=" + result.etag);
+        return result;
     }
 
     std::string errStr = (errbuf[0] != '\0') ? errbuf : curl_easy_strerror(res);
-    util::logLine("HttpClient: downloadToFile failed for " + url + " res=" + std::to_string(res) +
+    util::logLine("HttpClient: downloadToFileEx failed for " + url + " res=" + std::to_string(res) +
                   " (" + errStr + ") http_code=" + std::to_string(http_code) +
                   " written=" + std::to_string(file_ctx.written));
     std::remove(dest_path.c_str());
-    return false;
+    return result;
 #else
     std::fclose(fp);
-    auto resp = httpGet(url);
+    auto resp = httpGet(url, extra_headers);
+    result.http_code = resp.status_code;
+    if (resp.status_code == 304) {
+        result.not_modified = true;
+        result.success = true;
+        std::remove(dest_path.c_str());
+        return result;
+    }
     if (resp.status_code == 200 && !resp.body.empty()) {
         std::ofstream out(dest_path, std::ios::binary | std::ios::trunc);
         if (out.is_open()) {
             out.write(resp.body.data(), resp.body.size());
-            return true;
+            result.success = true;
+            result.bytes_written = resp.body.size();
+            return result;
         }
     }
     std::remove(dest_path.c_str());
-    return false;
+    return result;
 #endif
+}
+
+bool HttpClient::downloadToFile(const std::string& url, const std::string& dest_path,
+                                const std::atomic<bool>* cancel_flag, int timeout_sec) {
+    auto res = downloadToFileEx(url, dest_path, {}, cancel_flag, timeout_sec);
+    return res.success && !res.not_modified;
 }
 
 } // namespace net

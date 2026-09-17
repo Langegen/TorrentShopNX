@@ -49,7 +49,8 @@
         "stats_hint_suffix": " | R - 筛选/排序  L - 重置",
         "never_updated": "游戏数: 0 | 更新时间: 从未",
         "games_count": "游戏: {0}",
-        "shown_of": "游戏: {0} / {1}"
+        "shown_of": "游戏: {0} / {1}",
+        "jump_letter": "字母跳转 (A-Z)"
     },
     "collections": {
         "title": "游戏目录",
@@ -182,7 +183,11 @@
         "action_turn_off_backlight": "关闭屏幕背光",
         "action_turn_off_backlight_hint": "按任意键唤醒屏幕",
         "download_label": "下载: ",
-        "install_label": "安装: "
+        "install_label": "安装: ",
+        "action_retry": "重试下载",
+        "action_peers": "节点检查器",
+        "peers_title": "节点与连接状态",
+        "peers_no_active": "没有活动的节点连接"
     },
     "detail": {
         "unknown_publisher": "未知发行商",

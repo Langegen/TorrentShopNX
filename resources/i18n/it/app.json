@@ -49,7 +49,8 @@
         "stats_hint_suffix": " | R - Filtro/Ordinamento  L - Reimposta",
         "never_updated": "Giochi: 0 | Aggiornato: Mai",
         "games_count": "Giochi: {0}",
-        "shown_of": "Giochi: {0} di {1}"
+        "shown_of": "Giochi: {0} di {1}",
+        "jump_letter": "Salta (A-Z)"
     },
     "collections": {
         "title": "Catalogo",
@@ -182,7 +183,11 @@
         "action_turn_off_backlight": "Spegni schermo",
         "action_turn_off_backlight_hint": "Premi qualsiasi tasto per riattivare",
         "download_label": "Download: ",
-        "install_label": "Installazione: "
+        "install_label": "Installazione: ",
+        "action_retry": "Riprova download",
+        "action_peers": "Ispettore peer",
+        "peers_title": "Stato dello swarm e peer",
+        "peers_no_active": "Nessuna connessione attiva con i peer"
     },
     "detail": {
         "unknown_publisher": "Editore sconosciuto",
