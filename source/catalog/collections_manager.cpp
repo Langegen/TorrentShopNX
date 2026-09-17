@@ -111,12 +111,15 @@ bool CollectionsManager::loadCollection(const CollectionInfo& info,
                                         bool& from_cache) {
     if (info.id == "ports_homebrew") {
         out_entries.clear();
-        for (const auto& g : g_games) {
-            if (isHomebrewGame(g)) {
-                CollectionEntry e;
-                e.title = g.title;
-                e.title_id = g.title_id;
-                out_entries.push_back(std::move(e));
+        auto snap = getCatalogSnapshot();
+        if (snap) {
+            for (const auto& g : *snap) {
+                if (isHomebrewGame(g)) {
+                    CollectionEntry e;
+                    e.title = g.title;
+                    e.title_id = g.title_id;
+                    out_entries.push_back(std::move(e));
+                }
             }
         }
         from_cache = true;

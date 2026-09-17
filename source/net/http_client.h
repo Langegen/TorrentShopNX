@@ -54,7 +54,7 @@ public:
     /// @param timeout_sec максимальное время загрузки в секундах (по умолчанию 180с)
     /// @return true если файл успешно загружен (HTTP 200) и записан на диск
     bool downloadToFile(const std::string& url, const std::string& dest_path,
-                        const std::atomic<bool>* cancel_flag = nullptr, int timeout_sec = 180);
+                        const std::atomic<bool>* cancel_flag = nullptr, int timeout_sec = 0);
 
     /// Установить таймаут (секунды)
     void setTimeout(int seconds) { timeout_sec_ = seconds; }

@@ -756,15 +756,18 @@ void MainMenu::onContentAvailable() {
             }
 
             if (updated && !online_games.empty()) {
-                auto newSnapshot = std::make_shared<std::vector<Game>>(std::move(online_games));
+                // Save config and flush SD card filesystem buffers in background thread FIRST.
+                // This prevents freezing the cooperative UI main loop with fsdevCommitDevice("sdmc")
+                // which flushes ~43 MB of newly written catalog and cache data.
+                auto& main_cfg = config::ConfigManager::instance();
+                main_cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
+                main_cfg.save();
+
+                auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(online_games));
                 brls::sync([newSnapshot, notif, notifToken]() {
-                    setCatalogSnapshot(std::move(*newSnapshot));
+                    setCatalogSnapshot(newSnapshot);
                     auto snap = getCatalogSnapshot();
                     catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
-
-                    auto& main_cfg = config::ConfigManager::instance();
-                    main_cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
-                    main_cfg.save();
 
                     if (ui::g_activeCatalogView) {
                         ui::g_activeCatalogView->filterCatalog();

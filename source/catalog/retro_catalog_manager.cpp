@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cstring>
+#include <chrono>
 
 namespace catalog {
 
@@ -215,29 +216,48 @@ bool RetroCatalogManager::downloadConsoleCatalog(const std::string& console_id,
                                                 std::function<void(float, const std::string&)> progress_cb) {
     std::string url = getConsoleDownloadUrl(console_id);
     std::string dest = getConsoleJsonPath(console_id);
+    std::string tmpDest = dest + ".tmp";
 
-    std::filesystem::path p(dest);
+    std::filesystem::path p(tmpDest);
     if (p.has_parent_path()) {
         std::error_code ec;
         std::filesystem::create_directories(p.parent_path(), ec);
     }
 
-    util::logLine("RetroCatalog: downloading catalog from " + url + " to " + dest);
+    util::logLine("RetroCatalog: downloading catalog from " + url + " to " + tmpDest);
     if (progress_cb) progress_cb(0.05f, "Загрузка базы с GitHub...");
 
     net::HttpClient client;
     client.setTimeout(120);
-    client.setProgressCallback([progress_cb](int64_t dltotal, int64_t dlnow) {
-        if (progress_cb && dltotal > 0) {
-            float frac = static_cast<float>(dlnow) / static_cast<float>(dltotal);
-            progress_cb(0.05f + frac * 0.70f, "Загрузка базы с GitHub...");
+    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+    client.setProgressCallback([progress_cb, lastUpdate](int64_t dltotal, int64_t dlnow) {
+        if (!progress_cb || dltotal <= 0) return;
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count();
+        if (elapsed < 150 && dlnow < dltotal) {
+            return; // Throttle to ~6-7 Hz
         }
+        *lastUpdate = now;
+        float frac = static_cast<float>(dlnow) / static_cast<float>(dltotal);
+        progress_cb(0.05f + frac * 0.70f, "Загрузка базы с GitHub...");
     });
 
-    bool ok = client.downloadToFile(url, dest);
-    if (!ok) {
+    bool ok = client.downloadToFile(url, tmpDest, &g_appExiting, 120);
+    if (!ok || g_appExiting.load()) {
         util::logLine("RetroCatalog: failed to download catalog for " + console_id);
+        std::error_code ec;
+        std::filesystem::remove(tmpDest, ec);
         if (progress_cb) progress_cb(0.0f, "Ошибка загрузки с GitHub");
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::remove(dest, ec);
+    std::filesystem::rename(tmpDest, dest, ec);
+    if (ec) {
+        util::logLine("RetroCatalog: rename failed for " + console_id + ": " + ec.message());
+        std::filesystem::remove(tmpDest, ec);
+        if (progress_cb) progress_cb(0.0f, "Ошибка сохранения файла базы");
         return false;
     }
 
@@ -311,15 +331,21 @@ bool RetroCatalogManager::refreshConsoleCatalog(const std::string& console_id,
 
     net::HttpClient client;
     client.setTimeout(120);
-    client.setProgressCallback([progress_cb](int64_t dltotal, int64_t dlnow) {
-        if (progress_cb && dltotal > 0) {
-            float frac = static_cast<float>(dlnow) / static_cast<float>(dltotal);
-            progress_cb(0.05f + frac * 0.65f, "Загрузка обновления с GitHub...");
+    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+    client.setProgressCallback([progress_cb, lastUpdate](int64_t dltotal, int64_t dlnow) {
+        if (!progress_cb || dltotal <= 0) return;
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count();
+        if (elapsed < 150 && dlnow < dltotal) {
+            return; // Throttle to ~6-7 Hz
         }
+        *lastUpdate = now;
+        float frac = static_cast<float>(dlnow) / static_cast<float>(dltotal);
+        progress_cb(0.05f + frac * 0.65f, "Загрузка обновления с GitHub...");
     });
 
-    bool ok = client.downloadToFile(url, tmpJson);
-    if (!ok) {
+    bool ok = client.downloadToFile(url, tmpJson, &g_appExiting, 120);
+    if (!ok || g_appExiting.load()) {
         util::logLine("RetroCatalog: failed to download catalog update for " + console_id);
         std::error_code ec;
         std::filesystem::remove(tmpJson, ec);
