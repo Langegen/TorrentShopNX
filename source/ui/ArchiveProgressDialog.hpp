@@ -14,17 +14,28 @@
 
 namespace ui {
 
+enum class ArchiveOpMode { Extract, Create };
+
 class ArchiveProgressDialog : public brls::Dialog {
 public:
+    // Extraction
     ArchiveProgressDialog(const std::string& archivePath, const std::string& destDir, std::function<void(bool success, const std::string& msg)> onComplete);
+
+    // Creation
+    ArchiveProgressDialog(const std::string& targetArchivePath, const std::vector<std::string>& sourcePaths, const std::string& baseDir, std::function<void(bool success, const std::string& msg)> onComplete);
+
     ~ArchiveProgressDialog() override;
 
     void startExtraction();
+    void startCreation();
 
 private:
     ArchiveProgressDialog(brls::Box* contentBox, const std::string& archivePath, const std::string& destDir, std::function<void(bool success, const std::string& msg)> onComplete);
+    ArchiveProgressDialog(brls::Box* contentBox, const std::string& targetArchivePath, const std::vector<std::string>& sourcePaths, const std::string& baseDir, std::function<void(bool success, const std::string& msg)> onComplete);
 
+    void initDialogUi(const std::string& titleText, const std::string& subText);
     void runExtraction();
+    void runCreation();
     void updateUi(const util::ArchiveProgress& progress);
 
 #if defined(__SWITCH__)
@@ -35,8 +46,11 @@ private:
     std::thread workerThread_;
 #endif
 
+    ArchiveOpMode mode_ = ArchiveOpMode::Extract;
     std::string archivePath_;
     std::string destDir_;
+    std::vector<std::string> sourcePaths_;
+    std::string baseDir_;
     std::function<void(bool, const std::string&)> onComplete_;
 
     std::shared_ptr<std::atomic<bool>> cancelToken_;

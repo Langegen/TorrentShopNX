@@ -939,6 +939,12 @@ void Application::notify(const std::string& text)
     Application::notificationManager->notify(text);
 }
 
+void Application::clearNotifications()
+{
+    if (Application::notificationManager)
+        Application::notificationManager->clear();
+}
+
 void Application::giveFocus(View* view)
 {
     View* oldFocus = Application::currentFocus;

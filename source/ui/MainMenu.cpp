@@ -670,8 +670,29 @@ void MainMenu::onContentAvailable() {
                 });
             });
 
-            bool download_ok = http.downloadToFile(catalog_url, tempJsonPath, &g_appExiting, 180);
-            if (download_ok && !g_appExiting.load()) {
+            std::string savedEtag;
+            if (!was_empty && std::filesystem::exists(getCatalogBinPath())) {
+                savedEtag = readTextFile(getCatalogEtagPath());
+                while (!savedEtag.empty() && (savedEtag.back() == '\r' || savedEtag.back() == '\n' || savedEtag.back() == ' '))
+                    savedEtag.pop_back();
+            }
+
+            std::vector<std::string> extra_headers;
+            if (!savedEtag.empty()) {
+                extra_headers.push_back("If-None-Match: " + savedEtag);
+                util::logLine("catalog: checking online update with ETag: " + savedEtag);
+            }
+
+            bool already_up_to_date = false;
+            auto dl_res = http.downloadToFileEx(catalog_url, tempJsonPath, extra_headers, &g_appExiting, 180);
+
+            if (dl_res.not_modified && !g_appExiting.load()) {
+                util::logLine("catalog: HTTP 304 Not Modified - catalog is already up to date");
+                already_up_to_date = true;
+                auto& main_cfg = config::ConfigManager::instance();
+                main_cfg.setLastCatalogUpdateDate(config::ConfigManager::currentDateString());
+                main_cfg.save();
+            } else if (dl_res.success && !g_appExiting.load()) {
                 brls::sync([notif, notifToken]() {
                     if (notifToken && *notifToken && notif) {
                         notif->updateProgress(85.0f, "app/catalog/processing"_i18n);
@@ -713,7 +734,11 @@ void MainMenu::onContentAvailable() {
                     // got replaced; otherwise the next launch would reload the
                     // stale files and try again.
                     updated = jsonOk && binOk;
-                    if (!updated) {
+                    if (updated) {
+                        if (!dl_res.etag.empty()) {
+                            writeTextFile(getCatalogEtagPath(), dl_res.etag);
+                        }
+                    } else {
                         std::filesystem::remove(tempJsonPath, ec);
                         std::filesystem::remove(tempBinPath, ec);
                         util::logLine("catalog: background online update could not be persisted, keeping old files");
@@ -727,7 +752,7 @@ void MainMenu::onContentAvailable() {
             }
 
             // 2. Fallback parser if online fetch failed and catalog was empty
-            if (was_empty && !updated && !g_appExiting.load()) {
+            if (was_empty && !updated && !already_up_to_date && !g_appExiting.load()) {
                 util::logLine("catalog: running background fallback sources parser");
                 catalog::CatalogManager catalog_mgr;
                 bool sources_loaded = catalog_mgr.loadSourcesWithFallback(TSNX_SOURCES_PATH, "romfs:/sources.json");
@@ -775,6 +800,12 @@ void MainMenu::onContentAvailable() {
 
                     if (notifToken && *notifToken && notif) {
                         notif->setCompleted(brls::getStr("app/catalog/loaded_games", std::to_string(snap->size())));
+                    }
+                });
+            } else if (already_up_to_date) {
+                brls::sync([notif, notifToken]() {
+                    if (notifToken && *notifToken && notif) {
+                        notif->setCompleted("app/catalog/db_updated"_i18n);
                     }
                 });
             } else {

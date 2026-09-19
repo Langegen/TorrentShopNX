@@ -457,6 +457,20 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
             }
         }
 
+        if (!match && !game.developer.empty()) {
+            std::string lowerDev = toLowerUtf8(game.developer);
+            if (lowerDev.find(lowerQuery) != std::string::npos) {
+                match = true;
+            }
+        }
+
+        if (!match && !game.publisher.empty()) {
+            std::string lowerPub = toLowerUtf8(game.publisher);
+            if (lowerPub.find(lowerQuery) != std::string::npos) {
+                match = true;
+            }
+        }
+
         if (!match) {
             return false;
         }
@@ -465,36 +479,55 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
     return true;
 }
 
+// Normalize title for sorting by skipping leading punctuation and symbols
+inline std::string normalizeTitleForSort(const std::string& title) {
+    std::string s = cleanTitle(title);
+    size_t i = 0;
+    while (i < s.size()) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c <= 32 || c == '[' || c == '(' || c == '"' || c == '\'' ||
+            c == '-' || c == '.' || c == '_' || c == '#' || c == '!' ||
+            c == '?' || c == '~' || c == ':' || c == '/' || c == '\\' ||
+            c == '+' || c == '=' || c == '*' || c == '@' || c == '$' ||
+            c == '%' || c == '^' || c == '&') {
+            i++;
+        } else {
+            break;
+        }
+    }
+    return i > 0 ? s.substr(i) : s;
+}
+
 // Comparator for Game sorting
 inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
     switch (sort) {
         case SortOption::TITLE_ASC: {
-            std::string tA = toLowerUtf8(cleanTitle(a.title));
-            std::string tB = toLowerUtf8(cleanTitle(b.title));
+            std::string tA = toLowerUtf8(normalizeTitleForSort(a.title));
+            std::string tB = toLowerUtf8(normalizeTitleForSort(b.title));
             return tA < tB;
         }
         case SortOption::TITLE_DESC: {
-            std::string tA = toLowerUtf8(cleanTitle(a.title));
-            std::string tB = toLowerUtf8(cleanTitle(b.title));
+            std::string tA = toLowerUtf8(normalizeTitleForSort(a.title));
+            std::string tB = toLowerUtf8(normalizeTitleForSort(b.title));
             return tA > tB;
         }
         case SortOption::SIZE_ASC: {
             uint64_t sA = parseSizeToBytes(a.size);
             uint64_t sB = parseSizeToBytes(b.size);
             if (sA != sB) return sA < sB;
-            return toLowerUtf8(cleanTitle(a.title)) < toLowerUtf8(cleanTitle(b.title));
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::SIZE_DESC: {
             uint64_t sA = parseSizeToBytes(a.size);
             uint64_t sB = parseSizeToBytes(b.size);
             if (sA != sB) return sA > sB;
-            return toLowerUtf8(cleanTitle(a.title)) < toLowerUtf8(cleanTitle(b.title));
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::YEAR_DESC: {
             int yA = parseYear(a.year);
             int yB = parseYear(b.year);
             if (yA != yB) return yA > yB;
-            return toLowerUtf8(cleanTitle(a.title)) < toLowerUtf8(cleanTitle(b.title));
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::YEAR_ASC: {
             int yA = parseYear(a.year);
@@ -503,7 +536,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             if (yA == 0) yA = 9999;
             if (yB == 0) yB = 9999;
             if (yA != yB) return yA < yB;
-            return toLowerUtf8(cleanTitle(a.title)) < toLowerUtf8(cleanTitle(b.title));
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::DEFAULT:
         default:

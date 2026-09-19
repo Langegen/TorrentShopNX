@@ -63,14 +63,21 @@ void NotificationManager::notify(const std::string& text)
     notification->timeoutTimer.start();
 }
 
-NotificationManager::~NotificationManager()
+void NotificationManager::clear()
 {
     std::vector<View*> views = this->getChildren();
     for (auto& view : views)
     {
         auto label = dynamic_cast<Notification*>(view);
-        label->timeoutTimer.stop();
+        if (label)
+            label->timeoutTimer.stop();
+        this->removeView(view);
     }
+}
+
+NotificationManager::~NotificationManager()
+{
+    this->clear();
 }
 
 Notification::Notification(const std::string& text)

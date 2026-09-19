@@ -46,10 +46,11 @@
         "connecting": "Connessione in corso...",
         "db_updated": "Database aggiornato",
         "update_error": "Errore di aggiornamento",
-        "stats_hint_suffix": " | R - Filtro/Ordinamento  L - Reimposta",
+        "stats_hint_suffix": " | ZL/ZR - A-Z | R - Filtro/Ordinamento  L - Reimposta",
         "never_updated": "Giochi: 0 | Aggiornato: Mai",
         "games_count": "Giochi: {0}",
-        "shown_of": "Giochi: {0} di {1}"
+        "shown_of": "Giochi: {0} di {1}",
+        "jump_letter": "Salta (A-Z)"
     },
     "collections": {
         "title": "Catalogo",
@@ -180,9 +181,15 @@
         "action_pause": "Pausa",
         "action_cancel": "Annulla",
         "action_turn_off_backlight": "Spegni schermo",
-        "action_turn_off_backlight_hint": "Premi qualsiasi tasto per riattivare",
+        "action_turn_off_backlight_hint": "L - Peer  [-] Spegni schermo",
         "download_label": "Download: ",
-        "install_label": "Installazione: "
+        "install_label": "Installazione: ",
+        "action_retry": "Riprova download",
+        "action_peers": "Peer",
+        "peers_title": "Stato dello swarm e peer",
+        "peers_no_active": "Nessuna connessione attiva con i peer",
+        "action_peers_short": "Peer",
+        "downloads_header_hints": "L - Peer  [-] Spegni schermo"
     },
     "detail": {
         "unknown_publisher": "Editore sconosciuto",
@@ -271,7 +278,8 @@
         "storage_sd": "MicroSD",
         "storage_nand": "NAND",
         "storage_auto": "Auto",
-        "group_roms": "ROM dei giochi"
+        "group_roms": "ROM dei giochi",
+        "extra_files_bundle": "File extra [{0}]"
     },
     "remote": {
         "title": "Aggiungi torrent",
@@ -724,7 +732,13 @@
         "select_this_item": "Seleziona questo elemento",
         "select_all_count": "Seleziona tutto ({0})",
         "selected_summary_format": "{0} (file: {1}, cartelle: {2}) · {3}",
-        "extract_to_folder_named": "Estrai nella cartella /{0}"
+        "extract_to_folder_named": "Estrai nella cartella /{0}",
+        "create_archive_single": "Comprimi in ZIP",
+        "create_archive_count": "Comprimi in ZIP ({0})",
+        "create_archive_title": "Crea archivio ZIP",
+        "create_archive_success": "Archivio creato con successo!",
+        "create_archive_error": "Errore durante la creazione dell'archivio",
+        "archive_exists_overwrite": "Il file '{0}' esiste già. Sovrascrivere?"
     },
     "retro": {
         "consoles_title": "Giochi Retrò",
@@ -909,14 +923,16 @@
         "exception_prefix": "Eccezione durante l'estrazione: ",
         "unknown_error": "Errore sconosciuto durante l'estrazione",
         "done_100": "100.0% · Fatto",
-        "cancelled_by_user": "Estrazione annullata dall'utente"
+        "cancelled_by_user": "Estrazione annullata dall'utente",
+        "creating_title": "Creazione archivio...",
+        "preparing": "Preparazione..."
     },
     "text_viewer": {
         "file_not_found": "File non trovato: ",
         "cant_open_read": "Impossibile aprire il file in lettura",
         "too_large_warning": "\n\n--- [File troppo grande. Mostrati i primi 512 KB] ---",
         "lines_suffix": " righe",
-        "close_btn": "✕ Chiudi",
+        "close_btn": "Chiudi",
         "read_error": "Errore di lettura del file: ",
         "file_empty": "<File vuoto>",
         "page_up": "Pag. Su",

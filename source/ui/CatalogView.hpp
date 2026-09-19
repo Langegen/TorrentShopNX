@@ -66,6 +66,7 @@ public:
     
     void filterCatalog();
     void resetFilters();
+    void jumpToNextLetter(bool forward);
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
     BRLS_BIND(brls::Label, headerTitle, "headerTitle");
@@ -74,6 +75,8 @@ public:
 private:
     catalog::FilterSortState filterState_;
     std::vector<Game> filteredGames_;
+    int focusedRow_ = 0;
+    int focusedCol_ = 0;
 
     // Inner DataSource class
     class CatalogDataSource : public brls::RecyclerDataSource {

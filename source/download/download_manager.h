@@ -132,6 +132,10 @@ public:
     void trackProgress();
     void shutdown();
     bool cancelDownload(size_t index);
+    bool retryDownload(size_t index);
+    bool deleteFromQueue(size_t index);
+    bool pauseDownload(size_t index);
+    bool resumeDownload(size_t index);
     bool getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files);
     bool setFileWanted(size_t index, int file_index, bool wanted);
     bool probeTorrentFiles(const std::string& magnet,
@@ -145,7 +149,9 @@ public:
     /// Доступ к менеджеру источников данных
     datasource::DataSourceManager& dataSourceManager() { return ds_manager_; }
 
+    std::recursive_mutex& queueMutex() const { return queue_mutex_; }
     const std::vector<DownloadItem>& queue() const { return queue_; }
+    std::vector<DownloadItem>& queueMutable() { return queue_; }
 
     using ProgressCallback = std::function<void()>;
     void setProgressCallback(ProgressCallback cb) { progress_callback_ = cb; }
@@ -165,6 +171,7 @@ private:
     void handleFileDownload(size_t index, const std::vector<torrent::TorrentInfo>& list,
                             std::chrono::steady_clock::time_point now);
 
+    mutable std::recursive_mutex queue_mutex_;
     std::vector<DownloadItem> queue_;
     std::unique_ptr<torrent::TorrentManager> torrent_;
     datasource::DataSourceManager ds_manager_;

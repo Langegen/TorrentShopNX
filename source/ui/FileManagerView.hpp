@@ -56,6 +56,7 @@ public:
 
     void showActionsMenu();
     void showArchiveDialog(const util::FileItem& item);
+    void showCreateArchiveDialog(const std::vector<std::string>& targets);
     void showInstallDialog(const util::FileItem& item);
     void promptDeleteSourceFile(const std::string& filePath, const std::string& fileName);
     void openTextViewer(const std::string& path, const std::string& name = "");
