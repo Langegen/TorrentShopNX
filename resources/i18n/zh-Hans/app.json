@@ -46,7 +46,7 @@
         "connecting": "连接中...",
         "db_updated": "数据库已更新",
         "update_error": "更新出错",
-        "stats_hint_suffix": " | R - 筛选/排序  L - 重置",
+        "stats_hint_suffix": " | ZL/ZR - A-Z | R - 筛选/排序  L - 重置",
         "never_updated": "游戏数: 0 | 更新时间: 从未",
         "games_count": "游戏: {0}",
         "shown_of": "游戏: {0} / {1}",
@@ -181,13 +181,15 @@
         "action_pause": "暂停",
         "action_cancel": "取消",
         "action_turn_off_backlight": "关闭屏幕背光",
-        "action_turn_off_backlight_hint": "按任意键唤醒屏幕",
+        "action_turn_off_backlight_hint": "L - 节点  [-] 关闭屏幕",
         "download_label": "下载: ",
         "install_label": "安装: ",
         "action_retry": "重试下载",
-        "action_peers": "节点检查器",
+        "action_peers": "节点",
         "peers_title": "节点与连接状态",
-        "peers_no_active": "没有活动的节点连接"
+        "peers_no_active": "没有活动的节点连接",
+        "action_peers_short": "节点",
+        "downloads_header_hints": "L - 节点  [-] 关闭屏幕"
     },
     "detail": {
         "unknown_publisher": "未知发行商",
@@ -276,7 +278,8 @@
         "storage_sd": "TF卡",
         "storage_nand": "内置存储",
         "storage_auto": "自动",
-        "group_roms": "游戏ROM文件"
+        "group_roms": "游戏ROM文件",
+        "extra_files_bundle": "附加文件 [{0}]"
     },
     "remote": {
         "title": "添加种子",
@@ -729,7 +732,13 @@
         "select_this_item": "选中此项",
         "select_all_count": "全选 ({0})",
         "selected_summary_format": "{0} (文件: {1}, 文件夹: {2}) · {3}",
-        "extract_to_folder_named": "解压到文件夹 /{0}"
+        "extract_to_folder_named": "解压到文件夹 /{0}",
+        "create_archive_single": "压缩为 ZIP",
+        "create_archive_count": "压缩为 ZIP ({0})",
+        "create_archive_title": "创建 ZIP 压缩包",
+        "create_archive_success": "压缩包创建成功！",
+        "create_archive_error": "创建压缩包失败",
+        "archive_exists_overwrite": "文件 '{0}' 已存在。是否覆盖？"
     },
     "retro": {
         "consoles_title": "复古怀旧游戏",
@@ -914,14 +923,16 @@
         "exception_prefix": "解压异常: ",
         "unknown_error": "解压未知错误",
         "done_100": "100.0% · 完成",
-        "cancelled_by_user": "用户取消了解压"
+        "cancelled_by_user": "用户取消了解压",
+        "creating_title": "正在创建压缩包...",
+        "preparing": "准备中..."
     },
     "text_viewer": {
         "file_not_found": "未找到文件: ",
         "cant_open_read": "无法打开文件进行读取",
         "too_large_warning": "\n\n--- [文件过大。仅显示前 512 KB] ---",
         "lines_suffix": " 行",
-        "close_btn": "✕ 关闭",
+        "close_btn": "关闭",
         "read_error": "文件读取错误: ",
         "file_empty": "<文件为空>",
         "page_up": "上一页",

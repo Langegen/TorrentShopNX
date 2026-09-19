@@ -46,7 +46,7 @@
         "connecting": "Verbindung wird hergestellt...",
         "db_updated": "Datenbank aktualisiert",
         "update_error": "Aktualisierungsfehler",
-        "stats_hint_suffix": " | R - Filter/Sortierung  L - Zurücksetzen",
+        "stats_hint_suffix": " | ZL/ZR - A-Z | R - Filter/Sortierung  L - Zurücksetzen",
         "never_updated": "Spiele: 0 | Aktualisiert: Nie",
         "games_count": "Spiele: {0}",
         "shown_of": "Spiele: {0} von {1}",
@@ -181,13 +181,15 @@
         "action_pause": "Anhalten",
         "action_cancel": "Abbrechen",
         "action_turn_off_backlight": "Bildschirm ausschalten",
-        "action_turn_off_backlight_hint": "Beliebige Taste drücken zum Einschalten",
+        "action_turn_off_backlight_hint": "L - Peers  [-] Bildschirm aus",
         "download_label": "Download: ",
         "install_label": "Installation: ",
         "action_retry": "Download wiederholen",
-        "action_peers": "Schwarm-Inspektor",
+        "action_peers": "Peers",
         "peers_title": "Schwarm- & Peer-Status",
-        "peers_no_active": "Keine aktiven Peer-Verbindungen"
+        "peers_no_active": "Keine aktiven Peer-Verbindungen",
+        "action_peers_short": "Peers",
+        "downloads_header_hints": "L - Peers  [-] Bildschirm aus"
     },
     "detail": {
         "unknown_publisher": "Unbekannter Publisher",
@@ -276,7 +278,8 @@
         "storage_sd": "MicroSD",
         "storage_nand": "NAND",
         "storage_auto": "Auto",
-        "group_roms": "Spiel-ROMs"
+        "group_roms": "Spiel-ROMs",
+        "extra_files_bundle": "Zusatzdateien [{0}]"
     },
     "remote": {
         "title": "Torrent hinzufügen",
@@ -729,7 +732,13 @@
         "select_this_item": "Dieses Element auswählen",
         "select_all_count": "Alles auswählen ({0})",
         "selected_summary_format": "{0} (Dateien: {1}, Ordner: {2}) · {3}",
-        "extract_to_folder_named": "In Ordner /{0} entpacken"
+        "extract_to_folder_named": "In Ordner /{0} entpacken",
+        "create_archive_single": "Als ZIP packen",
+        "create_archive_count": "Als ZIP packen ({0})",
+        "create_archive_title": "ZIP-Archiv erstellen",
+        "create_archive_success": "Archiv erfolgreich erstellt!",
+        "create_archive_error": "Fehler beim Erstellen des Archivs",
+        "archive_exists_overwrite": "Datei '{0}' existiert bereits. Überschreiben?"
     },
     "retro": {
         "consoles_title": "Retro-Spiele",
@@ -914,14 +923,16 @@
         "exception_prefix": "Ausnahme beim Entpacken: ",
         "unknown_error": "Unbekannter Fehler beim Entpacken",
         "done_100": "100.0% · Fertig",
-        "cancelled_by_user": "Entpacken vom Benutzer abgebrochen"
+        "cancelled_by_user": "Entpacken vom Benutzer abgebrochen",
+        "creating_title": "Archiv wird erstellt...",
+        "preparing": "Vorbereitung..."
     },
     "text_viewer": {
         "file_not_found": "Datei nicht gefunden: ",
         "cant_open_read": "Datei konnte nicht zum Lesen geöffnet werden",
         "too_large_warning": "\n\n--- [Datei zu groß. Erste 512 KB werden angezeigt] ---",
         "lines_suffix": " Zeilen",
-        "close_btn": "✕ Schließen",
+        "close_btn": "Schließen",
         "read_error": "Dateilesefehler: ",
         "file_empty": "<Datei ist leer>",
         "page_up": "Seite hoch",

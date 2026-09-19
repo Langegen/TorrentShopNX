@@ -33,4 +33,18 @@ bool extractArchive(
     std::string& outError
 );
 
+// Compresses the given source files/directories into a ZIP archive.
+// Runs synchronously — caller should invoke via background thread (e.g. brls::async or ArchiveProgressDialog).
+// Periodic progress callback is fired during packing.
+// Archiving can be cancelled via cancelToken.
+bool createZipArchive(
+    const std::string& archivePath,
+    const std::vector<std::string>& sourcePaths,
+    const std::string& baseDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError
+);
+
 } // namespace util
+

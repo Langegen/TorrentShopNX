@@ -1581,7 +1581,8 @@ void DownloadManager::trackProgress() {
             item.state == DownloadState::Downloading &&
             (item.is_homebrew ||
              !item.retro_console_id.empty() ||
-             (item.forced_file_index >= 0 && !isSwitchGameFile(item.forced_stream_name)))) {
+             (item.forced_file_index >= 0 && !isSwitchGameFile(item.forced_stream_name)) ||
+             (!item.selected_files.empty() && !isSwitchGameFile(item.forced_stream_name)))) {
             handleFileDownload(i, list, now);
             continue;
         }

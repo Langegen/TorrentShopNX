@@ -87,6 +87,15 @@ void DownloadsView::onContentAvailable() {
         return true;
     }, true /* hidden from footer */);
 
+    this->registerAction("", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
+        std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+        const auto& queue = ui::DownloadManager::instance().getImpl().queue();
+        if (focusedRow_ >= 0 && static_cast<size_t>(focusedRow_) < queue.size()) {
+            showPeerInspector(queue[focusedRow_]);
+        }
+        return true;
+    }, true /* hidden from footer */);
+
     this->registerAction(brls::BrlsKeyCombination{brls::BRLS_KBD_KEY_MINUS, brls::BRLS_KBD_MODIFIER_NONE}, [this](brls::View* view) {
         toggleBacklight();
         return true;
@@ -540,7 +549,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
 
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
-    dialog->addButton("common/ok"_i18n, []() {});
+    dialog->addButton("app/common/ok"_i18n, []() {});
     dialog->open();
 }
 
@@ -769,11 +778,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
         });
     }
 
-    // Swarm inspector action for all items
-    cell->registerAction("app/downloads/action_peers"_i18n, brls::ControllerButton::BUTTON_LB, [item](brls::View* view) {
+    // Swarm inspector action for all items (hidden from footer, shown in top-right header)
+    cell->registerAction("", brls::ControllerButton::BUTTON_LB, [item](brls::View* view) {
         showPeerInspector(item);
         return true;
-    }, false, false, brls::SOUND_CLICK);
+    }, true /* hidden */, false, brls::SOUND_CLICK);
 
     // If this cell is currently focused, trigger hint refresh so bottom hints update immediately
     if (brls::Application::getCurrentFocus() == cell) {

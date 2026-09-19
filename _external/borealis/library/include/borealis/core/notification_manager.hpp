@@ -46,6 +46,7 @@ class NotificationManager : public Box
     ~NotificationManager() override;
 
     void notify(const std::string& text);
+    void clear();
 };
 
 }; // namespace brls

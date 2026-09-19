@@ -722,28 +722,80 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         }
     }
 
-    // Сортируем выбранные файлы по приоритету установки:
-    // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
-    std::stable_sort(chosen.begin(), chosen.end(), [this](size_t a, size_t b) {
-        int prio_a = download::installFilePriority(files_[a].name);
-        int prio_b = download::installFilePriority(files_[b].name);
-        if (prio_a != prio_b) {
-            return prio_a > prio_b; // наивысший приоритет (v0) в начало очереди
+    if (!retro_console_id_.empty()) {
+        for (size_t i : chosen) {
+            std::vector<int> singleSelected = { files_[i].index };
+            std::string itemTitle = cleanTitle(game_.title);
+            if (selectedIndices.size() > 1) {
+                itemTitle += " (" + files_[i].name + ")";
+            }
+            Game singleGame = game_;
+            singleGame.title = itemTitle;
+            singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
+            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
         }
-        return files_[a].size > files_[b].size; // при равном приоритете больший файл первым
-    });
+    } else {
+        std::vector<size_t> packages;
+        std::vector<size_t> extraFiles;
 
-    for (size_t i : chosen) {
-        std::vector<int> singleSelected = { files_[i].index };
-        std::string itemTitle = cleanTitle(game_.title);
-        if (selectedIndices.size() > 1) {
-            itemTitle += " (" + files_[i].name + ")";
+        for (size_t idx : chosen) {
+            if (isSwitchGameFile(files_[idx].name)) {
+                packages.push_back(idx);
+            } else {
+                extraFiles.push_back(idx);
+            }
         }
-        Game singleGame = game_;
-        singleGame.title = itemTitle;
-        singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
-        
-        ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
+
+        // Сортируем выбранные установочные пакеты по приоритету установки:
+        // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
+        std::stable_sort(packages.begin(), packages.end(), [this](size_t a, size_t b) {
+            int prio_a = download::installFilePriority(files_[a].name);
+            int prio_b = download::installFilePriority(files_[b].name);
+            if (prio_a != prio_b) {
+                return prio_a > prio_b;
+            }
+            return files_[a].size > files_[b].size;
+        });
+
+        size_t totalTasks = packages.size() + (!extraFiles.empty() ? 1 : 0);
+
+        // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
+        for (size_t idx : packages) {
+            std::vector<int> singleSelected = { files_[idx].index };
+            std::string itemTitle = cleanTitle(game_.title);
+            if (totalTasks > 1) {
+                itemTitle += " (" + files_[idx].name + ")";
+            }
+            Game singleGame = game_;
+            singleGame.title = itemTitle;
+            singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
+            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_);
+        }
+
+        // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
+        if (!extraFiles.empty()) {
+            std::vector<int> extraIndices;
+            extraIndices.reserve(extraFiles.size());
+            for (size_t idx : extraFiles) {
+                extraIndices.push_back(files_[idx].index);
+            }
+
+            std::string extraTitle = cleanTitle(game_.title);
+            if (extraFiles.size() == 1) {
+                extraTitle += " (" + files_[extraFiles[0]].name + ")";
+            } else {
+                std::string countStr = std::to_string(extraFiles.size());
+                extraTitle += " (" + brls::getStr("app/fileselect/extra_files_bundle", countStr) + ")";
+            }
+
+            Game extraGame = game_;
+            extraGame.title = extraTitle;
+            extraGame.topic_id = game_.topic_id + "_extras";
+            int firstIndex = files_[extraFiles[0]].index;
+            std::string forcedName = files_[extraFiles[0]].name;
+
+            ui::DownloadManager::instance().addDownload(extraGame, extraIndices, firstIndex, forcedName, retro_console_id_);
+        }
     }
 
     brls::sync([]() {

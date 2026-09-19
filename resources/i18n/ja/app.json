@@ -46,7 +46,7 @@
         "connecting": "接続中...",
         "db_updated": "データベースが更新されました",
         "update_error": "更新エラー",
-        "stats_hint_suffix": " | R - 絞り込み/並び替え  L - リセット",
+        "stats_hint_suffix": " | ZL/ZR - A-Z | R - 絞り込み/並び替え  L - リセット",
         "never_updated": "ゲーム数: 0 | 更新日: なし",
         "games_count": "ゲーム: {0}",
         "shown_of": "ゲーム: {0} / {1}",
@@ -181,13 +181,15 @@
         "action_pause": "一時停止",
         "action_cancel": "キャンセル",
         "action_turn_off_backlight": "画面バックライトを消灯",
-        "action_turn_off_backlight_hint": "任意のボタンを押すと再点灯します",
+        "action_turn_off_backlight_hint": "L - ピア  [-] 画面を消灯",
         "download_label": "ダウンロード: ",
         "install_label": "インストール: ",
         "action_retry": "ダウンロードを再試行",
-        "action_peers": "ピアインスペクター",
+        "action_peers": "ピア",
         "peers_title": "Swarmとピアの状態",
-        "peers_no_active": "アクティブなピア接続がありません"
+        "peers_no_active": "アクティブなピア接続がありません",
+        "action_peers_short": "ピア",
+        "downloads_header_hints": "L - ピア  [-] 画面を消灯"
     },
     "detail": {
         "unknown_publisher": "発売元不明",
@@ -276,7 +278,8 @@
         "storage_sd": "microSD",
         "storage_nand": "本体メモリー",
         "storage_auto": "自動",
-        "group_roms": "ゲームROMファイル"
+        "group_roms": "ゲームROMファイル",
+        "extra_files_bundle": "追加ファイル [{0}]"
     },
     "remote": {
         "title": "トレントを追加",
@@ -729,7 +732,13 @@
         "select_this_item": "この項目を選択",
         "select_all_count": "すべて選択 ({0})",
         "selected_summary_format": "{0} (ファイル: {1}, フォルダ: {2}) · {3}",
-        "extract_to_folder_named": "フォルダ /{0} に展開"
+        "extract_to_folder_named": "フォルダ /{0} に展開",
+        "create_archive_single": "ZIPに圧縮",
+        "create_archive_count": "ZIPに圧縮 ({0})",
+        "create_archive_title": "ZIPアーカイブを作成",
+        "create_archive_success": "アーカイブが正常に作成されました！",
+        "create_archive_error": "アーカイブの作成に失敗しました",
+        "archive_exists_overwrite": "ファイル '{0}' は既に存在します。上書きしますか？"
     },
     "retro": {
         "consoles_title": "レトロゲーム",
@@ -914,14 +923,16 @@
         "exception_prefix": "解凍の例外: ",
         "unknown_error": "不明な解凍エラー",
         "done_100": "100.0% · 完了",
-        "cancelled_by_user": "ユーザーによって解凍がキャンセルされました"
+        "cancelled_by_user": "ユーザーによって解凍がキャンセルされました",
+        "creating_title": "アーカイブ作成中...",
+        "preparing": "準備中..."
     },
     "text_viewer": {
         "file_not_found": "ファイルが見つかりません: ",
         "cant_open_read": "ファイルを読み込み用に開けませんでした",
         "too_large_warning": "\n\n--- [ファイルが大きすぎます。最初の 512 KB を表示しています] ---",
         "lines_suffix": " 行",
-        "close_btn": "✕ 閉じる",
+        "close_btn": "閉じる",
         "read_error": "ファイル読み込みエラー: ",
         "file_empty": "<ファイルが空です>",
         "page_up": "前ページ",
