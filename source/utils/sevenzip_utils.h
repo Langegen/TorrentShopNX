@@ -20,4 +20,12 @@ bool extract7zArchive(
     std::string& outError
 );
 
+// Fast listing of 7z directory contents without decompressing file data
+bool list7zArchiveFolder(
+    const std::string& archivePath,
+    const std::string& innerPath,
+    std::vector<FileItem>& outItems,
+    std::string& outError
+);
+
 } // namespace util

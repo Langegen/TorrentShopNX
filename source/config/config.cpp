@@ -50,6 +50,8 @@ bool parseConfigBody(const std::string& body,
                      bool& cache_cover_thumbnails,
                      int& listen_port,
                      std::string& last_catalog_update_date,
+                     int64_t& last_catalog_diff_time,
+                     int64_t& last_catalog_full_time,
                      std::string& install_location,
                      std::string& app_update_url,
                      bool& auto_app_update,
@@ -107,6 +109,12 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "last_catalog_update_date") {
                     last_catalog_update_date = val;
+                    parsed_known_keys = true;
+                } else if (key == "last_catalog_diff_time") {
+                    try { last_catalog_diff_time = std::stoll(val); } catch (...) {}
+                    parsed_known_keys = true;
+                } else if (key == "last_catalog_full_time") {
+                    try { last_catalog_full_time = std::stoll(val); } catch (...) {}
                     parsed_known_keys = true;
                 } else if (key == "install_location") {
                     install_location = val;
@@ -226,7 +234,8 @@ void ConfigManager::load() {
     if (readWholeFile(config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
                         keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
-                        last_catalog_update_date_, install_location_, app_update_url_,
+                        last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
+                        install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_, language_,
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
@@ -246,7 +255,8 @@ void ConfigManager::load() {
     if (readWholeFile(legacy_config_path_, body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
                         keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
-                        last_catalog_update_date_, install_location_, app_update_url_,
+                        last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
+                        install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_, language_,
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
@@ -292,6 +302,8 @@ void ConfigManager::save() {
     file << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
     file << "listen_port=" << listen_port_ << "\n";
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
+    file << "last_catalog_diff_time=" << last_catalog_diff_time_ << "\n";
+    file << "last_catalog_full_time=" << last_catalog_full_time_ << "\n";
     file << "install_location=" << install_location_ << "\n";
     file << "app_update_url=" << app_update_url_ << "\n";
     file << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
@@ -462,6 +474,78 @@ bool ConfigManager::shouldUpdateCatalogToday() const {
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_catalog_update_date_ != today;
+}
+
+int64_t ConfigManager::getLastCatalogDiffTime() const {
+    return last_catalog_diff_time_;
+}
+
+void ConfigManager::setLastCatalogDiffTime(int64_t timestamp) {
+    last_catalog_diff_time_ = timestamp;
+    save();
+}
+
+int64_t ConfigManager::getLastCatalogFullTime() const {
+    return last_catalog_full_time_;
+}
+
+void ConfigManager::setLastCatalogFullTime(int64_t timestamp) {
+    last_catalog_full_time_ = timestamp;
+    save();
+}
+
+bool ConfigManager::shouldUpdateCatalogDiff() const {
+    std::time_t now = std::time(nullptr);
+    if (now <= 0) return false;
+    if (last_catalog_diff_time_ <= 0) return true;
+    return (now - last_catalog_diff_time_) >= (4 * 3600); // 4 hours
+}
+
+bool ConfigManager::shouldUpdateCatalogFull() const {
+    std::time_t now = std::time(nullptr);
+    if (now <= 0) return false;
+    if (last_catalog_full_time_ <= 0) return true;
+    return (now - last_catalog_full_time_) >= (48 * 3600); // 48 hours (2 days)
+}
+
+std::string ConfigManager::getActiveCatalogLangKey() const {
+    std::string effUrl = getEffectiveCatalogSourceUrl();
+    if (effUrl.find("EN_catalog") != std::string::npos) return "en";
+    if (effUrl.find("ES_catalog") != std::string::npos) return "es";
+    if (effUrl.find("FR_catalog") != std::string::npos) return "fr";
+    if (effUrl.find("DE_catalog") != std::string::npos) return "de";
+    if (effUrl.find("IT_catalog") != std::string::npos) return "it";
+    if (effUrl.find("PT_BR_catalog") != std::string::npos) return "pt_br";
+    if (effUrl.find("ZH_Hans_catalog") != std::string::npos) return "zh_hans";
+    return "ru";
+}
+
+std::string ConfigManager::getEffectiveCatalogDiffUrl() const {
+    std::string url = normalizeCatalogUrl(catalog_source_url_);
+    bool isDefault = url.empty() ||
+                     url == DEFAULT_CATALOG_URL_RU ||
+                     url == DEFAULT_CATALOG_URL_EN ||
+                     url == DEFAULT_CATALOG_URL_ES ||
+                     url == DEFAULT_CATALOG_URL_FR ||
+                     url == DEFAULT_CATALOG_URL_DE ||
+                     url == DEFAULT_CATALOG_URL_IT ||
+                     url == DEFAULT_CATALOG_URL_PT_BR ||
+                     url == DEFAULT_CATALOG_URL_ZH_HANS ||
+                     url == LEGACY_CATALOG_URL ||
+                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-game-collection/", 0) == 0 ||
+                     url.rfind("https://github.com/Langegen/switch-game-collection/", 0) == 0 ||
+                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-games/", 0) == 0 ||
+                     url.rfind("https://github.com/Langegen/switch-games/", 0) == 0;
+
+    if (isDefault) {
+        return DEFAULT_CATALOG_DIFF_URL;
+    }
+
+    size_t lastSlash = url.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        return url.substr(0, lastSlash + 1) + "catalog_diff.json";
+    }
+    return DEFAULT_CATALOG_DIFF_URL;
 }
 
 const std::string& ConfigManager::getInstallLocation() const {

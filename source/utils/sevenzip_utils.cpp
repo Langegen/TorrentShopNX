@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <unordered_set>
 
 namespace util {
 
@@ -84,7 +85,7 @@ static std::string sanitizeEntryName(const std::string& raw) {
 static const char* sresToMessage(SRes res) {
     switch (res) {
     case SZ_OK:                 return "";
-    case SZ_ERROR_MEM:          return "Не хватает памяти";
+    case SZ_ERROR_MEM:          return "Не хватает оперативной памяти (RAM)";
     case SZ_ERROR_NO_ARCHIVE:   return "Файл не является архивом 7z";
     case SZ_ERROR_ARCHIVE:      return "Архив повреждён или имеет неверный формат";
     case SZ_ERROR_CRC:          return "Ошибка контрольной суммы в заголовке архива";
@@ -187,6 +188,11 @@ bool extract7zArchive(
                       " folders=" + std::to_string(db.db.NumFolders));
 
         UInt64 totalUncompressed = 0;
+        UInt64 maxFolderSize = 0;
+        for (UInt32 fi = 0; fi < db.db.NumFolders; fi++) {
+            UInt64 us = SzAr_GetFolderUnpackSize(&db.db, fi);
+            if (us > maxFolderSize) maxFolderSize = us;
+        }
         for (UInt32 fi = 0; fi < db.NumFiles; fi++) {
             if (!SzArEx_IsDir(&db, fi)) {
                 totalUncompressed += SzArEx_GetFileSize(&db, fi);
@@ -194,6 +200,16 @@ bool extract7zArchive(
         }
         progress.totalUncompressedSize = totalUncompressed;
         progress.totalEntries = db.NumFiles;
+
+        if (maxFolderSize > 64ULL * 1024 * 1024) {
+            util::logLine("sevenzip: archive has large unpack folder (" + std::to_string(maxFolderSize / (1024*1024)) +
+                          " MB > 64 MB), deferring to streaming libarchive");
+            outError = "requires_streaming";
+            SzFree(nullptr, lookStream.buf);
+            SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+            File_Close(&archiveStream.file);
+            return false;
+        }
 
         auto updateProgressPct = [&]() {
             if (totalUncompressed > 0) {
@@ -262,7 +278,11 @@ bool extract7zArchive(
                                  &offset, &outSizeProcessed,
                                  (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
             if (res != SZ_OK) {
-                outError = sresToMessage(res);
+                if (res == SZ_ERROR_MEM) {
+                    outError = "requires_streaming";
+                } else {
+                    outError = sresToMessage(res);
+                }
                 util::logLine("sevenzip: SzArEx_Extract failed for " + cleanName +
                               ": " + std::to_string((int)res) + " (" + outError + ")");
                 break;
@@ -344,6 +364,155 @@ bool extract7zArchive(
 
     util::logLine("sevenzip: extractArchive finished, success=" + std::string(ok ? "1" : "0"));
     return ok;
+}
+
+bool list7zArchiveFolder(
+    const std::string& archivePath,
+    const std::string& innerPath,
+    std::vector<FileItem>& outItems,
+    std::string& outError
+) {
+    outItems.clear();
+    std::string normInner = innerPath;
+    for (char& c : normInner) if (c == '\\') c = '/';
+    while (!normInner.empty() && normInner.front() == '/') normInner.erase(normInner.begin());
+    while (!normInner.empty() && normInner.back() == '/') normInner.pop_back();
+
+    std::error_code ec;
+    if (!std::filesystem::exists(archivePath, ec)) {
+        outError = "Файл архива не найден: " + archivePath;
+        return false;
+    }
+
+    CFileInStream archiveStream;
+    CLookToRead2 lookStream;
+    CSzArEx db;
+    File_Construct(&archiveStream.file);
+    archiveStream.wres = 0;
+
+    {
+        WRes wres;
+#ifdef _WIN32
+        std::wstring wpath = std::filesystem::u8path(archivePath).native();
+        wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
+#else
+        wres = InFile_Open(&archiveStream.file, archivePath.c_str());
+#endif
+        if (wres != 0) {
+            outError = "Не удалось открыть 7z архив";
+            return false;
+        }
+    }
+
+    FileInStream_CreateVTable(&archiveStream);
+    archiveStream.wres = 0;
+
+    LookToRead2_CreateVTable(&lookStream, False);
+    lookStream.buf = nullptr;
+    lookStream.bufSize = 0;
+    lookStream.realStream = nullptr;
+
+    CrcGenerateTable();
+    SzArEx_Init(&db);
+
+    lookStream.buf = static_cast<Byte*>(SzAlloc(nullptr, kInputBufSize));
+    if (!lookStream.buf) {
+        File_Close(&archiveStream.file);
+        outError = "Не хватает оперативной памяти (RAM)";
+        return false;
+    }
+    lookStream.bufSize = kInputBufSize;
+    lookStream.realStream = &archiveStream.vt;
+    LookToRead2_INIT(&lookStream);
+
+    SRes res = SzArEx_Open(&db, &lookStream.vt, (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
+    if (res != SZ_OK) {
+        outError = sresToMessage(res);
+        SzFree(nullptr, lookStream.buf);
+        File_Close(&archiveStream.file);
+        return false;
+    }
+
+    UInt16* nameBuf = nullptr;
+    size_t nameBufSize = 0;
+    std::unordered_set<std::string> seenDirs;
+
+    for (UInt32 i = 0; i < db.NumFiles; i++) {
+        size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
+        if (nameLen == 0 || nameLen > (1u << 20)) continue;
+        if (nameLen > nameBufSize) {
+            SzFree(nullptr, nameBuf);
+            nameBufSize = nameLen;
+            nameBuf = static_cast<UInt16*>(SzAlloc(nullptr, nameBufSize * sizeof(UInt16)));
+            if (!nameBuf) break;
+        }
+        SzArEx_GetFileNameUtf16(&db, i, nameBuf);
+        std::string clean = sanitizeEntryName(utf16leToUtf8(nameBuf, nameLen - 1));
+        if (clean.empty()) continue;
+
+        bool isDir = SzArEx_IsDir(&db, i) != 0;
+        uint64_t fileSize = isDir ? 0 : SzArEx_GetFileSize(&db, i);
+
+        if (normInner.empty()) {
+            size_t slash = clean.find('/');
+            if (slash == std::string::npos) {
+                FileItem item;
+                item.name = clean;
+                item.path = archivePath + "/" + clean;
+                item.isDir = isDir;
+                item.size = fileSize;
+                outItems.push_back(item);
+            } else {
+                std::string top = clean.substr(0, slash);
+                if (seenDirs.insert(top).second) {
+                    FileItem dirItem;
+                    dirItem.name = top;
+                    dirItem.path = archivePath + "/" + top;
+                    dirItem.isDir = true;
+                    dirItem.size = 0;
+                    outItems.push_back(dirItem);
+                }
+            }
+        } else {
+            std::string prefix = normInner + "/";
+            if (clean.compare(0, prefix.size(), prefix) == 0) {
+                std::string rel = clean.substr(prefix.size());
+                if (rel.empty()) continue;
+                size_t slash = rel.find('/');
+                if (slash == std::string::npos) {
+                    FileItem item;
+                    item.name = rel;
+                    item.path = archivePath + "/" + clean;
+                    item.isDir = isDir;
+                    item.size = fileSize;
+                    outItems.push_back(item);
+                } else {
+                    std::string sub = rel.substr(0, slash);
+                    if (seenDirs.insert(sub).second) {
+                        FileItem dirItem;
+                        dirItem.name = sub;
+                        dirItem.path = archivePath + "/" + normInner + "/" + sub;
+                        dirItem.isDir = true;
+                        dirItem.size = 0;
+                        outItems.push_back(dirItem);
+                    }
+                }
+            }
+        }
+    }
+
+    SzFree(nullptr, nameBuf);
+    SzFree(nullptr, lookStream.buf);
+    lookStream.buf = nullptr;
+    SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+    File_Close(&archiveStream.file);
+
+    std::sort(outItems.begin(), outItems.end(), [](const FileItem& a, const FileItem& b) {
+        if (a.isDir != b.isDir) return a.isDir > b.isDir;
+        return a.name < b.name;
+    });
+
+    return true;
 }
 
 } // namespace util

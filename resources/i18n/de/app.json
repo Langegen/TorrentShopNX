@@ -174,6 +174,7 @@
         "elapsed": "Vergangen: {0}",
         "saved_to": "Gespeichert in: {0}",
         "installed": "Auf Konsole installiert",
+        "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "Unbekannter Fehler",
         "action_delete": "Download löschen",
         "action_open_folder": "Ordner öffnen",
@@ -360,6 +361,7 @@
         "titledb_failed": "Laden der TitleDB fehlgeschlagen",
         "scanning_games": "Konsolenspiele werden analysiert...",
         "installed": "Installiert",
+        "release_completed": "All files in release downloaded: {0}",
         "available": "Verfügbar",
         "uninstall_confirm": "„{0}“ deinstallieren?\nDas Spiel, alle Updates und DLCs werden gelöscht.",
         "uninstall_success": "„{0}“ deinstalliert",
@@ -625,7 +627,14 @@
         "cache_games_count": "Cache: {0} Spiele (A - aktualisieren)",
         "cache_press_a": "A zum Aktualisieren drücken",
         "retro_update_catalogs_cached": "Cache: {0} Spiele (A - aktualisieren)",
-        "retro_update_catalogs_empty": "Drücke A zum Aktualisieren"
+        "retro_update_catalogs_empty": "Drücke A zum Aktualisieren",
+        "update_catalog_btn": "Spielekatalog aktualisieren",
+        "update_catalog_dialog_msg": "Aktualisierungsmodus auswählen:",
+        "update_catalog_fast_diff": "Schnelles Update (Delta)",
+        "update_catalog_full": "Vollständiger Datenbank-Download",
+        "update_catalog_downloading_diff": "Änderungen herunterladen...",
+        "update_catalog_applying_diff": "Änderungen anwenden...",
+        "update_catalog_diff_success": "Katalog aktualisiert: +{0} neu, {1} aktualisiert"
     },
     "applet": {
         "title": "Applet-Modus erkannt",
@@ -914,7 +923,12 @@
         "exception_prefix": "Ausnahme beim Entpacken: ",
         "unknown_error": "Unbekannter Fehler beim Entpacken",
         "done_100": "100.0% · Fertig",
-        "cancelled_by_user": "Entpacken vom Benutzer abgebrochen"
+        "cancelled_by_user": "Entpacken vom Benutzer abgebrochen",
+        "confirm_cancel_msg": "Möchten Sie das Entpacken wirklich abbrechen?",
+        "folder_type": "Archivordner",
+        "browse_archive": "Archiv durchsuchen",
+        "extract_this_file": "Ausgewählte Datei entpacken",
+        "extract_entire_archive": "Gesamtes Archiv entpacken"
     },
     "text_viewer": {
         "file_not_found": "Datei nicht gefunden: ",

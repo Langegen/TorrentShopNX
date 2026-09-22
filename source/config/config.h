@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 
 namespace config {
 
@@ -46,10 +47,24 @@ public:
     int getListenPort() const;
     void setListenPort(int port);
 
+    static constexpr const char* DEFAULT_CATALOG_DIFF_URL = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/catalog_diff.json";
+
     const std::string& getLastCatalogUpdateDate() const;
     void setLastCatalogUpdateDate(const std::string& date_yyyy_mm_dd);
     bool shouldUpdateCatalogToday() const;
     static std::string currentDateString();
+
+    int64_t getLastCatalogDiffTime() const;
+    void setLastCatalogDiffTime(int64_t timestamp);
+
+    int64_t getLastCatalogFullTime() const;
+    void setLastCatalogFullTime(int64_t timestamp);
+
+    bool shouldUpdateCatalogDiff() const;
+    bool shouldUpdateCatalogFull() const;
+
+    std::string getActiveCatalogLangKey() const;
+    std::string getEffectiveCatalogDiffUrl() const;
 
     const std::string& getInstallLocation() const;
     void setInstallLocation(const std::string& location);
@@ -101,6 +116,8 @@ private:
     bool cache_cover_thumbnails_;
     int listen_port_;
     std::string last_catalog_update_date_;
+    int64_t last_catalog_diff_time_ = 0;
+    int64_t last_catalog_full_time_ = 0;
     std::string install_location_;
     std::string app_update_url_;
     bool auto_app_update_;

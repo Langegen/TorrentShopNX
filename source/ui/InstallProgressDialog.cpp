@@ -192,7 +192,7 @@ InstallProgressDialog::InstallProgressDialog(
         }
     });
 
-    this->setCancelable(true);
+    this->setCancelable(false);
 
     auto* applet = this->getAppletFrame();
     if (applet) {

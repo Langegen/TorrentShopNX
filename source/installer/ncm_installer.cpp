@@ -40,6 +40,10 @@ NcmInstaller::~NcmInstaller() {
         ncmContentStorageClose(&content_storage_);
         storage_opened_ = false;
     }
+    if (initialized_) {
+        ncmExit();
+        initialized_ = false;
+    }
 #endif
 }
 
@@ -50,6 +54,16 @@ bool NcmInstaller::begin(NcmStorageId storage) {
     if (initialized_) {
         util::logLine("ncm: already initialized, resetting...");
         cleanup();
+        if (db_opened_) {
+            ncmContentMetaDatabaseClose(&meta_db_);
+            db_opened_ = false;
+        }
+        if (storage_opened_) {
+            ncmContentStorageClose(&content_storage_);
+            storage_opened_ = false;
+        }
+        ncmExit();
+        initialized_ = false;
     }
 
     storage_id_ = storage;

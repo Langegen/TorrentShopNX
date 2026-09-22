@@ -11,6 +11,7 @@ public:
     DownloadCell();
     ~DownloadCell();
     std::shared_ptr<bool> imageToken;
+    std::string loadedCoverUrl;
     static DownloadCell* create();
 
     void clearRegisteredActions() {

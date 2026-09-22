@@ -88,6 +88,13 @@ static utp_nb_sess *find_free_sess(void) {
     for (int i = 0; i < SESS_MAX; i++) {
         if (!g_sess[i].in_use && g_sess[i].refs == 0) return &g_sess[i];
     }
+    // Reclaim zombie sessions where in_use is false and socket is already closed
+    for (int i = 0; i < SESS_MAX; i++) {
+        if (!g_sess[i].in_use && g_sess[i].sock == NULL) {
+            free_sess(&g_sess[i]);
+            return &g_sess[i];
+        }
+    }
     return NULL;
 }
 

@@ -20,6 +20,7 @@ public:
     ~ArchiveProgressDialog() override;
 
     void startExtraction();
+    void requestCancel();
 
 private:
     ArchiveProgressDialog(brls::Box* contentBox, const std::string& archivePath, const std::string& destDir, std::function<void(bool success, const std::string& msg)> onComplete);
@@ -49,6 +50,7 @@ private:
     brls::Box* progressBg_ = nullptr;
     brls::Box* progressFill_ = nullptr;
     brls::Label* statsLabel_ = nullptr;
+    brls::Button* cancelButton_ = nullptr;
 
     std::chrono::steady_clock::time_point lastUiUpdate_;
 };

@@ -342,6 +342,7 @@ struct torrentfs {
     int64_t playhead_piece;    // lock-free (aligned 64-bit store, see below)
     int64_t read_blocked_piece;// piece the reader thread is waiting on, -1 = none
     volatile bool stop;
+    volatile bool cancel_reader;
 
     aq_entry aq[AQ_MAX];
     int n_aq;
@@ -2830,6 +2831,86 @@ void torrentfs_close(torrentfs *tfs) {
     free(tfs);
 }
 
+bool torrentfs_select_file(torrentfs *tfs, int file_index) {
+    if (!tfs) return false;
+    if (file_index < 0 || file_index >= tfs->meta.file_count) return false;
+
+    int64_t new_offset = tfs->meta.files[file_index].offset;
+    int64_t new_size = tfs->meta.files[file_index].length;
+
+    // If already on this file, nothing to change
+    if (tfs->stream_offset == new_offset && tfs->stream_size == new_size) {
+        tfs->cancel_reader = false;
+        return true;
+    }
+
+    engine_log(ENGINE_LOG_INFO,
+               "[torrentfs] select_file: switching to file %d (%lld bytes)",
+               file_index, (long long)new_size);
+
+    // 1. Unblock any current reader
+    tfs->cancel_reader = true;
+    tfs->read_blocked_piece = -1;
+
+    // 2. Lock to safely reconfigure stream range and request queues
+    mutexLock(&tfs->lock);
+
+    tfs->stream_offset    = new_offset;
+    tfs->stream_size      = new_size;
+    tfs->file_first_piece = new_offset / tfs->meta.piece_len;
+    tfs->file_last_piece  = (new_offset + new_size - 1) / tfs->meta.piece_len;
+    tfs->playhead_piece   = tfs->file_first_piece;
+    if (tfs->ram_mode) {
+        tfs->ram_lo       = tfs->file_first_piece;
+    }
+
+    int64_t plen = tfs->meta.piece_len;
+    tfs->crit_head = (int)((CRIT_HEAD_BYTES + plen - 1) / plen);
+    tfs->crit_tail = 0;
+    if (tfs->crit_head < 1) tfs->crit_head = 1;
+    if (tfs->crit_head > CRIT_HEAD_MAX) tfs->crit_head = CRIT_HEAD_MAX;
+
+    // Reset scheduler zones
+    if (tfs->piece_zone) {
+        memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
+    }
+
+    // Count pieces of the new file that are already DONE
+    int64_t done = 0;
+    if (tfs->status) {
+        for (int64_t p = tfs->file_first_piece; p <= tfs->file_last_piece; p++) {
+            if (tfs->status[p] == PIECE_DONE) done++;
+        }
+    }
+    tfs->pieces_done = done;
+
+    // Reset active assembly queue (aq)
+    for (int i = 0; i < tfs->n_aq; i++) {
+        tfs->aq[i].idx = -1;
+        if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);
+        if (tfs->aq[i].req) memset(tfs->aq[i].req, 0, (size_t)tfs->blocks_per_piece);
+        if (tfs->aq[i].req_ts) memset(tfs->aq[i].req_ts, 0, (size_t)tfs->blocks_per_piece * sizeof(uint64_t));
+    }
+
+    // Drop in-flight requests on connected sessions so they can immediately request
+    // blocks of the new file's pieces
+    for (int i = 0; i < MAX_SESS; i++) {
+        if (tfs->S[i].nb.handshaked) {
+            sess_drop_requests(tfs, &tfs->S[i]);
+        }
+    }
+
+    tfs->cancel_reader = false;
+
+    mutexUnlock(&tfs->lock);
+
+    engine_log(ENGINE_LOG_INFO,
+               "[torrentfs] select_file: now streaming pieces %lld..%lld (peers: %d)",
+               (long long)tfs->file_first_piece, (long long)tfs->file_last_piece,
+               tfs->peer_count);
+    return true;
+}
+
 //-----------------------------------------------------------------------------
 // The player-facing read path (mpv demuxer thread). LOCK-FREE on purpose:
 // Horizon does not timeslice equal-priority threads, so a CPU-bound mpv
@@ -2897,10 +2978,10 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
     // which piece gates us so free sessions that have it can join the claim.
     tfs->read_blocked_piece = first;
     u64 wait_start = armGetSystemTick();
-    while (!tfs->stop && !piece_ready(tfs, first, b0))
+    while (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0))
         svcSleepThread(20000000ULL);  // 20 ms
     tfs->read_blocked_piece = -1;
-    if (tfs->stop) return -1;
+    if (tfs->stop || tfs->cancel_reader) return -1;
     double waited = (double)(armGetSystemTick() - wait_start) / tfs->freq;
     if (waited > 5.0) {
         engine_log(ENGINE_LOG_WARN,
@@ -2927,6 +3008,11 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
 void torrentfs_cancel(torrentfs *tfs) {
     if (!tfs) return;  // metadata-only slots have no torrentfs
     tfs->stop = true;
+}
+
+void torrentfs_cancel_reader(torrentfs *tfs) {
+    if (!tfs) return;
+    tfs->cancel_reader = true;
 }
 
 void torrentfs_set_strict_verify(torrentfs *tfs, int on) {

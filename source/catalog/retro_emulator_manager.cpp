@@ -1,5 +1,6 @@
 #include "retro_emulator_manager.h"
 #include "../utils/app_paths.h"
+#include "../utils/file_ops.h"
 #include "../utils/log.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
@@ -31,6 +32,7 @@ RetroEmulatorManager::RetroEmulatorManager() {
     initPackages();
     loadInstalledVersions();
     loadLocalManifest();
+    healInstalledEmulators();
 }
 
 void RetroEmulatorManager::initPackages() {
@@ -610,6 +612,85 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
     if (progress_cb) progress_cb(1.0f, "Манифест успешно обновлен");
     util::logLine("RetroEmulatorManager: manifest successfully refreshed and cached at " + finalPath);
     return true;
+}
+
+void RetroEmulatorManager::healInstalledEmulators() {
+    std::error_code ec;
+
+    // 1. PPSSPP: heal nested switch/ppsspp folder
+    std::string pspBase = resolvePlatformPath("sdmc:/switch/ppsspp");
+    std::string pspNested = resolvePlatformPath("sdmc:/switch/ppsspp/switch/ppsspp");
+    if (std::filesystem::exists(pspNested, ec)) {
+        std::string moveErr;
+        util::movePath(pspNested, pspBase, moveErr);
+        std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/ppsspp/switch"), ec);
+        util::logLine("RetroEmulatorManager: auto-healed PPSSPP folder structure (moved assets and files to " + pspBase + ")");
+    } else {
+        // Also check if assets alone was left behind in switch/ppsspp/assets
+        std::string pspAssetsNested = resolvePlatformPath("sdmc:/switch/ppsspp/switch/ppsspp/assets");
+        std::string pspAssetsTarget = resolvePlatformPath("sdmc:/switch/ppsspp/assets");
+        if (std::filesystem::exists(pspAssetsNested, ec) && !std::filesystem::exists(pspAssetsTarget, ec)) {
+            std::string moveErr;
+            util::movePath(pspAssetsNested, pspAssetsTarget, moveErr);
+            std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/ppsspp/switch"), ec);
+            util::logLine("RetroEmulatorManager: auto-healed PPSSPP assets folder");
+        }
+    }
+    std::string pspAssetsNested2 = resolvePlatformPath("sdmc:/switch/ppsspp/switch/assets");
+    if (std::filesystem::exists(pspAssetsNested2, ec) && !std::filesystem::exists(resolvePlatformPath("sdmc:/switch/ppsspp/assets"), ec)) {
+        std::string moveErr;
+        util::movePath(pspAssetsNested2, resolvePlatformPath("sdmc:/switch/ppsspp/assets"), moveErr);
+        std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/ppsspp/switch"), ec);
+        util::logLine("RetroEmulatorManager: auto-healed PPSSPP switch/assets folder");
+    }
+    std::string pspSwitchDir = resolvePlatformPath("sdmc:/switch/ppsspp/switch");
+    if (std::filesystem::exists(pspSwitchDir, ec)) {
+        std::filesystem::remove_all(pspSwitchDir, ec);
+    }
+    std::string pspGL = resolvePlatformPath("sdmc:/switch/ppsspp/PPSSPP_GL.nro");
+    std::string pspTarget = resolvePlatformPath("sdmc:/switch/ppsspp/PPSSPP.nro");
+    if (std::filesystem::exists(pspGL, ec) && !std::filesystem::exists(pspTarget, ec)) {
+        std::filesystem::rename(pspGL, pspTarget, ec);
+    }
+
+    // 2. DuckStation: heal nested switch/duckstation folder
+    std::string duckBase = resolvePlatformPath("sdmc:/switch/duckstation");
+    std::string duckNested = resolvePlatformPath("sdmc:/switch/duckstation/switch/duckstation");
+    if (std::filesystem::exists(duckNested, ec)) {
+        std::string moveErr;
+        util::movePath(duckNested, duckBase, moveErr);
+        std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/duckstation/switch"), ec);
+        util::logLine("RetroEmulatorManager: auto-healed DuckStation folder structure");
+    }
+    std::string duckSwitchDir = resolvePlatformPath("sdmc:/switch/duckstation/switch");
+    if (std::filesystem::exists(duckSwitchDir, ec)) {
+        std::filesystem::remove_all(duckSwitchDir, ec);
+    }
+
+    // 3. mGBA: heal nested mGBA-*-switch folder
+    std::string mgbaBase = resolvePlatformPath("sdmc:/switch/mGBA");
+    if (std::filesystem::exists(mgbaBase, ec)) {
+        for (const auto& entry : std::filesystem::directory_iterator(mgbaBase, ec)) {
+            if (entry.is_directory()) {
+                std::string dirName = entry.path().filename().string();
+                std::string dirLower = dirName;
+                std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+                if (dirLower.find("mgba") != std::string::npos) {
+                    std::string moveErr;
+                    util::movePath(entry.path().string(), mgbaBase, moveErr);
+                    std::filesystem::remove_all(entry.path(), ec);
+                    util::logLine("RetroEmulatorManager: auto-healed mGBA folder structure");
+                    break;
+                }
+            }
+        }
+        // Normalize mgba.nro -> mGBA.nro if needed
+        std::string lowerNro = resolvePlatformPath("sdmc:/switch/mGBA/mgba.nro");
+        std::string upperNro = resolvePlatformPath("sdmc:/switch/mGBA/mGBA.nro");
+        if (std::filesystem::exists(lowerNro, ec) && !std::filesystem::exists(upperNro, ec)) {
+            std::filesystem::rename(lowerNro, upperNro, ec);
+        }
+    }
 }
 
 } // namespace catalog

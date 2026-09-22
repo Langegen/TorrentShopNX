@@ -14,6 +14,7 @@ namespace util {
 
 #ifdef __SWITCH__
 namespace {
+std::atomic<int> g_sleep_inhibit_count{0};
 std::atomic<int> g_cpu_boost_count{0};
 
 bool boostAllowed() {
@@ -32,14 +33,37 @@ struct SpaceCache {
 SpaceCache g_space_cache[2]; // 0: NAND (BuiltInUser), 1: SD (SdCard)
 } // namespace
 
+void preventSleepBegin() {
+    int c = g_sleep_inhibit_count.fetch_add(1);
+    if (c == 0) {
+        if (hosversionAtLeast(5, 0, 0)) {
+            appletSetAutoSleepDisabled(true);
+        }
+        appletSetMediaPlaybackState(true);
+        util::logLine("switch_utils: sleep inhibited (auto-sleep disabled & keep-awake active)");
+    }
+}
+
+void preventSleepEnd() {
+    int c = g_sleep_inhibit_count.fetch_sub(1);
+    if (c <= 1) {
+        g_sleep_inhibit_count.store(0);
+        if (hosversionAtLeast(5, 0, 0)) {
+            appletSetAutoSleepDisabled(false);
+        }
+        appletSetMediaPlaybackState(false);
+        util::logLine("switch_utils: sleep inhibition released");
+    }
+}
+
 void cpuBoostBegin() {
+    preventSleepBegin();
     if (!boostAllowed()) return;
     int c = g_cpu_boost_count.fetch_add(1);
     if (c > 0) return;   // already boosted by another active transfer
     Result rc = appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
-    if (R_SUCCEEDED(rc) && hosversionAtLeast(5, 0, 0)) {
-        appletSetAutoSleepDisabled(true);
-        util::logLine("switch_utils: CPU boost enabled (1785 MHz), auto-sleep disabled");
+    if (R_SUCCEEDED(rc)) {
+        util::logLine("switch_utils: CPU boost enabled (1785 MHz)");
     } else {
         g_cpu_boost_count.fetch_sub(1);   // failed: never raised the refcount
         util::logLine("switch_utils: CPU boost failed rc=" + std::to_string(rc));
@@ -47,6 +71,7 @@ void cpuBoostBegin() {
 }
 
 void cpuBoostEnd() {
+    preventSleepEnd();
     if (!boostAllowed()) return;
     int c = g_cpu_boost_count.fetch_sub(1);
     if (c < 1) {
@@ -54,7 +79,6 @@ void cpuBoostEnd() {
         return;
     }
     if (c == 1) {
-        appletSetAutoSleepDisabled(false);
         appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
         util::logLine("switch_utils: CPU boost released");
     }
@@ -81,6 +105,8 @@ bool isBacklightOff() {
     return g_backlight_off.load();
 }
 #else
+void preventSleepBegin() {}
+void preventSleepEnd() {}
 void cpuBoostBegin() {}
 void cpuBoostEnd() {}
 

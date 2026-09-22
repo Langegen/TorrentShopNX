@@ -174,6 +174,7 @@
         "elapsed": "已用时间: {0}",
         "saved_to": "保存至: {0}",
         "installed": "已安装至主机系统",
+        "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "未知错误",
         "action_delete": "删除任务",
         "action_open_folder": "打开所在文件夹",
@@ -360,6 +361,7 @@
         "titledb_failed": "TitleDB 数据库加载失败",
         "scanning_games": "正在分析主机已装内容...",
         "installed": "已安装",
+        "release_completed": "All files in release downloaded: {0}",
         "available": "可更新",
         "uninstall_confirm": "确定卸载《{0}》？\n游戏本体及其所有更新和DLC都将被删除。",
         "uninstall_success": "《{0}》卸载完成",
@@ -625,7 +627,14 @@
         "cache_games_count": "缓存: {0} 款游戏 (按 A 键更新)",
         "cache_press_a": "按 A 键更新",
         "retro_update_catalogs_cached": "缓存: {0} 个游戏 (A - 更新)",
-        "retro_update_catalogs_empty": "按 A 键更新"
+        "retro_update_catalogs_empty": "按 A 键更新",
+        "update_catalog_btn": "更新游戏目录数据库",
+        "update_catalog_dialog_msg": "请选择目录更新模式：",
+        "update_catalog_fast_diff": "增量快速更新 (Delta)",
+        "update_catalog_full": "全量重新下载数据库",
+        "update_catalog_downloading_diff": "正在下载增量变更...",
+        "update_catalog_applying_diff": "正在应用变更...",
+        "update_catalog_diff_success": "目录已更新：新增 {0} 款，更新 {1} 款"
     },
     "applet": {
         "title": "当前运行在 Applet 模式",
@@ -914,7 +923,12 @@
         "exception_prefix": "解压异常: ",
         "unknown_error": "解压未知错误",
         "done_100": "100.0% · 完成",
-        "cancelled_by_user": "用户取消了解压"
+        "cancelled_by_user": "用户取消了解压",
+        "confirm_cancel_msg": "确定要取消解压吗？",
+        "folder_type": "压缩包文件夹",
+        "browse_archive": "浏览压缩包",
+        "extract_this_file": "提取此文件",
+        "extract_entire_archive": "解压整个压缩包"
     },
     "text_viewer": {
         "file_not_found": "未找到文件: ",

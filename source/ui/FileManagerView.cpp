@@ -247,7 +247,17 @@ void FileManagerView::refresh(const std::string& focusChild) {
     hasParentDir_ = (currentDir_ != rootDir_) && (!parentDir.empty() && parentDir != currentDir_);
 
     std::string err;
-    items_ = util::listFolder(currentDir_, err);
+    std::string archPath, innerPath;
+    if (util::parseArchiveVirtualPath(currentDir_, archPath, innerPath)) {
+        hasParentDir_ = true;
+        items_.clear();
+        if (!util::listArchiveFolder(archPath, innerPath, items_, err)) {
+            util::logLine("FileManagerView: listArchiveFolder failed: " + err);
+            brls::Application::notify(err.empty() ? "Failed to read archive" : err);
+        }
+    } else {
+        items_ = util::listFolder(currentDir_, err);
+    }
 
     if (currentPath) {
         currentPath->setText(currentDir_);
@@ -290,7 +300,12 @@ void FileManagerView::refresh(const std::string& focusChild) {
 void FileManagerView::updateSpaceInfo() {
     if (!spaceInfo) return;
     uint64_t freeB = 0, totalB = 0;
-    if (util::getStorageSpace(currentDir_, freeB, totalB) && totalB > 0) {
+    std::string checkPath = currentDir_;
+    std::string archPath, innerPath;
+    if (util::parseArchiveVirtualPath(currentDir_, archPath, innerPath)) {
+        checkPath = archPath;
+    }
+    if (util::getStorageSpace(checkPath, freeB, totalB) && totalB > 0) {
         char buf[128];
         std::string freeStr = util::formatFileSize(freeB);
         std::string totalStr = util::formatFileSize(totalB);
@@ -534,22 +549,26 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
         content->addView(row);
     };
 
+    std::filesystem::path ap(item.path);
+    std::string baseDir = ap.parent_path().generic_string();
+    if (baseDir.empty()) baseDir = currentDir_;
+
     // Option 1: Extract here
-    addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_here"_i18n, [this, item]() {
+    addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_here"_i18n, [this, item, baseDir]() {
         // Extract into a hidden temp folder first, then merge up, so a failed
         // extraction never leaves partial files in the real destination.
-        const std::string tmpDir = joinPath(currentDir_, ".tsnx_extract_tmp");
+        const std::string tmpDir = joinPath(baseDir, ".tsnx_extract_tmp");
         {
             std::string delErr;
             util::deletePathRecursive(tmpDir, delErr);
         }
-        auto* progressDlg = new ArchiveProgressDialog(item.path, tmpDir, [this, item, tmpDir](bool ok, const std::string& msg) {
+        auto* progressDlg = new ArchiveProgressDialog(item.path, tmpDir, [this, item, tmpDir, baseDir](bool ok, const std::string& msg) {
             std::string err;
             if (ok) {
                 bool merged = true;
                 std::vector<util::FileItem> entries = util::listFolder(tmpDir, err);
                 for (const auto& e : entries) {
-                    std::string dst = joinPath(currentDir_, e.name);
+                    std::string dst = joinPath(baseDir, e.name);
                     std::string moveErr;
                     if (!util::movePath(e.path, dst, moveErr)) {
                         util::logLine("FileManagerView: merge move failed: " + e.path + " -> " + dst + " (" + moveErr + ")");
@@ -576,9 +595,8 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     });
 
     // Option 2: Extract to subfolder named after archive
-    std::filesystem::path p(item.path);
-    std::string folderName = p.stem().generic_string();
-    std::string targetDir = joinPath(currentDir_, folderName);
+    std::string folderName = ap.stem().generic_string();
+    std::string targetDir = joinPath(baseDir, folderName);
     const std::string tmpDir = targetDir + ".tsnx_tmp";
     std::string optText = brls::getStr("app/file_manager/extract_to_folder_named", folderName);
     addOption("\uE2CC", nvgRGB(0, 224, 165), optText, [this, targetDir, folderName, item, tmpDir]() {
@@ -1089,8 +1107,34 @@ void FileManagerView::showActionsMenu() {
     auto* badgeIcon = new brls::Label();
     badgeIcon->setFontSize(22.0f);
 
+    std::string archPath, innerPath;
+    bool inArchive = util::parseArchiveVirtualPath(currentDir_, archPath, innerPath);
+
     std::string titleText, subtitleText;
-    if (hasSelection && selectedPaths_.size() > 1) {
+    if (inArchive) {
+        if (targetSingleItem) {
+            if (targetSingleItem->isDir) {
+                iconBadge->setBackgroundColor(nvgRGBA(255, 193, 7, 40));
+                badgeIcon->setText("\uE2C7"); // Folder
+                badgeIcon->setTextColor(nvgRGB(255, 193, 7));
+                titleText = targetSingleItem->name;
+                subtitleText = "app/archive/folder_type"_i18n;
+            } else {
+                iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+                badgeIcon->setText("\uE24D"); // File
+                badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+                titleText = targetSingleItem->name;
+                subtitleText = util::formatFileSize(targetSingleItem->size);
+            }
+        } else {
+            iconBadge->setBackgroundColor(nvgRGBA(255, 110, 64, 40));
+            badgeIcon->setText("\uE2C6"); // Archive
+            badgeIcon->setTextColor(nvgRGB(255, 110, 64));
+            std::filesystem::path ap(archPath);
+            titleText = ap.filename().generic_string();
+            subtitleText = innerPath.empty() ? "/" : ("/" + innerPath);
+        }
+    } else if (hasSelection && selectedPaths_.size() > 1) {
         iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
         badgeIcon->setText("\uE834"); // Multiple select icon
         badgeIcon->setTextColor(nvgRGB(0, 224, 165));
@@ -1231,95 +1275,128 @@ void FileManagerView::showActionsMenu() {
         content->addView(row);
     };
 
-    // Install Game (if target is game package)
-    if (targetSingleItem && util::isGamePackage(targetSingleItem->path)) {
-        addOption("\uE0E0", nvgRGB(0, 224, 165), "app/file_manager/install_game_btn"_i18n, [this, item = *targetSingleItem]() {
-            showInstallDialog(item);
+    if (inArchive) {
+        // Option 1: Extract entire archive
+        addOption("\uE2C6", nvgRGB(255, 110, 64), "app/archive/extract_entire_archive"_i18n, [this, archPath]() {
+            util::FileItem archItem;
+            archItem.path = archPath;
+            std::filesystem::path ap(archPath);
+            archItem.name = ap.filename().generic_string();
+            archItem.isDir = false;
+            showArchiveDialog(archItem);
+        }, true);
+
+        // Option 2: Extract selected file
+        if (targetSingleItem && !targetSingleItem->isDir) {
+            addOption("\uE2C6", nvgRGB(0, 224, 165), "app/archive/extract_this_file"_i18n, [this, archPath, item = *targetSingleItem]() {
+                std::filesystem::path ap(archPath);
+                std::string baseDir = ap.parent_path().generic_string();
+                std::string relInner = item.path.substr(archPath.size());
+                while (!relInner.empty() && (relInner.front() == '/' || relInner.front() == '\\')) relInner.erase(relInner.begin());
+                std::string err;
+                bool ok = util::extractSingleFileFromArchive(archPath, relInner, baseDir, nullptr, nullptr, err);
+                if (ok) {
+                    brls::Application::notify("app/file_manager/archive_complete"_i18n);
+                } else {
+                    brls::Application::notify(err.empty() ? "app/file_manager/extract_error"_i18n : err);
+                }
+            }, true);
+        }
+    } else {
+        // Install Game (if target is game package)
+        if (targetSingleItem && util::isGamePackage(targetSingleItem->path)) {
+            addOption("\uE0E0", nvgRGB(0, 224, 165), "app/file_manager/install_game_btn"_i18n, [this, item = *targetSingleItem]() {
+                showInstallDialog(item);
+            }, true);
+        }
+
+        // Browse / Extract archive (if target is archive)
+        if (targetSingleItem && util::isArchiveFile(targetSingleItem->path)) {
+            addOption("\uE2C7", nvgRGB(0, 224, 165), "app/archive/browse_archive"_i18n, [this, item = *targetSingleItem]() {
+                navigateTo(item.path);
+            });
+
+            addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_archive_btn"_i18n, [this, item = *targetSingleItem]() {
+                showArchiveDialog(item);
+            }, true);
+        }
+
+        // View as text (if single file)
+        if (targetSingleItem && !targetSingleItem->isDir) {
+            addOption("\uE873", nvgRGB(0, 224, 165), "app/file_manager/view_as_text_btn"_i18n, [this, item = *targetSingleItem]() {
+                openTextViewer(item.path, item.name);
+            }, true);
+        }
+
+        // 2. Paste (if clipboard active)
+        if (hasClipboard) {
+            std::string pasteText = (clip.op == util::ClipboardOp::Cut ?
+                                    brls::getStr("app/file_manager/paste_cut", std::to_string(clip.paths.size())) :
+                                    brls::getStr("app/file_manager/paste_copy", std::to_string(clip.paths.size())));
+            addOption("\uE14F", nvgRGB(0, 224, 165), pasteText, [this]() {
+                pasteClipboard();
+            });
+        }
+
+        // 3. Copy
+        if (hasSelection) {
+            addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/copy_count", std::to_string(selectedPaths_.size())), [this]() {
+                auto& c = util::getClipboard();
+                c.op = util::ClipboardOp::Copy;
+                c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
+                brls::Application::notify(brls::getStr("app/file_manager/copied_count", std::to_string(c.paths.size())));
+            });
+        } else if (targetSingleItem) {
+            addOption("\uE14D", nvgRGB(64, 196, 255), "app/file_manager/copy_single"_i18n, [this, item = *targetSingleItem]() {
+                auto& c = util::getClipboard();
+                c.op = util::ClipboardOp::Copy;
+                c.paths = { item.path };
+                brls::Application::notify("app/file_manager/copied_single"_i18n + item.name);
+            });
+        }
+
+        // 4. Cut
+        if (hasSelection) {
+            addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/cut_count", std::to_string(selectedPaths_.size())), [this]() {
+                auto& c = util::getClipboard();
+                c.op = util::ClipboardOp::Cut;
+                c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
+                brls::Application::notify(brls::getStr("app/file_manager/cut_done_count", std::to_string(c.paths.size())));
+            });
+        } else if (targetSingleItem) {
+            addOption("\uE14E", nvgRGB(255, 179, 0), "app/file_manager/cut_single"_i18n, [this, item = *targetSingleItem]() {
+                auto& c = util::getClipboard();
+                c.op = util::ClipboardOp::Cut;
+                c.paths = { item.path };
+                brls::Application::notify("app/file_manager/cut_done_single"_i18n + item.name);
+            });
+        }
+
+        // 5. Rename
+        if (targetSingleItem) {
+            addOption("\uE254", nvgRGB(179, 136, 255), "app/file_manager/rename"_i18n, [this, item = *targetSingleItem]() {
+                showRenameDialog(item);
+            }, true);
+        }
+
+        // 6. Delete
+        if (hasSelection) {
+            addOption("\uE872", nvgRGB(255, 82, 82), brls::getStr("app/file_manager/delete_count", std::to_string(selectedPaths_.size())), [this]() {
+                showDeleteConfirmDialog();
+            }, true);
+        } else if (targetSingleItem) {
+            addOption("\uE872", nvgRGB(255, 82, 82), "app/file_manager/delete_single"_i18n, [this, item = *targetSingleItem]() {
+                selectedPaths_.clear();
+                selectedPaths_.insert(item.path);
+                showDeleteConfirmDialog();
+            }, true);
+        }
+
+        // 7. New Folder (always available)
+        addOption("\uE2CC", nvgRGB(38, 198, 218), "app/file_manager/new_folder"_i18n, [this]() {
+            showNewFolderDialog();
         }, true);
     }
-
-    // 1. Unarchive (if target is archive)
-    if (targetSingleItem && util::isArchiveFile(targetSingleItem->path)) {
-        addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_archive_btn"_i18n, [this, item = *targetSingleItem]() {
-            showArchiveDialog(item);
-        }, true);
-    }
-
-    // View as text (if single file)
-    if (targetSingleItem && !targetSingleItem->isDir) {
-        addOption("\uE873", nvgRGB(0, 224, 165), "app/file_manager/view_as_text_btn"_i18n, [this, item = *targetSingleItem]() {
-            openTextViewer(item.path, item.name);
-        }, true);
-    }
-
-    // 2. Paste (if clipboard active)
-    if (hasClipboard) {
-        std::string pasteText = (clip.op == util::ClipboardOp::Cut ?
-                                brls::getStr("app/file_manager/paste_cut", std::to_string(clip.paths.size())) :
-                                brls::getStr("app/file_manager/paste_copy", std::to_string(clip.paths.size())));
-        addOption("\uE14F", nvgRGB(0, 224, 165), pasteText, [this]() {
-            pasteClipboard();
-        });
-    }
-
-    // 3. Copy
-    if (hasSelection) {
-        addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/copy_count", std::to_string(selectedPaths_.size())), [this]() {
-            auto& c = util::getClipboard();
-            c.op = util::ClipboardOp::Copy;
-            c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
-            brls::Application::notify(brls::getStr("app/file_manager/copied_count", std::to_string(c.paths.size())));
-        });
-    } else if (targetSingleItem) {
-        addOption("\uE14D", nvgRGB(64, 196, 255), "app/file_manager/copy_single"_i18n, [this, item = *targetSingleItem]() {
-            auto& c = util::getClipboard();
-            c.op = util::ClipboardOp::Copy;
-            c.paths = { item.path };
-            brls::Application::notify("app/file_manager/copied_single"_i18n + item.name);
-        });
-    }
-
-    // 4. Cut
-    if (hasSelection) {
-        addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/cut_count", std::to_string(selectedPaths_.size())), [this]() {
-            auto& c = util::getClipboard();
-            c.op = util::ClipboardOp::Cut;
-            c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
-            brls::Application::notify(brls::getStr("app/file_manager/cut_done_count", std::to_string(c.paths.size())));
-        });
-    } else if (targetSingleItem) {
-        addOption("\uE14E", nvgRGB(255, 179, 0), "app/file_manager/cut_single"_i18n, [this, item = *targetSingleItem]() {
-            auto& c = util::getClipboard();
-            c.op = util::ClipboardOp::Cut;
-            c.paths = { item.path };
-            brls::Application::notify("app/file_manager/cut_done_single"_i18n + item.name);
-        });
-    }
-
-    // 5. Rename
-    if (targetSingleItem) {
-        addOption("\uE254", nvgRGB(179, 136, 255), "app/file_manager/rename"_i18n, [this, item = *targetSingleItem]() {
-            showRenameDialog(item);
-        }, true);
-    }
-
-    // 6. Delete
-    if (hasSelection) {
-        addOption("\uE872", nvgRGB(255, 82, 82), brls::getStr("app/file_manager/delete_count", std::to_string(selectedPaths_.size())), [this]() {
-            showDeleteConfirmDialog();
-        }, true);
-    } else if (targetSingleItem) {
-        addOption("\uE872", nvgRGB(255, 82, 82), "app/file_manager/delete_single"_i18n, [this, item = *targetSingleItem]() {
-            selectedPaths_.clear();
-            selectedPaths_.insert(item.path);
-            showDeleteConfirmDialog();
-        }, true);
-    }
-
-    // 7. New Folder (always available)
-    addOption("\uE2CC", nvgRGB(38, 198, 218), "app/file_manager/new_folder"_i18n, [this]() {
-        showNewFolderDialog();
-    }, true);
 
     // 8. Selection helpers
     if (hasSelection) {
@@ -1469,17 +1546,24 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
     // Click action (A button)
     cell->registerClickAction([parent = parent_, item](brls::View* view) {
         util::logLine("FileManagerView: cell clicked on " + item.name);
+        std::string archPath, innerPath;
+        bool inArchive = util::parseArchiveVirtualPath(parent->currentDir_, archPath, innerPath);
+
         if (item.isDir) {
             brls::sync([parent, target = item.path]() {
                 parent->navigateTo(target);
             });
+        } else if (util::isArchiveFile(item.path) && !inArchive) {
+            brls::sync([parent, target = item.path]() {
+                parent->navigateTo(target);
+            });
+        } else if (inArchive) {
+            brls::sync([parent]() {
+                parent->showActionsMenu();
+            });
         } else if (util::isGamePackage(item.path)) {
             brls::sync([parent, item]() {
                 parent->showInstallDialog(item);
-            });
-        } else if (util::isArchiveFile(item.path)) {
-            brls::sync([parent, item]() {
-                parent->showArchiveDialog(item);
             });
         } else if (isTextFile(item.path)) {
             brls::sync([parent, item]() {

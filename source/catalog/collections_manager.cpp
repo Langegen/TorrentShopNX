@@ -134,7 +134,8 @@ bool CollectionsManager::loadCollection(const CollectionInfo& info,
     std::string body;
     from_cache = true;
 
-    if (!readWholeFileLocal(cache_path, body) || !isCacheFresh(cache_path)) {
+    const int maxAge = (info.id == "new_release") ? (4 * 3600) : 86400;
+    if (!readWholeFileLocal(cache_path, body) || !isCacheFresh(cache_path, maxAge)) {
         util::logLine("collections: fetching " + info.id + " from " + url);
         net::HttpClient http;
         http.setTimeout(30);

@@ -57,6 +57,8 @@ public:
     // Resolve relative path according to platform (Switch vs PC)
     static std::string resolvePlatformPath(const std::string& path);
 
+    void healInstalledEmulators();
+
 private:
     RetroEmulatorManager();
     void initPackages();

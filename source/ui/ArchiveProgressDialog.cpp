@@ -86,24 +86,25 @@ ArchiveProgressDialog::ArchiveProgressDialog(
     std::string cancelText = brls::getStr("app/common/cancel");
     if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
-    this->addButton(cancelText, [this]() {
-        if (cancelToken_) {
-            cancelToken_->store(true);
-        }
-        if (currentFileLabel_) {
-            currentFileLabel_->setText("app/archive/cancelling"_i18n);
-        }
+    cancelButton_ = new brls::Button();
+    cancelButton_->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
+    cancelButton_->setText(cancelText);
+    cancelButton_->setHeight(40.0f);
+    cancelButton_->setMarginTop(14.0f);
+    cancelButton_->setCornerRadius(8.0f);
+    cancelButton_->setHighlightCornerRadius(8.0f);
+    cancelButton_->setFocusable(true);
+    cancelButton_->registerClickAction([this](brls::View* view) {
+        requestCancel();
+        return true;
     });
+    contentBox_->addView(cancelButton_);
 
-    // Handle B button properly to cancel extraction gracefully
-    this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
-        if (cancelToken_) {
-            cancelToken_->store(true);
-        }
-        if (currentFileLabel_) {
-            currentFileLabel_->setText("app/archive/cancelling"_i18n);
-        }
-        this->dismiss();
+    this->setCancelable(false);
+
+    // Handle B button: request cancellation with confirmation
+    this->registerAction("hints/cancel"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        requestCancel();
         return true;
     }, false, false, brls::SOUND_BACK);
 
@@ -137,6 +138,37 @@ ArchiveProgressDialog::~ArchiveProgressDialog() {
     }
 #endif
     util::logLine("ArchiveProgressDialog: destructor completed");
+}
+
+void ArchiveProgressDialog::requestCancel() {
+    if (!aliveToken_ || !aliveToken_->load() || closed_.load()) return;
+    if (cancelToken_ && cancelToken_->load()) return;
+
+    std::string confirmMsg = brls::getStr("app/archive/confirm_cancel_msg");
+    if (confirmMsg.empty() || confirmMsg == "app/archive/confirm_cancel_msg") {
+        confirmMsg = "Are you sure you want to cancel extraction?";
+    }
+
+    std::string noText = brls::getStr("app/common/no");
+    if (noText.empty() || noText == "app/common/no") noText = "No";
+
+    std::string yesText = brls::getStr("app/common/yes");
+    if (yesText.empty() || yesText == "app/common/yes") yesText = "Yes";
+
+    auto* confirmDlg = new brls::Dialog(confirmMsg);
+    confirmDlg->setCancelable(false);
+    confirmDlg->addButton(noText, []() {
+        // Dismiss confirmation, continue extraction
+    });
+    confirmDlg->addButton(yesText, [this]() {
+        if (cancelToken_) {
+            cancelToken_->store(true);
+        }
+        if (currentFileLabel_) {
+            currentFileLabel_->setText("app/archive/cancelling"_i18n);
+        }
+    });
+    confirmDlg->open();
 }
 
 void ArchiveProgressDialog::updateUi(const util::ArchiveProgress& progress) {

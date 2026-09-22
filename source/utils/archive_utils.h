@@ -5,6 +5,7 @@
 #include <memory>
 #include <atomic>
 #include <cstdint>
+#include "file_ops.h"
 
 namespace util {
 
@@ -21,12 +22,40 @@ struct ArchiveProgress {
 // Returns true if filename has an archive extension (.zip, .rar, .7z, .tar, .gz, .bz2, .xz)
 bool isArchiveFile(const std::string& path);
 
+// Parses a path that may point to an archive or inside an archive.
+// Returns true if fullPath is an archive or an inner path inside an archive.
+// If true, populates outArchivePath (e.g. "sdmc:/games/pack.zip") and outInnerPath (e.g. "roms/sub" or "").
+bool parseArchiveVirtualPath(
+    const std::string& fullPath,
+    std::string& outArchivePath,
+    std::string& outInnerPath
+);
+
+// Lists directory contents inside an archive file at innerPath ("" for root of archive).
+// Populates outItems with FileItems (isDir=true for subdirectories, size=uncompressed size).
+bool listArchiveFolder(
+    const std::string& archivePath,
+    const std::string& innerPath,
+    std::vector<FileItem>& outItems,
+    std::string& outError
+);
+
 // Extracts the given archive to destination directory.
 // Runs synchronously — caller should invoke via background thread (e.g. brls::async).
 // Periodic progress callback is fired during unpacking.
 // Extraction can be cancelled via cancelToken.
 bool extractArchive(
     const std::string& archivePath,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError
+);
+
+// Extracts a single file entry from an archive to destination directory.
+bool extractSingleFileFromArchive(
+    const std::string& archivePath,
+    const std::string& innerFilePath,
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,

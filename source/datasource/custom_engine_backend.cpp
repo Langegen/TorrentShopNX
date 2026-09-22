@@ -283,8 +283,6 @@ void CustomEngineBackend::close() {
     health_.reset();
     if (!info_hash_str_.empty()) {
         tsnx_engine_cancel_read(engine_, info_hash_str_.c_str());
-        tsnx_engine_remove_torrent(engine_, info_hash_str_.c_str());
-        CustomEngineClient::instance().unmarkInUse(info_hash_str_);
     }
     opened_ = false;
     state_ = StreamState::Idle;

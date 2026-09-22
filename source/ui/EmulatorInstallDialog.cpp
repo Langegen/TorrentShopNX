@@ -3,6 +3,7 @@
 #include "../net/http_client.h"
 #include "../utils/archive_utils.h"
 #include "../utils/app_paths.h"
+#include "../utils/file_ops.h"
 #include "../utils/log.h"
 #include <borealis.hpp>
 #include <filesystem>
@@ -204,15 +205,69 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
                 return;
             }
 
-            // Post-extraction: ensure targetFile is present at pkg.install_path
+            // Post-extraction: ensure targetFile and companion folders (assets, licenses, etc.) are at destDir root
             std::string targetFile = catalog::RetroEmulatorManager::resolvePlatformPath(pkg.install_path);
-            if (!std::filesystem::exists(targetFile)) {
-                std::string targetFilename = std::filesystem::path(targetFile).filename().string();
-                std::error_code ecIter;
-                std::filesystem::path foundPath;
+            std::filesystem::path targetP(targetFile);
+            std::filesystem::path destP(destDir);
+            std::string targetFilename = targetP.filename().string();
 
-                // 1. Search for matching filename (case-insensitive) in destDir
+            std::error_code ecIter;
+            std::filesystem::path foundNroPath;
+
+            // 1. Search for matching filename (case-insensitive) in destDir
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(destDir, ecIter)) {
+                if (entry.is_regular_file()) {
+                    std::string fn = entry.path().filename().string();
+#ifdef _WIN32
+                    if (_stricmp(fn.c_str(), targetFilename.c_str()) == 0) {
+#else
+                    if (strcasecmp(fn.c_str(), targetFilename.c_str()) == 0) {
+#endif
+                        foundNroPath = entry.path();
+                        break;
+                    }
+                }
+            }
+
+            // 2. Fallback: search for any .nro file in destDir
+            if (foundNroPath.empty()) {
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(destDir, ecIter)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".nro") {
+                        foundNroPath = entry.path();
+                        break;
+                    }
+                }
+            }
+
+            // 3. If found inside a nested subfolder of destDir, move entire contents of that folder up to destDir
+            if (!foundNroPath.empty()) {
+                std::filesystem::path nroDir = foundNroPath.parent_path();
+                if (nroDir != destP) {
+                    std::string moveErr;
+                    util::logLine("EmulatorInstall: moving nested directory contents from " + nroDir.string() + " to " + destDir);
+                    if (util::movePath(nroDir.string(), destDir, moveErr)) {
+                        util::logLine("EmulatorInstall: successfully merged nested folder into " + destDir);
+                    } else {
+                        util::logLine("EmulatorInstall: warning moving nested folder: " + moveErr);
+                    }
+
+                    // Clean up intermediate directories up to destDir
+                    std::error_code ecRm;
+                    std::filesystem::path curr = nroDir;
+                    while (curr.has_parent_path() && curr.parent_path() != destP && curr.parent_path() != curr) {
+                        curr = curr.parent_path();
+                    }
+                    if (curr != destP && std::filesystem::exists(curr, ecRm)) {
+                        std::filesystem::remove_all(curr, ecRm);
+                    }
+                }
+            }
+
+            // 4. Ensure targetFile exists with the exact canonical name in destDir
+            if (!std::filesystem::exists(targetFile)) {
+                std::error_code ecDir;
+                // Try case-insensitive match in destDir root
+                for (const auto& entry : std::filesystem::directory_iterator(destDir, ecDir)) {
                     if (entry.is_regular_file()) {
                         std::string fn = entry.path().filename().string();
 #ifdef _WIN32
@@ -220,34 +275,30 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
 #else
                         if (strcasecmp(fn.c_str(), targetFilename.c_str()) == 0) {
 #endif
-                            foundPath = entry.path();
+                            std::error_code ecRen;
+                            std::filesystem::rename(entry.path(), targetFile, ecRen);
+                            util::logLine("EmulatorInstall: normalized executable name from " + entry.path().string() + " to " + targetFile);
                             break;
                         }
                     }
-                }
-
-                // 2. Fallback: search for any .nro file in destDir
-                if (foundPath.empty()) {
-                    for (const auto& entry : std::filesystem::recursive_directory_iterator(destDir, ecIter)) {
-                        if (entry.is_regular_file() && entry.path().extension() == ".nro") {
-                            foundPath = entry.path();
-                            break;
-                        }
-                    }
-                }
-
-                // If found at an alternative/nested path, relocate to targetFile
-                if (!foundPath.empty() && foundPath != targetFile) {
-                    tsnx_ensure_parent_dirs(targetFile.c_str());
-                    std::error_code ecMove;
-                    std::filesystem::rename(foundPath, targetFile, ecMove);
-                    if (ecMove) {
-                        std::filesystem::copy_file(foundPath, targetFile, std::filesystem::copy_options::overwrite_existing, ecMove);
-                        std::filesystem::remove(foundPath, ecMove);
-                    }
-                    util::logLine("EmulatorInstall: relocated extracted file from " + foundPath.string() + " to " + targetFile);
                 }
             }
+
+            // Fallback: if targetFile still doesn't exist, rename any .nro at destDir root
+            if (!std::filesystem::exists(targetFile)) {
+                std::error_code ecDir;
+                for (const auto& entry : std::filesystem::directory_iterator(destDir, ecDir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".nro") {
+                        std::error_code ecRen;
+                        std::filesystem::rename(entry.path(), targetFile, ecRen);
+                        util::logLine("EmulatorInstall: fallback renamed .nro to " + targetFile);
+                        break;
+                    }
+                }
+            }
+
+            // 5. Run auto-healing for any known packages (assets relocation, etc.)
+            catalog::RetroEmulatorManager::instance().healInstalledEmulators();
         } else {
             // Standalone .nro
             brls::sync([statusLabel]() {

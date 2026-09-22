@@ -174,6 +174,7 @@
         "elapsed": "Decorrido: {0}",
         "saved_to": "Salvo em: {0}",
         "installed": "Instalado no console",
+        "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "Erro desconhecido",
         "action_delete": "Excluir download",
         "action_open_folder": "Abrir pasta",
@@ -360,6 +361,7 @@
         "titledb_failed": "Falha ao carregar a TitleDB",
         "scanning_games": "Analisando jogos do console...",
         "installed": "Instalado",
+        "release_completed": "All files in release downloaded: {0}",
         "available": "Disponível",
         "uninstall_confirm": "Desinstalar \"{0}\"?\nO jogo, todas as atualizações e DLCs serão removidos.",
         "uninstall_success": "\"{0}\" desinstalado",
@@ -625,7 +627,14 @@
         "cache_games_count": "Cache: {0} jogos (A - atualizar)",
         "cache_press_a": "Pressione A para atualizar",
         "retro_update_catalogs_cached": "Cache: {0} jogos (A - atualizar)",
-        "retro_update_catalogs_empty": "Pressione A para atualizar"
+        "retro_update_catalogs_empty": "Pressione A para atualizar",
+        "update_catalog_btn": "Atualizar catálogo de jogos",
+        "update_catalog_dialog_msg": "Selecione o modo de atualização:",
+        "update_catalog_fast_diff": "Atualização rápida (delta)",
+        "update_catalog_full": "Recarregar banco completo",
+        "update_catalog_downloading_diff": "Baixando alterações...",
+        "update_catalog_applying_diff": "Aplicando alterações...",
+        "update_catalog_diff_success": "Catálogo atualizado: +{0} novos, {1} atualizados"
     },
     "applet": {
         "title": "Modo Applet detectado",
@@ -914,7 +923,12 @@
         "exception_prefix": "Exceção na extração: ",
         "unknown_error": "Erro desconhecido na extração",
         "done_100": "100.0% · Concluído",
-        "cancelled_by_user": "Extração cancelada pelo usuário"
+        "cancelled_by_user": "Extração cancelada pelo usuário",
+        "confirm_cancel_msg": "Tem certeza que deseja cancelar a extração?",
+        "folder_type": "Pasta do arquivo",
+        "browse_archive": "Explorar arquivo",
+        "extract_this_file": "Extrair este arquivo",
+        "extract_entire_archive": "Extrair arquivo completo"
     },
     "text_viewer": {
         "file_not_found": "Arquivo não encontrado: ",
