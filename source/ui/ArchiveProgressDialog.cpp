@@ -10,30 +10,15 @@ namespace ui {
 #if defined(__SWITCH__)
 void ArchiveProgressDialog::threadEntry(void* arg) {
     auto* self = static_cast<ArchiveProgressDialog*>(arg);
-    self->runExtraction();
+    if (self->mode_ == ArchiveOpMode::Create) {
+        self->runCreation();
+    } else {
+        self->runExtraction();
+    }
 }
 #endif
 
-ArchiveProgressDialog::ArchiveProgressDialog(
-    const std::string& archivePath,
-    const std::string& destDir,
-    std::function<void(bool, const std::string&)> onComplete
-) : ArchiveProgressDialog(new brls::Box(), archivePath, destDir, std::move(onComplete))
-{
-}
-
-ArchiveProgressDialog::ArchiveProgressDialog(
-    brls::Box* contentBox,
-    const std::string& archivePath,
-    const std::string& destDir,
-    std::function<void(bool, const std::string&)> onComplete
-) : brls::Dialog(contentBox),
-    archivePath_(archivePath),
-    destDir_(destDir),
-    onComplete_(std::move(onComplete)),
-    contentBox_(contentBox)
-{
-    util::logLine("ArchiveProgressDialog: constructor entered for " + archivePath_);
+void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std::string& subText) {
     cancelToken_ = std::make_shared<std::atomic<bool>>(false);
     aliveToken_ = std::make_shared<std::atomic<bool>>(true);
     lastUiUpdate_ = std::chrono::steady_clock::now();
@@ -43,18 +28,15 @@ ArchiveProgressDialog::ArchiveProgressDialog(
     contentBox_->setPadding(20.0f);
     contentBox_->setAlignItems(brls::AlignItems::STRETCH);
 
-    std::filesystem::path ap(archivePath_);
-    std::string fileName = ap.filename().generic_string();
-
     titleLabel_ = new brls::Label();
-    titleLabel_->setText(fileName);
+    titleLabel_->setText(titleText);
     titleLabel_->setFontSize(20);
     titleLabel_->setTextColor(nvgRGB(255, 255, 255));
     titleLabel_->setMarginBottom(10.0f);
     contentBox_->addView(titleLabel_);
 
     currentFileLabel_ = new brls::Label();
-    currentFileLabel_->setText("...");
+    currentFileLabel_->setText(subText);
     currentFileLabel_->setFontSize(14);
     currentFileLabel_->setTextColor(nvgRGB(180, 180, 190));
     currentFileLabel_->setMarginBottom(14.0f);
@@ -114,7 +96,63 @@ ArchiveProgressDialog::ArchiveProgressDialog(
         applet->setCornerRadius(14.0f);
         applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
     }
-    util::logLine("ArchiveProgressDialog: constructor completed");
+}
+
+ArchiveProgressDialog::ArchiveProgressDialog(
+    const std::string& archivePath,
+    const std::string& destDir,
+    std::function<void(bool, const std::string&)> onComplete
+) : ArchiveProgressDialog(new brls::Box(), archivePath, destDir, std::move(onComplete))
+{
+}
+
+ArchiveProgressDialog::ArchiveProgressDialog(
+    brls::Box* contentBox,
+    const std::string& archivePath,
+    const std::string& destDir,
+    std::function<void(bool, const std::string&)> onComplete
+) : brls::Dialog(contentBox),
+    mode_(ArchiveOpMode::Extract),
+    archivePath_(archivePath),
+    destDir_(destDir),
+    onComplete_(std::move(onComplete)),
+    contentBox_(contentBox)
+{
+    util::logLine("ArchiveProgressDialog: extract constructor entered for " + archivePath_);
+    std::filesystem::path ap(archivePath_);
+    std::string fileName = ap.filename().generic_string();
+    initDialogUi(fileName, "...");
+    util::logLine("ArchiveProgressDialog: extract constructor completed");
+}
+
+ArchiveProgressDialog::ArchiveProgressDialog(
+    const std::string& targetArchivePath,
+    const std::vector<std::string>& sourcePaths,
+    const std::string& baseDir,
+    std::function<void(bool, const std::string&)> onComplete
+) : ArchiveProgressDialog(new brls::Box(), targetArchivePath, sourcePaths, baseDir, std::move(onComplete))
+{
+}
+
+ArchiveProgressDialog::ArchiveProgressDialog(
+    brls::Box* contentBox,
+    const std::string& targetArchivePath,
+    const std::vector<std::string>& sourcePaths,
+    const std::string& baseDir,
+    std::function<void(bool, const std::string&)> onComplete
+) : brls::Dialog(contentBox),
+    mode_(ArchiveOpMode::Create),
+    archivePath_(targetArchivePath),
+    sourcePaths_(sourcePaths),
+    baseDir_(baseDir),
+    onComplete_(std::move(onComplete)),
+    contentBox_(contentBox)
+{
+    util::logLine("ArchiveProgressDialog: create constructor entered for " + targetArchivePath);
+    std::filesystem::path ap(targetArchivePath);
+    std::string fileName = ap.filename().generic_string();
+    initDialogUi(fileName, "app/archive/preparing"_i18n);
+    util::logLine("ArchiveProgressDialog: create constructor completed");
 }
 
 ArchiveProgressDialog::~ArchiveProgressDialog() {
@@ -289,6 +327,111 @@ void ArchiveProgressDialog::runExtraction() {
     }
 
     util::logLine("ArchiveProgressDialog: extraction finished, ok=" + std::to_string(ok) + " err=" + err);
+
+    if (ok) {
+        brls::sync([this, alive]() {
+            if (alive && alive->load() && !closed_.load()) {
+                if (progressFill_) {
+                    float maxW = progressBg_ ? progressBg_->getWidth() : 480.0f;
+                    if (maxW <= 0.0f) maxW = 480.0f;
+                    progressFill_->setWidth(maxW);
+                }
+                if (statsLabel_) {
+                    statsLabel_->setText("app/archive/done_100"_i18n);
+                }
+            }
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    brls::sync([this, alive, ok, err, onComplete]() {
+        if (!alive || !alive->load()) {
+            if (onComplete) {
+                onComplete(ok, err.empty() ? "app/archive/cancelled_by_user"_i18n : err);
+            }
+            return;
+        }
+        if (!closed_.exchange(true)) {
+            this->close([onComplete, ok, err]() {
+                if (onComplete) {
+                    onComplete(ok, err);
+                }
+            });
+        }
+    });
+}
+
+void ArchiveProgressDialog::startCreation() {
+    mode_ = ArchiveOpMode::Create;
+    util::logLine("ArchiveProgressDialog: startCreation opening dialog for " + archivePath_);
+    this->open();
+    util::logLine("ArchiveProgressDialog: dialog opened, creating creation thread");
+
+#if defined(__SWITCH__)
+    // 512KB stack size (0x80000), default core (-2), Priority 0x2C
+    Result rc = threadCreate(&thread_, &ArchiveProgressDialog::threadEntry, this, nullptr, 0x80000, 0x2C, -2);
+    if (R_SUCCEEDED(rc)) {
+        threadStarted_ = true;
+        rc = threadStart(&thread_);
+        if (R_FAILED(rc)) {
+            util::logLine("ArchiveProgressDialog: threadStart failed, rc=" + std::to_string(rc));
+            threadClose(&thread_);
+            threadStarted_ = false;
+            if (onComplete_) onComplete_(false, "Failed to start creation thread");
+            if (!closed_.exchange(true)) this->close();
+        }
+    } else {
+        util::logLine("ArchiveProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
+        if (onComplete_) onComplete_(false, "Failed to create creation thread");
+        if (!closed_.exchange(true)) this->close();
+    }
+#else
+    workerThread_ = std::thread([this]() { runCreation(); });
+#endif
+}
+
+void ArchiveProgressDialog::runCreation() {
+    auto alive = aliveToken_;
+    auto cancel = cancelToken_;
+    auto onComplete = onComplete_;
+    std::string archivePath = archivePath_;
+    std::vector<std::string> sourcePaths = sourcePaths_;
+    std::string baseDir = baseDir_;
+
+    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+    std::string err;
+    bool ok = false;
+    try {
+        ok = util::createZipArchive(
+            archivePath,
+            sourcePaths,
+            baseDir,
+            [this, alive, cancel, lastUpdate](const util::ArchiveProgress& prog) {
+                if (!alive || !alive->load() || (cancel && cancel->load()) || closed_.load()) return;
+                auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count() > 80 || prog.percentage >= 99.9f) {
+                    *lastUpdate = now;
+                    brls::sync([this, alive, prog]() {
+                        if (alive && alive->load() && !closed_.load()) {
+                            updateUi(prog);
+                        }
+                    });
+                }
+            },
+            cancel,
+            err
+        );
+    } catch (const std::exception& e) {
+        err = "app/archive/exception_prefix"_i18n + e.what();
+        util::logLine("ArchiveProgressDialog: exception in createZipArchive: " + err);
+        ok = false;
+    } catch (...) {
+        err = "app/archive/unknown_error"_i18n;
+        util::logLine("ArchiveProgressDialog: unknown exception in createZipArchive");
+        ok = false;
+    }
+
+    util::logLine("ArchiveProgressDialog: archiving finished, ok=" + std::to_string(ok) + " err=" + err);
 
     if (ok) {
         brls::sync([this, alive]() {

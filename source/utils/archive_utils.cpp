@@ -6,6 +6,8 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <filesystem>
+#include <fstream>
+#include <chrono>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -504,6 +506,266 @@ bool extractSingleFileFromArchive(
 ) {
     ScopedCpuBoost boostGuard;
     return extractLibarchiveInternal(archivePath, destinationDir, innerFilePath, progressCb, cancelToken, outError);
+}
+
+bool createZipArchive(
+    const std::string& archivePath,
+    const std::vector<std::string>& sourcePaths,
+    const std::string& baseDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError
+) {
+    ScopedCpuBoost boostGuard;
+    if (sourcePaths.empty()) {
+        outError = "No source files specified";
+        return false;
+    }
+
+    util::logLine("archive_utils: createZipArchive start: " + archivePath + ", sources count=" + std::to_string(sourcePaths.size()));
+
+    struct ItemToArchive {
+        std::string fullPath;
+        std::string relPath;
+        bool isDir = false;
+        uint64_t size = 0;
+        time_t mtime = 0;
+    };
+
+    std::vector<ItemToArchive> items;
+    uint64_t totalBytes = 0;
+    std::error_code ec;
+
+    std::filesystem::path base(baseDir);
+
+    auto collectItem = [&](const std::filesystem::path& p) {
+        std::string rel;
+        try {
+            if (!baseDir.empty() && std::filesystem::exists(base, ec)) {
+                rel = std::filesystem::relative(p, base, ec).generic_string();
+            }
+        } catch (...) {
+            rel = "";
+        }
+        if (rel.empty() || rel == ".") {
+            rel = p.filename().generic_string();
+        }
+
+        // Avoid archiving the target archive itself or its temporary file
+        std::filesystem::path tmpTargetPath(archivePath + ".tsnx_tmp");
+        std::filesystem::path realTargetPath(archivePath);
+        if (std::filesystem::equivalent(p, tmpTargetPath, ec) || std::filesystem::equivalent(p, realTargetPath, ec)) {
+            return;
+        }
+
+        bool isDir = std::filesystem::is_directory(p, ec);
+        uint64_t sz = 0;
+        if (!isDir && std::filesystem::is_regular_file(p, ec)) {
+            sz = std::filesystem::file_size(p, ec);
+        }
+
+        time_t mt = 0;
+        auto ftime = std::filesystem::last_write_time(p, ec);
+        if (!ec) {
+            auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now()
+            );
+            mt = std::chrono::system_clock::to_time_t(sctp);
+        } else {
+            mt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        }
+
+        ItemToArchive item;
+        item.fullPath = p.generic_string();
+        item.relPath = rel;
+        item.isDir = isDir;
+        item.size = sz;
+        item.mtime = mt;
+        items.push_back(item);
+        if (!isDir) {
+            totalBytes += sz;
+        }
+    };
+
+    for (const auto& src : sourcePaths) {
+        std::filesystem::path srcP(src);
+        if (!std::filesystem::exists(srcP, ec)) continue;
+
+        if (std::filesystem::is_directory(srcP, ec)) {
+            collectItem(srcP);
+            try {
+                for (const auto& entry : std::filesystem::recursive_directory_iterator(srcP, std::filesystem::directory_options::skip_permission_denied, ec)) {
+                    collectItem(entry.path());
+                }
+            } catch (...) {}
+        } else {
+            collectItem(srcP);
+        }
+    }
+
+    if (items.empty()) {
+        outError = "No valid files found to archive";
+        util::logLine("archive_utils: createZipArchive failed: " + outError);
+        return false;
+    }
+
+    try {
+        std::filesystem::path outP(archivePath);
+        if (outP.has_parent_path()) {
+            safeCreateDirectories(outP.parent_path().generic_string());
+        }
+    } catch (...) {}
+
+    std::string tmpArchivePath = archivePath + ".tsnx_tmp";
+    std::filesystem::remove(tmpArchivePath, ec);
+
+    struct archive* a = archive_write_new();
+    if (!a) {
+        outError = "Failed to allocate libarchive writer";
+        util::logLine("archive_utils: " + outError);
+        return false;
+    }
+
+    archive_write_set_format_zip(a);
+    archive_write_zip_set_compression_deflate(a);
+
+    int r = archive_write_open_filename(a, tmpArchivePath.c_str());
+    if (r != ARCHIVE_OK) {
+        const char* err = archive_error_string(a);
+        outError = err ? err : "Failed to open output archive file";
+        util::logLine("archive_utils: failed to open output archive: " + outError);
+        archive_write_free(a);
+        return false;
+    }
+
+    ArchiveProgress progress;
+    progress.totalEntries = items.size();
+    progress.totalUncompressedSize = totalBytes;
+    progress.entriesProcessed = 0;
+    progress.bytesExtracted = 0;
+    progress.percentage = 0.0f;
+
+    std::vector<char> buffer(128 * 1024);
+    bool success = true;
+
+    for (const auto& it : items) {
+        if (cancelToken && cancelToken->load()) {
+            util::logLine("archive_utils: createZipArchive cancelled by user");
+            outError = "Cancelled";
+            success = false;
+            break;
+        }
+
+        progress.currentFileName = it.relPath;
+        if (progressCb) {
+            progressCb(progress);
+        }
+
+        struct archive_entry* entry = archive_entry_new();
+        if (!entry) {
+            outError = "Failed to create archive entry";
+            success = false;
+            break;
+        }
+
+        archive_entry_set_pathname(entry, it.relPath.c_str());
+        if (it.mtime > 0) {
+            archive_entry_set_mtime(entry, it.mtime, 0);
+        }
+
+        if (it.isDir) {
+            archive_entry_set_filetype(entry, AE_IFDIR);
+            archive_entry_set_perm(entry, 0755);
+            archive_entry_set_size(entry, 0);
+            int hr = archive_write_header(a, entry);
+            archive_entry_free(entry);
+            if (hr < ARCHIVE_OK) {
+                const char* err = archive_error_string(a);
+                outError = err ? err : "Failed to write directory entry header";
+                success = false;
+                break;
+            }
+            archive_write_finish_entry(a);
+            progress.entriesProcessed++;
+        } else {
+            archive_entry_set_filetype(entry, AE_IFREG);
+            archive_entry_set_perm(entry, 0644);
+            archive_entry_set_size(entry, static_cast<la_int64_t>(it.size));
+            int hr = archive_write_header(a, entry);
+            archive_entry_free(entry);
+            if (hr < ARCHIVE_OK) {
+                const char* err = archive_error_string(a);
+                outError = err ? err : "Failed to write file entry header";
+                success = false;
+                break;
+            }
+
+            std::ifstream file(it.fullPath, std::ios::binary);
+            if (!file.is_open()) {
+                util::logLine("archive_utils: warning: could not open file " + it.fullPath);
+            } else {
+                while (file) {
+                    if (cancelToken && cancelToken->load()) {
+                        outError = "Cancelled";
+                        success = false;
+                        break;
+                    }
+                    file.read(buffer.data(), buffer.size());
+                    std::streamsize count = file.gcount();
+                    if (count > 0) {
+                        la_ssize_t written = archive_write_data(a, buffer.data(), static_cast<size_t>(count));
+                        if (written < 0) {
+                            const char* err = archive_error_string(a);
+                            outError = err ? err : "Error writing archive data";
+                            success = false;
+                            break;
+                        }
+                        progress.bytesExtracted += static_cast<uint64_t>(count);
+                        if (totalBytes > 0) {
+                            float pct = (static_cast<float>(progress.bytesExtracted) / static_cast<float>(totalBytes)) * 100.0f;
+                            if (!std::isnan(pct) && !std::isinf(pct)) {
+                                progress.percentage = std::clamp(pct, 0.0f, 99.9f);
+                            }
+                        }
+                        if (progressCb) {
+                            progressCb(progress);
+                        }
+                    }
+                }
+            }
+
+            if (!success) {
+                break;
+            }
+
+            archive_write_finish_entry(a);
+            progress.entriesProcessed++;
+        }
+    }
+
+    archive_write_close(a);
+    archive_write_free(a);
+
+    if (!success || (cancelToken && cancelToken->load())) {
+        std::filesystem::remove(tmpArchivePath, ec);
+        return false;
+    }
+
+    std::string moveErr;
+    std::filesystem::remove(archivePath, ec);
+    if (!util::movePath(tmpArchivePath, archivePath, moveErr)) {
+        outError = "Failed to finalize archive: " + moveErr;
+        std::filesystem::remove(tmpArchivePath, ec);
+        return false;
+    }
+
+    progress.percentage = 100.0f;
+    if (progressCb) {
+        progressCb(progress);
+    }
+
+    util::logLine("archive_utils: createZipArchive completed successfully: " + archivePath);
+    return true;
 }
 
 } // namespace util

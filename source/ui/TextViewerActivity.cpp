@@ -135,7 +135,14 @@ brls::View* TextViewerActivity::createContentView() {
     closeBtn->setPadding(6.0f, 14.0f, 6.0f, 14.0f);
     closeBtn->setCornerRadius(8.0f);
     closeBtn->setBackgroundColor(nvgRGBA(255, 255, 255, 20));
-    closeBtn->setFocusable(true);
+    closeBtn->setFocusable(false);
+
+    auto* closeIcon = new brls::Label();
+    closeIcon->setText("\uE5CD"); // Material close icon
+    closeIcon->setFontSize(18.0f);
+    closeIcon->setTextColor(nvgRGB(220, 225, 235));
+    closeIcon->setMarginRight(6.0f);
+    closeBtn->addView(closeIcon);
 
     auto* closeLbl = new brls::Label();
     closeLbl->setText("app/text_viewer/close_btn"_i18n);
@@ -156,6 +163,10 @@ brls::View* TextViewerActivity::createContentView() {
     scrollingFrame_->setGrow(1.0f);
     scrollingFrame_->setScrollingBehavior(brls::ScrollingBehavior::NATURAL);
     scrollingFrame_->setFocusable(true);
+    scrollingFrame_->setCustomNavigationRoute(brls::FocusDirection::UP, nullptr);
+    scrollingFrame_->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+    scrollingFrame_->setCustomNavigationRoute(brls::FocusDirection::LEFT, nullptr);
+    scrollingFrame_->setCustomNavigationRoute(brls::FocusDirection::RIGHT, nullptr);
 
     auto* textContainer = new brls::Box();
     textContainer->setAxis(brls::Axis::COLUMN);

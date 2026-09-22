@@ -191,10 +191,10 @@ void CatalogView::onContentAvailable() {
         return true;
     }, true);
 
-    this->registerAction("app/catalog/jump_letter"_i18n, brls::ControllerButton::BUTTON_RT, [this](brls::View* view) {
+    this->registerAction("", brls::ControllerButton::BUTTON_RT, [this](brls::View* view) {
         jumpToNextLetter(true);
         return true;
-    });
+    }, true /* hidden */);
 
     this->registerAction("", brls::ControllerButton::BUTTON_LT, [this](brls::View* view) {
         jumpToNextLetter(false);
@@ -422,35 +422,68 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
     return rowCell;
 }
 
-static char getGameInitial(const std::string& title) {
-    std::string cleaned = cleanTitle(title);
-    for (size_t i = 0; i < cleaned.size(); ++i) {
-        unsigned char c = static_cast<unsigned char>(cleaned[i]);
-        if (c <= 32) continue;
-        if (c == '[' || c == '(' || c == '"' || c == '\'' || c == '-' || c == '.' || c == '_' || c == '#' || c == '!') continue;
+static std::string getGameInitial(const std::string& title) {
+    std::string s = cleanTitle(title);
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c <= 32 || c == '[' || c == '(' || c == '"' || c == '\'' ||
+            c == '-' || c == '.' || c == '_' || c == '#' || c == '!' ||
+            c == '?' || c == '~' || c == ':' || c == '/' || c == '\\' ||
+            c == '+' || c == '=' || c == '*' || c == '@' || c == '$' ||
+            c == '%' || c == '^' || c == '&') {
+            i++;
+            continue;
+        }
         if (std::isalpha(c)) {
-            return static_cast<char>(std::toupper(c));
+            return std::string(1, static_cast<char>(std::toupper(c)));
         }
         if (std::isdigit(c)) {
-            return '#';
+            return "#";
         }
-        if (c >= 0x80) {
-            return '?';
+        if (c == 0xD0 && i + 1 < s.size()) {
+            unsigned char c2 = static_cast<unsigned char>(s[i + 1]);
+            if (c2 == 0x81) { // Ё -> Ё
+                return "\xD0\x81";
+            } else if (c2 >= 0x90 && c2 <= 0xAF) { // А..Я
+                std::string res;
+                res.push_back(static_cast<char>(c));
+                res.push_back(static_cast<char>(c2));
+                return res;
+            } else if (c2 >= 0xB0 && c2 <= 0xBF) { // а..п -> А..П
+                std::string res;
+                res.push_back(static_cast<char>(0xD0));
+                res.push_back(static_cast<char>(c2 - 0x20));
+                return res;
+            }
+            return "#";
         }
+        if (c == 0xD1 && i + 1 < s.size()) {
+            unsigned char c2 = static_cast<unsigned char>(s[i + 1]);
+            if (c2 == 0x91) { // ё -> Ё
+                return "\xD0\x81";
+            } else if (c2 >= 0x80 && c2 <= 0x8F) { // р..я -> Р..Я
+                std::string res;
+                res.push_back(static_cast<char>(0xD0));
+                res.push_back(static_cast<char>(c2 + 0x20));
+                return res;
+            }
+            return "#";
+        }
+        return "#";
     }
-    return '#';
+    return "#";
 }
 
 void CatalogView::jumpToNextLetter(bool forward) {
     if (filteredGames_.empty()) return;
 
     int currentIdx = std::clamp(focusedRow_ * 6 + focusedCol_, 0, static_cast<int>(filteredGames_.size()) - 1);
-    char currentInitial = getGameInitial(filteredGames_[currentIdx].title);
+    std::string currentInitial = getGameInitial(filteredGames_[currentIdx].title);
     int targetIdx = -1;
 
     if (forward) {
         for (size_t i = currentIdx + 1; i < filteredGames_.size(); ++i) {
-            char init = getGameInitial(filteredGames_[i].title);
+            std::string init = getGameInitial(filteredGames_[i].title);
             if (init != currentInitial) {
                 targetIdx = static_cast<int>(i);
                 break;
@@ -467,7 +500,7 @@ void CatalogView::jumpToNextLetter(bool forward) {
         if (currentIdx > static_cast<int>(firstOfCurrent) + 5) {
             targetIdx = static_cast<int>(firstOfCurrent);
         } else if (firstOfCurrent > 0) {
-            char prevInitial = getGameInitial(filteredGames_[firstOfCurrent - 1].title);
+            std::string prevInitial = getGameInitial(filteredGames_[firstOfCurrent - 1].title);
             size_t firstOfPrev = firstOfCurrent - 1;
             while (firstOfPrev > 0 && getGameInitial(filteredGames_[firstOfPrev - 1].title) == prevInitial) {
                 firstOfPrev--;
@@ -475,7 +508,7 @@ void CatalogView::jumpToNextLetter(bool forward) {
             targetIdx = static_cast<int>(firstOfPrev);
         } else {
             targetIdx = static_cast<int>(filteredGames_.size() - 1);
-            char lastInitial = getGameInitial(filteredGames_[targetIdx].title);
+            std::string lastInitial = getGameInitial(filteredGames_[targetIdx].title);
             while (targetIdx > 0 && getGameInitial(filteredGames_[targetIdx - 1].title) == lastInitial) {
                 targetIdx--;
             }
@@ -491,12 +524,13 @@ void CatalogView::jumpToNextLetter(bool forward) {
 
         if (recycler) {
             recycler->setDefaultCellFocus(brls::IndexPath(0, targetRow));
-            recycler->selectRowAt(brls::IndexPath(0, targetRow), true);
+            recycler->selectRowAt(brls::IndexPath(0, targetRow), false);
             brls::Application::giveFocus(recycler);
         }
 
-        char targetInit = getGameInitial(filteredGames_[targetIdx].title);
-        std::string toast = "[" + std::string(1, targetInit) + "]";
+        std::string targetInit = getGameInitial(filteredGames_[targetIdx].title);
+        std::string toast = "[" + targetInit + "]";
+        brls::Application::clearNotifications();
         brls::Application::notify(toast);
     }
 }

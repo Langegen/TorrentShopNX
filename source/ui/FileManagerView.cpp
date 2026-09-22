@@ -657,6 +657,79 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     }
 }
 
+void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& targets) {
+    if (targets.empty()) return;
+
+    // Determine default archive name
+    std::string defaultName;
+    if (targets.size() == 1) {
+        std::filesystem::path p(targets[0]);
+        if (std::filesystem::is_directory(p)) {
+            defaultName = p.filename().generic_string() + ".zip";
+        } else {
+            defaultName = p.stem().generic_string() + ".zip";
+        }
+    } else {
+        std::filesystem::path cur(currentDir_);
+        std::string folderName = cur.filename().generic_string();
+        if (folderName.empty() || folderName == "." || folderName == "/") {
+            defaultName = "archive.zip";
+        } else {
+            defaultName = folderName + ".zip";
+        }
+    }
+
+    brls::Application::getImeManager()->openForText([this, targets](std::string text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.erase(text.begin());
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.pop_back();
+
+        if (text.empty()) return;
+
+        std::string lower = text;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (lower.size() < 4 || lower.substr(lower.size() - 4) != ".zip") {
+            text += ".zip";
+        }
+
+        std::filesystem::path sanitized(text);
+        std::string fileName = sanitized.filename().generic_string();
+        if (fileName.empty() || fileName == ".zip") {
+            brls::Application::notify("app/file_manager/create_archive_error"_i18n);
+            return;
+        }
+
+        std::string targetArchivePath = joinPath(currentDir_, fileName);
+
+        auto startArchiving = [this, targetArchivePath, targets, fileName]() {
+            auto* dlg = new ArchiveProgressDialog(targetArchivePath, targets, currentDir_, [this, fileName](bool ok, const std::string& msg) {
+                if (ok) {
+                    brls::Application::notify("app/file_manager/create_archive_success"_i18n);
+                    clearSelection();
+                    refresh(fileName);
+                } else {
+                    brls::Application::notify(msg.empty() ? "app/file_manager/create_archive_error"_i18n : msg);
+                    refresh();
+                }
+            });
+            dlg->startCreation();
+        };
+
+        std::error_code ec;
+        if (std::filesystem::exists(targetArchivePath, ec)) {
+            std::string promptMsg = brls::getStr("app/file_manager/archive_exists_overwrite", fileName);
+            auto* confirmDialog = new brls::Dialog(promptMsg);
+            confirmDialog->setCancelable(true);
+            confirmDialog->addButton("app/common/yes"_i18n, [startArchiving]() {
+                startArchiving();
+            });
+            confirmDialog->addButton("app/common/cancel"_i18n, []() {});
+            confirmDialog->open();
+        } else {
+            startArchiving();
+        }
+    }, brls::getStr("app/file_manager/create_archive_title"), "", 64, defaultName);
+}
+
 void FileManagerView::showInstallDialog(const util::FileItem& item) {
     util::logLine("FileManagerView: showInstallDialog for " + item.path);
 
@@ -1328,6 +1401,18 @@ void FileManagerView::showActionsMenu() {
             }, true);
         }
 
+        // Create Archive (if selection or target single item)
+        if (hasSelection) {
+            addOption("\uE2C6", nvgRGB(255, 110, 64), brls::getStr("app/file_manager/create_archive_count", std::to_string(selectedPaths_.size())), [this]() {
+                std::vector<std::string> targets(selectedPaths_.begin(), selectedPaths_.end());
+                showCreateArchiveDialog(targets);
+            }, true);
+        } else if (targetSingleItem) {
+            addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/create_archive_single"_i18n, [this, item = *targetSingleItem]() {
+                showCreateArchiveDialog({ item.path });
+            }, true);
+        }
+
         // 2. Paste (if clipboard active)
         if (hasClipboard) {
             std::string pasteText = (clip.op == util::ClipboardOp::Cut ?
@@ -1397,7 +1482,6 @@ void FileManagerView::showActionsMenu() {
             showNewFolderDialog();
         }, true);
     }
-
     // 8. Selection helpers
     if (hasSelection) {
         addOption("\uE835", nvgRGB(180, 190, 200), "app/file_manager/deselect_all"_i18n, [this]() {

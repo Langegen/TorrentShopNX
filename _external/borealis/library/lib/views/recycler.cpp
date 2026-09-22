@@ -342,6 +342,8 @@ void RecyclerFrame::selectRowAt(IndexPath indexPath, bool animated)
     }
 
     offset -= this->getHeight() / 2;
+    if (offset < 0)
+        offset = 0;
     this->setContentOffsetY(offset, animated);
     this->cellsRecyclingLoop();
 
@@ -452,6 +454,33 @@ void RecyclerFrame::cellsRecyclingLoop()
         Logger::debug("Cell #{} - destroyed", visibleMax);
 
         visibleMax--;
+    }
+
+    if (contentBox->getChildren().empty())
+    {
+        float runningY = 0;
+        size_t targetIndex = 0;
+        float targetY = 0;
+        for (size_t k = 0; k < cacheFramesData.size(); ++k)
+        {
+            float h = cacheFramesData[k].height;
+            if (runningY + h >= visibleFrame.getMinY() - 720.0f)
+            {
+                targetIndex = k;
+                targetY = runningY;
+                break;
+            }
+            runningY += h;
+        }
+
+        visibleMin = UINT_MAX;
+        visibleMax = 0;
+        renderedFrame.origin.y = targetY;
+        renderedFrame.size.height = 0;
+        if (targetIndex < cacheFramesData.size())
+        {
+            addCellAt(targetIndex, true);
+        }
     }
 
     while (visibleMin > 0 && visibleMin - 1 < cacheFramesData.size() && renderedFrame.getMinY() + paddingTop > visibleFrame.getMinY() - 720.0f)
