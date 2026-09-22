@@ -1,4 +1,5 @@
 #include "EmulatorInstallDialog.hpp"
+#include "InstallProgressDialog.hpp"
 #include "../catalog/retro_emulator_manager.h"
 #include "../net/http_client.h"
 #include "../utils/archive_utils.h"
@@ -88,10 +89,111 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     dialog->open();
 
     brls::async([pkg, cancelFlag, closedFlag, dialog, statusLabel, progressFill, statsLabel, onComplete]() {
+        std::error_code ec;
+        auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+
+        // --- Check for Multi-File Package (e.g. BIOS sets) ---
+        if (!pkg.companion_downloads.empty()) {
+            size_t totalFiles = pkg.companion_downloads.size();
+            bool allOk = true;
+
+            for (size_t i = 0; i < totalFiles; ++i) {
+                if (cancelFlag->load()) { allOk = false; break; }
+
+                const auto& comp = pkg.companion_downloads[i];
+                std::string targetFile = catalog::RetroEmulatorManager::resolvePlatformPath(comp.install_path);
+                tsnx_ensure_parent_dirs(targetFile.c_str());
+
+                std::filesystem::path tp(targetFile);
+                std::string fn = tp.filename().string();
+                std::string tmpCompFile = std::string(TSNX_CACHE_TMP) + "/" + fn;
+                tsnx_ensure_parent_dirs(tmpCompFile.c_str());
+
+                brls::sync([statusLabel, progressFill, statsLabel, i, totalFiles, fn]() {
+                    statusLabel->setText(brls::getStr("app/retro/downloading_comp_file", fn, std::to_string(i + 1), std::to_string(totalFiles)));
+                    float basePct = static_cast<float>(i) / static_cast<float>(totalFiles);
+                    progressFill->setWidth(440.0f * basePct);
+                    statsLabel->setText(fn);
+                });
+
+                net::HttpClient compClient;
+                compClient.setTimeout(600);
+                compClient.setCancelFlag(cancelFlag.get());
+
+                compClient.setProgressCallback([lastUpdate, statusLabel, progressFill, statsLabel, cancelFlag, i, totalFiles, fn](int64_t dltotal, int64_t dlnow) {
+                    if (cancelFlag->load()) return;
+                    auto now = std::chrono::steady_clock::now();
+                    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count() < 60 && dlnow < dltotal) {
+                        return;
+                    }
+                    *lastUpdate = now;
+
+                    brls::sync([statusLabel, progressFill, statsLabel, dltotal, dlnow, i, totalFiles, fn]() {
+                        float filePct = (dltotal > 0) ? (static_cast<float>(dlnow) / static_cast<float>(dltotal)) : 0.0f;
+                        float totalPct = (static_cast<float>(i) + filePct) / static_cast<float>(totalFiles);
+                        progressFill->setWidth(440.0f * totalPct);
+                        statsLabel->setText(fn + ": " + formatSizeMb(dlnow) + " / " + formatSizeMb(dltotal));
+                    });
+                });
+
+                bool compDlOk = compClient.downloadToFile(comp.download_url, tmpCompFile, cancelFlag.get(), 600);
+                if (!compDlOk || cancelFlag->load()) {
+                    std::filesystem::remove(tmpCompFile, ec);
+                    allOk = false;
+                    break;
+                }
+
+                std::filesystem::remove(targetFile, ec);
+                std::filesystem::rename(tmpCompFile, targetFile, ec);
+                if (ec) {
+                    std::filesystem::copy_file(tmpCompFile, targetFile, std::filesystem::copy_options::overwrite_existing, ec);
+                    std::filesystem::remove(tmpCompFile, ec);
+                }
+            }
+
+            if (cancelFlag->load()) {
+                brls::sync([dialog, closedFlag, onComplete]() {
+                    if (!closedFlag->exchange(true)) {
+                        dialog->close([onComplete]() {
+                            brls::Application::notify("app/retro/install_cancelled"_i18n);
+                            if (onComplete) onComplete(false);
+                        });
+                    }
+                });
+                return;
+            }
+
+            if (!allOk) {
+                util::logLine("EmulatorInstall: failed to download companion files for " + pkg.name);
+                brls::sync([dialog, closedFlag, onComplete]() {
+                    if (!closedFlag->exchange(true)) {
+                        dialog->close([onComplete]() {
+                            brls::Application::notify("app/retro/download_error_offline"_i18n);
+                            if (onComplete) onComplete(false);
+                        });
+                    }
+                });
+                return;
+            }
+
+            // Record installation
+            catalog::RetroEmulatorManager::instance().recordInstalledVersion(pkg.id, pkg.version);
+            util::logLine("EmulatorInstall: successfully installed BIOS package " + pkg.name);
+
+            brls::sync([dialog, closedFlag, pkg, onComplete]() {
+                if (!closedFlag->exchange(true)) {
+                    dialog->close([pkg, onComplete]() {
+                        brls::Application::notify(brls::getStr("app/retro/emu_installed_success_format", pkg.name));
+                        if (onComplete) onComplete(true);
+                    });
+                }
+            });
+            return;
+        }
+
         std::string tmpFile = TSNX_CACHE_TMP "/" + pkg.filename;
         tsnx_ensure_parent_dirs(tmpFile.c_str());
 
-        std::error_code ec;
         std::filesystem::remove(tmpFile, ec);
 
         util::logLine("EmulatorInstall: starting download for " + pkg.name + " from " + pkg.download_url);
@@ -99,8 +201,6 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
         net::HttpClient client;
         client.setTimeout(600);
         client.setCancelFlag(cancelFlag.get());
-
-        auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
 
         client.setProgressCallback([lastUpdate, statusLabel, progressFill, statsLabel, cancelFlag](int64_t dltotal, int64_t dlnow) {
             if (cancelFlag->load()) return;
@@ -329,6 +429,120 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
                 });
             }
         });
+    });
+}
+
+void installForwarderForEmulator(const catalog::EmulatorPackage& pkg,
+                                 std::function<void(bool success)> onComplete) {
+    if (pkg.forwarder_url.empty()) {
+        brls::Application::notify("app/retro/forwarder_not_available"_i18n);
+        if (onComplete) onComplete(false);
+        return;
+    }
+
+    std::string nspFilename = pkg.id + "_forwarder.nsp";
+    std::string tmpNsp = std::string(TSNX_CACHE_TMP) + "/" + nspFilename;
+    tsnx_ensure_parent_dirs(tmpNsp.c_str());
+
+    std::error_code ec;
+    std::filesystem::remove(tmpNsp, ec);
+
+    brls::Application::notify("app/retro/forwarder_downloading"_i18n);
+
+    brls::async([pkg, tmpNsp, onComplete]() {
+        net::HttpClient client;
+        client.setTimeout(180);
+        bool dlOk = client.downloadToFile(pkg.forwarder_url, tmpNsp, nullptr, 180);
+
+        brls::sync([pkg, tmpNsp, dlOk, onComplete]() {
+            if (!dlOk) {
+                std::error_code ec;
+                std::filesystem::remove(tmpNsp, ec);
+                brls::Application::notify("app/retro/forwarder_download_error"_i18n);
+                if (onComplete) onComplete(false);
+                return;
+            }
+
+            auto* progressDlg = new InstallProgressDialog(tmpNsp, 1, [pkg, tmpNsp, onComplete](bool success, const std::string& msg) {
+                std::error_code ec;
+                std::filesystem::remove(tmpNsp, ec);
+
+                if (success) {
+                    catalog::RetroEmulatorManager::instance().recordForwarderInstalled(pkg.id, true);
+                    brls::Application::notify(brls::getStr("app/retro/forwarder_installed_success", pkg.name));
+                } else {
+                    util::logLine("Install forwarder failed: " + msg);
+                    brls::Application::notify("app/retro/forwarder_install_error"_i18n);
+                }
+                if (onComplete) onComplete(success);
+            });
+            progressDlg->startInstallation();
+        });
+    });
+}
+
+void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
+                                   std::function<void()> onDone) {
+    if (pkg.category == "bios") {
+        if (onDone) onDone();
+        return;
+    }
+
+    util::logLine("EmulatorInstall: handlePostEmulatorInstallFlow started for " + pkg.id);
+
+    brls::sync([pkg, onDone]() {
+        auto proceedToForwarder = [pkg, onDone]() {
+            brls::sync([pkg, onDone]() {
+                if (pkg.forwarder_url.empty()) {
+                    if (onDone) onDone();
+                    return;
+                }
+
+                if (catalog::RetroEmulatorManager::instance().isForwarderInstalled(pkg.id)) {
+                    if (onDone) onDone();
+                    return;
+                }
+
+                util::logLine("EmulatorInstall: showing forwarder prompt for " + pkg.id);
+                std::string forwarderMsg = brls::getStr("app/retro/prompt_install_forwarder_msg", pkg.name);
+                auto* forwarderDlg = new brls::Dialog(forwarderMsg);
+                forwarderDlg->addButton("app/retro/btn_install_forwarder"_i18n, [pkg, onDone]() {
+                    brls::sync([pkg, onDone]() {
+                        installForwarderForEmulator(pkg, [onDone](bool ok) {
+                            if (onDone) onDone();
+                        });
+                    });
+                });
+                forwarderDlg->addButton("app/retro/btn_skip"_i18n, [onDone]() {
+                    if (onDone) onDone();
+                });
+                forwarderDlg->open();
+            });
+        };
+
+        // Check if emulator has an associated BIOS that is not yet installed
+        const auto* biosPkg = catalog::RetroEmulatorManager::instance().getBiosPackageForEmulator(pkg.id);
+        if (biosPkg && !catalog::RetroEmulatorManager::instance().isInstalled(biosPkg->id)) {
+            catalog::EmulatorPackage biosCopy = *biosPkg;
+            util::logLine("EmulatorInstall: showing BIOS prompt for " + pkg.id + " -> bios=" + biosCopy.id);
+            std::string biosMsg = brls::getStr("app/retro/prompt_install_bios_msg", pkg.name, biosCopy.name);
+            auto* biosDlg = new brls::Dialog(biosMsg);
+            biosDlg->addButton("app/retro/btn_install_bios"_i18n, [biosCopy, proceedToForwarder]() {
+                util::logLine("EmulatorInstall: user accepted BIOS install for " + biosCopy.id);
+                brls::sync([biosCopy, proceedToForwarder]() {
+                    showEmulatorInstallDialog(biosCopy, [proceedToForwarder](bool ok) {
+                        proceedToForwarder();
+                    });
+                });
+            });
+            biosDlg->addButton("app/retro/btn_skip"_i18n, [proceedToForwarder]() {
+                util::logLine("EmulatorInstall: user skipped BIOS install");
+                proceedToForwarder();
+            });
+            biosDlg->open();
+        } else {
+            proceedToForwarder();
+        }
     });
 }
 

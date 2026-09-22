@@ -166,10 +166,13 @@ void RetroCatalogView::triggerEmulatorAction() {
     if (isNowInstalled) {
         brls::Application::pushActivity(new RetroEmulatorsView());
     } else {
-        showEmulatorInstallDialog(*emuPkg, [this](bool ok) {
+        showEmulatorInstallDialog(*emuPkg, [this, emuPkg](bool ok) {
             if (ok) {
                 brls::Application::notify("app/retro/emu_ready_notify"_i18n);
                 updateEmulatorBadge();
+                handlePostEmulatorInstallFlow(*emuPkg, [this]() {
+                    updateEmulatorBadge();
+                });
             }
         });
     }

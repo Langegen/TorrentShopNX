@@ -136,7 +136,8 @@ void RetroEmulatorsView::rebuildList() {
         {"nintendo",  "app/retro/sec_emu_nintendo"_i18n,  nvgRGBA(230, 0, 18, 255)},
         {"sony",      "app/retro/sec_emu_sony"_i18n,      nvgRGBA(0, 55, 145, 255)},
         {"sega",      "app/retro/sec_emu_sega"_i18n,      nvgRGBA(0, 224, 165, 255)},
-        {"retroarch", "app/retro/sec_emu_retroarch"_i18n, nvgRGBA(255, 152, 0, 255)}
+        {"retroarch", "app/retro/sec_emu_retroarch"_i18n, nvgRGBA(255, 152, 0, 255)},
+        {"bios",      "app/retro/sec_emu_bios"_i18n,      nvgRGBA(233, 30, 99, 255)}
     };
 
     for (const auto& sec : sections) {
@@ -283,10 +284,40 @@ void RetroEmulatorsView::rebuildList() {
                 if (status == catalog::EmulatorInstallStatus::INSTALLED) {
                     auto* chooseDialog = new brls::Dialog("app/retro/emu_prefix"_i18n + curPkg.name + "app/retro/emu_already_installed"_i18n);
                     chooseDialog->addButton("app/retro/btn_reinstall"_i18n, [this, curPkg]() {
-                        showEmulatorInstallDialog(curPkg, [this](bool ok) {
-                            if (ok) rebuildList();
+                        brls::sync([this, curPkg]() {
+                            showEmulatorInstallDialog(curPkg, [this, curPkg](bool ok) {
+                                if (ok) {
+                                    rebuildList();
+                                    handlePostEmulatorInstallFlow(curPkg, [this]() { rebuildList(); });
+                                }
+                            });
                         });
                     });
+
+                    if (!curPkg.forwarder_url.empty()) {
+                        chooseDialog->addButton("app/retro/btn_forwarder"_i18n, [this, curPkg]() {
+                            brls::sync([this, curPkg]() {
+                                installForwarderForEmulator(curPkg, [this](bool ok) {
+                                    if (ok) rebuildList();
+                                });
+                            });
+                        });
+                    }
+
+                    if (!curPkg.bios_id.empty()) {
+                        const auto* biosPkg = catalog::RetroEmulatorManager::instance().findPackage(curPkg.bios_id);
+                        if (biosPkg) {
+                            catalog::EmulatorPackage biosCopy = *biosPkg;
+                            chooseDialog->addButton("app/retro/btn_bios"_i18n, [this, biosCopy]() {
+                                brls::sync([this, biosCopy]() {
+                                    showEmulatorInstallDialog(biosCopy, [this](bool ok) {
+                                        if (ok) rebuildList();
+                                    });
+                                });
+                            });
+                        }
+                    }
+
                     chooseDialog->addButton("app/retro/btn_delete"_i18n, [this, curPkg]() {
                         std::string err;
                         if (catalog::RetroEmulatorManager::instance().uninstallEmulator(curPkg.id, err)) {
@@ -299,8 +330,11 @@ void RetroEmulatorsView::rebuildList() {
                     chooseDialog->addButton("app/common/cancel"_i18n, []() {});
                     chooseDialog->open();
                 } else {
-                    showEmulatorInstallDialog(curPkg, [this](bool ok) {
-                        if (ok) rebuildList();
+                    showEmulatorInstallDialog(curPkg, [this, curPkg](bool ok) {
+                        if (ok) {
+                            rebuildList();
+                            handlePostEmulatorInstallFlow(curPkg, [this]() { rebuildList(); });
+                        }
                     });
                 }
                 return true;

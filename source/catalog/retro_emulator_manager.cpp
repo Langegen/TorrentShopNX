@@ -343,6 +343,243 @@ void RetroEmulatorManager::initPackages() {
             nvgRGBA(255, 152, 0, 255)
         }
     };
+
+    // Configure bios_id and forwarder_url mappings for standard emulators
+    for (auto& p : packages_) {
+        if (p.id == "nethersx2") {
+            p.bios_id = "ps2_bios";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/NetherSX2.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000002";
+        } else if (p.id == "duckstation") {
+            p.bios_id = "ps1_bios";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/DuckStation.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000003";
+        } else if (p.id == "vita3k") {
+            p.bios_id = "vita_fw";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Vita3K.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000004";
+        } else if (p.id == "flycast") {
+            p.bios_id = "dreamcast_bios";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Flycast.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000005";
+        } else if (p.id == "pgen") {
+            p.bios_id = "segacd_bios";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pGEN.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000006";
+        } else if (p.id == "melonds") {
+            p.bios_id = "nds_bios";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/melonDS.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000007";
+        } else if (p.id == "pnes") {
+            p.bios_id = "fds_bios";
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pNES.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000008";
+        } else if (p.id == "picodrive") {
+            p.bios_id = "sega32x_bios";
+        } else if (p.id == "dekopon") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Dekopon.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000001";
+        } else if (p.id == "dolphin") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Dolphin.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000009";
+        } else if (p.id == "cemu") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Cemu.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000010";
+        } else if (p.id == "drasticds") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/DrasticDS.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000011";
+        } else if (p.id == "ppsspp") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/PPSSPP.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000012";
+        } else if (p.id == "psnes") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pSNES.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000013";
+        } else if (p.id == "mgba") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/mGBA.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000014";
+        } else if (p.id == "pgba") {
+            p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pGBA.forwarder.nsp";
+            p.forwarder_title_id = "0510000000000015";
+        }
+    }
+
+    // --- Add Category: BIOS Packages ---
+    std::vector<EmulatorPackage> biosPackages = {
+        // --- 1. PlayStation 2 BIOS (NetherSX2) ---
+        {
+            "ps2_bios",
+            "PlayStation 2 BIOS Pack",
+            "Sony / Dump",
+            "v2.30",
+            "Комплект BIOS PS2 (v2.30 NTSC-U) для запуска игр в NetherSX2",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin",
+            "ps2-0230a-20080220.bin",
+            "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin",
+            "sdmc:/switch/NetherSX2/bios",
+            false,
+            4 * 1024 * 1024,
+            {"ps2"},
+            nvgRGBA(0, 36, 100, 255)
+        },
+
+        // --- 2. PlayStation 1 BIOS (DuckStation) ---
+        {
+            "ps1_bios",
+            "PlayStation 1 BIOS Pack",
+            "Sony / Dump",
+            "v5.5",
+            "Дампы BIOS PS1 (SCPH-5501 US, SCPH-5502 EU, SCPH-5500 JP) для DuckStation",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
+            "scph5501.bin",
+            "sdmc:/switch/duckstation/bios/scph5501.bin",
+            "sdmc:/switch/duckstation/bios",
+            false,
+            1572864,
+            {"ps1"},
+            nvgRGBA(0, 55, 145, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/switch/duckstation/bios/scph5501.bin", 524288},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5502.bin", "sdmc:/switch/duckstation/bios/scph5502.bin", 524288},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5500.bin", "sdmc:/switch/duckstation/bios/scph5500.bin", 524288}
+            }
+        },
+
+        // --- 3. PlayStation Vita Firmware (Vita3K) ---
+        {
+            "vita_fw",
+            "PS Vita Firmware PUP",
+            "Sony Interactive Ent.",
+            "3.74",
+            "Официальный пакет обновления прошивки PS Vita для первой настройки Vita3K",
+            "bios",
+            "http://dus01.psp2.update.playstation.net/update/psp2/image/2019_0924/sd_8b5f60b56c3da8365b973dba570c53a5/PSP2UPDAT.PUP?dest=us",
+            "PSP2UPDAT.PUP",
+            "sdmc:/switch/Vita3K/PSP2UPDAT.PUP",
+            "sdmc:/switch/Vita3K",
+            false,
+            56768512,
+            {"psvita"},
+            nvgRGBA(0, 150, 214, 255)
+        },
+
+        // --- 4. Sega Dreamcast & Naomi (Flycast) ---
+        {
+            "dreamcast_bios",
+            "Dreamcast BIOS & Flash",
+            "Sega / Dump",
+            "v1.01",
+            "Системный BIOS (dc_boot.bin) и энергонезависимая память (flash.bin) для Flycast",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin",
+            "dc_boot.bin",
+            "sdmc:/switch/flycast/data/dc_boot.bin",
+            "sdmc:/switch/flycast/data",
+            false,
+            2228224,
+            {"dreamcast"},
+            nvgRGBA(255, 87, 34, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/switch/flycast/data/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/switch/flycast/data/flash.bin", 131072}
+            }
+        },
+
+        // --- 5. Sega CD (pGEN) ---
+        {
+            "segacd_bios",
+            "Sega CD BIOS Pack",
+            "Sega / Dump",
+            "v2.00",
+            "BIOS привода Sega CD / Mega CD (US, EUR, JPN) для запуска CD-образов в pGEN",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
+            "bios_CD_U.bin",
+            "sdmc:/switch/pGEN/bios_CD_U.bin",
+            "sdmc:/switch/pGEN",
+            false,
+            393216,
+            {"sega_cd"},
+            nvgRGBA(76, 175, 80, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/switch/pGEN/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/switch/pGEN/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/switch/pGEN/bios_CD_J.bin", 131072}
+            }
+        },
+
+        // --- 6. Nintendo DS (melonDS) ---
+        {
+            "nds_bios",
+            "Nintendo DS BIOS & Firmware",
+            "Nintendo / Dump",
+            "v1.0",
+            "Оригинальные ARM7/ARM9 BIOS и firmware.bin для melonDS (Wi-Fi, тайминги)",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
+            "bios7.bin",
+            "sdmc:/switch/melonds/bios7.bin",
+            "sdmc:/switch/melonds",
+            false,
+            282624,
+            {"nds"},
+            nvgRGBA(0, 188, 212, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/melonds/bios7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/melonds/bios9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/melonds/firmware.bin", 262144}
+            }
+        },
+
+        // --- 7. Famicom Disk System (pNES) ---
+        {
+            "fds_bios",
+            "Famicom Disk System BIOS",
+            "Nintendo / Dump",
+            "v1.0",
+            "Образ BIOS дисковой системы FDS (disksys.rom) для запуска .fds игр в pNES",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom",
+            "disksys.rom",
+            "sdmc:/switch/pNES/disksys.rom",
+            "sdmc:/switch/pNES",
+            false,
+            8192,
+            {"nes"},
+            nvgRGBA(230, 0, 18, 255)
+        },
+
+        // --- 8. Sega 32X & Sega CD (RetroArch) ---
+        {
+            "sega32x_bios",
+            "RetroArch Sega CD & System BIOS",
+            "Sega / Libretro",
+            "v2.0",
+            "Набор BIOS Sega CD и системных файлов для RetroArch (cores/system)",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
+            "bios_CD_U.bin",
+            "sdmc:/retroarch/cores/system/bios_CD_U.bin",
+            "sdmc:/retroarch/cores/system",
+            false,
+            393216,
+            {"sega_32x", "sega_cd"},
+            nvgRGBA(255, 152, 0, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/retroarch/cores/system/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/retroarch/cores/system/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/retroarch/cores/system/bios_CD_J.bin", 131072}
+            }
+        }
+    };
+
+    packages_.insert(packages_.end(), biosPackages.begin(), biosPackages.end());
 }
 
 const EmulatorPackage* RetroEmulatorManager::findPackage(const std::string& emu_id) const {
@@ -364,6 +601,17 @@ const EmulatorPackage* RetroEmulatorManager::getPackageForConsole(const std::str
 bool RetroEmulatorManager::isInstalled(const std::string& emu_id) const {
     const auto* p = findPackage(emu_id);
     if (!p) return false;
+
+    // For multi-file packages (e.g. BIOS sets with companion downloads),
+    // verify that all companion files exist on disk with non-zero size
+    if (!p->companion_downloads.empty()) {
+        for (const auto& comp : p->companion_downloads) {
+            std::string cpath = resolvePlatformPath(comp.install_path);
+            struct stat cst;
+            if (stat(cpath.c_str(), &cst) != 0 || cst.st_size <= 0) return false;
+        }
+        return true;
+    }
 
     std::string path = resolvePlatformPath(p->install_path);
     struct stat st;
@@ -453,13 +701,23 @@ void RetroEmulatorManager::saveInstalledVersions() {
 bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::string& out_err) {
     const auto* p = findPackage(emu_id);
     if (!p) {
-        out_err = "Эмулятор не найден в базе";
+        out_err = "Пакет не найден в базе";
         return false;
     }
 
-    std::string mainFile = resolvePlatformPath(p->install_path);
     std::error_code ec;
 
+    // If there are companion downloads, remove each of them
+    if (!p->companion_downloads.empty()) {
+        for (const auto& comp : p->companion_downloads) {
+            std::string cpath = resolvePlatformPath(comp.install_path);
+            if (std::filesystem::exists(cpath, ec)) {
+                std::filesystem::remove(cpath, ec);
+            }
+        }
+    }
+
+    std::string mainFile = resolvePlatformPath(p->install_path);
     if (std::filesystem::exists(mainFile, ec)) {
         std::filesystem::remove(mainFile, ec);
         if (ec) {
@@ -489,6 +747,29 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
     saveInstalledVersions();
     util::logLine("RetroEmulatorManager: uninstalled " + emu_id);
     return true;
+}
+
+const EmulatorPackage* RetroEmulatorManager::getBiosPackageForEmulator(const std::string& emu_id) const {
+    const auto* emu = findPackage(emu_id);
+    if (!emu || emu->bios_id.empty()) return nullptr;
+    return findPackage(emu->bios_id);
+}
+
+bool RetroEmulatorManager::isForwarderInstalled(const std::string& emu_id) const {
+    auto it = installed_versions_.find("forwarder_" + emu_id);
+    if (it != installed_versions_.end() && it->second == "installed") {
+        return true;
+    }
+    return false;
+}
+
+void RetroEmulatorManager::recordForwarderInstalled(const std::string& emu_id, bool installed) {
+    if (installed) {
+        installed_versions_["forwarder_" + emu_id] = "installed";
+    } else {
+        installed_versions_.erase("forwarder_" + emu_id);
+    }
+    saveInstalledVersions();
 }
 
 std::string RetroEmulatorManager::getManifestDownloadUrl() const {
@@ -531,6 +812,22 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
                                   item["color"][3].get<int>());
             } else {
                 p.color = nvgRGBA(128, 128, 128, 255);
+            }
+
+            p.bios_id = item.value("bios_id", "");
+            p.forwarder_url = item.value("forwarder_url", "");
+            p.forwarder_title_id = item.value("forwarder_title_id", "");
+
+            if (item.contains("companion_downloads") && item["companion_downloads"].is_array()) {
+                for (const auto& cd : item["companion_downloads"]) {
+                    CompanionDownload comp;
+                    comp.download_url = cd.value("download_url", "");
+                    comp.install_path = cd.value("install_path", "");
+                    comp.file_size = cd.value("file_size", (int64_t)0);
+                    if (!comp.download_url.empty() && !comp.install_path.empty()) {
+                        p.companion_downloads.push_back(comp);
+                    }
+                }
             }
 
             if (!p.id.empty() && !p.download_url.empty()) {
