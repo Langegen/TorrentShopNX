@@ -42,6 +42,7 @@ class Dialog : public Box
 {
   private:
     BRLS_BIND(Box, container, "brls/dialog/container");
+    BRLS_BIND(Box, buttonBox, "brls/dialog/buttonBox");
     BRLS_BIND(AppletFrame, appletFrame, "brls/dialog/applet");
 
     unsigned frameX, frameY, frameWidth, frameHeight;
@@ -54,12 +55,12 @@ class Dialog : public Box
     bool cancelable = true;
 
   protected:
-    BRLS_BIND(Button, button1, "brls/dialog/button1");
-    BRLS_BIND(Button, button2, "brls/dialog/button2");
-    BRLS_BIND(Button, button3, "brls/dialog/button3");
+    Button* button1 = nullptr;
+    Button* button2 = nullptr;
+    Button* button3 = nullptr;
 
-    BRLS_BIND(Rectangle, button2separator, "brls/dialog/button2/separator");
-    BRLS_BIND(Rectangle, button3separator, "brls/dialog/button3/separator");
+    Rectangle* button2separator = nullptr;
+    Rectangle* button3separator = nullptr;
 
   public:
     Dialog(std::string text);

@@ -992,17 +992,32 @@ static void releaseTorrentIfUnneeded(const std::vector<download::DownloadItem>& 
     }
 }
 
+static std::string extractBaseTopicId(const std::string& tid) {
+    if (tid.empty()) return "";
+    size_t pos = tid.find('_');
+    return (pos != std::string::npos) ? tid.substr(0, pos) : tid;
+}
+
+static bool isSameReleaseItem(const download::DownloadItem& a, const download::DownloadItem& b) {
+    if (!a.torrent_hash.empty() && !b.torrent_hash.empty() && a.torrent_hash == b.torrent_hash) {
+        return true;
+    }
+    if (!a.magnet.empty() && !b.magnet.empty() && a.magnet == b.magnet) {
+        return true;
+    }
+    std::string baseA = extractBaseTopicId(a.topic_id);
+    std::string baseB = extractBaseTopicId(b.topic_id);
+    if (!baseA.empty() && !baseB.empty() && baseA == baseB) {
+        return true;
+    }
+    return false;
+}
+
 static void checkAndNotifyReleaseComplete(const std::vector<download::DownloadItem>& queue,
                                           const download::DownloadItem& completed_item) {
     bool all_done = true;
     for (const auto& other : queue) {
-        bool matches = false;
-        if (!completed_item.topic_id.empty() && other.topic_id == completed_item.topic_id) {
-            matches = true;
-        } else if (!completed_item.torrent_hash.empty() && other.torrent_hash == completed_item.torrent_hash) {
-            matches = true;
-        }
-        if (matches) {
+        if (isSameReleaseItem(completed_item, other)) {
             if (other.state == download::DownloadState::Queued ||
                 other.state == download::DownloadState::Downloading ||
                 other.state == download::DownloadState::StreamPreparing ||
@@ -1017,6 +1032,10 @@ static void checkAndNotifyReleaseComplete(const std::vector<download::DownloadIt
 
     if (all_done) {
         std::string title = cleanTitle(completed_item.title);
+        size_t paren = title.find(" (");
+        if (paren != std::string::npos && paren > 0) {
+            title = title.substr(0, paren);
+        }
         size_t bracket = title.find(" [");
         if (bracket != std::string::npos && bracket > 0) {
             std::string suffix = title.substr(bracket);

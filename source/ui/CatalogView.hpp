@@ -94,5 +94,9 @@ private:
 };
 
 extern CatalogView* g_activeCatalogView;
+// Alive token: set in willAppear, invalidated (*token = false) in willDisappear.
+// Background threads capture a copy before brls::sync so they can check
+// whether the view is still alive before calling filterCatalog().
+extern std::shared_ptr<bool> g_catalogViewAliveToken;
 
 } // namespace ui

@@ -102,7 +102,9 @@ bool extract7zArchive(
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize,
+    size_t* outKnownTotalEntries
 ) {
     util::logLine("sevenzip: extractArchive start: " + archivePath + " -> " + destinationDir);
 
@@ -200,6 +202,8 @@ bool extract7zArchive(
         }
         progress.totalUncompressedSize = totalUncompressed;
         progress.totalEntries = db.NumFiles;
+        if (outKnownUncompressedSize) *outKnownUncompressedSize = totalUncompressed;
+        if (outKnownTotalEntries) *outKnownTotalEntries = db.NumFiles;
 
         if (maxFolderSize > 64ULL * 1024 * 1024) {
             util::logLine("sevenzip: archive has large unpack folder (" + std::to_string(maxFolderSize / (1024*1024)) +
@@ -436,6 +440,7 @@ bool list7zArchiveFolder(
     UInt16* nameBuf = nullptr;
     size_t nameBufSize = 0;
     std::unordered_set<std::string> seenDirs;
+    std::unordered_set<std::string> seenFiles;
 
     for (UInt32 i = 0; i < db.NumFiles; i++) {
         size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
@@ -447,21 +452,41 @@ bool list7zArchiveFolder(
             if (!nameBuf) break;
         }
         SzArEx_GetFileNameUtf16(&db, i, nameBuf);
-        std::string clean = sanitizeEntryName(utf16leToUtf8(nameBuf, nameLen - 1));
+        std::string rawName = utf16leToUtf8(nameBuf, nameLen - 1);
+        std::string clean = sanitizeEntryName(rawName);
+        for (char& c : clean) {
+            if (c == '\\') c = '/';
+        }
         if (clean.empty()) continue;
 
-        bool isDir = SzArEx_IsDir(&db, i) != 0;
+        bool isDir = (SzArEx_IsDir(&db, i) != 0) || (!clean.empty() && clean.back() == '/');
+        while (!clean.empty() && clean.back() == '/') clean.pop_back();
+        if (clean.empty()) continue;
+
         uint64_t fileSize = isDir ? 0 : SzArEx_GetFileSize(&db, i);
 
         if (normInner.empty()) {
             size_t slash = clean.find('/');
             if (slash == std::string::npos) {
-                FileItem item;
-                item.name = clean;
-                item.path = archivePath + "/" + clean;
-                item.isDir = isDir;
-                item.size = fileSize;
-                outItems.push_back(item);
+                if (isDir) {
+                    if (seenDirs.insert(clean).second) {
+                        FileItem item;
+                        item.name = clean;
+                        item.path = archivePath + "/" + clean;
+                        item.isDir = true;
+                        item.size = 0;
+                        outItems.push_back(item);
+                    }
+                } else {
+                    if (seenFiles.insert(clean).second) {
+                        FileItem item;
+                        item.name = clean;
+                        item.path = archivePath + "/" + clean;
+                        item.isDir = false;
+                        item.size = fileSize;
+                        outItems.push_back(item);
+                    }
+                }
             } else {
                 std::string top = clean.substr(0, slash);
                 if (seenDirs.insert(top).second) {
@@ -480,12 +505,25 @@ bool list7zArchiveFolder(
                 if (rel.empty()) continue;
                 size_t slash = rel.find('/');
                 if (slash == std::string::npos) {
-                    FileItem item;
-                    item.name = rel;
-                    item.path = archivePath + "/" + clean;
-                    item.isDir = isDir;
-                    item.size = fileSize;
-                    outItems.push_back(item);
+                    if (isDir) {
+                        if (seenDirs.insert(rel).second) {
+                            FileItem item;
+                            item.name = rel;
+                            item.path = archivePath + "/" + clean;
+                            item.isDir = true;
+                            item.size = 0;
+                            outItems.push_back(item);
+                        }
+                    } else {
+                        if (seenFiles.insert(rel).second) {
+                            FileItem item;
+                            item.name = rel;
+                            item.path = archivePath + "/" + clean;
+                            item.isDir = false;
+                            item.size = fileSize;
+                            outItems.push_back(item);
+                        }
+                    }
                 } else {
                     std::string sub = rel.substr(0, slash);
                     if (seenDirs.insert(sub).second) {
@@ -512,6 +550,76 @@ bool list7zArchiveFolder(
         return a.name < b.name;
     });
 
+    return true;
+}
+
+bool get7zArchiveTotals(
+    const std::string& archivePath,
+    uint64_t& outUncompressedSize,
+    size_t& outTotalEntries
+) {
+    outUncompressedSize = 0;
+    outTotalEntries = 0;
+
+    CFileInStream archiveStream;
+    CLookToRead2 lookStream;
+    CSzArEx db;
+    File_Construct(&archiveStream.file);
+    archiveStream.wres = 0;
+
+    {
+        WRes wres;
+#ifdef _WIN32
+        std::wstring wpath = std::filesystem::u8path(archivePath).native();
+        wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
+#else
+        wres = InFile_Open(&archiveStream.file, archivePath.c_str());
+#endif
+        if (wres != 0) {
+            return false;
+        }
+    }
+
+    FileInStream_CreateVTable(&archiveStream);
+    archiveStream.wres = 0;
+
+    LookToRead2_CreateVTable(&lookStream, False);
+    lookStream.buf = nullptr;
+    lookStream.bufSize = 0;
+    lookStream.realStream = nullptr;
+
+    CrcGenerateTable();
+    SzArEx_Init(&db);
+
+    lookStream.buf = static_cast<Byte*>(SzAlloc(nullptr, kInputBufSize));
+    if (!lookStream.buf) {
+        File_Close(&archiveStream.file);
+        return false;
+    }
+    lookStream.bufSize = kInputBufSize;
+    lookStream.realStream = &archiveStream.vt;
+    LookToRead2_INIT(&lookStream);
+
+    SRes res = SzArEx_Open(&db, &lookStream.vt, (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
+    if (res != SZ_OK) {
+        SzFree(nullptr, lookStream.buf);
+        File_Close(&archiveStream.file);
+        return false;
+    }
+
+    UInt64 totalUncompressed = 0;
+    for (UInt32 fi = 0; fi < db.NumFiles; fi++) {
+        if (!SzArEx_IsDir(&db, fi)) {
+            totalUncompressed += SzArEx_GetFileSize(&db, fi);
+        }
+    }
+    outUncompressedSize = totalUncompressed;
+    outTotalEntries = db.NumFiles;
+
+    SzFree(nullptr, lookStream.buf);
+    lookStream.buf = nullptr;
+    SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+    File_Close(&archiveStream.file);
     return true;
 }
 

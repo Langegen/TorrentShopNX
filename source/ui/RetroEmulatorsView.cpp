@@ -281,31 +281,36 @@ void RetroEmulatorsView::rebuildList() {
             catalog::EmulatorPackage curPkg = pkg;
 
             row->registerClickAction([this, curPkg, status](brls::View*) {
+                const auto* freshPkg = catalog::RetroEmulatorManager::instance().findPackage(curPkg.id);
+                catalog::EmulatorPackage activePkg = freshPkg ? *freshPkg : curPkg;
+
                 if (status == catalog::EmulatorInstallStatus::INSTALLED) {
-                    auto* chooseDialog = new brls::Dialog("app/retro/emu_prefix"_i18n + curPkg.name + "app/retro/emu_already_installed"_i18n);
-                    chooseDialog->addButton("app/retro/btn_reinstall"_i18n, [this, curPkg]() {
-                        brls::sync([this, curPkg]() {
-                            showEmulatorInstallDialog(curPkg, [this, curPkg](bool ok) {
+                    auto* chooseDialog = new brls::Dialog("app/retro/emu_prefix"_i18n + activePkg.name + "app/retro/emu_already_installed"_i18n);
+                    chooseDialog->addButton("app/retro/btn_reinstall"_i18n, [this, activePkg]() {
+                        brls::sync([this, activePkg]() {
+                            showEmulatorInstallDialog(activePkg, [this, activePkg](bool ok) {
                                 if (ok) {
                                     rebuildList();
-                                    handlePostEmulatorInstallFlow(curPkg, [this]() { rebuildList(); });
+                                    if (activePkg.category != "bios") {
+                                        handlePostEmulatorInstallFlow(activePkg, [this]() { rebuildList(); });
+                                    }
                                 }
                             });
                         });
                     });
 
-                    if (!curPkg.forwarder_url.empty()) {
-                        chooseDialog->addButton("app/retro/btn_forwarder"_i18n, [this, curPkg]() {
-                            brls::sync([this, curPkg]() {
-                                installForwarderForEmulator(curPkg, [this](bool ok) {
+                    if (!activePkg.forwarder_url.empty()) {
+                        chooseDialog->addButton("app/retro/btn_forwarder"_i18n, [this, activePkg]() {
+                            brls::sync([this, activePkg]() {
+                                installForwarderForEmulator(activePkg, [this](bool ok) {
                                     if (ok) rebuildList();
                                 });
                             });
                         });
                     }
 
-                    if (!curPkg.bios_id.empty()) {
-                        const auto* biosPkg = catalog::RetroEmulatorManager::instance().findPackage(curPkg.bios_id);
+                    if (!activePkg.bios_id.empty()) {
+                        const auto* biosPkg = catalog::RetroEmulatorManager::instance().findPackage(activePkg.bios_id);
                         if (biosPkg) {
                             catalog::EmulatorPackage biosCopy = *biosPkg;
                             chooseDialog->addButton("app/retro/btn_bios"_i18n, [this, biosCopy]() {
@@ -318,9 +323,9 @@ void RetroEmulatorsView::rebuildList() {
                         }
                     }
 
-                    chooseDialog->addButton("app/retro/btn_delete"_i18n, [this, curPkg]() {
+                    chooseDialog->addButton("app/retro/btn_delete"_i18n, [this, activePkg]() {
                         std::string err;
-                        if (catalog::RetroEmulatorManager::instance().uninstallEmulator(curPkg.id, err)) {
+                        if (catalog::RetroEmulatorManager::instance().uninstallEmulator(activePkg.id, err)) {
                             brls::Application::notify("app/retro/emu_deleted"_i18n);
                             rebuildList();
                         } else {
@@ -330,10 +335,12 @@ void RetroEmulatorsView::rebuildList() {
                     chooseDialog->addButton("app/common/cancel"_i18n, []() {});
                     chooseDialog->open();
                 } else {
-                    showEmulatorInstallDialog(curPkg, [this, curPkg](bool ok) {
+                    showEmulatorInstallDialog(activePkg, [this, activePkg](bool ok) {
                         if (ok) {
                             rebuildList();
-                            handlePostEmulatorInstallFlow(curPkg, [this]() { rebuildList(); });
+                            if (activePkg.category != "bios") {
+                                handlePostEmulatorInstallFlow(activePkg, [this]() { rebuildList(); });
+                            }
                         }
                     });
                 }

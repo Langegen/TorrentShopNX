@@ -59,76 +59,11 @@ const std::string dialogXML = R"xml(
                     grow="1"
                     axis="column"/>
 
-                <brls:Rectangle
-                    id="brls/dialog/button3/separator"
-                    width="auto"
-                    height="2"
-                    color="@theme/brls/sidebar/separator"
-                    visibility="gone" />
-
-                <brls:Button
-                    id="brls/dialog/button3"
-                    width="auto"
-                    height="72"
-                    axis="column"
-                    focusable="true"
-                    justifyContent="center"
-                    alignItems="center"
-                    highlightCornerRadius="6"
-                    fontSize="@style/brls/dialog/fontSize"
-                    style="borderless"
-                    textColor="@theme/brls/accent"
-                    text="Continue"
-                    visibility="gone"/>
-
                 <brls:Box
+                    id="brls/dialog/buttonBox"
                     width="auto"
-                    height="72"
-                    axis="row"
-                    justifyContent="spaceEvenly"
-                    alignItems="stretch"
-                    lineTop="2px"
-                    lineColor="@theme/brls/sidebar/separator"
-                    visibility="gone">
-
-                    <brls:Button
-                        id="brls/dialog/button1"
-                        width="0"
-                        height="auto"
-                        grow="1"
-                        focusable="true"
-                        justifyContent="center"
-                        alignItems="center"
-                        highlightCornerRadius="6"
-                        text="Continue"
-                        style="borderless"
-                        fontSize="@style/brls/dialog/fontSize"
-                        textColor="@theme/brls/accent"
-                        visibility="gone"/>
-
-                    <brls:Rectangle
-                        id="brls/dialog/button2/separator"
-                        width="2"
-                        height="auto"
-                        color="@theme/brls/sidebar/separator"
-                        visibility="gone" />
-
-                    <brls:Button
-                        id="brls/dialog/button2"
-                        width="0"
-                        height="auto"
-                        grow="1"
-                        focusable="true"
-                        justifyContent="center"
-                        alignItems="center"
-                        highlightCornerRadius="6"
-                        text="Continue"
-                        style="borderless"
-                        fontSize="@style/brls/dialog/fontSize"
-                        textColor="@theme/brls/accent"
-                        visibility="gone"/>
-
-                </brls:Box>
+                    height="auto"
+                    axis="column"/>
             
             </brls:Box>
 
@@ -168,6 +103,7 @@ Dialog::Dialog(std::string text)
     label->setFontSize(style["brls/dialog/fontSize"]);
     label->setHorizontalAlign(HorizontalAlign::CENTER);
     label->setSingleLine(false);
+    label->setWidth(720.0f - 2.0f * style["brls/dialog/paddingLeftRight"]);
 
     Box* box = new Box();
     box->addView(label);
@@ -195,11 +131,28 @@ Dialog::Dialog(std::string text)
     }));
 }
 
+static size_t utf8CharCount(const std::string& str)
+{
+    size_t res = 0, inc = 0;
+    while (inc < str.length())
+    {
+        if (str[inc] & 0x80)
+            if (str[inc] & 0x20)
+                if (str[inc] & 0x10)
+                    inc += 4;
+                else
+                    inc += 3;
+            else
+                inc += 2;
+        else
+            inc += 1;
+        res++;
+    }
+    return res;
+}
+
 void Dialog::addButton(std::string label, VoidEvent::Callback cb)
 {
-    if (this->buttons.size() >= 3)
-        return;
-
     DialogButton* button = new DialogButton();
     button->label        = label;
     button->cb           = cb;
@@ -226,40 +179,144 @@ void Dialog::setCancelable(bool cancelable)
 
 void Dialog::rebuildButtons()
 {
-    if (this->buttons.size() > 0)
+    if (!buttonBox)
+        return;
+
+    buttonBox->clearViews(true);
+    button1 = nullptr;
+    button2 = nullptr;
+    button3 = nullptr;
+    button2separator = nullptr;
+    button3separator = nullptr;
+
+    if (this->buttons.empty())
+        return;
+
+    Style style = Application::getStyle();
+    Theme theme = Application::getTheme();
+
+    auto createBtn = [this](DialogButton* b) -> Button* {
+        Theme theme = Application::getTheme();
+        Style style = Application::getStyle();
+        Button* btn = new Button();
+        btn->setHeight(72);
+        btn->setStyle(&BUTTONSTYLE_BORDERLESS);
+        btn->setTextColor(theme["brls/accent"]);
+        btn->setFontSize(style["brls/dialog/fontSize"]);
+        btn->setText(b->label);
+        btn->registerClickAction([this, b](View* view) {
+            buttonClick(b);
+            return true;
+        });
+        return btn;
+    };
+
+    auto createSep = []() -> Rectangle* {
+        Theme theme = Application::getTheme();
+        Rectangle* sep = new Rectangle();
+        sep->setHeight(2);
+        sep->setColor(theme["brls/sidebar/separator"]);
+        return sep;
+    };
+
+    if (this->buttons.size() == 1)
     {
+        button1 = createBtn(buttons[0]);
+        buttonBox->addView(createSep());
+        buttonBox->addView(button1);
         setLastFocusedView(button1);
-        button1->getParent()->setVisibility(Visibility::VISIBLE);
-
-        button1->setVisibility(Visibility::VISIBLE);
-        button1->setText(buttons[0]->label);
-        button1->registerClickAction([this](View* view) {
-            buttonClick(buttons[0]);
-            return true;
-        });
+        return;
     }
 
-    if (this->buttons.size() > 1)
+    if (this->buttons.size() == 2)
     {
-        button2separator->setVisibility(Visibility::VISIBLE);
-        button2->setVisibility(Visibility::VISIBLE);
-        button2->setText(buttons[1]->label);
-        button2->registerClickAction([this](View* view) {
-            buttonClick(buttons[1]);
-            return true;
-        });
+        bool fitSideBySide = true;
+        NVGcontext* vg = Application::getNVGContext();
+        for (DialogButton* b : this->buttons)
+        {
+            if (utf8CharCount(b->label) > 16)
+            {
+                fitSideBySide = false;
+                break;
+            }
+
+            if (vg)
+            {
+                int font = Application::getDefaultFont();
+                if (font != FONT_INVALID)
+                {
+                    nvgFontSize(vg, style["brls/dialog/fontSize"]);
+                    nvgFontFaceId(vg, font);
+                    float bounds[4];
+                    nvgTextBounds(vg, 0, 0, b->label.c_str(), nullptr, bounds);
+                    float requiredWidth = bounds[2] - bounds[0];
+                    if (requiredWidth > 260.0f)
+                    {
+                        fitSideBySide = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (fitSideBySide)
+        {
+            Box* row = new Box();
+            row->setAxis(Axis::ROW);
+            row->setHeight(72);
+            row->setJustifyContent(JustifyContent::SPACE_EVENLY);
+            row->setAlignItems(AlignItems::STRETCH);
+
+            button1 = createBtn(buttons[0]);
+            button1->setWidth(0);
+            button1->setGrow(1);
+
+            button2separator = new Rectangle();
+            button2separator->setWidth(2);
+            button2separator->setColor(theme["brls/sidebar/separator"]);
+
+            button2 = createBtn(buttons[1]);
+            button2->setWidth(0);
+            button2->setGrow(1);
+
+            row->addView(button1);
+            row->addView(button2separator);
+            row->addView(button2);
+
+            buttonBox->addView(createSep());
+            buttonBox->addView(row);
+            setLastFocusedView(button1);
+            return;
+        }
     }
 
-    if (this->buttons.size() > 2)
+    // 3 or more buttons, or 2 buttons with long text: stack vertically
+    std::vector<Button*> createdBtns;
+    for (size_t i = 0; i < this->buttons.size(); i++)
     {
-        button3separator->setVisibility(Visibility::VISIBLE);
-        button3->setVisibility(Visibility::VISIBLE);
-        button3->setText(buttons[2]->label);
-        button3->registerClickAction([this](View* view) {
-            buttonClick(buttons[2]);
-            return true;
-        });
+        Rectangle* sep = createSep();
+        buttonBox->addView(sep);
+
+        Button* btn = createBtn(buttons[i]);
+        buttonBox->addView(btn);
+        createdBtns.push_back(btn);
+
+        if (i == 0)
+            button1 = btn;
+        else if (i == 1)
+        {
+            button2 = btn;
+            button2separator = sep;
+        }
+        else if (i == 2)
+        {
+            button3 = btn;
+            button3separator = sep;
+        }
     }
+
+    if (!createdBtns.empty())
+        setLastFocusedView(createdBtns[0]);
 }
 
 void Dialog::buttonClick(DialogButton* button)

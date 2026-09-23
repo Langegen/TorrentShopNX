@@ -66,8 +66,11 @@ public:
     std::string getManifestDownloadUrl() const;
     std::string getLocalManifestPath() const;
     bool loadLocalManifest();
+    bool saveLocalManifest();
     bool refreshManifest(std::function<void(float progress, const std::string& status)> progress_cb = nullptr);
     bool parseManifestFromJson(const std::string& json_str);
+    void applyPackageDefaults();
+    std::vector<EmulatorPackage> getBuiltinBiosPackages() const;
 
     // Resolve relative path according to platform (Switch vs PC)
     static std::string resolvePlatformPath(const std::string& path);

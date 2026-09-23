@@ -17,7 +17,9 @@ bool extract7zArchive(
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize = nullptr,
+    size_t* outKnownTotalEntries = nullptr
 );
 
 // Fast listing of 7z directory contents without decompressing file data
@@ -26,6 +28,13 @@ bool list7zArchiveFolder(
     const std::string& innerPath,
     std::vector<FileItem>& outItems,
     std::string& outError
+);
+
+// Fast calculation of total uncompressed size and total file entries for 7z archives
+bool get7zArchiveTotals(
+    const std::string& archivePath,
+    uint64_t& outUncompressedSize,
+    size_t& outTotalEntries
 );
 
 } // namespace util

@@ -40,6 +40,15 @@ bool listArchiveFolder(
     std::string& outError
 );
 
+// Fast calculation of total uncompressed size and entry count if possible without decompressing payload.
+// Returns false for streaming compressed formats like .tar.gz / .tar.xz where pre-scanning
+// would require decompressing the entire file.
+bool getArchiveTotals(
+    const std::string& archivePath,
+    uint64_t& outUncompressedSize,
+    size_t& outTotalEntries
+);
+
 // Extracts the given archive to destination directory.
 // Runs synchronously — caller should invoke via background thread (e.g. brls::async).
 // Periodic progress callback is fired during unpacking.

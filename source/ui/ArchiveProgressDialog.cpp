@@ -238,22 +238,33 @@ void ArchiveProgressDialog::updateUi(const util::ArchiveProgress& progress) {
     if (statsLabel_) {
         char buf[160];
         std::string extStr = util::formatFileSize(progress.bytesExtracted);
-        uint64_t totalTarget = progress.totalUncompressedSize > 0
-            ? progress.totalUncompressedSize
-            : progress.totalArchiveSize;
-        std::string totalStr = util::formatFileSize(totalTarget);
         float pct = progress.percentage;
         if (std::isnan(pct) || std::isinf(pct)) pct = 0.0f;
         pct = std::clamp(pct, 0.0f, 100.0f);
 
-        if (progress.totalEntries > 0) {
-            std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu / %zu)",
-                          pct, extStr.c_str(), totalStr.c_str(),
-                          progress.entriesProcessed, progress.totalEntries);
+        if (progress.totalUncompressedSize > 0) {
+            std::string totalStr = util::formatFileSize(progress.totalUncompressedSize);
+            if (progress.totalEntries > 0) {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu / %zu)",
+                              pct, extStr.c_str(), totalStr.c_str(),
+                              progress.entriesProcessed, progress.totalEntries);
+            } else {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu)",
+                              pct, extStr.c_str(), totalStr.c_str(),
+                              progress.entriesProcessed);
+            }
         } else {
-            std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu)",
-                          pct, extStr.c_str(), totalStr.c_str(),
-                          progress.entriesProcessed);
+            // When total uncompressed size is not known in advance (e.g. streaming compressed tar),
+            // do not display compressed archive size as denominator for uncompressed extracted bytes!
+            if (progress.totalEntries > 0) {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s (%zu / %zu)",
+                              pct, extStr.c_str(),
+                              progress.entriesProcessed, progress.totalEntries);
+            } else {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s (%zu)",
+                              pct, extStr.c_str(),
+                              progress.entriesProcessed);
+            }
         }
         statsLabel_->setText(buf);
     }

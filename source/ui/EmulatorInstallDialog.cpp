@@ -91,6 +91,7 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     brls::async([pkg, cancelFlag, closedFlag, dialog, statusLabel, progressFill, statsLabel, onComplete]() {
         std::error_code ec;
         auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+        auto isSyncPending = std::make_shared<std::atomic<bool>>(false);
 
         // --- Check for Multi-File Package (e.g. BIOS sets) ---
         if (!pkg.companion_downloads.empty()) {
@@ -120,19 +121,34 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
                 compClient.setTimeout(600);
                 compClient.setCancelFlag(cancelFlag.get());
 
-                compClient.setProgressCallback([lastUpdate, statusLabel, progressFill, statsLabel, cancelFlag, i, totalFiles, fn](int64_t dltotal, int64_t dlnow) {
+                int64_t compExpectedSize = comp.file_size;
+
+                compClient.setProgressCallback([lastUpdate, isSyncPending, statusLabel, progressFill, statsLabel, cancelFlag, i, totalFiles, fn, compExpectedSize](int64_t dltotal, int64_t dlnow) {
                     if (cancelFlag->load()) return;
+                    if (isSyncPending->load(std::memory_order_relaxed)) return;
+
+                    int64_t effectiveTotal = (dltotal > 0) ? dltotal : compExpectedSize;
+
                     auto now = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count() < 60 && dlnow < dltotal) {
+                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count();
+                    if (elapsed < 80 && (effectiveTotal <= 0 || dlnow < effectiveTotal)) {
                         return;
                     }
                     *lastUpdate = now;
+                    isSyncPending->store(true, std::memory_order_relaxed);
 
-                    brls::sync([statusLabel, progressFill, statsLabel, dltotal, dlnow, i, totalFiles, fn]() {
-                        float filePct = (dltotal > 0) ? (static_cast<float>(dlnow) / static_cast<float>(dltotal)) : 0.0f;
+                    brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, effectiveTotal, dlnow, i, totalFiles, fn]() {
+                        isSyncPending->store(false, std::memory_order_relaxed);
+                        float filePct = (effectiveTotal > 0) ? (static_cast<float>(dlnow) / static_cast<float>(effectiveTotal)) : 0.0f;
+                        if (filePct > 1.0f) filePct = 1.0f;
                         float totalPct = (static_cast<float>(i) + filePct) / static_cast<float>(totalFiles);
+                        if (totalPct > 1.0f) totalPct = 1.0f;
                         progressFill->setWidth(440.0f * totalPct);
-                        statsLabel->setText(fn + ": " + formatSizeMb(dlnow) + " / " + formatSizeMb(dltotal));
+                        if (effectiveTotal > 0) {
+                            statsLabel->setText(fn + ": " + formatSizeMb(dlnow) + " / " + formatSizeMb(effectiveTotal));
+                        } else {
+                            statsLabel->setText(fn + ": " + formatSizeMb(dlnow));
+                        }
                     });
                 });
 
@@ -202,21 +218,30 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
         client.setTimeout(600);
         client.setCancelFlag(cancelFlag.get());
 
-        client.setProgressCallback([lastUpdate, statusLabel, progressFill, statsLabel, cancelFlag](int64_t dltotal, int64_t dlnow) {
+        int64_t pkgExpectedSize = pkg.file_size;
+
+        client.setProgressCallback([lastUpdate, isSyncPending, statusLabel, progressFill, statsLabel, cancelFlag, pkgExpectedSize](int64_t dltotal, int64_t dlnow) {
             if (cancelFlag->load()) return;
+            if (isSyncPending->load(std::memory_order_relaxed)) return;
+
+            int64_t effectiveTotal = (dltotal > 0) ? dltotal : pkgExpectedSize;
 
             auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count() < 60 && dlnow < dltotal) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count();
+            if (elapsed < 80 && (effectiveTotal <= 0 || dlnow < effectiveTotal)) {
                 return;
             }
             *lastUpdate = now;
+            isSyncPending->store(true, std::memory_order_relaxed);
 
-            brls::sync([statusLabel, progressFill, statsLabel, dltotal, dlnow]() {
-                if (dltotal > 0) {
-                    float pct = static_cast<float>(dlnow) / static_cast<float>(dltotal);
+            brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, effectiveTotal, dlnow]() {
+                isSyncPending->store(false, std::memory_order_relaxed);
+                if (effectiveTotal > 0) {
+                    float pct = static_cast<float>(dlnow) / static_cast<float>(effectiveTotal);
+                    if (pct > 1.0f) pct = 1.0f;
                     progressFill->setWidth(440.0f * pct);
                     statusLabel->setText(brls::getStr("app/retro/downloading_files_pct", std::to_string(static_cast<int>(pct * 100))));
-                    statsLabel->setText(formatSizeMb(dlnow) + " / " + formatSizeMb(dltotal));
+                    statsLabel->setText(formatSizeMb(dlnow) + " / " + formatSizeMb(effectiveTotal));
                 } else if (dlnow > 0) {
                     statusLabel->setText("app/retro/downloading_files"_i18n);
                     statsLabel->setText(formatSizeMb(dlnow));
@@ -270,16 +295,23 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
             bool extractOk = util::extractArchive(
                 tmpFile,
                 destDir,
-                [statusLabel, progressFill, statsLabel, lastUpdate, cancelFlag](const util::ArchiveProgress& prog) {
+                [statusLabel, progressFill, statsLabel, lastUpdate, isSyncPending, cancelFlag](const util::ArchiveProgress& prog) {
                     if (cancelFlag->load()) return;
+                    if (isSyncPending->load(std::memory_order_relaxed)) return;
+
                     auto now = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count() < 60 && prog.percentage < 100.0f) {
+                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - *lastUpdate).count();
+                    if (elapsed < 80 && prog.percentage < 100.0f) {
                         return;
                     }
                     *lastUpdate = now;
+                    isSyncPending->store(true, std::memory_order_relaxed);
 
-                    brls::sync([statusLabel, progressFill, statsLabel, prog]() {
-                        progressFill->setWidth(440.0f * (prog.percentage / 100.0f));
+                    brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, prog]() {
+                        isSyncPending->store(false, std::memory_order_relaxed);
+                        float pct = prog.percentage / 100.0f;
+                        if (pct > 1.0f) pct = 1.0f;
+                        progressFill->setWidth(440.0f * pct);
                         statusLabel->setText(brls::getStr("app/retro/extracting_pct", std::to_string(static_cast<int>(prog.percentage))));
                         if (!prog.currentFileName.empty()) {
                             statsLabel->setText(prog.currentFileName);
@@ -491,24 +523,31 @@ void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
     util::logLine("EmulatorInstall: handlePostEmulatorInstallFlow started for " + pkg.id);
 
     brls::sync([pkg, onDone]() {
-        auto proceedToForwarder = [pkg, onDone]() {
-            brls::sync([pkg, onDone]() {
-                if (pkg.forwarder_url.empty()) {
+        // Query the freshest package definition from manager
+        const auto* freshPkg = catalog::RetroEmulatorManager::instance().findPackage(pkg.id);
+        catalog::EmulatorPackage effectivePkg = freshPkg ? *freshPkg : pkg;
+
+        auto proceedToForwarder = [effectivePkg, onDone]() {
+            brls::sync([effectivePkg, onDone]() {
+                const auto* curPkgPtr = catalog::RetroEmulatorManager::instance().findPackage(effectivePkg.id);
+                catalog::EmulatorPackage activePkg = curPkgPtr ? *curPkgPtr : effectivePkg;
+
+                if (activePkg.forwarder_url.empty()) {
                     if (onDone) onDone();
                     return;
                 }
 
-                if (catalog::RetroEmulatorManager::instance().isForwarderInstalled(pkg.id)) {
+                if (catalog::RetroEmulatorManager::instance().isForwarderInstalled(activePkg.id)) {
                     if (onDone) onDone();
                     return;
                 }
 
-                util::logLine("EmulatorInstall: showing forwarder prompt for " + pkg.id);
-                std::string forwarderMsg = brls::getStr("app/retro/prompt_install_forwarder_msg", pkg.name);
+                util::logLine("EmulatorInstall: showing forwarder prompt for " + activePkg.id);
+                std::string forwarderMsg = brls::getStr("app/retro/prompt_install_forwarder_msg", activePkg.name);
                 auto* forwarderDlg = new brls::Dialog(forwarderMsg);
-                forwarderDlg->addButton("app/retro/btn_install_forwarder"_i18n, [pkg, onDone]() {
-                    brls::sync([pkg, onDone]() {
-                        installForwarderForEmulator(pkg, [onDone](bool ok) {
+                forwarderDlg->addButton("app/retro/btn_install_forwarder"_i18n, [activePkg, onDone]() {
+                    brls::sync([activePkg, onDone]() {
+                        installForwarderForEmulator(activePkg, [onDone](bool ok) {
                             if (onDone) onDone();
                         });
                     });
@@ -521,11 +560,11 @@ void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
         };
 
         // Check if emulator has an associated BIOS that is not yet installed
-        const auto* biosPkg = catalog::RetroEmulatorManager::instance().getBiosPackageForEmulator(pkg.id);
+        const auto* biosPkg = catalog::RetroEmulatorManager::instance().getBiosPackageForEmulator(effectivePkg.id);
         if (biosPkg && !catalog::RetroEmulatorManager::instance().isInstalled(biosPkg->id)) {
             catalog::EmulatorPackage biosCopy = *biosPkg;
-            util::logLine("EmulatorInstall: showing BIOS prompt for " + pkg.id + " -> bios=" + biosCopy.id);
-            std::string biosMsg = brls::getStr("app/retro/prompt_install_bios_msg", pkg.name, biosCopy.name);
+            util::logLine("EmulatorInstall: showing BIOS prompt for " + effectivePkg.id + " -> bios=" + biosCopy.id);
+            std::string biosMsg = brls::getStr("app/retro/prompt_install_bios_msg", effectivePkg.name, biosCopy.name);
             auto* biosDlg = new brls::Dialog(biosMsg);
             biosDlg->addButton("app/retro/btn_install_bios"_i18n, [biosCopy, proceedToForwarder]() {
                 util::logLine("EmulatorInstall: user accepted BIOS install for " + biosCopy.id);

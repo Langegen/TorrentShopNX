@@ -236,11 +236,12 @@ bool CatalogUpdater::applyDiffToGames(std::vector<Game>& currentGames,
         }
     }
 
-    // Prepend new games to the top of catalog so new releases appear first
+    // Prepend new games to the top of catalog so new releases appear first.
+    // Use move-append instead of insert(begin,...) to avoid O(N) shifting of all existing games.
     if (!newGames.empty()) {
-        currentGames.insert(currentGames.begin(),
-                            std::make_move_iterator(newGames.begin()),
-                            std::make_move_iterator(newGames.end()));
+        newGames.reserve(newGames.size() + currentGames.size());
+        std::move(currentGames.begin(), currentGames.end(), std::back_inserter(newGames));
+        currentGames = std::move(newGames);
     }
 
     // Apply deletions if any
@@ -383,13 +384,17 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
     std::filesystem::remove(tempDiffPath, ec);
 
-    // Update in-memory snapshot and refresh views
+    // Update in-memory snapshot and refresh views.
+    // IMPORTANT: capture viewToken HERE, in the background thread, before brls::sync.
+    // If the user navigated away from CatalogView between now and when the lambda runs,
+    // *viewToken will be false and we skip filterCatalog() on a potentially-dead object.
     auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(gamesCopy));
-    brls::sync([newSnapshot]() {
+    auto viewToken = ui::g_catalogViewAliveToken;
+    brls::sync([newSnapshot, viewToken]() {
         setCatalogSnapshot(newSnapshot);
         auto snap = getCatalogSnapshot();
         catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
-        if (ui::g_activeCatalogView) {
+        if (viewToken && *viewToken && ui::g_activeCatalogView) {
             ui::g_activeCatalogView->filterCatalog();
         }
     });
@@ -492,19 +497,29 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
             util::logLine("catalog_updater: parsed " + std::to_string(online_games.size()) + " games from stream");
 
             std::string tempBinPath = getCatalogBinPath() + ".tmp";
-            saveGamesToBinaryFile(tempBinPath, online_games);
+            bool binSaved = saveGamesToBinaryFile(tempBinPath, online_games);
 
             std::error_code ec;
             bool jsonOk = false;
-            bool binOk = false;
+            bool binOk  = false;
 
-            std::filesystem::remove(getCatalogBinPath(), ec);
-            std::filesystem::rename(tempBinPath, getCatalogBinPath(), ec);
-            binOk = !ec;
+            if (!binSaved) {
+                // Write failed (e.g. SD card full). Keep old .bin intact — do NOT remove it.
+                util::logLine("catalog_updater: saveGamesToBinaryFile failed, keeping existing cache");
+                std::filesystem::remove(tempBinPath, ec);
+                std::filesystem::remove(tempJsonPath, ec);
+            } else {
+                std::filesystem::remove(getCatalogBinPath(), ec);
+                std::filesystem::rename(tempBinPath, getCatalogBinPath(), ec);
+                binOk = !ec;
+                if (!binOk) {
+                    util::logLine("catalog_updater: rename bin failed: " + ec.message());
+                }
 
-            std::filesystem::remove(getCatalogPath(), ec);
-            std::filesystem::rename(tempJsonPath, getCatalogPath(), ec);
-            jsonOk = !ec;
+                std::filesystem::remove(getCatalogPath(), ec);
+                std::filesystem::rename(tempJsonPath, getCatalogPath(), ec);
+                jsonOk = !ec;
+            }
 
             updated = jsonOk && binOk;
             if (updated && !dl_res.etag.empty()) {
@@ -554,11 +569,13 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         cfg.save();
 
         auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(online_games));
-        brls::sync([newSnapshot]() {
+        // Capture viewToken in the background thread before scheduling on main thread.
+        auto viewToken = ui::g_catalogViewAliveToken;
+        brls::sync([newSnapshot, viewToken]() {
             setCatalogSnapshot(newSnapshot);
             auto snap = getCatalogSnapshot();
             catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
-            if (ui::g_activeCatalogView) {
+            if (viewToken && *viewToken && ui::g_activeCatalogView) {
                 ui::g_activeCatalogView->filterCatalog();
             }
         });

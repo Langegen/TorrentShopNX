@@ -529,19 +529,19 @@ struct HeaderCaptureCtx {
     std::string last_modified;
 };
 
+static bool startsWithCi(std::string_view str, std::string_view prefix) {
+    if (str.size() < prefix.size()) return false;
+    for (size_t i = 0; i < prefix.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(str[i])) != std::tolower(static_cast<unsigned char>(prefix[i])))
+            return false;
+    }
+    return true;
+}
+
 static size_t curlCaptureHeader(void* ptr, size_t size, size_t nmemb, void* userdata) {
     auto* ctx = static_cast<HeaderCaptureCtx*>(userdata);
     if (!ctx) return size * nmemb;
     std::string_view line(static_cast<const char*>(ptr), size * nmemb);
-    
-    auto startsWithCi = [](std::string_view str, std::string_view prefix) {
-        if (str.size() < prefix.size()) return false;
-        for (size_t i = 0; i < prefix.size(); ++i) {
-            if (std::tolower(static_cast<unsigned char>(str[i])) != std::tolower(static_cast<unsigned char>(prefix[i])))
-                return false;
-        }
-        return true;
-    };
 
     if (startsWithCi(line, "etag:")) {
         auto val = line.substr(5);
@@ -588,9 +588,31 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     curl_easy_reset(curl);
 
     struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.11)");
+    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.12)");
     for (const auto& h : extra_headers) {
         headers = curl_slist_append(headers, h.c_str());
+    }
+
+    bool hasAcceptEncoding = false;
+    for (const auto& h : extra_headers) {
+        if (startsWithCi(h, "accept-encoding:")) {
+            hasAcceptEncoding = true;
+            break;
+        }
+    }
+
+    if (!hasAcceptEncoding) {
+        bool isTextOrCatalog = (url.find(".json") != std::string::npos ||
+                                url.find(".diff") != std::string::npos ||
+                                url.find(".txt") != std::string::npos);
+        if (isTextOrCatalog) {
+            curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+        } else {
+            headers = curl_slist_append(headers, "Accept-Encoding: identity");
+            curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "identity");
+        }
+    } else {
+        curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
     }
 
     FileWriteCtx file_ctx{fp, 0};
@@ -615,7 +637,6 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);  // 1 KB/s
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);    // 30 seconds stall timeout
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");    // automatic gzip/deflate decompression!
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 256L * 1024L);
     curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
