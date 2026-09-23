@@ -376,7 +376,7 @@
         "notify_update_disabled": "Vérification des mises à jour désactivée pour « {0} »",
         "notify_update_enabled": "Vérification des mises à jour activée pour « {0} »",
         "mod_warn_dialog_title": "Attention : Modifications détectées",
-        "mod_warn_dialog_msg": "Des mods installés ({1}) ont été détectés pour « {0} ».\n\nLa mise à jour peut rendre les mods ou traductions incompatibles ou provoquer des plantages.\n\nQue souhaitez-vous faire ?",
+        "mod_warn_dialog_msg": "Des mods installés ({1}) ont été détectés pour « {0} ». La mise à jour peut rendre les mods ou traductions incompatibles ou provoquer des plantages. Que souhaitez-vous faire ?",
         "mod_warn_btn_proceed": "Mettre à jour quand même",
         "mod_warn_btn_freeze": "Figer la mise à jour"
     },
@@ -637,7 +637,8 @@
         "update_catalog_full": "Rechargement complet de la base",
         "update_catalog_downloading_diff": "Téléchargement des modifications...",
         "update_catalog_applying_diff": "Application des modifications...",
-        "update_catalog_diff_success": "Catalogue mis à jour : +{0} nouveaux, {1} modifiés"
+        "update_catalog_diff_success": "Catalogue mis à jour : +{0} nouveaux, {1} modifiés",
+        "update_catalog_up_to_date": "Le catalogue est déjà à jour"
     },
     "applet": {
         "title": "Mode Applet détecté",
@@ -847,7 +848,23 @@
         "emulator_download": "Télécharger",
         "emulator_downloading": "Téléchargement de l'émulateur...",
         "emulator_extracting": "Extraction de l'archive...",
-        "emulator_install_success": "Émulateur installé avec succès !"
+        "emulator_install_success": "Émulateur installé avec succès !",
+        "btn_bios": "Installer le BIOS",
+        "btn_forwarder": "Créer un forwarder",
+        "btn_install_bios": "Installer le BIOS",
+        "btn_install_forwarder": "Créer un forwarder",
+        "btn_skip": "Ignorer",
+        "downloading_comp_file": "Téléchargement du fichier {0} ({1} sur {2})...",
+        "forwarder_download_error": "Impossible de télécharger le forwarder (vérifiez la connexion Internet)",
+        "forwarder_downloading": "Téléchargement du forwarder...",
+        "forwarder_install_error": "Erreur lors de l'installation du forwarder",
+        "forwarder_installed_success": "Forwarder pour {0} installé avec succès dans le menu principal !",
+        "forwarder_not_available": "Aucun forwarder disponible pour cet émulateur",
+        "prompt_install_bios_msg": "Pour que {0} fonctionne correctement, {1} est requis/recommandé. Installer le BIOS maintenant ?",
+        "prompt_install_bios_title": "Installer le BIOS",
+        "prompt_install_forwarder_msg": "Créer une icône pour {0} dans le menu principal de la Switch pour un accès rapide ?",
+        "prompt_install_forwarder_title": "Raccourci dans le menu principal",
+        "sec_emu_bios": "BIOS et fichiers système (PS2, PS1, PS Vita, Dreamcast, Sega CD, NDS, FDS, Sega 32X)"
     },
     "dashboard": {
         "catalog_title": "JEUX NOUVEAUX ET POPULAIRES",

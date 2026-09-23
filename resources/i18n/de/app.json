@@ -376,7 +376,7 @@
         "notify_update_disabled": "Update-Prüfung deaktiviert für „{0}“",
         "notify_update_enabled": "Update-Prüfung aktiviert für „{0}“",
         "mod_warn_dialog_title": "Achtung: Modifikationen gefunden",
-        "mod_warn_dialog_msg": "Für das Spiel „{0}“ wurden installierte Mods ({1}) gefunden.\n\nEine Aktualisierung kann Mods oder Übersetzungen beschädigen oder Abstürze verursachen.\n\nWas möchten Sie tun?",
+        "mod_warn_dialog_msg": "Für das Spiel „{0}“ wurden installierte Mods ({1}) gefunden. Eine Aktualisierung kann Mods oder Übersetzungen beschädigen oder Abstürze verursachen. Was möchten Sie tun?",
         "mod_warn_btn_proceed": "Trotzdem aktualisieren",
         "mod_warn_btn_freeze": "Update einfrieren"
     },
@@ -637,7 +637,8 @@
         "update_catalog_full": "Vollständiger Datenbank-Download",
         "update_catalog_downloading_diff": "Änderungen herunterladen...",
         "update_catalog_applying_diff": "Änderungen anwenden...",
-        "update_catalog_diff_success": "Katalog aktualisiert: +{0} neu, {1} aktualisiert"
+        "update_catalog_diff_success": "Katalog aktualisiert: +{0} neu, {1} aktualisiert",
+        "update_catalog_up_to_date": "Katalog ist bereits aktuell"
     },
     "applet": {
         "title": "Applet-Modus erkannt",
@@ -847,7 +848,23 @@
         "emulator_download": "Herunterladen",
         "emulator_downloading": "Emulator wird heruntergeladen...",
         "emulator_extracting": "Archiv wird entpackt...",
-        "emulator_install_success": "Emulator erfolgreich installiert!"
+        "emulator_install_success": "Emulator erfolgreich installiert!",
+        "btn_bios": "BIOS installieren",
+        "btn_forwarder": "Forwarder erstellen",
+        "btn_install_bios": "BIOS installieren",
+        "btn_install_forwarder": "Forwarder erstellen",
+        "btn_skip": "Überspringen",
+        "downloading_comp_file": "Datei {0} wird heruntergeladen ({1} von {2})...",
+        "forwarder_download_error": "Forwarder konnte nicht heruntergeladen werden (Internetverbindung prüfen)",
+        "forwarder_downloading": "Forwarder wird heruntergeladen...",
+        "forwarder_install_error": "Fehler bei der Installation des Forwarders",
+        "forwarder_installed_success": "Forwarder für {0} erfolgreich im Home-Menü installiert!",
+        "forwarder_not_available": "Für diesen Emulator ist kein Forwarder verfügbar",
+        "prompt_install_bios_msg": "Damit {0} einwandfrei funktioniert, wird {1} benötigt/empfohlen. BIOS jetzt installieren?",
+        "prompt_install_bios_title": "BIOS installieren",
+        "prompt_install_forwarder_msg": "Ein Symbol für {0} im Switch-Home-Menü für den Schnellstart erstellen?",
+        "prompt_install_forwarder_title": "Home-Menü-Verknüpfung",
+        "sec_emu_bios": "BIOS & Systemdateien (PS2, PS1, PS Vita, Dreamcast, Sega CD, NDS, FDS, Sega 32X)"
     },
     "dashboard": {
         "catalog_title": "NEUE & BELIEBTE SPIELE",

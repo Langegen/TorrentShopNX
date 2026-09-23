@@ -376,7 +376,7 @@
         "notify_update_disabled": "已禁用《{0}》的更新检测",
         "notify_update_enabled": "已启用《{0}》的更新检测",
         "mod_warn_dialog_title": "警告: 检测到MOD文件",
-        "mod_warn_dialog_msg": "已为游戏《{0}》检测到安装的MOD（{1}个）。\n\n更新游戏可能会导致MOD失效或启动报错。\n\n您想要执行什么操作？",
+        "mod_warn_dialog_msg": "已为游戏《{0}》检测到安装的MOD（{1}个）。 更新游戏可能会导致MOD失效或启动报错。 您想要执行什么操作？",
         "mod_warn_btn_proceed": "仍要更新",
         "mod_warn_btn_freeze": "忽略此更新"
     },
@@ -637,7 +637,8 @@
         "update_catalog_full": "全量重新下载数据库",
         "update_catalog_downloading_diff": "正在下载增量变更...",
         "update_catalog_applying_diff": "正在应用变更...",
-        "update_catalog_diff_success": "目录已更新：新增 {0} 款，更新 {1} 款"
+        "update_catalog_diff_success": "目录已更新：新增 {0} 款，更新 {1} 款",
+        "update_catalog_up_to_date": "目录已是最新"
     },
     "applet": {
         "title": "当前运行在 Applet 模式",
@@ -847,7 +848,23 @@
         "emulator_download": "下载",
         "emulator_downloading": "正在下载模拟器...",
         "emulator_extracting": "正在解压压缩包...",
-        "emulator_install_success": "模拟器安装成功！"
+        "emulator_install_success": "模拟器安装成功！",
+        "btn_bios": "安装 BIOS",
+        "btn_forwarder": "创建启动快捷方式",
+        "btn_install_bios": "安装 BIOS",
+        "btn_install_forwarder": "创建启动快捷方式",
+        "btn_skip": "跳过",
+        "downloading_comp_file": "正在下载文件 {0}（{1}/{2}）...",
+        "forwarder_download_error": "下载启动快捷方式失败（请检查网络连接）",
+        "forwarder_downloading": "正在下载启动快捷方式...",
+        "forwarder_install_error": "安装启动快捷方式到系统失败",
+        "forwarder_installed_success": "{0} 的启动快捷方式已成功安装到主菜单！",
+        "forwarder_not_available": "此模拟器暂无可用的启动快捷方式",
+        "prompt_install_bios_msg": "要使 {0} 正常运行，需要/推荐安装 {1}。 立即安装 BIOS？",
+        "prompt_install_bios_title": "安装 BIOS",
+        "prompt_install_forwarder_msg": "在 Switch 主菜单为 {0} 创建快速启动图标吗？",
+        "prompt_install_forwarder_title": "主菜单快捷方式",
+        "sec_emu_bios": "BIOS 和系统文件（PS2、PS1、PS Vita、Dreamcast、Sega CD、NDS、FDS、Sega 32X）"
     },
     "dashboard": {
         "catalog_title": "最新与热门游戏",
