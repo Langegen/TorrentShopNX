@@ -1,5 +1,6 @@
 #include "retro_emulator_manager.h"
 #include "../utils/app_paths.h"
+#include "../utils/file_ops.h"
 #include "../utils/log.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
@@ -31,6 +32,7 @@ RetroEmulatorManager::RetroEmulatorManager() {
     initPackages();
     loadInstalledVersions();
     loadLocalManifest();
+    healInstalledEmulators();
 }
 
 void RetroEmulatorManager::initPackages() {
@@ -182,17 +184,17 @@ void RetroEmulatorManager::initPackages() {
         // --- 9. Sony PSP ---
         {
             "ppsspp",
-            "PPSSPP Community Build",
-            "SirSamael",
-            "0.7.0",
-            "Современная сборка PPSSPP с поддержкой Vulkan (NXVK), онлайн-мультиплеера и 60 FPS",
+            "PPSSPP-nx",
+            "NaGaa95",
+            "1.0.0",
+            "Порт эмулятора Sony PlayStation Portable для Switch от NaGaa95. Высокая производительность и поддержка Vulkan",
             "sony",
-            "https://github.com/SirSamael/ppsspp-switch-community-build/releases/download/v0.7.0/PPSSPP-Switch-Community-Build-v0.7.0.zip",
-            "ppsspp_switch.zip",
+            "https://github.com/NaGaa95/ppsspp-nx/releases/download/1.0.0/PPSSPP.nro",
+            "PPSSPP.nro",
             "sdmc:/switch/ppsspp/PPSSPP.nro",
-            "sdmc:/switch/ppsspp",
-            true,
-            26 * 1024 * 1024,
+            "",
+            false,
+            33554432,
             {"psp"},
             nvgRGBA(30, 136, 229, 255)
         },
@@ -341,6 +343,215 @@ void RetroEmulatorManager::initPackages() {
             nvgRGBA(255, 152, 0, 255)
         }
     };
+
+    applyPackageDefaults();
+}
+
+std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() const {
+    return {
+        // --- 1. PlayStation 2 BIOS (NetherSX2) ---
+        {
+            "ps2_bios",
+            "PlayStation 2 BIOS Pack",
+            "Sony / Dump",
+            "v2.30",
+            "Комплект BIOS PS2 (v2.30 NTSC-U) для запуска игр в NetherSX2",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin",
+            "ps2-0230a-20080220.bin",
+            "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin",
+            "sdmc:/switch/NetherSX2/bios",
+            false,
+            4194304,
+            {"ps2"},
+            nvgRGBA(0, 36, 100, 255)
+        },
+
+        // --- 2. PlayStation 1 BIOS (DuckStation) ---
+        {
+            "ps1_bios",
+            "PlayStation 1 BIOS (SCPH-5501)",
+            "Sony / Dump",
+            "v3.0",
+            "Американский образ BIOS PS1 (SCPH-5501) для DuckStation",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
+            "scph5501.bin",
+            "sdmc:/switch/duckstation/bios/scph5501.bin",
+            "sdmc:/switch/duckstation/bios",
+            false,
+            524288,
+            {"ps1"},
+            nvgRGBA(0, 55, 145, 255)
+        },
+
+        // --- 3. PlayStation Vita Firmware (Vita3K) ---
+        {
+            "vita_fw",
+            "PS Vita Firmware PUP",
+            "Sony Interactive Ent.",
+            "3.74",
+            "Официальный пакет обновления прошивки PS Vita для первой настройки Vita3K",
+            "bios",
+            "http://dus01.psp2.update.playstation.net/update/psp2/image/2019_0924/sd_8b5f60b56c3da8365b973dba570c53a5/PSP2UPDAT.PUP?dest=us",
+            "PSP2UPDAT.PUP",
+            "sdmc:/switch/Vita3K/PSP2UPDAT.PUP",
+            "sdmc:/switch/Vita3K",
+            false,
+            56768512,
+            {"psvita"},
+            nvgRGBA(0, 150, 214, 255)
+        },
+
+        // --- 4. Sega Dreamcast & Naomi (Flycast) ---
+        {
+            "dreamcast_bios",
+            "Dreamcast BIOS & Flash",
+            "Sega / Dump",
+            "v1.01",
+            "Системный BIOS (dc_boot.bin) и энергонезависимая память (flash.bin) для Flycast",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin",
+            "dc_boot.bin",
+            "sdmc:/switch/flycast/data/dc_boot.bin",
+            "sdmc:/switch/flycast/data",
+            false,
+            2228224,
+            {"dreamcast"},
+            nvgRGBA(255, 87, 34, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/switch/flycast/data/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/switch/flycast/data/flash.bin", 131072}
+            }
+        },
+
+        // --- 5. Sega CD (pGEN) ---
+        {
+            "segacd_bios",
+            "Sega CD BIOS Pack",
+            "Sega / Dump",
+            "v2.00",
+            "BIOS привода Sega CD / Mega CD (US, EUR, JPN) для запуска CD-образов в pGEN",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
+            "bios_CD_U.bin",
+            "sdmc:/switch/pGEN/bios_CD_U.bin",
+            "sdmc:/switch/pGEN",
+            false,
+            393216,
+            {"sega_cd"},
+            nvgRGBA(76, 175, 80, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/switch/pGEN/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/switch/pGEN/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/switch/pGEN/bios_CD_J.bin", 131072}
+            }
+        },
+
+        // --- 6. Nintendo DS (melonDS) ---
+        {
+            "nds_bios",
+            "Nintendo DS BIOS & Firmware",
+            "Nintendo / Dump",
+            "v1.0",
+            "Оригинальные ARM7/ARM9 BIOS и firmware.bin для melonDS (Wi-Fi, тайминги)",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
+            "bios7.bin",
+            "sdmc:/switch/melonds/bios7.bin",
+            "sdmc:/switch/melonds",
+            false,
+            282624,
+            {"nds"},
+            nvgRGBA(0, 188, 212, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/melonds/bios7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/melonds/bios9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/melonds/firmware.bin", 262144}
+            }
+        },
+
+        // --- 7. Famicom Disk System (pNES) ---
+        {
+            "fds_bios",
+            "Famicom Disk System BIOS",
+            "Nintendo / Dump",
+            "v1.0",
+            "Образ BIOS дисковой системы FDS (disksys.rom) для запуска .fds игр в pNES",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom",
+            "disksys.rom",
+            "sdmc:/switch/pNES/disksys.rom",
+            "sdmc:/switch/pNES",
+            false,
+            8192,
+            {"nes"},
+            nvgRGBA(230, 0, 18, 255)
+        },
+
+        // --- 8. Sega 32X & Sega CD (RetroArch) ---
+        {
+            "sega32x_bios",
+            "RetroArch Sega CD & System BIOS",
+            "Sega / Libretro",
+            "v2.0",
+            "Набор BIOS Sega CD и системных файлов для RetroArch (cores/system)",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
+            "bios_CD_U.bin",
+            "sdmc:/retroarch/cores/system/bios_CD_U.bin",
+            "sdmc:/retroarch/cores/system",
+            false,
+            393216,
+            {"sega_32x", "sega_cd"},
+            nvgRGBA(255, 152, 0, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/retroarch/cores/system/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/retroarch/cores/system/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/retroarch/cores/system/bios_CD_J.bin", 131072}
+            }
+        }
+    };
+}
+
+void RetroEmulatorManager::applyPackageDefaults() {
+    for (auto& p : packages_) {
+        if (p.id == "nethersx2") {
+            if (p.bios_id.empty()) p.bios_id = "ps2_bios";
+        } else if (p.id == "duckstation") {
+            if (p.bios_id.empty()) p.bios_id = "ps1_bios";
+        } else if (p.id == "vita3k") {
+            if (p.bios_id.empty()) p.bios_id = "vita_fw";
+        } else if (p.id == "flycast") {
+            if (p.bios_id.empty()) p.bios_id = "dreamcast_bios";
+        } else if (p.id == "pgen") {
+            if (p.bios_id.empty()) p.bios_id = "segacd_bios";
+        } else if (p.id == "melonds") {
+            if (p.bios_id.empty()) p.bios_id = "nds_bios";
+        } else if (p.id == "pnes") {
+            if (p.bios_id.empty()) p.bios_id = "fds_bios";
+        } else if (p.id == "picodrive") {
+            if (p.bios_id.empty()) p.bios_id = "sega32x_bios";
+        } else if (p.id == "retroarch") {
+            if (p.bios_id.empty()) p.bios_id = "sega32x_bios";
+        }
+    }
+
+    for (const auto& bp : getBuiltinBiosPackages()) {
+        auto it = std::find_if(packages_.begin(), packages_.end(),
+            [&bp](const EmulatorPackage& p) { return p.id == bp.id; });
+        if (it == packages_.end()) {
+            packages_.push_back(bp);
+        } else {
+            if (it->companion_downloads.empty() && !bp.companion_downloads.empty()) {
+                it->companion_downloads = bp.companion_downloads;
+            }
+        }
+    }
 }
 
 const EmulatorPackage* RetroEmulatorManager::findPackage(const std::string& emu_id) const {
@@ -362,6 +573,17 @@ const EmulatorPackage* RetroEmulatorManager::getPackageForConsole(const std::str
 bool RetroEmulatorManager::isInstalled(const std::string& emu_id) const {
     const auto* p = findPackage(emu_id);
     if (!p) return false;
+
+    // For multi-file packages (e.g. BIOS sets with companion downloads),
+    // verify that all companion files exist on disk with non-zero size
+    if (!p->companion_downloads.empty()) {
+        for (const auto& comp : p->companion_downloads) {
+            std::string cpath = resolvePlatformPath(comp.install_path);
+            struct stat cst;
+            if (stat(cpath.c_str(), &cst) != 0 || cst.st_size <= 0) return false;
+        }
+        return true;
+    }
 
     std::string path = resolvePlatformPath(p->install_path);
     struct stat st;
@@ -402,6 +624,11 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
 
     const auto* p = findPackage(emu_id);
     if (!p) return EmulatorInstallStatus::INSTALLED;
+
+    // BIOS packages are static dump files and do not have software updates
+    if (p->category == "bios") {
+        return EmulatorInstallStatus::INSTALLED;
+    }
 
     std::string installedVer = getInstalledVersion(emu_id);
     if (!installedVer.empty() && installedVer != p->version && p->version != "latest") {
@@ -451,13 +678,23 @@ void RetroEmulatorManager::saveInstalledVersions() {
 bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::string& out_err) {
     const auto* p = findPackage(emu_id);
     if (!p) {
-        out_err = "Эмулятор не найден в базе";
+        out_err = "Пакет не найден в базе";
         return false;
     }
 
-    std::string mainFile = resolvePlatformPath(p->install_path);
     std::error_code ec;
 
+    // If there are companion downloads, remove each of them
+    if (!p->companion_downloads.empty()) {
+        for (const auto& comp : p->companion_downloads) {
+            std::string cpath = resolvePlatformPath(comp.install_path);
+            if (std::filesystem::exists(cpath, ec)) {
+                std::filesystem::remove(cpath, ec);
+            }
+        }
+    }
+
+    std::string mainFile = resolvePlatformPath(p->install_path);
     if (std::filesystem::exists(mainFile, ec)) {
         std::filesystem::remove(mainFile, ec);
         if (ec) {
@@ -489,6 +726,12 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
     return true;
 }
 
+const EmulatorPackage* RetroEmulatorManager::getBiosPackageForEmulator(const std::string& emu_id) const {
+    const auto* emu = findPackage(emu_id);
+    if (!emu || emu->bios_id.empty()) return nullptr;
+    return findPackage(emu->bios_id);
+}
+
 std::string RetroEmulatorManager::getManifestDownloadUrl() const {
     return "https://raw.githubusercontent.com/Langegen/console-games/main/data/emulators.json";
 }
@@ -497,50 +740,181 @@ std::string RetroEmulatorManager::getLocalManifestPath() const {
     return resolvePlatformPath(std::string(TSNX_RETRO_DATA_DIR) + "/emulators.json");
 }
 
+bool RetroEmulatorManager::saveLocalManifest() {
+    std::string finalPath = getLocalManifestPath();
+    tsnx_ensure_parent_dirs(finalPath.c_str());
+
+    try {
+        nlohmann::json j = nlohmann::json::array();
+        for (const auto& p : packages_) {
+            nlohmann::json item;
+            item["id"] = p.id;
+            item["name"] = p.name;
+            item["author"] = p.author;
+            item["version"] = p.version;
+            item["description"] = p.description;
+            item["category"] = p.category;
+            item["download_url"] = p.download_url;
+            item["filename"] = p.filename;
+            item["install_path"] = p.install_path;
+            item["extract_dir"] = p.extract_dir;
+            item["is_archive"] = p.is_archive;
+            item["file_size"] = p.file_size;
+            item["supported_console_ids"] = p.supported_console_ids;
+            item["color"] = {
+                static_cast<int>(p.color.r * 255.0f),
+                static_cast<int>(p.color.g * 255.0f),
+                static_cast<int>(p.color.b * 255.0f),
+                static_cast<int>(p.color.a * 255.0f)
+            };
+            if (!p.bios_id.empty()) item["bios_id"] = p.bios_id;
+            if (!p.companion_downloads.empty()) {
+                nlohmann::json comps = nlohmann::json::array();
+                for (const auto& cd : p.companion_downloads) {
+                    nlohmann::json cj;
+                    cj["download_url"] = cd.download_url;
+                    cj["install_path"] = cd.install_path;
+                    cj["file_size"] = cd.file_size;
+                    comps.push_back(cj);
+                }
+                item["companion_downloads"] = comps;
+            }
+            j.push_back(item);
+        }
+
+        std::string tmpPath = finalPath + ".tmp";
+        std::ofstream out(tmpPath, std::ios::trunc);
+        if (!out.is_open()) return false;
+        out << j.dump(2);
+        out.close();
+
+        std::error_code ec;
+        std::filesystem::remove(finalPath, ec);
+        std::filesystem::rename(tmpPath, finalPath, ec);
+        util::logLine("RetroEmulatorManager: saved local manifest with " + std::to_string(packages_.size()) + " packages to " + finalPath);
+        return true;
+    } catch (const std::exception& e) {
+        util::logLine(std::string("RetroEmulatorManager: saveLocalManifest error: ") + e.what());
+    }
+    return false;
+}
+
 bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
     try {
         auto j = nlohmann::json::parse(json_str);
         if (!j.is_array()) return false;
 
-        std::vector<EmulatorPackage> parsed;
         for (const auto& item : j) {
-            EmulatorPackage p;
-            p.id = item.value("id", "");
-            p.name = item.value("name", "");
-            p.author = item.value("author", "");
-            p.version = item.value("version", "");
-            p.description = item.value("description", "");
-            p.category = item.value("category", "nintendo");
-            p.download_url = item.value("download_url", "");
-            p.filename = item.value("filename", "");
-            p.install_path = item.value("install_path", "");
-            p.extract_dir = item.value("extract_dir", "");
-            p.is_archive = item.value("is_archive", false);
-            p.file_size = item.value("file_size", (int64_t)0);
+            std::string id = item.value("id", "");
+            if (id.empty()) continue;
 
-            if (item.contains("supported_console_ids") && item["supported_console_ids"].is_array()) {
-                p.supported_console_ids = item["supported_console_ids"].get<std::vector<std::string>>();
-            }
+            auto it = std::find_if(packages_.begin(), packages_.end(),
+                [&id](const EmulatorPackage& p) { return p.id == id; });
 
-            if (item.contains("color") && item["color"].is_array() && item["color"].size() == 4) {
-                p.color = nvgRGBA(item["color"][0].get<int>(),
-                                  item["color"][1].get<int>(),
-                                  item["color"][2].get<int>(),
-                                  item["color"][3].get<int>());
+            if (it != packages_.end()) {
+                if (item.contains("name") && !item["name"].get<std::string>().empty())
+                    it->name = item["name"].get<std::string>();
+                if (item.contains("author") && !item["author"].get<std::string>().empty())
+                    it->author = item["author"].get<std::string>();
+                if (item.contains("version") && !item["version"].get<std::string>().empty())
+                    it->version = item["version"].get<std::string>();
+                if (item.contains("description") && !item["description"].get<std::string>().empty())
+                    it->description = item["description"].get<std::string>();
+                if (item.contains("category") && !item["category"].get<std::string>().empty())
+                    it->category = item["category"].get<std::string>();
+                if (item.contains("download_url") && !item["download_url"].get<std::string>().empty())
+                    it->download_url = item["download_url"].get<std::string>();
+                if (item.contains("filename") && !item["filename"].get<std::string>().empty())
+                    it->filename = item["filename"].get<std::string>();
+                if (item.contains("install_path") && !item["install_path"].get<std::string>().empty())
+                    it->install_path = item["install_path"].get<std::string>();
+                if (item.contains("extract_dir"))
+                    it->extract_dir = item["extract_dir"].get<std::string>();
+                if (item.contains("is_archive"))
+                    it->is_archive = item["is_archive"].get<bool>();
+                if (item.contains("file_size") && item["file_size"].get<int64_t>() > 0)
+                    it->file_size = item["file_size"].get<int64_t>();
+
+                if (item.contains("supported_console_ids") && item["supported_console_ids"].is_array() && !item["supported_console_ids"].empty()) {
+                    it->supported_console_ids = item["supported_console_ids"].get<std::vector<std::string>>();
+                }
+
+                if (item.contains("color") && item["color"].is_array() && item["color"].size() == 4) {
+                    it->color = nvgRGBA(item["color"][0].get<int>(),
+                                        item["color"][1].get<int>(),
+                                        item["color"][2].get<int>(),
+                                        item["color"][3].get<int>());
+                }
+
+                std::string bId = item.value("bios_id", "");
+                if (!bId.empty()) it->bios_id = bId;
+
+                if (item.contains("companion_downloads") && item["companion_downloads"].is_array() && !item["companion_downloads"].empty()) {
+                    std::vector<CompanionDownload> comps;
+                    for (const auto& cd : item["companion_downloads"]) {
+                        CompanionDownload comp;
+                        comp.download_url = cd.value("download_url", "");
+                        comp.install_path = cd.value("install_path", "");
+                        comp.file_size = cd.value("file_size", (int64_t)0);
+                        if (!comp.download_url.empty() && !comp.install_path.empty()) {
+                            comps.push_back(comp);
+                        }
+                    }
+                    if (!comps.empty()) {
+                        it->companion_downloads = comps;
+                    }
+                }
             } else {
-                p.color = nvgRGBA(128, 128, 128, 255);
-            }
+                EmulatorPackage p;
+                p.id = id;
+                p.name = item.value("name", "");
+                p.author = item.value("author", "");
+                p.version = item.value("version", "");
+                p.description = item.value("description", "");
+                p.category = item.value("category", "nintendo");
+                p.download_url = item.value("download_url", "");
+                p.filename = item.value("filename", "");
+                p.install_path = item.value("install_path", "");
+                p.extract_dir = item.value("extract_dir", "");
+                p.is_archive = item.value("is_archive", false);
+                p.file_size = item.value("file_size", (int64_t)0);
 
-            if (!p.id.empty() && !p.download_url.empty()) {
-                parsed.push_back(p);
+                if (item.contains("supported_console_ids") && item["supported_console_ids"].is_array()) {
+                    p.supported_console_ids = item["supported_console_ids"].get<std::vector<std::string>>();
+                }
+
+                if (item.contains("color") && item["color"].is_array() && item["color"].size() == 4) {
+                    p.color = nvgRGBA(item["color"][0].get<int>(),
+                                      item["color"][1].get<int>(),
+                                      item["color"][2].get<int>(),
+                                      item["color"][3].get<int>());
+                } else {
+                    p.color = nvgRGBA(128, 128, 128, 255);
+                }
+
+                p.bios_id = item.value("bios_id", "");
+
+                if (item.contains("companion_downloads") && item["companion_downloads"].is_array()) {
+                    for (const auto& cd : item["companion_downloads"]) {
+                        CompanionDownload comp;
+                        comp.download_url = cd.value("download_url", "");
+                        comp.install_path = cd.value("install_path", "");
+                        comp.file_size = cd.value("file_size", (int64_t)0);
+                        if (!comp.download_url.empty() && !comp.install_path.empty()) {
+                            p.companion_downloads.push_back(comp);
+                        }
+                    }
+                }
+
+                if (!p.download_url.empty()) {
+                    packages_.push_back(p);
+                }
             }
         }
 
-        if (!parsed.empty()) {
-            packages_ = std::move(parsed);
-            util::logLine("RetroEmulatorManager: parsed " + std::to_string(packages_.size()) + " emulators from JSON");
-            return true;
-        }
+        applyPackageDefaults();
+        util::logLine("RetroEmulatorManager: merged manifest into memory, total packages: " + std::to_string(packages_.size()));
+        return true;
     } catch (const std::exception& e) {
         util::logLine(std::string("RetroEmulatorManager: parse error: ") + e.what());
     }
@@ -554,8 +928,16 @@ bool RetroEmulatorManager::loadLocalManifest() {
 
     std::stringstream buffer;
     buffer << in.rdbuf();
+    in.close();
     std::string str = buffer.str();
     if (str.empty()) return false;
+
+    // Check if the cached manifest on disk is an obsolete pre-BIOS file
+    if (str.find("\"bios\"") == std::string::npos || str.find("\"ps2_bios\"") == std::string::npos) {
+        util::logLine("RetroEmulatorManager: detected obsolete local manifest without BIOS packages, updating cache to latest built-in definitions");
+        saveLocalManifest();
+        return true;
+    }
 
     return parseManifestFromJson(str);
 }
@@ -594,22 +976,100 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
     buffer << in.rdbuf();
     in.close();
 
+    std::error_code ec;
+    std::filesystem::remove(tmpPath, ec);
+
     bool parseOk = parseManifestFromJson(buffer.str());
     if (!parseOk) {
         util::logLine("RetroEmulatorManager: invalid JSON received from " + url);
-        std::error_code ec;
-        std::filesystem::remove(tmpPath, ec);
         return false;
     }
 
-    // Atomic replace on disk
-    std::error_code ec;
-    std::filesystem::remove(finalPath, ec);
-    std::filesystem::rename(tmpPath, finalPath, ec);
+    // Save the fully merged manifest to disk so all BIOSes are preserved
+    saveLocalManifest();
 
     if (progress_cb) progress_cb(1.0f, "Манифест успешно обновлен");
     util::logLine("RetroEmulatorManager: manifest successfully refreshed and cached at " + finalPath);
     return true;
+}
+
+void RetroEmulatorManager::healInstalledEmulators() {
+    std::error_code ec;
+
+    // 1. PPSSPP: heal nested switch/ppsspp folder
+    std::string pspBase = resolvePlatformPath("sdmc:/switch/ppsspp");
+    std::string pspNested = resolvePlatformPath("sdmc:/switch/ppsspp/switch/ppsspp");
+    if (std::filesystem::exists(pspNested, ec)) {
+        std::string moveErr;
+        util::movePath(pspNested, pspBase, moveErr);
+        std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/ppsspp/switch"), ec);
+        util::logLine("RetroEmulatorManager: auto-healed PPSSPP folder structure (moved assets and files to " + pspBase + ")");
+    } else {
+        // Also check if assets alone was left behind in switch/ppsspp/assets
+        std::string pspAssetsNested = resolvePlatformPath("sdmc:/switch/ppsspp/switch/ppsspp/assets");
+        std::string pspAssetsTarget = resolvePlatformPath("sdmc:/switch/ppsspp/assets");
+        if (std::filesystem::exists(pspAssetsNested, ec) && !std::filesystem::exists(pspAssetsTarget, ec)) {
+            std::string moveErr;
+            util::movePath(pspAssetsNested, pspAssetsTarget, moveErr);
+            std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/ppsspp/switch"), ec);
+            util::logLine("RetroEmulatorManager: auto-healed PPSSPP assets folder");
+        }
+    }
+    std::string pspAssetsNested2 = resolvePlatformPath("sdmc:/switch/ppsspp/switch/assets");
+    if (std::filesystem::exists(pspAssetsNested2, ec) && !std::filesystem::exists(resolvePlatformPath("sdmc:/switch/ppsspp/assets"), ec)) {
+        std::string moveErr;
+        util::movePath(pspAssetsNested2, resolvePlatformPath("sdmc:/switch/ppsspp/assets"), moveErr);
+        std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/ppsspp/switch"), ec);
+        util::logLine("RetroEmulatorManager: auto-healed PPSSPP switch/assets folder");
+    }
+    std::string pspSwitchDir = resolvePlatformPath("sdmc:/switch/ppsspp/switch");
+    if (std::filesystem::exists(pspSwitchDir, ec)) {
+        std::filesystem::remove_all(pspSwitchDir, ec);
+    }
+    std::string pspGL = resolvePlatformPath("sdmc:/switch/ppsspp/PPSSPP_GL.nro");
+    std::string pspTarget = resolvePlatformPath("sdmc:/switch/ppsspp/PPSSPP.nro");
+    if (std::filesystem::exists(pspGL, ec) && !std::filesystem::exists(pspTarget, ec)) {
+        std::filesystem::rename(pspGL, pspTarget, ec);
+    }
+
+    // 2. DuckStation: heal nested switch/duckstation folder
+    std::string duckBase = resolvePlatformPath("sdmc:/switch/duckstation");
+    std::string duckNested = resolvePlatformPath("sdmc:/switch/duckstation/switch/duckstation");
+    if (std::filesystem::exists(duckNested, ec)) {
+        std::string moveErr;
+        util::movePath(duckNested, duckBase, moveErr);
+        std::filesystem::remove_all(resolvePlatformPath("sdmc:/switch/duckstation/switch"), ec);
+        util::logLine("RetroEmulatorManager: auto-healed DuckStation folder structure");
+    }
+    std::string duckSwitchDir = resolvePlatformPath("sdmc:/switch/duckstation/switch");
+    if (std::filesystem::exists(duckSwitchDir, ec)) {
+        std::filesystem::remove_all(duckSwitchDir, ec);
+    }
+
+    // 3. mGBA: heal nested mGBA-*-switch folder
+    std::string mgbaBase = resolvePlatformPath("sdmc:/switch/mGBA");
+    if (std::filesystem::exists(mgbaBase, ec)) {
+        for (const auto& entry : std::filesystem::directory_iterator(mgbaBase, ec)) {
+            if (entry.is_directory()) {
+                std::string dirName = entry.path().filename().string();
+                std::string dirLower = dirName;
+                std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
+                if (dirLower.find("mgba") != std::string::npos) {
+                    std::string moveErr;
+                    util::movePath(entry.path().string(), mgbaBase, moveErr);
+                    std::filesystem::remove_all(entry.path(), ec);
+                    util::logLine("RetroEmulatorManager: auto-healed mGBA folder structure");
+                    break;
+                }
+            }
+        }
+        // Normalize mgba.nro -> mGBA.nro if needed
+        std::string lowerNro = resolvePlatformPath("sdmc:/switch/mGBA/mgba.nro");
+        std::string upperNro = resolvePlatformPath("sdmc:/switch/mGBA/mGBA.nro");
+        if (std::filesystem::exists(lowerNro, ec) && !std::filesystem::exists(upperNro, ec)) {
+            std::filesystem::rename(lowerNro, upperNro, ec);
+        }
+    }
 }
 
 } // namespace catalog

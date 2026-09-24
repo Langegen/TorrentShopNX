@@ -442,6 +442,9 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
     if (width == 0)
         return;
 
+    if (this->font == FONT_INVALID)
+        this->font = Application::getDefaultFont();
+
     enum NVGalign horizAlign = this->getNVGHorizontalAlign();
     enum NVGalign vertAlign  = this->getNVGVerticalAlign();
     int cursor_position = -1;
@@ -479,7 +482,7 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
         nvgRestore(vg);
     }
     // Wrapped text
-    else if (this->isWrapping)
+    else if (this->isWrapping || (!this->singleLine && (this->fullText.find('\n') != std::string::npos || width < this->requiredWidth)))
     {
         nvgTextAlign(vg, horizAlign | NVG_ALIGN_TOP);
         nvgTextBoxWithCursor(vg, x, y, width, this->fullText.c_str(), nullptr, cursor_position);
@@ -487,6 +490,9 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
     // Truncated text
     else
     {
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, width, height);
+
         float textX = x;
         float textY = y;
 
@@ -501,6 +507,8 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
             textY += height;
 
         nvgTextWithCursor(vg, textX, textY, this->truncatedText.c_str(), nullptr, cursor_position);
+
+        nvgRestore(vg);
     }
 }
 
@@ -589,6 +597,9 @@ void Label::onLayout()
     // Prebake clipping
     if (!this->fullText.empty() && width < this->requiredWidth && !this->isWrapping)
     {
+        if (this->font == FONT_INVALID)
+            this->font = Application::getDefaultFont();
+
         // Compute the position of the ellipsis (in chars), should the string be truncated
         // Cannot do it in the measure function because the margins are not applied yet there
         auto vg = Application::getNVGContext();
@@ -600,12 +611,13 @@ void Label::onLayout()
 
         std::vector<NVGglyphPosition> positions;
         positions.resize(stringLength);
-        nvgTextGlyphPositions(vg, 0, 0, fullText.c_str(), nullptr, positions.data(), stringLength);
+        int npos = nvgTextGlyphPositions(vg, 0, 0, fullText.c_str(), nullptr, positions.data(), stringLength);
 
         const char* start   = fullText.c_str();
         this->truncatedText = fullText;
-        for (auto& i : positions)
+        for (int idx = 0; idx < npos; idx++)
         {
+            auto& i = positions[idx];
             if (i.str == start)
                 continue;
             if (i.str >= start + fullText.size())

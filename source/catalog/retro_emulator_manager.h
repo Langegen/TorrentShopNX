@@ -16,13 +16,19 @@ enum class EmulatorInstallStatus {
     UPDATE_AVAILABLE
 };
 
+struct CompanionDownload {
+    std::string download_url;
+    std::string install_path;
+    int64_t file_size = 0;
+};
+
 struct EmulatorPackage {
     std::string id;
     std::string name;
     std::string author;
     std::string version;
     std::string description;
-    std::string category; // "nintendo", "sony", "sega", "retroarch"
+    std::string category; // "nintendo", "sony", "sega", "retroarch", "bios"
     std::string download_url;
     std::string filename;
     std::string install_path; // e.g. "sdmc:/switch/dekopon/dekopon.nro"
@@ -31,6 +37,9 @@ struct EmulatorPackage {
     int64_t file_size = 0;
     std::vector<std::string> supported_console_ids;
     NVGcolor color;
+
+    std::string bios_id;                                // ID of associated BIOS package (e.g. "ps2_bios")
+    std::vector<CompanionDownload> companion_downloads; // For multi-file packages (e.g. BIOS sets)
 };
 
 class RetroEmulatorManager {
@@ -48,14 +57,21 @@ public:
     void recordInstalledVersion(const std::string& emu_id, const std::string& version);
     bool uninstallEmulator(const std::string& emu_id, std::string& out_err);
 
+    const EmulatorPackage* getBiosPackageForEmulator(const std::string& emu_id) const;
+
     std::string getManifestDownloadUrl() const;
     std::string getLocalManifestPath() const;
     bool loadLocalManifest();
+    bool saveLocalManifest();
     bool refreshManifest(std::function<void(float progress, const std::string& status)> progress_cb = nullptr);
     bool parseManifestFromJson(const std::string& json_str);
+    void applyPackageDefaults();
+    std::vector<EmulatorPackage> getBuiltinBiosPackages() const;
 
     // Resolve relative path according to platform (Switch vs PC)
     static std::string resolvePlatformPath(const std::string& path);
+
+    void healInstalledEmulators();
 
 private:
     RetroEmulatorManager();

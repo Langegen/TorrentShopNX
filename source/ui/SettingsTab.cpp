@@ -4,6 +4,8 @@
 #include "QrCodeView.hpp"
 #include "RetroUpdateDialog.hpp"
 #include "../catalog/retro_catalog_manager.h"
+#include "../catalog/catalog_updater.h"
+#include "../GameData.hpp"
 #include "../config/config.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
@@ -552,6 +554,46 @@ brls::View* SettingsTab::buildGeneralTab() {
         return true;
     });
     box->addView(catalogUrlCell);
+
+    // Обновление каталога игр (принудительное обновление)
+    auto* catalogUpdateCell = new brls::DetailCell();
+    catalogUpdateCell->setText("app/settings/update_catalog_btn"_i18n);
+    auto updateCatalogStatusDisplay = [catalogUpdateCell]() {
+        auto snap = getCatalogSnapshot();
+        size_t gameCount = snap ? snap->size() : 0;
+        catalogUpdateCell->setDetailText(brls::getStr("app/catalog/games_count", std::to_string(gameCount)));
+    };
+    updateCatalogStatusDisplay();
+    catalogUpdateCell->registerClickAction([updateCatalogStatusDisplay](brls::View* view) {
+        if (catalog::CatalogUpdater::instance().isUpdateRunning()) {
+            brls::Application::notify("app/catalog/updating_db"_i18n);
+            return true;
+        }
+
+        auto* dialog = new brls::Dialog("app/settings/update_catalog_dialog_msg"_i18n);
+        dialog->addButton("app/settings/update_catalog_fast_diff"_i18n, [updateCatalogStatusDisplay]() {
+            catalog::CatalogUpdater::instance().startUpdate(
+                catalog::CatalogUpdateMode::ForceDiff,
+                [updateCatalogStatusDisplay](const catalog::CatalogUpdateResult& res) {
+                    updateCatalogStatusDisplay();
+                },
+                true
+            );
+        });
+        dialog->addButton("app/settings/update_catalog_full"_i18n, [updateCatalogStatusDisplay]() {
+            catalog::CatalogUpdater::instance().startUpdate(
+                catalog::CatalogUpdateMode::ForceFull,
+                [updateCatalogStatusDisplay](const catalog::CatalogUpdateResult& res) {
+                    updateCatalogStatusDisplay();
+                },
+                true
+            );
+        });
+        dialog->addButton("app/common/cancel"_i18n, []() {});
+        dialog->open();
+        return true;
+    });
+    box->addView(catalogUpdateCell);
 
     // Telegram и GitHub (QR-коды)
     auto* communityCell = new brls::DetailCell();

@@ -174,6 +174,7 @@
         "elapsed": "Vergangen: {0}",
         "saved_to": "Gespeichert in: {0}",
         "installed": "Auf Konsole installiert",
+        "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "Unbekannter Fehler",
         "action_delete": "Download löschen",
         "action_open_folder": "Ordner öffnen",
@@ -363,6 +364,7 @@
         "titledb_failed": "Laden der TitleDB fehlgeschlagen",
         "scanning_games": "Konsolenspiele werden analysiert...",
         "installed": "Installiert",
+        "release_completed": "All files in release downloaded: {0}",
         "available": "Verfügbar",
         "uninstall_confirm": "„{0}“ deinstallieren?\nDas Spiel, alle Updates und DLCs werden gelöscht.",
         "uninstall_success": "„{0}“ deinstalliert",
@@ -374,7 +376,7 @@
         "notify_update_disabled": "Update-Prüfung deaktiviert für „{0}“",
         "notify_update_enabled": "Update-Prüfung aktiviert für „{0}“",
         "mod_warn_dialog_title": "Achtung: Modifikationen gefunden",
-        "mod_warn_dialog_msg": "Für das Spiel „{0}“ wurden installierte Mods ({1}) gefunden.\n\nEine Aktualisierung kann Mods oder Übersetzungen beschädigen oder Abstürze verursachen.\n\nWas möchten Sie tun?",
+        "mod_warn_dialog_msg": "Für das Spiel „{0}“ wurden installierte Mods ({1}) gefunden. Eine Aktualisierung kann Mods oder Übersetzungen beschädigen oder Abstürze verursachen. Was möchten Sie tun?",
         "mod_warn_btn_proceed": "Trotzdem aktualisieren",
         "mod_warn_btn_freeze": "Update einfrieren"
     },
@@ -628,7 +630,15 @@
         "cache_games_count": "Cache: {0} Spiele (A - aktualisieren)",
         "cache_press_a": "A zum Aktualisieren drücken",
         "retro_update_catalogs_cached": "Cache: {0} Spiele (A - aktualisieren)",
-        "retro_update_catalogs_empty": "Drücke A zum Aktualisieren"
+        "retro_update_catalogs_empty": "Drücke A zum Aktualisieren",
+        "update_catalog_btn": "Spielekatalog aktualisieren",
+        "update_catalog_dialog_msg": "Aktualisierungsmodus auswählen:",
+        "update_catalog_fast_diff": "Schnelles Update (Delta)",
+        "update_catalog_full": "Vollständiger Datenbank-Download",
+        "update_catalog_downloading_diff": "Änderungen herunterladen...",
+        "update_catalog_applying_diff": "Änderungen anwenden...",
+        "update_catalog_diff_success": "Katalog aktualisiert: +{0} neu, {1} aktualisiert",
+        "update_catalog_up_to_date": "Katalog ist bereits aktuell"
     },
     "applet": {
         "title": "Applet-Modus erkannt",
@@ -838,7 +848,14 @@
         "emulator_download": "Herunterladen",
         "emulator_downloading": "Emulator wird heruntergeladen...",
         "emulator_extracting": "Archiv wird entpackt...",
-        "emulator_install_success": "Emulator erfolgreich installiert!"
+        "emulator_install_success": "Emulator erfolgreich installiert!",
+        "btn_bios": "BIOS installieren",
+        "btn_install_bios": "BIOS installieren",
+        "btn_skip": "Überspringen",
+        "downloading_comp_file": "Datei {0} wird heruntergeladen ({1} von {2})...",
+        "prompt_install_bios_msg": "Damit {0} einwandfrei funktioniert, wird {1} benötigt/empfohlen. BIOS jetzt installieren?",
+        "prompt_install_bios_title": "BIOS installieren",
+        "sec_emu_bios": "BIOS & Systemdateien (PS2, PS1, PS Vita, Dreamcast, Sega CD, NDS, FDS, Sega 32X)"
     },
     "dashboard": {
         "catalog_title": "NEUE & BELIEBTE SPIELE",
@@ -924,6 +941,11 @@
         "unknown_error": "Unbekannter Fehler beim Entpacken",
         "done_100": "100.0% · Fertig",
         "cancelled_by_user": "Entpacken vom Benutzer abgebrochen",
+        "confirm_cancel_msg": "Möchten Sie das Entpacken wirklich abbrechen?",
+        "folder_type": "Archivordner",
+        "browse_archive": "Archiv durchsuchen",
+        "extract_this_file": "Ausgewählte Datei entpacken",
+        "extract_entire_archive": "Gesamtes Archiv entpacken",
         "creating_title": "Archiv wird erstellt...",
         "preparing": "Vorbereitung..."
     },

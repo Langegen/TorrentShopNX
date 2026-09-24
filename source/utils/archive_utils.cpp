@@ -2,6 +2,7 @@
 #include "file_ops.h"
 #include "log.h"
 #include "sevenzip_utils.h"
+#include "switch_utils.h"
 #include <archive.h>
 #include <archive_entry.h>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <unordered_set>
 
 namespace util {
 
@@ -33,22 +35,308 @@ bool isArchiveFile(const std::string& path) {
            endsWith(".xz");
 }
 
+bool parseArchiveVirtualPath(
+    const std::string& fullPath,
+    std::string& outArchivePath,
+    std::string& outInnerPath
+) {
+    outArchivePath.clear();
+    outInnerPath.clear();
+    if (fullPath.empty()) return false;
 
-bool extractArchive(
+    static const std::vector<std::string> exts = {
+        ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"
+    };
+
+    std::string norm = fullPath;
+    for (char& c : norm) if (c == '\\') c = '/';
+
+    for (const auto& ext : exts) {
+        size_t pos = 0;
+        std::string lower = norm;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        while ((pos = lower.find(ext, pos)) != std::string::npos) {
+            size_t afterExt = pos + ext.size();
+            if (afterExt == norm.size() || norm[afterExt] == '/') {
+                outArchivePath = norm.substr(0, afterExt);
+                if (afterExt < norm.size() && norm[afterExt] == '/') {
+                    outInnerPath = norm.substr(afterExt + 1);
+                } else {
+                    outInnerPath = "";
+                }
+                while (!outInnerPath.empty() && outInnerPath.back() == '/') {
+                    outInnerPath.pop_back();
+                }
+                return true;
+            }
+            pos += ext.size();
+        }
+    }
+    return false;
+}
+
+static std::string sanitizeEntryPath(const std::string& raw) {
+    std::string clean = raw;
+    for (char& c : clean) if (c == '\\') c = '/';
+    while (!clean.empty() && (clean.front() == '/' || clean.front() == ' ')) {
+        clean.erase(clean.begin());
+    }
+    size_t dotdot;
+    while ((dotdot = clean.find("..")) != std::string::npos) {
+        clean.replace(dotdot, 2, "__");
+    }
+    for (char& c : clean) {
+        if (c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+            c = '_';
+        }
+    }
+    return clean;
+}
+
+bool listArchiveFolder(
     const std::string& archivePath,
-    const std::string& destinationDir,
-    std::function<void(const ArchiveProgress&)> progressCb,
-    std::shared_ptr<std::atomic<bool>> cancelToken,
+    const std::string& innerPath,
+    std::vector<FileItem>& outItems,
     std::string& outError
 ) {
-    // 7z archives go through the embedded 7-Zip SDK decoder, which supports
-    // every codec the official 7-Zip creates (ARM64/ARM/x86 BCJ, BCJ2, PPMd, ...).
-    // The devkitPro libarchive build does not, and fails on such archives.
-    if (is7zFile(archivePath)) {
-        return extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError);
+    outItems.clear();
+    std::string normInner = innerPath;
+    for (char& c : normInner) if (c == '\\') c = '/';
+    while (!normInner.empty() && normInner.front() == '/') normInner.erase(normInner.begin());
+    while (!normInner.empty() && normInner.back() == '/') normInner.pop_back();
+
+    std::error_code ec;
+    if (!std::filesystem::exists(archivePath, ec)) {
+        outError = "Файл архива не найден: " + archivePath;
+        return false;
     }
 
-    util::logLine("archive_utils: extractArchive start: " + archivePath + " -> " + destinationDir);
+    if (is7zFile(archivePath)) {
+        if (list7zArchiveFolder(archivePath, normInner, outItems, outError)) {
+            return true;
+        }
+        // Fall back to libarchive if 7zsdk had an issue
+    }
+
+    struct archive* a = archive_read_new();
+    if (!a) {
+        outError = "Failed to allocate libarchive";
+        return false;
+    }
+    archive_read_support_format_all(a);
+    archive_read_support_filter_all(a);
+
+    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    if (r != ARCHIVE_OK) {
+        const char* err = archive_error_string(a);
+        outError = err ? err : "Failed to open archive file";
+        archive_read_free(a);
+        return false;
+    }
+
+    std::unordered_set<std::string> seenDirs;
+    std::unordered_set<std::string> seenFiles;
+    std::unordered_map<std::string, size_t> dirIndices;
+    struct archive_entry* entry = nullptr;
+
+    while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK || r == ARCHIVE_WARN) {
+        const char* rawPath = archive_entry_pathname_utf8(entry);
+        if (!rawPath) rawPath = archive_entry_pathname(entry);
+        if (!rawPath || !*rawPath) {
+            archive_read_data_skip(a);
+            continue;
+        }
+
+        std::string clean = sanitizeEntryPath(rawPath);
+        if (clean.empty()) {
+            archive_read_data_skip(a);
+            continue;
+        }
+
+        bool isDir = (archive_entry_filetype(entry) == AE_IFDIR) ||
+                     ((archive_entry_mode(entry) & 0170000) == 0040000) ||
+                     (!clean.empty() && clean.back() == '/');
+        while (!clean.empty() && clean.back() == '/') clean.pop_back();
+        if (clean.empty()) {
+            archive_read_data_skip(a);
+            continue;
+        }
+
+        uint64_t fileSize = isDir ? 0 : static_cast<uint64_t>(std::max<la_int64_t>(0, archive_entry_size(entry)));
+        time_t mtime = archive_entry_mtime(entry);
+
+        if (normInner.empty()) {
+            size_t slash = clean.find('/');
+            if (slash == std::string::npos) {
+                if (isDir) {
+                    if (seenDirs.insert(clean).second) {
+                        FileItem item;
+                        item.name = clean;
+                        item.path = archivePath + "/" + clean;
+                        item.isDir = true;
+                        item.size = 0;
+                        item.modifiedTime = mtime;
+                        dirIndices[clean] = outItems.size();
+                        outItems.push_back(item);
+                    } else {
+                        auto it = dirIndices.find(clean);
+                        if (it != dirIndices.end() && mtime > 0 && outItems[it->second].modifiedTime == 0) {
+                            outItems[it->second].modifiedTime = mtime;
+                        }
+                    }
+                } else {
+                    if (seenFiles.insert(clean).second) {
+                        FileItem item;
+                        item.name = clean;
+                        item.path = archivePath + "/" + clean;
+                        item.isDir = false;
+                        item.size = fileSize;
+                        item.modifiedTime = mtime;
+                        outItems.push_back(item);
+                    }
+                }
+            } else {
+                std::string top = clean.substr(0, slash);
+                if (seenDirs.insert(top).second) {
+                    FileItem dirItem;
+                    dirItem.name = top;
+                    dirItem.path = archivePath + "/" + top;
+                    dirItem.isDir = true;
+                    dirItem.size = 0;
+                    dirItem.modifiedTime = 0;
+                    dirIndices[top] = outItems.size();
+                    outItems.push_back(dirItem);
+                }
+            }
+        } else {
+            std::string prefix = normInner + "/";
+            if (clean.compare(0, prefix.size(), prefix) == 0) {
+                std::string rel = clean.substr(prefix.size());
+                if (rel.empty()) {
+                    archive_read_data_skip(a);
+                    continue;
+                }
+                size_t slash = rel.find('/');
+                if (slash == std::string::npos) {
+                    if (isDir) {
+                        if (seenDirs.insert(rel).second) {
+                            FileItem item;
+                            item.name = rel;
+                            item.path = archivePath + "/" + clean;
+                            item.isDir = true;
+                            item.size = 0;
+                            item.modifiedTime = mtime;
+                            dirIndices[rel] = outItems.size();
+                            outItems.push_back(item);
+                        } else {
+                            auto it = dirIndices.find(rel);
+                            if (it != dirIndices.end() && mtime > 0 && outItems[it->second].modifiedTime == 0) {
+                                outItems[it->second].modifiedTime = mtime;
+                            }
+                        }
+                    } else {
+                        if (seenFiles.insert(rel).second) {
+                            FileItem item;
+                            item.name = rel;
+                            item.path = archivePath + "/" + clean;
+                            item.isDir = false;
+                            item.size = fileSize;
+                            item.modifiedTime = mtime;
+                            outItems.push_back(item);
+                        }
+                    }
+                } else {
+                    std::string sub = rel.substr(0, slash);
+                    if (seenDirs.insert(sub).second) {
+                        FileItem dirItem;
+                        dirItem.name = sub;
+                        dirItem.path = archivePath + "/" + normInner + "/" + sub;
+                        dirItem.isDir = true;
+                        dirItem.size = 0;
+                        dirItem.modifiedTime = 0;
+                        dirIndices[sub] = outItems.size();
+                        outItems.push_back(dirItem);
+                    }
+                }
+            }
+        }
+
+        archive_read_data_skip(a);
+    }
+
+    archive_read_close(a);
+    archive_read_free(a);
+
+    std::sort(outItems.begin(), outItems.end(), [](const FileItem& a, const FileItem& b) {
+        if (a.isDir != b.isDir) return a.isDir > b.isDir;
+        return a.name < b.name;
+    });
+
+    return true;
+}
+
+bool getArchiveTotals(
+    const std::string& archivePath,
+    uint64_t& outUncompressedSize,
+    size_t& outTotalEntries
+) {
+    outUncompressedSize = 0;
+    outTotalEntries = 0;
+
+    if (is7zFile(archivePath)) {
+        return get7zArchiveTotals(archivePath, outUncompressedSize, outTotalEntries);
+    }
+
+    struct archive* a = archive_read_new();
+    if (!a) return false;
+
+    archive_read_support_format_all(a);
+    archive_read_support_filter_all(a);
+
+    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    if (r != ARCHIVE_OK) {
+        archive_read_free(a);
+        return false;
+    }
+
+    int filterCount = archive_filter_count(a);
+    int filterCode = archive_filter_code(a, 0);
+    // Compressed streaming archives like .tar.gz / .tar.xz require full decompression to scan headers.
+    if (filterCount > 1 || (filterCode != ARCHIVE_FILTER_NONE && filterCode != ARCHIVE_FILTER_COMPRESS)) {
+        archive_read_close(a);
+        archive_read_free(a);
+        return false;
+    }
+
+    struct archive_entry* entry = nullptr;
+    while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK) {
+        outTotalEntries++;
+        if (archive_entry_filetype(entry) != AE_IFDIR && ((archive_entry_mode(entry) & 0170000) != 0040000)) {
+            la_int64_t sz = archive_entry_size(entry);
+            if (sz > 0) {
+                outUncompressedSize += static_cast<uint64_t>(sz);
+            }
+        }
+        archive_read_data_skip(a);
+    }
+
+    archive_read_close(a);
+    archive_read_free(a);
+    return (outTotalEntries > 0);
+}
+
+static bool extractLibarchiveInternal(
+    const std::string& archivePath,
+    const std::string& destinationDir,
+    const std::string& singleEntryFilter,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError,
+    uint64_t knownUncompressedSize = 0,
+    size_t knownTotalEntries = 0
+) {
+    util::logLine("archive_utils: extractLibarchiveInternal start: " + archivePath + " -> " + destinationDir);
 
     std::error_code ec;
     uint64_t totalFileSize = 0;
@@ -64,6 +352,10 @@ bool extractArchive(
         outError = e.what();
         util::logLine("archive_utils: exception preparing destination: " + std::string(e.what()));
         return false;
+    }
+
+    if (knownUncompressedSize == 0 && knownTotalEntries == 0 && singleEntryFilter.empty()) {
+        getArchiveTotals(archivePath, knownUncompressedSize, knownTotalEntries);
     }
 
     struct archive* a = archive_read_new();
@@ -84,13 +376,38 @@ bool extractArchive(
         archive_read_free(a);
         return false;
     }
-    util::logLine("archive_utils: archive opened successfully, total size=" + std::to_string(totalFileSize));
+    util::logLine("archive_utils: archive opened successfully, total size=" + std::to_string(totalFileSize) +
+                  ", uncompressed size=" + std::to_string(knownUncompressedSize) +
+                  ", total entries=" + std::to_string(knownTotalEntries));
 
     ArchiveProgress progress;
     progress.totalArchiveSize = totalFileSize;
+    progress.totalUncompressedSize = knownUncompressedSize;
+    progress.totalEntries = knownTotalEntries;
+
+    auto updateProgressPercentage = [&]() {
+        if (progress.totalUncompressedSize > 0) {
+            float pct = static_cast<float>((static_cast<double>(progress.bytesExtracted) * 100.0) / static_cast<double>(progress.totalUncompressedSize));
+            progress.percentage = std::clamp(pct, 0.0f, 100.0f);
+        } else {
+            la_int64_t pos = archive_filter_bytes(a, -1);
+            if (pos <= 0) pos = archive_read_header_position(a);
+            if (totalFileSize > 0 && pos > 0) {
+                float pct = (static_cast<float>(pos) / static_cast<float>(totalFileSize)) * 100.0f;
+                if (!std::isnan(pct) && !std::isinf(pct)) {
+                    progress.percentage = std::clamp(pct, 0.0f, 100.0f);
+                }
+            } else if (progress.totalEntries > 0) {
+                float pct = static_cast<float>((static_cast<double>(progress.entriesProcessed) * 100.0) / static_cast<double>(progress.totalEntries));
+                progress.percentage = std::clamp(pct, 0.0f, 100.0f);
+            }
+        }
+    };
 
     struct archive_entry* entry = nullptr;
     bool success = true;
+
+    std::string normFilter = sanitizeEntryPath(singleEntryFilter);
 
     while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK || r == ARCHIVE_WARN) {
         if (r == ARCHIVE_WARN) {
@@ -107,28 +424,35 @@ bool extractArchive(
             break;
         }
 
-        const char* currentEntryName = archive_entry_pathname(entry);
+        const char* currentEntryName = archive_entry_pathname_utf8(entry);
+        if (!currentEntryName) currentEntryName = archive_entry_pathname(entry);
         if (!currentEntryName || !*currentEntryName) {
+            archive_read_data_skip(a);
             continue;
         }
 
-        // Sanitize entry name: strip leading slashes and path traversals
-        std::string cleanName = currentEntryName;
-        while (!cleanName.empty() && (cleanName.front() == '/' || cleanName.front() == '\\')) {
-            cleanName.erase(cleanName.begin());
-        }
-        size_t dotdot;
-        while ((dotdot = cleanName.find("..")) != std::string::npos) {
-            cleanName.replace(dotdot, 2, "__");
-        }
-        // Sanitize FAT32 illegal characters: ':', '*', '?', '"', '<', '>', '|'
-        for (char& c : cleanName) {
-            if (c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
-                c = '_';
-            }
-        }
+        std::string cleanName = sanitizeEntryPath(currentEntryName);
         if (cleanName.empty()) {
+            archive_read_data_skip(a);
             continue;
+        }
+
+        bool isDir = (archive_entry_filetype(entry) == AE_IFDIR) ||
+                     ((archive_entry_mode(entry) & 0170000) == 0040000) ||
+                     (!cleanName.empty() && (cleanName.back() == '/' || cleanName.back() == '\\'));
+
+        if (!normFilter.empty()) {
+            if (cleanName != normFilter && cleanName.rfind(normFilter + "/", 0) != 0) {
+                archive_read_data_skip(a);
+                continue;
+            }
+            if (progress.totalUncompressedSize == 0 && !isDir) {
+                la_int64_t esz = archive_entry_size(entry);
+                if (esz > 0) {
+                    progress.totalUncompressedSize = static_cast<uint64_t>(esz);
+                }
+                progress.totalEntries = 1;
+            }
         }
 
         progress.currentFileName = cleanName;
@@ -144,14 +468,9 @@ bool extractArchive(
         }
         fullPath += cleanName;
 
-        bool isDir = (archive_entry_filetype(entry) == AE_IFDIR) ||
-                     ((archive_entry_mode(entry) & 0170000) == 0040000) ||
-                     (!cleanName.empty() && (cleanName.back() == '/' || cleanName.back() == '\\'));
-
         if (isDir) {
             safeCreateDirectories(fullPath);
         } else {
-            // Ensure parent folder exists
             size_t lastSlash = fullPath.rfind('/');
             if (lastSlash != std::string::npos) {
                 safeCreateDirectories(fullPath.substr(0, lastSlash));
@@ -159,7 +478,6 @@ bool extractArchive(
 
             FILE* outFile = fopen(fullPath.c_str(), "wb");
             if (!outFile) {
-                // If opening failed, try deleting existing file if any and re-try
                 std::remove(fullPath.c_str());
                 outFile = fopen(fullPath.c_str(), "wb");
             }
@@ -185,9 +503,9 @@ bool extractArchive(
 
                 if (size > 0 && buff != nullptr) {
 #if defined(_WIN32)
-                        _fseeki64(outFile, offset, SEEK_SET);
+                    _fseeki64(outFile, offset, SEEK_SET);
 #else
-                        fseeko(outFile, static_cast<off_t>(offset), SEEK_SET);
+                    fseeko(outFile, static_cast<off_t>(offset), SEEK_SET);
 #endif
                     size_t written = fwrite(buff, 1, size, outFile);
                     if (written != size) {
@@ -200,14 +518,7 @@ bool extractArchive(
                     entryBytesExtracted += size;
                 }
 
-                la_int64_t pos = archive_filter_bytes(a, -1);
-                if (pos <= 0) pos = archive_read_header_position(a);
-                if (totalFileSize > 0 && pos > 0) {
-                    float pct = (static_cast<float>(pos) / static_cast<float>(totalFileSize)) * 100.0f;
-                    if (!std::isnan(pct) && !std::isinf(pct)) {
-                        progress.percentage = std::clamp(pct, 0.0f, 100.0f);
-                    }
-                }
+                updateProgressPercentage();
 
                 if (progressCb) {
                     progressCb(progress);
@@ -226,10 +537,6 @@ bool extractArchive(
             if (r != ARCHIVE_EOF && r < ARCHIVE_OK) {
                 const char* err = archive_error_string(a);
                 std::string errStr = err ? err : "Ошибка чтения блока данных архива";
-                // Libarchive (<= 3.7.2 RAR decompression) has a known upstream bug
-                // with circular LZSS window calculation on large entries (e.g. CD-ROM images > 100MB),
-                // which causes a false-positive "File CRC error" (code 79 EFTYPE) at the very end of decompression,
-                // even though all uncompressed bytes were already written out to disk.
                 if (errStr.find("CRC") != std::string::npos && entryBytesExtracted > 0) {
                     util::logLine("archive_utils: warning: " + errStr + " for " + cleanName +
                                   " (known libarchive RAR issue). Data extracted: " +
@@ -246,14 +553,7 @@ bool extractArchive(
             }
         }
 
-        la_int64_t pos = archive_filter_bytes(a, -1);
-        if (pos <= 0) pos = archive_read_header_position(a);
-        if (totalFileSize > 0 && pos > 0) {
-            float pct = (static_cast<float>(pos) / static_cast<float>(totalFileSize)) * 100.0f;
-            if (!std::isnan(pct) && !std::isinf(pct)) {
-                progress.percentage = std::clamp(pct, 0.0f, 100.0f);
-            }
-        }
+        updateProgressPercentage();
         if (progressCb) {
             progressCb(progress);
         }
@@ -268,6 +568,12 @@ bool extractArchive(
 
     if (success) {
         progress.percentage = 100.0f;
+        if (progress.totalUncompressedSize > 0) {
+            progress.bytesExtracted = progress.totalUncompressedSize;
+        }
+        if (progress.totalEntries > 0) {
+            progress.entriesProcessed = progress.totalEntries;
+        }
         if (progressCb) {
             progressCb(progress);
         }
@@ -276,8 +582,55 @@ bool extractArchive(
     archive_read_close(a);
     archive_read_free(a);
 
-    util::logLine("archive_utils: extractArchive finished, success=" + std::to_string(success));
+    util::logLine("archive_utils: extractLibarchiveInternal finished, success=" + std::to_string(success));
     return success;
+}
+
+bool extractArchive(
+    const std::string& archivePath,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError
+) {
+    ScopedCpuBoost boostGuard; // raises CPU to 1785 MHz and prevents auto-sleep!
+
+    // 7z archives try 7-Zip SDK decoder first (supports all ARM64/ARM/x86 BCJ, BCJ2, PPMd codecs)
+    if (is7zFile(archivePath)) {
+        uint64_t knownUncompressed = 0;
+        size_t knownEntries = 0;
+        bool ok = extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError, &knownUncompressed, &knownEntries);
+        if (ok) return true;
+        if (cancelToken && cancelToken->load()) return false;
+
+        // If 7zsdk indicated requires_streaming (e.g. folder > 64 MB / 2 GB file) or memory error,
+        // seamlessly fall back to streaming libarchive which streams 64KB blocks directly to disk!
+        util::logLine("archive_utils: 7zsdk returned '" + outError + "', falling back to streaming libarchive");
+        std::string fallbackErr;
+        if (extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, fallbackErr, knownUncompressed, knownEntries)) {
+            util::logLine("archive_utils: streaming libarchive fallback succeeded for 7z archive!");
+            outError.clear();
+            return true;
+        }
+        if (outError.empty() || outError == "requires_streaming") {
+            outError = fallbackErr.empty() ? "Ошибка распаковки 7z архива" : fallbackErr;
+        }
+        return false;
+    }
+
+    return extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, outError, 0, 0);
+}
+
+bool extractSingleFileFromArchive(
+    const std::string& archivePath,
+    const std::string& innerFilePath,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError
+) {
+    ScopedCpuBoost boostGuard;
+    return extractLibarchiveInternal(archivePath, destinationDir, innerFilePath, progressCb, cancelToken, outError, 0, 0);
 }
 
 bool createZipArchive(
@@ -288,6 +641,7 @@ bool createZipArchive(
     std::shared_ptr<std::atomic<bool>> cancelToken,
     std::string& outError
 ) {
+    ScopedCpuBoost boostGuard;
     if (sourcePaths.empty()) {
         outError = "No source files specified";
         return false;

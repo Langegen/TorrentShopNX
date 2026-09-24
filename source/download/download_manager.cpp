@@ -15,6 +15,7 @@
 #include "../utils/app_paths.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/archive_utils.h"
+#include "../GameData.hpp"
 
 #include <engine/engine.h>
 
@@ -975,6 +976,83 @@ static void clearTorrentCache(const std::string& hash) {
     }
 }
 
+static void releaseTorrentIfUnneeded(const std::vector<download::DownloadItem>& queue,
+                                     size_t self_index, const std::string& hash) {
+    if (hash.empty()) return;
+    if (!torrentStillNeeded(queue, self_index, hash)) {
+        tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
+        if (eng) {
+            tsnx_engine_remove_torrent(eng, hash.c_str());
+        }
+        datasource::CustomEngineClient::instance().unmarkInUse(hash);
+        clearTorrentCache(hash);
+        util::logLine("download: released unneeded torrent and cleared cache, hash=" + hash);
+    } else {
+        util::logLine("download: keeping torrent active as it is needed by another queued item, hash=" + hash);
+    }
+}
+
+static std::string extractBaseTopicId(const std::string& tid) {
+    if (tid.empty()) return "";
+    size_t pos = tid.find('_');
+    return (pos != std::string::npos) ? tid.substr(0, pos) : tid;
+}
+
+static bool isSameReleaseItem(const download::DownloadItem& a, const download::DownloadItem& b) {
+    if (!a.torrent_hash.empty() && !b.torrent_hash.empty() && a.torrent_hash == b.torrent_hash) {
+        return true;
+    }
+    if (!a.magnet.empty() && !b.magnet.empty() && a.magnet == b.magnet) {
+        return true;
+    }
+    std::string baseA = extractBaseTopicId(a.topic_id);
+    std::string baseB = extractBaseTopicId(b.topic_id);
+    if (!baseA.empty() && !baseB.empty() && baseA == baseB) {
+        return true;
+    }
+    return false;
+}
+
+static void checkAndNotifyReleaseComplete(const std::vector<download::DownloadItem>& queue,
+                                          const download::DownloadItem& completed_item) {
+    bool all_done = true;
+    for (const auto& other : queue) {
+        if (isSameReleaseItem(completed_item, other)) {
+            if (other.state == download::DownloadState::Queued ||
+                other.state == download::DownloadState::Downloading ||
+                other.state == download::DownloadState::StreamPreparing ||
+                other.state == download::DownloadState::StreamInstalling ||
+                other.state == download::DownloadState::Installing ||
+                other.state == download::DownloadState::Paused) {
+                all_done = false;
+                break;
+            }
+        }
+    }
+
+    if (all_done) {
+        std::string title = cleanTitle(completed_item.title);
+        size_t paren = title.find(" (");
+        if (paren != std::string::npos && paren > 0) {
+            title = title.substr(0, paren);
+        }
+        size_t bracket = title.find(" [");
+        if (bracket != std::string::npos && bracket > 0) {
+            std::string suffix = title.substr(bracket);
+            if (suffix.find("DLC") != std::string::npos ||
+                suffix.find("Update") != std::string::npos ||
+                suffix.find("v") != std::string::npos) {
+                title = title.substr(0, bracket);
+            }
+        }
+        util::logLine("download: all files in release completed: " + title);
+        brls::sync([title]() {
+            std::string msg = brls::getStr("app/downloads/release_completed", title);
+            brls::Application::notify(msg);
+        });
+    }
+}
+
 static std::string streamRouteNameFromPath(const std::string& path_or_name, const std::string& fallback) {
     std::string name = path_or_name;
     size_t slash = name.find_last_of("/\\");
@@ -1336,11 +1414,8 @@ void DownloadManager::handleFileDownload(size_t index,
         item.install_written = item.install_total;
         if (!item.file_dl_state->dest.empty()) item.file_dl_dest = item.file_dl_state->dest;
     }
-    util::logLine("download: file download completed: " + item.file_dl_dest);
-
-    if (!torrentStillNeeded(queue_, index, item.torrent_hash)) {
-        clearTorrentCache(item.torrent_hash);
-    }
+    releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+    checkAndNotifyReleaseComplete(queue_, item);
 }
 
 bool DownloadManager::startDownload(size_t index) {
@@ -1537,30 +1612,10 @@ void DownloadManager::trackProgress() {
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
                     } else if (!item.torrent_hash.empty()) {
-                        bool still_needed = false;
-                        for (size_t j = 0; j < queue_.size(); ++j) {
-                            if (i == j) continue;
-                            const auto& other = queue_[j];
-                            std::string other_hash = other.torrent_hash;
-                            if (other_hash.empty() && !other.magnet.empty()) {
-                                other_hash = extractBtihHash(normalizeTorrentLink(other.magnet));
-                            }
-                            if (other_hash == item.torrent_hash &&
-                                (other.state == DownloadState::Queued ||
-                                 other.state == DownloadState::Downloading ||
-                                 other.state == DownloadState::StreamPreparing ||
-                                 other.state == DownloadState::StreamInstalling)) {
-                                still_needed = true;
-                                break;
-                            }
-                        }
-                        if (!still_needed) {
-                            clearTorrentCache(item.torrent_hash);
-                        } else {
-                            util::logLine("download: keeping torrent in cache as it is needed by another queued item, hash=" + item.torrent_hash);
-                        }
+                        releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
                     }
                     util::logLine("download: hybrid install completed: " + item.title);
+                    checkAndNotifyReleaseComplete(queue_, item);
                 }
                 item.hybrid_installer.reset();
                 if (item.stream_consumer_started && item.torrent_id >= 0) {
@@ -1841,6 +1896,10 @@ void DownloadManager::trackProgress() {
                     stopStreamConsumer(item.torrent_id);
                     item.stream_consumer_started = false;
                 }
+                if (!item.torrent_hash.empty() && isLocalBackend()) {
+                    releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
+                }
+                checkAndNotifyReleaseComplete(queue_, item);
             }
         }
 
@@ -2181,28 +2240,7 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.torrent_id >= 0 && torrent_) {
         torrent_->cancelTorrent(item.torrent_id);
     } else if (!item.torrent_hash.empty()) {
-        bool still_needed = false;
-        for (size_t j = 0; j < queue_.size(); ++j) {
-            if (index == j) continue;
-            const auto& other = queue_[j];
-            std::string other_hash = other.torrent_hash;
-            if (other_hash.empty() && !other.magnet.empty()) {
-                other_hash = extractBtihHash(normalizeTorrentLink(other.magnet));
-            }
-            if (other_hash == item.torrent_hash &&
-                (other.state == DownloadState::Queued ||
-                 other.state == DownloadState::Downloading ||
-                 other.state == DownloadState::StreamPreparing ||
-                 other.state == DownloadState::StreamInstalling)) {
-                still_needed = true;
-                break;
-            }
-        }
-        if (!still_needed) {
-            clearTorrentCache(item.torrent_hash);
-        } else {
-            util::logLine("download: keeping torrent in cache on cancellation as it is needed by another queued item, hash=" + item.torrent_hash);
-        }
+        releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
     }
     item.state = DownloadState::Cancelled;
     item.download_speed_kbps = 0.0f;

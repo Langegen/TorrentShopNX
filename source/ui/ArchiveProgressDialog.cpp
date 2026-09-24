@@ -68,24 +68,25 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
     std::string cancelText = brls::getStr("app/common/cancel");
     if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
-    this->addButton(cancelText, [this]() {
-        if (cancelToken_) {
-            cancelToken_->store(true);
-        }
-        if (currentFileLabel_) {
-            currentFileLabel_->setText("app/archive/cancelling"_i18n);
-        }
+    cancelButton_ = new brls::Button();
+    cancelButton_->setStyle(&brls::BUTTONSTYLE_BORDERLESS);
+    cancelButton_->setText(cancelText);
+    cancelButton_->setHeight(40.0f);
+    cancelButton_->setMarginTop(14.0f);
+    cancelButton_->setCornerRadius(8.0f);
+    cancelButton_->setHighlightCornerRadius(8.0f);
+    cancelButton_->setFocusable(true);
+    cancelButton_->registerClickAction([this](brls::View* view) {
+        requestCancel();
+        return true;
     });
+    contentBox_->addView(cancelButton_);
 
-    // Handle B button properly to cancel extraction/creation gracefully
-    this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
-        if (cancelToken_) {
-            cancelToken_->store(true);
-        }
-        if (currentFileLabel_) {
-            currentFileLabel_->setText("app/archive/cancelling"_i18n);
-        }
-        this->dismiss();
+    this->setCancelable(false);
+
+    // Handle B button: request cancellation with confirmation
+    this->registerAction("hints/cancel"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        requestCancel();
         return true;
     }, false, false, brls::SOUND_BACK);
 
@@ -177,6 +178,37 @@ ArchiveProgressDialog::~ArchiveProgressDialog() {
     util::logLine("ArchiveProgressDialog: destructor completed");
 }
 
+void ArchiveProgressDialog::requestCancel() {
+    if (!aliveToken_ || !aliveToken_->load() || closed_.load()) return;
+    if (cancelToken_ && cancelToken_->load()) return;
+
+    std::string confirmMsg = brls::getStr("app/archive/confirm_cancel_msg");
+    if (confirmMsg.empty() || confirmMsg == "app/archive/confirm_cancel_msg") {
+        confirmMsg = "Are you sure you want to cancel extraction?";
+    }
+
+    std::string noText = brls::getStr("app/common/no");
+    if (noText.empty() || noText == "app/common/no") noText = "No";
+
+    std::string yesText = brls::getStr("app/common/yes");
+    if (yesText.empty() || yesText == "app/common/yes") yesText = "Yes";
+
+    auto* confirmDlg = new brls::Dialog(confirmMsg);
+    confirmDlg->setCancelable(false);
+    confirmDlg->addButton(noText, []() {
+        // Dismiss confirmation, continue extraction
+    });
+    confirmDlg->addButton(yesText, [this]() {
+        if (cancelToken_) {
+            cancelToken_->store(true);
+        }
+        if (currentFileLabel_) {
+            currentFileLabel_->setText("app/archive/cancelling"_i18n);
+        }
+    });
+    confirmDlg->open();
+}
+
 void ArchiveProgressDialog::updateUi(const util::ArchiveProgress& progress) {
     if (!aliveToken_ || !aliveToken_->load() || closed_.load()) return;
 
@@ -206,22 +238,33 @@ void ArchiveProgressDialog::updateUi(const util::ArchiveProgress& progress) {
     if (statsLabel_) {
         char buf[160];
         std::string extStr = util::formatFileSize(progress.bytesExtracted);
-        uint64_t totalTarget = progress.totalUncompressedSize > 0
-            ? progress.totalUncompressedSize
-            : progress.totalArchiveSize;
-        std::string totalStr = util::formatFileSize(totalTarget);
         float pct = progress.percentage;
         if (std::isnan(pct) || std::isinf(pct)) pct = 0.0f;
         pct = std::clamp(pct, 0.0f, 100.0f);
 
-        if (progress.totalEntries > 0) {
-            std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu / %zu)",
-                          pct, extStr.c_str(), totalStr.c_str(),
-                          progress.entriesProcessed, progress.totalEntries);
+        if (progress.totalUncompressedSize > 0) {
+            std::string totalStr = util::formatFileSize(progress.totalUncompressedSize);
+            if (progress.totalEntries > 0) {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu / %zu)",
+                              pct, extStr.c_str(), totalStr.c_str(),
+                              progress.entriesProcessed, progress.totalEntries);
+            } else {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu)",
+                              pct, extStr.c_str(), totalStr.c_str(),
+                              progress.entriesProcessed);
+            }
         } else {
-            std::snprintf(buf, sizeof(buf), "%.1f%% · %s / %s (%zu)",
-                          pct, extStr.c_str(), totalStr.c_str(),
-                          progress.entriesProcessed);
+            // When total uncompressed size is not known in advance (e.g. streaming compressed tar),
+            // do not display compressed archive size as denominator for uncompressed extracted bytes!
+            if (progress.totalEntries > 0) {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s (%zu / %zu)",
+                              pct, extStr.c_str(),
+                              progress.entriesProcessed, progress.totalEntries);
+            } else {
+                std::snprintf(buf, sizeof(buf), "%.1f%% · %s (%zu)",
+                              pct, extStr.c_str(),
+                              progress.entriesProcessed);
+            }
         }
         statsLabel_->setText(buf);
     }

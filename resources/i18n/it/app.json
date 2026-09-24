@@ -174,6 +174,7 @@
         "elapsed": "Trascorso: {0}",
         "saved_to": "Salvato in: {0}",
         "installed": "Installato sulla console",
+        "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "Errore sconosciuto",
         "action_delete": "Elimina download",
         "action_open_folder": "Apri cartella",
@@ -363,6 +364,7 @@
         "titledb_failed": "Caricamento TitleDB fallito",
         "scanning_games": "Analisi giochi sulla console...",
         "installed": "Installato",
+        "release_completed": "All files in release downloaded: {0}",
         "available": "Disponibile",
         "uninstall_confirm": "Disinstallare \"{0}\"?\nIl gioco, tutti gli aggiornamenti e i DLC verranno rimossi.",
         "uninstall_success": "\"{0}\" disinstallato",
@@ -374,7 +376,7 @@
         "notify_update_disabled": "Controllo aggiornamenti disabilitato per \"{0}\"",
         "notify_update_enabled": "Controllo aggiornamenti abilitato per \"{0}\"",
         "mod_warn_dialog_title": "Attenzione: Modifiche rilevate",
-        "mod_warn_dialog_msg": "Sono state rilevate mod installate ({1}) per \"{0}\".\n\nL'aggiornamento potrebbe renderle incompatibili o causare errori di avvio.\n\nCosa desideri fare?",
+        "mod_warn_dialog_msg": "Sono state rilevate mod installate ({1}) per \"{0}\". L'aggiornamento potrebbe renderle incompatibili o causare errori di avvio. Cosa desideri fare?",
         "mod_warn_btn_proceed": "Aggiorna comunque",
         "mod_warn_btn_freeze": "Congela aggiornamento"
     },
@@ -628,7 +630,15 @@
         "cache_games_count": "Cache: {0} giochi (A - aggiorna)",
         "cache_press_a": "Premi A per aggiornare",
         "retro_update_catalogs_cached": "Cache: {0} giochi (A - aggiorna)",
-        "retro_update_catalogs_empty": "Premi A per aggiornare"
+        "retro_update_catalogs_empty": "Premi A per aggiornare",
+        "update_catalog_btn": "Aggiorna catalogo giochi",
+        "update_catalog_dialog_msg": "Seleziona modalità di aggiornamento:",
+        "update_catalog_fast_diff": "Aggiornamento rapido (delta)",
+        "update_catalog_full": "Ricarica completa del database",
+        "update_catalog_downloading_diff": "Download modifiche...",
+        "update_catalog_applying_diff": "Applicazione modifiche...",
+        "update_catalog_diff_success": "Catalogo aggiornato: +{0} nuovi, {1} aggiornati",
+        "update_catalog_up_to_date": "Il catalogo è già aggiornato"
     },
     "applet": {
         "title": "Modalità Applet rilevata",
@@ -838,7 +848,14 @@
         "emulator_download": "Scarica",
         "emulator_downloading": "Download emulatore in corso...",
         "emulator_extracting": "Estrazione archivio...",
-        "emulator_install_success": "Emulatore installato con successo!"
+        "emulator_install_success": "Emulatore installato con successo!",
+        "btn_bios": "Installa BIOS",
+        "btn_install_bios": "Installa BIOS",
+        "btn_skip": "Salta",
+        "downloading_comp_file": "Download file {0} ({1} di {2})...",
+        "prompt_install_bios_msg": "Per il corretto funzionamento di {0}, è richiesto/consigliato {1}. Installare il BIOS ora?",
+        "prompt_install_bios_title": "Installa BIOS",
+        "sec_emu_bios": "BIOS e file di sistema (PS2, PS1, PS Vita, Dreamcast, Sega CD, NDS, FDS, Sega 32X)"
     },
     "dashboard": {
         "catalog_title": "GIOCHI NUOVI E POPOLARI",
@@ -924,6 +941,11 @@
         "unknown_error": "Errore sconosciuto durante l'estrazione",
         "done_100": "100.0% · Fatto",
         "cancelled_by_user": "Estrazione annullata dall'utente",
+        "confirm_cancel_msg": "Sei sicuro di voler annullare l'estrazione?",
+        "folder_type": "Cartella archivio",
+        "browse_archive": "Sfoglia archivio",
+        "extract_this_file": "Estrai questo file",
+        "extract_entire_archive": "Estrai intero archivio",
         "creating_title": "Creazione archivio...",
         "preparing": "Preparazione..."
     },

@@ -717,6 +717,10 @@ inline std::string getCatalogEtagPath() {
     return getCatalogPath() + ".etag";
 }
 
+inline std::string getCatalogDiffEtagPath() {
+    return getCatalogPath() + ".diff.etag";
+}
+
 inline const char* kCatalogPath = TSNX_CATALOG_JSON_RU;
 inline const char* kCatalogBinPath = TSNX_CATALOG_BIN_RU;
 

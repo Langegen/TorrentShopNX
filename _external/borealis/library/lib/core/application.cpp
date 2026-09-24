@@ -1382,11 +1382,9 @@ int Application::getFont(std::string fontName)
 
 int Application::getDefaultFont()
 {
-#ifdef __SWITCH__
-    static int regular = Application::getFont(FONT_REGULAR);
-#else
-    static int regular = Application::getFont(FONT_REGULAR);
-#endif
+    static int regular = FONT_INVALID;
+    if (regular == FONT_INVALID)
+        regular = Application::getFont(FONT_REGULAR);
     return regular;
 }
 

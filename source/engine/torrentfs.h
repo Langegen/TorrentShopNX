@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "torrent_meta.h"   // peer_addr
 
@@ -33,6 +34,11 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
 
 void torrentfs_close(torrentfs *tfs);
 
+// Switch the stream to a different file in the same torrent without tearing down
+// the peer swarm, DHT, or network connections.
+// Returns true on success.
+bool torrentfs_select_file(torrentfs *tfs, int file_index);
+
 // Total size of the streamed file, in bytes.
 int64_t torrentfs_size(const torrentfs *tfs);
 
@@ -51,6 +57,9 @@ void torrentfs_pause(torrentfs *tfs, int on);
 
 // Unblock any in-progress read so playback can shut down.
 void torrentfs_cancel(torrentfs *tfs);
+
+// Unblock any currently blocked reader thread without stopping the network loops.
+void torrentfs_cancel_reader(torrentfs *tfs);
 
 // Strict piece verification mode (1 = wait for full SHA-1 verified pieces).
 void torrentfs_set_strict_verify(torrentfs *tfs, int on);

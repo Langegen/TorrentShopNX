@@ -564,9 +564,15 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     
     std::string coverUrl = findCoverForDownload(item);
     if (!coverUrl.empty()) {
-        setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken);
+        if (cell->loadedCoverUrl != coverUrl) {
+            cell->loadedCoverUrl = coverUrl;
+            setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken);
+        }
     } else {
-        cell->cover->setImageFromFile("romfs:/img/borealis_96.png"); // fallback
+        if (cell->loadedCoverUrl != "__fallback__") {
+            cell->loadedCoverUrl = "__fallback__";
+            cell->cover->setImageFromFile("romfs:/img/borealis_96.png"); // fallback
+        }
     }
 
     // Set download progress
@@ -799,6 +805,7 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
     
     if (cell->imageToken) *(cell->imageToken) = false;
     cell->imageToken = std::make_shared<bool>(true);
+    cell->loadedCoverUrl.clear();
 
     std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();

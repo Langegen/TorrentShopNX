@@ -33,6 +33,7 @@ extern std::vector<Game> g_games;
 namespace ui {
 
 CatalogView* g_activeCatalogView = nullptr;
+std::shared_ptr<bool> g_catalogViewAliveToken;
 
 int GameRowCell::s_lastFocusedColumn = 0;
 
@@ -538,13 +539,17 @@ void CatalogView::jumpToNextLetter(bool forward) {
 void CatalogView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     g_activeCatalogView = this;
+    g_catalogViewAliveToken = std::make_shared<bool>(true);
 }
 
 void CatalogView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
+    // Invalidate the token so any pending brls::sync lambdas skip filterCatalog()
+    if (g_catalogViewAliveToken) *g_catalogViewAliveToken = false;
     if (g_activeCatalogView == this) {
         g_activeCatalogView = nullptr;
     }
 }
+
 
 } // namespace ui

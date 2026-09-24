@@ -174,6 +174,7 @@
         "elapsed": "経過時間: {0}",
         "saved_to": "保存先: {0}",
         "installed": "本体にインストール済み",
+        "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "不明なエラー",
         "action_delete": "タスク削除",
         "action_open_folder": "フォルダを開く",
@@ -363,6 +364,7 @@
         "titledb_failed": "TitleDB の読み込みに失敗しました",
         "scanning_games": "本体のゲームを解析中...",
         "installed": "インストール済み",
+        "release_completed": "All files in release downloaded: {0}",
         "available": "利用可能",
         "uninstall_confirm": "「{0}」をアンインストールしますか？\nゲーム本体、すべての更新データおよびDLCが削除されます。",
         "uninstall_success": "「{0}」をアンインストールしました",
@@ -374,7 +376,7 @@
         "notify_update_disabled": "「{0}」の更新確認を無効化しました",
         "notify_update_enabled": "「{0}」の更新確認を有効化しました",
         "mod_warn_dialog_title": "警告: MODを検出しました",
-        "mod_warn_dialog_msg": "ゲーム「{0}」にインストールされたMOD（{1}件）が見つかりました。\n\nゲームを更新するとMODが動作しなくなったり、起動エラーが発生する可能性があります。\n\nどうしますか？",
+        "mod_warn_dialog_msg": "ゲーム「{0}」にインストールされたMOD（{1}件）が見つかりました。 ゲームを更新するとMODが動作しなくなったり、起動エラーが発生する可能性があります。 どうしますか？",
         "mod_warn_btn_proceed": "そのまま更新",
         "mod_warn_btn_freeze": "更新をスキップ"
     },
@@ -628,7 +630,15 @@
         "cache_games_count": "キャッシュ: {0} 本 (A - 更新)",
         "cache_press_a": "Aを押して更新",
         "retro_update_catalogs_cached": "キャッシュ: {0} 本のゲーム (A - 更新)",
-        "retro_update_catalogs_empty": "Aボタンを押して更新"
+        "retro_update_catalogs_empty": "Aボタンを押して更新",
+        "update_catalog_btn": "ゲームカタログ更新",
+        "update_catalog_dialog_msg": "更新モードを選択してください：",
+        "update_catalog_fast_diff": "高速差分更新 (Delta)",
+        "update_catalog_full": "データベース全量再取得",
+        "update_catalog_downloading_diff": "差分データをダウンロード中...",
+        "update_catalog_applying_diff": "変更を適用中...",
+        "update_catalog_diff_success": "カタログを更新しました：新規 +{0}、更新 {1}",
+        "update_catalog_up_to_date": "カタログはすでに最新です"
     },
     "applet": {
         "title": "アプレットモードを検出しました",
@@ -838,7 +848,14 @@
         "emulator_download": "ダウンロード",
         "emulator_downloading": "エミュレータをダウンロード中...",
         "emulator_extracting": "アーカイブを解凍中...",
-        "emulator_install_success": "エミュレータが正常にインストールされました！"
+        "emulator_install_success": "エミュレータが正常にインストールされました！",
+        "btn_bios": "BIOSをインストール",
+        "btn_install_bios": "BIOSをインストール",
+        "btn_skip": "スキップ",
+        "downloading_comp_file": "ファイル {0} をダウンロード中（{1}/{2}）...",
+        "prompt_install_bios_msg": "{0} が正常に動作するには、{1} が必要/推奨されます。 BIOSを今すぐインストールしますか？",
+        "prompt_install_bios_title": "BIOSのインストール",
+        "sec_emu_bios": "BIOS＆システムファイル（PS2、PS1、PS Vita、Dreamcast、Sega CD、NDS、FDS、Sega 32X）"
     },
     "dashboard": {
         "catalog_title": "新作・人気ゲーム",
@@ -924,6 +941,11 @@
         "unknown_error": "不明な解凍エラー",
         "done_100": "100.0% · 完了",
         "cancelled_by_user": "ユーザーによって解凍がキャンセルされました",
+        "confirm_cancel_msg": "解凍をキャンセルしてもよろしいですか？",
+        "folder_type": "アーカイブフォルダ",
+        "browse_archive": "アーカイブを開く",
+        "extract_this_file": "このファイルを抽出",
+        "extract_entire_archive": "アーカイブ全体を解凍",
         "creating_title": "アーカイブ作成中...",
         "preparing": "準備中..."
     },
