@@ -299,16 +299,6 @@ void RetroEmulatorsView::rebuildList() {
                         });
                     });
 
-                    if (!activePkg.forwarder_url.empty()) {
-                        chooseDialog->addButton("app/retro/btn_forwarder"_i18n, [this, activePkg]() {
-                            brls::sync([this, activePkg]() {
-                                installForwarderForEmulator(activePkg, [this](bool ok) {
-                                    if (ok) rebuildList();
-                                });
-                            });
-                        });
-                    }
-
                     if (!activePkg.bios_id.empty()) {
                         const auto* biosPkg = catalog::RetroEmulatorManager::instance().findPackage(activePkg.bios_id);
                         if (biosPkg) {

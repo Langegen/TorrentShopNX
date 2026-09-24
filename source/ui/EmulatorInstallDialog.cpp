@@ -1,5 +1,4 @@
 #include "EmulatorInstallDialog.hpp"
-#include "InstallProgressDialog.hpp"
 #include "../catalog/retro_emulator_manager.h"
 #include "../net/http_client.h"
 #include "../utils/archive_utils.h"
@@ -464,55 +463,6 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     });
 }
 
-void installForwarderForEmulator(const catalog::EmulatorPackage& pkg,
-                                 std::function<void(bool success)> onComplete) {
-    if (pkg.forwarder_url.empty()) {
-        brls::Application::notify("app/retro/forwarder_not_available"_i18n);
-        if (onComplete) onComplete(false);
-        return;
-    }
-
-    std::string nspFilename = pkg.id + "_forwarder.nsp";
-    std::string tmpNsp = std::string(TSNX_CACHE_TMP) + "/" + nspFilename;
-    tsnx_ensure_parent_dirs(tmpNsp.c_str());
-
-    std::error_code ec;
-    std::filesystem::remove(tmpNsp, ec);
-
-    brls::Application::notify("app/retro/forwarder_downloading"_i18n);
-
-    brls::async([pkg, tmpNsp, onComplete]() {
-        net::HttpClient client;
-        client.setTimeout(180);
-        bool dlOk = client.downloadToFile(pkg.forwarder_url, tmpNsp, nullptr, 180);
-
-        brls::sync([pkg, tmpNsp, dlOk, onComplete]() {
-            if (!dlOk) {
-                std::error_code ec;
-                std::filesystem::remove(tmpNsp, ec);
-                brls::Application::notify("app/retro/forwarder_download_error"_i18n);
-                if (onComplete) onComplete(false);
-                return;
-            }
-
-            auto* progressDlg = new InstallProgressDialog(tmpNsp, 1, [pkg, tmpNsp, onComplete](bool success, const std::string& msg) {
-                std::error_code ec;
-                std::filesystem::remove(tmpNsp, ec);
-
-                if (success) {
-                    catalog::RetroEmulatorManager::instance().recordForwarderInstalled(pkg.id, true);
-                    brls::Application::notify(brls::getStr("app/retro/forwarder_installed_success", pkg.name));
-                } else {
-                    util::logLine("Install forwarder failed: " + msg);
-                    brls::Application::notify("app/retro/forwarder_install_error"_i18n);
-                }
-                if (onComplete) onComplete(success);
-            });
-            progressDlg->startInstallation();
-        });
-    });
-}
-
 void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
                                    std::function<void()> onDone) {
     if (pkg.category == "bios") {
@@ -527,38 +477,6 @@ void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
         const auto* freshPkg = catalog::RetroEmulatorManager::instance().findPackage(pkg.id);
         catalog::EmulatorPackage effectivePkg = freshPkg ? *freshPkg : pkg;
 
-        auto proceedToForwarder = [effectivePkg, onDone]() {
-            brls::sync([effectivePkg, onDone]() {
-                const auto* curPkgPtr = catalog::RetroEmulatorManager::instance().findPackage(effectivePkg.id);
-                catalog::EmulatorPackage activePkg = curPkgPtr ? *curPkgPtr : effectivePkg;
-
-                if (activePkg.forwarder_url.empty()) {
-                    if (onDone) onDone();
-                    return;
-                }
-
-                if (catalog::RetroEmulatorManager::instance().isForwarderInstalled(activePkg.id)) {
-                    if (onDone) onDone();
-                    return;
-                }
-
-                util::logLine("EmulatorInstall: showing forwarder prompt for " + activePkg.id);
-                std::string forwarderMsg = brls::getStr("app/retro/prompt_install_forwarder_msg", activePkg.name);
-                auto* forwarderDlg = new brls::Dialog(forwarderMsg);
-                forwarderDlg->addButton("app/retro/btn_install_forwarder"_i18n, [activePkg, onDone]() {
-                    brls::sync([activePkg, onDone]() {
-                        installForwarderForEmulator(activePkg, [onDone](bool ok) {
-                            if (onDone) onDone();
-                        });
-                    });
-                });
-                forwarderDlg->addButton("app/retro/btn_skip"_i18n, [onDone]() {
-                    if (onDone) onDone();
-                });
-                forwarderDlg->open();
-            });
-        };
-
         // Check if emulator has an associated BIOS that is not yet installed
         const auto* biosPkg = catalog::RetroEmulatorManager::instance().getBiosPackageForEmulator(effectivePkg.id);
         if (biosPkg && !catalog::RetroEmulatorManager::instance().isInstalled(biosPkg->id)) {
@@ -566,21 +484,21 @@ void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
             util::logLine("EmulatorInstall: showing BIOS prompt for " + effectivePkg.id + " -> bios=" + biosCopy.id);
             std::string biosMsg = brls::getStr("app/retro/prompt_install_bios_msg", effectivePkg.name, biosCopy.name);
             auto* biosDlg = new brls::Dialog(biosMsg);
-            biosDlg->addButton("app/retro/btn_install_bios"_i18n, [biosCopy, proceedToForwarder]() {
+            biosDlg->addButton("app/retro/btn_install_bios"_i18n, [biosCopy, onDone]() {
                 util::logLine("EmulatorInstall: user accepted BIOS install for " + biosCopy.id);
-                brls::sync([biosCopy, proceedToForwarder]() {
-                    showEmulatorInstallDialog(biosCopy, [proceedToForwarder](bool ok) {
-                        proceedToForwarder();
+                brls::sync([biosCopy, onDone]() {
+                    showEmulatorInstallDialog(biosCopy, [onDone](bool ok) {
+                        if (onDone) onDone();
                     });
                 });
             });
-            biosDlg->addButton("app/retro/btn_skip"_i18n, [proceedToForwarder]() {
+            biosDlg->addButton("app/retro/btn_skip"_i18n, [onDone]() {
                 util::logLine("EmulatorInstall: user skipped BIOS install");
-                proceedToForwarder();
+                if (onDone) onDone();
             });
             biosDlg->open();
         } else {
-            proceedToForwarder();
+            if (onDone) onDone();
         }
     });
 }

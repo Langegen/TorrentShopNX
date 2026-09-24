@@ -40,8 +40,6 @@ struct EmulatorPackage {
 
     std::string bios_id;                                // ID of associated BIOS package (e.g. "ps2_bios")
     std::vector<CompanionDownload> companion_downloads; // For multi-file packages (e.g. BIOS sets)
-    std::string forwarder_url;                          // URL to .nsp forwarder for Home Menu
-    std::string forwarder_title_id;                     // 16-char hex Title ID for Home Menu check
 };
 
 class RetroEmulatorManager {
@@ -60,8 +58,6 @@ public:
     bool uninstallEmulator(const std::string& emu_id, std::string& out_err);
 
     const EmulatorPackage* getBiosPackageForEmulator(const std::string& emu_id) const;
-    bool isForwarderInstalled(const std::string& emu_id) const;
-    void recordForwarderInstalled(const std::string& emu_id, bool installed);
 
     std::string getManifestDownloadUrl() const;
     std::string getLocalManifestPath() const;

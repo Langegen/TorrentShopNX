@@ -522,62 +522,22 @@ void RetroEmulatorManager::applyPackageDefaults() {
     for (auto& p : packages_) {
         if (p.id == "nethersx2") {
             if (p.bios_id.empty()) p.bios_id = "ps2_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/NetherSX2.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000002";
         } else if (p.id == "duckstation") {
             if (p.bios_id.empty()) p.bios_id = "ps1_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/DuckStation.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000003";
         } else if (p.id == "vita3k") {
             if (p.bios_id.empty()) p.bios_id = "vita_fw";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Vita3K.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000004";
         } else if (p.id == "flycast") {
             if (p.bios_id.empty()) p.bios_id = "dreamcast_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Flycast.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000005";
         } else if (p.id == "pgen") {
             if (p.bios_id.empty()) p.bios_id = "segacd_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pGEN.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000006";
         } else if (p.id == "melonds") {
             if (p.bios_id.empty()) p.bios_id = "nds_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/melonDS.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000007";
         } else if (p.id == "pnes") {
             if (p.bios_id.empty()) p.bios_id = "fds_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pNES.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000008";
         } else if (p.id == "picodrive") {
             if (p.bios_id.empty()) p.bios_id = "sega32x_bios";
-        } else if (p.id == "dekopon") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Dekopon.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000001";
-        } else if (p.id == "dolphin") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Dolphin.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000009";
-        } else if (p.id == "cemu") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/Cemu.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000010";
-        } else if (p.id == "drasticds") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/DrasticDS.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000011";
-        } else if (p.id == "ppsspp") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/PPSSPP.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000012";
-        } else if (p.id == "psnes") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pSNES.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000013";
-        } else if (p.id == "mgba") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/mGBA.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000014";
-        } else if (p.id == "pgba") {
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/pGBA.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000015";
         } else if (p.id == "retroarch") {
             if (p.bios_id.empty()) p.bios_id = "sega32x_bios";
-            if (p.forwarder_url.empty()) p.forwarder_url = "https://github.com/Langegen/console-games/releases/download/forwarders/RetroArch.forwarder.nsp";
-            if (p.forwarder_title_id.empty()) p.forwarder_title_id = "0510000000000016";
         }
     }
 
@@ -772,23 +732,6 @@ const EmulatorPackage* RetroEmulatorManager::getBiosPackageForEmulator(const std
     return findPackage(emu->bios_id);
 }
 
-bool RetroEmulatorManager::isForwarderInstalled(const std::string& emu_id) const {
-    auto it = installed_versions_.find("forwarder_" + emu_id);
-    if (it != installed_versions_.end() && it->second == "installed") {
-        return true;
-    }
-    return false;
-}
-
-void RetroEmulatorManager::recordForwarderInstalled(const std::string& emu_id, bool installed) {
-    if (installed) {
-        installed_versions_["forwarder_" + emu_id] = "installed";
-    } else {
-        installed_versions_.erase("forwarder_" + emu_id);
-    }
-    saveInstalledVersions();
-}
-
 std::string RetroEmulatorManager::getManifestDownloadUrl() const {
     return "https://raw.githubusercontent.com/Langegen/console-games/main/data/emulators.json";
 }
@@ -825,8 +768,6 @@ bool RetroEmulatorManager::saveLocalManifest() {
                 static_cast<int>(p.color.a * 255.0f)
             };
             if (!p.bios_id.empty()) item["bios_id"] = p.bios_id;
-            if (!p.forwarder_url.empty()) item["forwarder_url"] = p.forwarder_url;
-            if (!p.forwarder_title_id.empty()) item["forwarder_title_id"] = p.forwarder_title_id;
             if (!p.companion_downloads.empty()) {
                 nlohmann::json comps = nlohmann::json::array();
                 for (const auto& cd : p.companion_downloads) {
@@ -908,12 +849,6 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
                 std::string bId = item.value("bios_id", "");
                 if (!bId.empty()) it->bios_id = bId;
 
-                std::string fUrl = item.value("forwarder_url", "");
-                if (!fUrl.empty()) it->forwarder_url = fUrl;
-
-                std::string fTid = item.value("forwarder_title_id", "");
-                if (!fTid.empty()) it->forwarder_title_id = fTid;
-
                 if (item.contains("companion_downloads") && item["companion_downloads"].is_array() && !item["companion_downloads"].empty()) {
                     std::vector<CompanionDownload> comps;
                     for (const auto& cd : item["companion_downloads"]) {
@@ -958,8 +893,6 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
                 }
 
                 p.bios_id = item.value("bios_id", "");
-                p.forwarder_url = item.value("forwarder_url", "");
-                p.forwarder_title_id = item.value("forwarder_title_id", "");
 
                 if (item.contains("companion_downloads") && item["companion_downloads"].is_array()) {
                     for (const auto& cd : item["companion_downloads"]) {
@@ -1052,7 +985,7 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
         return false;
     }
 
-    // Save the fully merged manifest to disk so all BIOSes and forwarders are preserved
+    // Save the fully merged manifest to disk so all BIOSes are preserved
     saveLocalManifest();
 
     if (progress_cb) progress_cb(1.0f, "Манифест успешно обновлен");
