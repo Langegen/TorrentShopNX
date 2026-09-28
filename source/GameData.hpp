@@ -1192,33 +1192,66 @@ inline std::string getOriginalImageUrl(const std::string& url) {
     return original;
 }
 
-// Check if a game belongs to Homebrew / Ports category
+// Check if a game belongs to Homebrew category:
+// Both conditions must be met:
+// 1. Format is NRO (image_format contains "nro" or title contains "[nro]")
+// 2. Genre is Homebrew (genre contains "homebrew"/"хомбрю", or if genre is empty, title contains "[homebrew]"/"[хомбрю]")
 inline bool isHomebrewGame(const Game& g) {
+    // 1. Check format NRO
+    bool hasNroFormat = false;
+    if (!g.image_format.empty()) {
+        std::string lowerFormat = g.image_format;
+        std::transform(lowerFormat.begin(), lowerFormat.end(), lowerFormat.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowerFormat.find("nro") != std::string::npos) {
+            hasNroFormat = true;
+        }
+    }
+    if (!hasNroFormat && !g.title.empty()) {
+        std::string lowerTitle = g.title;
+        std::transform(lowerTitle.begin(), lowerTitle.end(), lowerTitle.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        if (lowerTitle.find("[nro]") != std::string::npos) {
+            hasNroFormat = true;
+        }
+    }
+
+    if (!hasNroFormat) {
+        return false;
+    }
+
+    // 2. Check genre Homebrew
+    bool hasHomebrewGenre = false;
     if (!g.genre.empty()) {
         std::string lowerGenre = g.genre;
         std::transform(lowerGenre.begin(), lowerGenre.end(), lowerGenre.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
         if (lowerGenre.find("homebrew") != std::string::npos ||
-            lowerGenre.find("порт") != std::string::npos ||
-            lowerGenre.find("port") != std::string::npos) {
-            return true;
+            lowerGenre.find("хомбрю") != std::string::npos ||
+            lowerGenre.find("Хомбрю") != std::string::npos ||
+            lowerGenre.find("хоумбрю") != std::string::npos ||
+            lowerGenre.find("Хоумбрю") != std::string::npos) {
+            hasHomebrewGenre = true;
         }
-    }
-    if (g.image_format == "NRO" || g.image_format == "nro") {
-        return true;
-    }
-    if (!g.title.empty()) {
+    } else if (!g.title.empty()) {
+        // Fallback: if genre is empty, check title for [homebrew] tag
         std::string lowerTitle = g.title;
         std::transform(lowerTitle.begin(), lowerTitle.end(), lowerTitle.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
-        if (lowerTitle.find("[nro]") != std::string::npos ||
-            lowerTitle.find("[port]") != std::string::npos) {
-            return true;
+        if (lowerTitle.find("[homebrew]") != std::string::npos ||
+            lowerTitle.find("[хомбрю]") != std::string::npos ||
+            lowerTitle.find("[Хомбрю]") != std::string::npos ||
+            lowerTitle.find("[хоумбрю]") != std::string::npos ||
+            lowerTitle.find("[Хоумбрю]") != std::string::npos) {
+            hasHomebrewGenre = true;
         }
     }
-    return false;
+
+    return hasHomebrewGenre;
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download

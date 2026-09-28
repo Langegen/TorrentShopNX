@@ -413,7 +413,12 @@
         "players_3_4": "3-4 Spieler",
         "players_5_plus": "5+ Spieler",
         "players_multi": "Jeder Mehrspieler",
-        "title": "Filter und Sortierung"
+        "title": "Filter und Sortierung",
+        "selected_count": "Ausgewählt: {0}",
+        "hint_select_one": "Einzeln wählen",
+        "hint_multiselect": "Mehrfachauswahl",
+        "hint_apply": "Anwenden",
+        "apply_done": "Fertig"
     },
     "settings": {
         "title": "Werkzeuge",
@@ -959,5 +964,30 @@
         "file_empty": "<Datei ist leer>",
         "page_up": "Seite hoch",
         "page_down": "Seite runter"
+    },
+    "genres": {
+        "action": "Action",
+        "adventure": "Abenteuer",
+        "platformer": "Plattformer",
+        "arcade": "Arcade",
+        "puzzle": "Rätsel",
+        "rpg": "Rollenspiel (RPG)",
+        "simulation": "Simulation",
+        "strategy": "Strategie & Taktik",
+        "visual_novel": "Visual Novels",
+        "horror": "Horror",
+        "shooter": "Shooter",
+        "party": "Party & Multiplayer",
+        "fighting": "Kampfspiel",
+        "metroidvania": "Metroidvania",
+        "card_board": "Brett- & Kartenspiele",
+        "roguelike": "Roguelike / Roguelite",
+        "point_and_click": "Point & Click",
+        "racing": "Rennspiel",
+        "music": "Musik & Rhythmus",
+        "sports": "Sport",
+        "hidden_objects": "Wimmelbild",
+        "stealth": "Schleichspiel",
+        "education": "Lernspiel"
     }
 }

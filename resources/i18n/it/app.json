@@ -413,7 +413,12 @@
         "players_3_4": "3-4 giocatori",
         "players_5_plus": "5+ giocatori",
         "players_multi": "Qualsiasi multigiocatore",
-        "title": "Filtri e ordinamento"
+        "title": "Filtri e ordinamento",
+        "selected_count": "Selezionati: {0}",
+        "hint_select_one": "Seleziona singolo",
+        "hint_multiselect": "Multiselezione",
+        "hint_apply": "Applica",
+        "apply_done": "Fatto"
     },
     "settings": {
         "title": "Strumenti",
@@ -959,5 +964,30 @@
         "file_empty": "<File vuoto>",
         "page_up": "Pag. Su",
         "page_down": "Pag. Giù"
+    },
+    "genres": {
+        "action": "Azione",
+        "adventure": "Avventura",
+        "platformer": "Platform",
+        "arcade": "Arcade",
+        "puzzle": "Rompicapo",
+        "rpg": "Giochi di ruolo (RPG)",
+        "simulation": "Simulazione",
+        "strategy": "Strategia e tattica",
+        "visual_novel": "Visual Novel",
+        "horror": "Horror",
+        "shooter": "Sparatutto",
+        "party": "Party & Multigiocatore",
+        "fighting": "Picchiaduro",
+        "metroidvania": "Metroidvania",
+        "card_board": "Giochi da tavolo e carte",
+        "roguelike": "Roguelike / Roguelite",
+        "point_and_click": "Point & Click",
+        "racing": "Corse",
+        "music": "Musica e ritmo",
+        "sports": "Sport",
+        "hidden_objects": "Oggetti nascosti",
+        "stealth": "Stealth",
+        "education": "Educativo"
     }
 }

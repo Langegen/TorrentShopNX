@@ -413,7 +413,12 @@
         "players_3_4": "3-4人对战合作",
         "players_5_plus": "5人以上联欢",
         "players_multi": "任何多人对战",
-        "title": "筛选与排序"
+        "title": "筛选与排序",
+        "selected_count": "已选：{0}",
+        "hint_select_one": "单选",
+        "hint_multiselect": "多选切换",
+        "hint_apply": "应用",
+        "apply_done": "完成"
     },
     "settings": {
         "title": "设置工具",
@@ -959,5 +964,30 @@
         "file_empty": "<文件为空>",
         "page_up": "上一页",
         "page_down": "下一页"
+    },
+    "genres": {
+        "action": "动作",
+        "adventure": "冒险",
+        "platformer": "平台跳跃",
+        "arcade": "街机",
+        "puzzle": "解谜",
+        "rpg": "角色扮演 (RPG)",
+        "simulation": "模拟",
+        "strategy": "策略与战术",
+        "visual_novel": "视觉小说",
+        "horror": "恐怖",
+        "shooter": "射击",
+        "party": "聚会与多人",
+        "fighting": "格斗",
+        "metroidvania": "类银河恶魔城",
+        "card_board": "桌面与卡牌",
+        "roguelike": "Roguelike",
+        "point_and_click": "点击式解谜",
+        "racing": "竞速",
+        "music": "音乐与节奏",
+        "sports": "体育",
+        "hidden_objects": "寻找物品",
+        "stealth": "潜行",
+        "education": "教育"
     }
 }

@@ -413,7 +413,12 @@
         "players_3_4": "3-4人プレイ",
         "players_5_plus": "5人以上プレイ",
         "players_multi": "マルチプレイ全般",
-        "title": "フィルターと並び替え"
+        "title": "フィルターと並び替え",
+        "selected_count": "選択中: {0}",
+        "hint_select_one": "1つ選択",
+        "hint_multiselect": "複数選択",
+        "hint_apply": "適用",
+        "apply_done": "完了"
     },
     "settings": {
         "title": "設定・ツール",
@@ -959,5 +964,30 @@
         "file_empty": "<ファイルが空です>",
         "page_up": "前ページ",
         "page_down": "次ページ"
+    },
+    "genres": {
+        "action": "アクション",
+        "adventure": "アドベンチャー",
+        "platformer": "プラットフォーマー",
+        "arcade": "アーケード",
+        "puzzle": "パズル",
+        "rpg": "RPG",
+        "simulation": "シミュレーション",
+        "strategy": "戦略・タクティクス",
+        "visual_novel": "ビジュアルノベル",
+        "horror": "ホラー",
+        "shooter": "シューティング",
+        "party": "パーティー・マルチプレイ",
+        "fighting": "格闘",
+        "metroidvania": "メトロイドヴァニア",
+        "card_board": "ボード・カード",
+        "roguelike": "ローグライク",
+        "point_and_click": "ポイント＆クリック",
+        "racing": "レース",
+        "music": "音楽・リズム",
+        "sports": "スポーツ",
+        "hidden_objects": "アイテム探し",
+        "stealth": "ステルス",
+        "education": "教育"
     }
 }

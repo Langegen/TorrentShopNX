@@ -154,27 +154,22 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Add genre badges
-    std::stringstream ss(game_.genre);
-    std::string genreTag;
-    while (std::getline(ss, genreTag, ',')) {
-        while (!genreTag.empty() && std::isspace(genreTag.front())) genreTag.erase(genreTag.begin());
-        while (!genreTag.empty() && std::isspace(genreTag.back())) genreTag.pop_back();
-        if (!genreTag.empty()) {
-            brls::Box* gBadge = new brls::Box();
-            gBadge->setPadding(5, 10, 5, 10);
-            gBadge->setMarginRight(10);
-            gBadge->setMarginBottom(10);
-            gBadge->setBackgroundColor(nvgRGB(0, 150, 136)); // Teal genre badge
-            gBadge->setCornerRadius(6);
+    std::vector<std::string> displayBadges = catalog::getDisplayGenreBadges(game_.genre);
+    for (const auto& genreTag : displayBadges) {
+        brls::Box* gBadge = new brls::Box();
+        gBadge->setPadding(5, 10, 5, 10);
+        gBadge->setMarginRight(10);
+        gBadge->setMarginBottom(10);
+        gBadge->setBackgroundColor(nvgRGB(0, 150, 136)); // Teal genre badge
+        gBadge->setCornerRadius(6);
 
-            brls::Label* gLabel = new brls::Label();
-            gLabel->setText(genreTag);
-            gLabel->setFontSize(14);
-            gLabel->setTextColor(nvgRGB(255, 255, 255));
-            gBadge->addView(gLabel);
+        brls::Label* gLabel = new brls::Label();
+        gLabel->setText(genreTag);
+        gLabel->setFontSize(14);
+        gLabel->setTextColor(nvgRGB(255, 255, 255));
+        gBadge->addView(gLabel);
 
-            badgesBox->addView(gBadge);
-        }
+        badgesBox->addView(gBadge);
     }
 
     // Add multiplayer badge
