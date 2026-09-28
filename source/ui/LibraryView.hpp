@@ -62,9 +62,9 @@ public:
 
     void scanForUpdates();
     void uninstallGame(uint64_t titleId, const std::string& displayName);
-    void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName);
+    void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection = -1, int currentRow = -1);
     void showModWarningDialog(const LibraryItem& item);
-    void rebuildSections();
+    void rebuildSections(int targetSection = -1, int targetRow = -1);
     void updateStatsAndSpace();
     void updateSpaceHint();
 

@@ -356,7 +356,7 @@ void LibraryView::willDisappear(bool resetState) {
     brls::Application::giveFocus(nullptr);
 }
 
-void LibraryView::rebuildSections() {
+void LibraryView::rebuildSections(int targetSection, int targetRow) {
     sections_.clear();
 
     std::vector<LibraryItem> modsUpdates;
@@ -393,9 +393,9 @@ void LibraryView::rebuildSections() {
 
     sortAlpha(modsUpdates);
     sortAlpha(normalUpdates);
-    sortAlpha(ignoredItems);
     sortAlpha(upToDateItems);
     sortAlpha(otherItems);
+    sortAlpha(ignoredItems);
 
     if (!modsUpdates.empty()) {
         std::string title = brls::getStr("app/library/section_mods_updates", std::to_string(modsUpdates.size()));
@@ -405,10 +405,6 @@ void LibraryView::rebuildSections() {
         std::string title = brls::getStr("app/library/section_updates", std::to_string(normalUpdates.size()));
         sections_.push_back({title, std::move(normalUpdates)});
     }
-    if (!ignoredItems.empty()) {
-        std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
-        sections_.push_back({title, std::move(ignoredItems)});
-    }
     if (!upToDateItems.empty()) {
         std::string title = brls::getStr("app/library/section_uptodate", std::to_string(upToDateItems.size()));
         sections_.push_back({title, std::move(upToDateItems)});
@@ -417,16 +413,32 @@ void LibraryView::rebuildSections() {
         std::string title = brls::getStr("app/library/section_other", std::to_string(otherItems.size()));
         sections_.push_back({title, std::move(otherItems)});
     }
+    if (!ignoredItems.empty()) {
+        std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
+        sections_.push_back({title, std::move(ignoredItems)});
+    }
 
     if (recycler) {
+        if (targetSection >= 0 && targetRow >= 0 && !sections_.empty()) {
+            size_t sec = static_cast<size_t>(targetSection);
+            if (sec >= sections_.size()) sec = sections_.size() - 1;
+            int maxRow = static_cast<int>(sections_[sec].items.size()) - 1;
+            int r = targetRow;
+            if (r > maxRow) r = maxRow;
+            if (r < 0) r = 0;
+            recycler->setDefaultCellFocus(brls::IndexPath(sec, static_cast<size_t>(r)));
+        } else {
+            recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
+        }
         recycler->reloadData();
+        recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
     }
     updateStatsAndSpace();
 }
 
-void LibraryView::toggleUpdateIgnored(uint64_t titleId, const std::string& displayName) {
+void LibraryView::toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow) {
     bool nowIgnored = catalog::IgnoredUpdatesManager::instance().toggleIgnored(titleId);
-    rebuildSections();
+    rebuildSections(currentSection, currentRow);
     if (recycler && !sections_.empty()) {
         brls::Application::giveFocus(recycler);
     }
@@ -1007,16 +1019,18 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         }
 
         // Toggle update ignore action (X button)
+        int currentSection = static_cast<int>(index.section);
+        int currentRow = index.row;
         if (item.updateIgnored) {
             cell->registerAction("app/library/action_enable_update"_i18n, brls::ControllerButton::BUTTON_X,
-                [parent = parent_, tid, displayName](brls::View* view) {
-                    parent->toggleUpdateIgnored(tid, displayName);
+                [parent = parent_, tid, displayName, currentSection, currentRow](brls::View* view) {
+                    parent->toggleUpdateIgnored(tid, displayName, currentSection, currentRow);
                     return true;
                 });
         } else {
             cell->registerAction("app/library/action_disable_update"_i18n, brls::ControllerButton::BUTTON_X,
-                [parent = parent_, tid, displayName](brls::View* view) {
-                    parent->toggleUpdateIgnored(tid, displayName);
+                [parent = parent_, tid, displayName, currentSection, currentRow](brls::View* view) {
+                    parent->toggleUpdateIgnored(tid, displayName, currentSection, currentRow);
                     return true;
                 });
         }
