@@ -54,14 +54,7 @@ public:
     int focusedRow_ = 0;
 
 private:
-    void checkBacklightState();
     void toggleBacklight();
-
-    std::chrono::steady_clock::time_point lastInputTime_;
-    std::chrono::steady_clock::time_point backlightToggleTime_;
-    brls::RepeatingTimer* backlightTimer_ = nullptr;
-    brls::ControllerState prevControllerState_{};
-    bool isFirstStateCheck_ = true;
 
     class DownloadsDataSource : public brls::RecyclerDataSource {
     public:

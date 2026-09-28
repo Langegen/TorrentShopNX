@@ -295,6 +295,18 @@ void Application::processInput()
             controllerState.buttons[i] = swapKeys[i];
     }
 
+    if (Application::inputInterceptor && Application::inputInterceptor(controllerState, rawTouch, rawMouse))
+    {
+        rawTouch.clear();
+        rawMouse = {};
+        currentTouchState.clear();
+        currentMouseState = {};
+        oldControllerState = controllerState;
+        for (size_t i = 0; i < watchedKeys.size(); i++)
+            oldWatchedKeys[i] = watchedKeys[i];
+        return;
+    }
+
     std::vector<TouchState> touchState;
     for (auto& i : rawTouch)
     {
@@ -1231,6 +1243,11 @@ void Application::unblockInputs()
 bool Application::isInputBlocks()
 {
     return Application::blockInputsTokens > 0;
+}
+
+void Application::setInputInterceptor(InputInterceptor interceptor)
+{
+    Application::inputInterceptor = std::move(interceptor);
 }
 
 void Application::setSwapInputKeys(bool swap)
