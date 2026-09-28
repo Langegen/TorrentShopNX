@@ -234,12 +234,17 @@ class RecyclerFrame : public ScrollingFrame
         this->defaultCellFocus = indexPath;
     }
 
+    View* getDefaultFocus() override;
+    void focusRow(size_t index);
+    Box* getContentBox() const { return this->contentBox; }
+
     static View* create();
 
   private:
     RecyclerDataSource* dataSource = nullptr;
     bool deleteDataSource          = false;
     bool layouted                  = false;
+    float oldWidth                 = -1.0f;
 
     uint32_t visibleMin, visibleMax;
 

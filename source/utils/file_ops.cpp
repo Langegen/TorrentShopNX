@@ -10,6 +10,21 @@ namespace util {
 
 static ClipboardData s_clipboard;
 
+std::string normalizeFsPath(const std::string& path) {
+    std::string p = path;
+    std::replace(p.begin(), p.end(), '\\', '/');
+#if defined(_WIN32) || defined(PLATFORM_DESKTOP)
+    if (p.size() >= 3 && p[0] == '/' && std::isalpha(static_cast<unsigned char>(p[1])) && p[2] == '/') {
+        char drive = static_cast<char>(std::toupper(static_cast<unsigned char>(p[1])));
+        p = std::string(1, drive) + ":" + p.substr(2);
+    } else if (p.size() >= 3 && p[0] == '/' && std::isalpha(static_cast<unsigned char>(p[1])) && p[2] == ':') {
+        char drive = static_cast<char>(std::toupper(static_cast<unsigned char>(p[1])));
+        p = std::string(1, drive) + p.substr(2);
+    }
+#endif
+    return p;
+}
+
 std::string getDefaultRootPath() {
 #ifdef __SWITCH__
     return "sdmc:/";
@@ -17,7 +32,7 @@ std::string getDefaultRootPath() {
     std::error_code ec;
     std::filesystem::path cur = std::filesystem::current_path(ec);
     if (!ec && !cur.empty()) {
-        return cur.generic_string();
+        return normalizeFsPath(cur.generic_string());
     }
     return ".";
 #endif
@@ -34,13 +49,14 @@ std::vector<FileItem> listFolder(const std::string& folderPath, std::string& out
     std::vector<FileItem> items;
     std::error_code ec;
 
-    std::filesystem::path p(folderPath);
+    std::string cleanFolder = normalizeFsPath(folderPath);
+    std::filesystem::path p(cleanFolder);
     if (!std::filesystem::exists(p, ec)) {
-        outError = "Path does not exist: " + folderPath;
+        outError = "Path does not exist: " + cleanFolder;
         return items;
     }
     if (!std::filesystem::is_directory(p, ec)) {
-        outError = "Path is not a directory: " + folderPath;
+        outError = "Path is not a directory: " + cleanFolder;
         return items;
     }
 
@@ -51,7 +67,7 @@ std::vector<FileItem> listFolder(const std::string& folderPath, std::string& out
             if (item.name.empty() || item.name == "." || item.name == "..") {
                 continue;
             }
-            item.path = entry.path().generic_string();
+            item.path = normalizeFsPath(entry.path().generic_string());
             item.isDir = entry.is_directory(ec);
             if (!item.isDir) {
                 item.size = entry.file_size(ec);
@@ -92,8 +108,9 @@ std::vector<FileItem> listFolder(const std::string& folderPath, std::string& out
 bool deletePathRecursive(const std::string& path, std::string& outError) {
     if (path.empty()) return true;
 
+    std::string clean = normalizeFsPath(path);
     std::error_code ec;
-    std::filesystem::path p(path);
+    std::filesystem::path p(clean);
     if (!std::filesystem::exists(p, ec)) {
         return true; // Already gone
     }
@@ -103,13 +120,13 @@ bool deletePathRecursive(const std::string& path, std::string& outError) {
             for (auto it = std::filesystem::directory_iterator(p, std::filesystem::directory_options::skip_permission_denied, ec);
                  it != std::filesystem::directory_iterator(); ++it) {
                 std::string subErr;
-                if (!deletePathRecursive(it->path().generic_string(), subErr)) {
+                if (!deletePathRecursive(normalizeFsPath(it->path().generic_string()), subErr)) {
                     outError = subErr;
                     return false;
                 }
             }
             if (!std::filesystem::remove(p, ec) || ec) {
-                if (std::remove(path.c_str()) != 0) {
+                if (std::remove(clean.c_str()) != 0) {
                     outError = ec ? ec.message() : "Failed to remove directory";
                     return false;
                 }
@@ -118,7 +135,7 @@ bool deletePathRecursive(const std::string& path, std::string& outError) {
         } else {
             bool ok = std::filesystem::remove(p, ec);
             if (!ok || ec) {
-                if (std::remove(path.c_str()) != 0) {
+                if (std::remove(clean.c_str()) != 0) {
                     outError = ec ? ec.message() : "Failed to remove file";
                     return false;
                 }
@@ -154,8 +171,7 @@ bool deleteMultiplePaths(const std::vector<std::string>& paths, std::string& out
 bool safeCreateDirectories(const std::string& path) {
     if (path.empty()) return true;
 
-    std::string norm = path;
-    std::replace(norm.begin(), norm.end(), '\\', '/');
+    std::string norm = normalizeFsPath(path);
     while (norm.size() > 1 && norm.back() == '/') {
         if (norm == "sdmc:/" || (norm.size() == 3 && norm[1] == ':')) break;
         norm.pop_back();
@@ -196,25 +212,28 @@ bool safeCreateDirectories(const std::string& path) {
 }
 
 static bool copySingleFile(const std::string& src, const std::string& dst, std::string& outError) {
-    size_t lastSlash = dst.find_last_of("/\\");
+    std::string cleanSrc = normalizeFsPath(src);
+    std::string cleanDst = normalizeFsPath(dst);
+
+    size_t lastSlash = cleanDst.find_last_of("/\\");
     if (lastSlash != std::string::npos) {
-        safeCreateDirectories(dst.substr(0, lastSlash));
+        safeCreateDirectories(cleanDst.substr(0, lastSlash));
     }
 
-    FILE* in = fopen(src.c_str(), "rb");
+    FILE* in = fopen(cleanSrc.c_str(), "rb");
     if (!in) {
-        outError = "Cannot open source file: " + src;
+        outError = "Cannot open source file: " + cleanSrc;
         return false;
     }
 
-    FILE* out = fopen(dst.c_str(), "wb");
+    FILE* out = fopen(cleanDst.c_str(), "wb");
     if (!out) {
-        std::remove(dst.c_str());
-        out = fopen(dst.c_str(), "wb");
+        std::remove(cleanDst.c_str());
+        out = fopen(cleanDst.c_str(), "wb");
     }
     if (!out) {
         fclose(in);
-        outError = "Cannot create destination file: " + dst;
+        outError = "Cannot create destination file: " + cleanDst;
         return false;
     }
 
@@ -251,37 +270,46 @@ bool copyPathRecursive(
     std::shared_ptr<std::atomic<bool>> cancelToken,
     std::string& outError
 ) {
-    util::logLine("file_ops: copyPathRecursive start " + src + " -> " + dst);
+    std::string cleanSrc = normalizeFsPath(src);
+    std::string cleanDst = normalizeFsPath(dst);
+    util::logLine("file_ops: copyPathRecursive start " + cleanSrc + " -> " + cleanDst);
     std::error_code ec;
-    std::filesystem::path srcP(src);
+    std::filesystem::path srcP(cleanSrc);
 
     if (!std::filesystem::exists(srcP, ec)) {
-        outError = "Source does not exist: " + src;
-        util::logLine("file_ops: copyPathRecursive source does not exist: " + src);
+        outError = "Source does not exist: " + cleanSrc;
+        util::logLine("file_ops: copyPathRecursive source does not exist: " + cleanSrc);
         return false;
     }
 
-    if (src == dst) {
+    if (cleanSrc == cleanDst) {
         return true;
     }
 
     try {
         if (std::filesystem::is_directory(srcP, ec)) {
-            std::string srcNorm = src;
-            std::replace(srcNorm.begin(), srcNorm.end(), '\\', '/');
+            std::string srcNorm = cleanSrc;
             if (srcNorm.back() != '/') srcNorm += '/';
-            std::string dstNorm = dst;
-            std::replace(dstNorm.begin(), dstNorm.end(), '\\', '/');
+            std::string dstNorm = cleanDst;
             if (dstNorm.back() != '/') dstNorm += '/';
-            if (dstNorm.rfind(srcNorm, 0) == 0) {
+
+            bool isIntoItself = false;
+#if defined(_WIN32) || defined(PLATFORM_DESKTOP)
+            std::string s1 = dstNorm, s2 = srcNorm;
+            std::transform(s1.begin(), s1.end(), s1.begin(), ::tolower);
+            std::transform(s2.begin(), s2.end(), s2.begin(), ::tolower);
+            if (s1.rfind(s2, 0) == 0) isIntoItself = true;
+#else
+            if (dstNorm.rfind(srcNorm, 0) == 0) isIntoItself = true;
+#endif
+            if (isIntoItself) {
                 outError = "Cannot copy directory into itself";
                 return false;
             }
 
-            safeCreateDirectories(dst);
+            safeCreateDirectories(cleanDst);
 
-            std::string srcBase = src;
-            std::replace(srcBase.begin(), srcBase.end(), '\\', '/');
+            std::string srcBase = cleanSrc;
             while (!srcBase.empty() && srcBase.back() == '/') srcBase.pop_back();
 
             for (const auto& entry : std::filesystem::recursive_directory_iterator(srcP, std::filesystem::directory_options::skip_permission_denied, ec)) {
@@ -290,14 +318,14 @@ bool copyPathRecursive(
                     return false;
                 }
 
-                std::string entryPath = entry.path().generic_string();
+                std::string entryPath = normalizeFsPath(entry.path().generic_string());
                 std::string rel = entryPath.substr(srcBase.length());
                 while (!rel.empty() && (rel.front() == '/' || rel.front() == '\\')) {
                     rel.erase(0, 1);
                 }
                 if (rel.empty()) continue;
 
-                std::string target = dst;
+                std::string target = cleanDst;
                 if (!target.empty() && target.back() != '/') target += '/';
                 target += rel;
 
@@ -317,8 +345,8 @@ bool copyPathRecursive(
             if (progressCb) {
                 progressCb(0.0f, srcP.filename().generic_string());
             }
-            if (!copySingleFile(src, dst, outError)) {
-                util::logLine("file_ops: copySingleFile failed: " + src + " -> " + dst + ": " + outError);
+            if (!copySingleFile(cleanSrc, cleanDst, outError)) {
+                util::logLine("file_ops: copySingleFile failed: " + cleanSrc + " -> " + cleanDst + ": " + outError);
                 return false;
             }
         }
@@ -328,23 +356,25 @@ bool copyPathRecursive(
         return false;
     }
 
-    util::logLine("file_ops: copyPathRecursive completed successfully " + src + " -> " + dst);
+    util::logLine("file_ops: copyPathRecursive completed successfully " + cleanSrc + " -> " + cleanDst);
     return true;
 }
 
 bool movePath(const std::string& src, const std::string& dst, std::string& outError) {
-    util::logLine("file_ops: movePath start " + src + " -> " + dst);
+    std::string cleanSrc = normalizeFsPath(src);
+    std::string cleanDst = normalizeFsPath(dst);
+    util::logLine("file_ops: movePath start " + cleanSrc + " -> " + cleanDst);
     std::error_code ec;
-    std::filesystem::path srcP(src);
-    std::filesystem::path dstP(dst);
+    std::filesystem::path srcP(cleanSrc);
+    std::filesystem::path dstP(cleanDst);
 
     if (!std::filesystem::exists(srcP, ec)) {
-        outError = "Source does not exist: " + src;
-        util::logLine("file_ops: movePath source does not exist: " + src);
+        outError = "Source does not exist: " + cleanSrc;
+        util::logLine("file_ops: movePath source does not exist: " + cleanSrc);
         return false;
     }
 
-    if (src == dst) {
+    if (cleanSrc == cleanDst) {
         return true;
     }
 
@@ -353,12 +383,12 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
 
     // If destination does NOT exist, try fast atomic rename first
     if (!dstExists) {
-        size_t lastSlash = dst.find_last_of("/\\");
+        size_t lastSlash = cleanDst.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
-            safeCreateDirectories(dst.substr(0, lastSlash));
+            safeCreateDirectories(cleanDst.substr(0, lastSlash));
         }
 
-        if (std::rename(src.c_str(), dst.c_str()) == 0) {
+        if (std::rename(cleanSrc.c_str(), cleanDst.c_str()) == 0) {
             util::logLine("file_ops: movePath fast rename succeeded");
             return true;
         }
@@ -366,18 +396,18 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
 
     // If src is a single file:
     if (!srcIsDir) {
-        size_t lastSlash = dst.find_last_of("/\\");
+        size_t lastSlash = cleanDst.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
-            safeCreateDirectories(dst.substr(0, lastSlash));
+            safeCreateDirectories(cleanDst.substr(0, lastSlash));
         }
-        std::remove(dst.c_str());
-        if (std::rename(src.c_str(), dst.c_str()) == 0) {
+        std::remove(cleanDst.c_str());
+        if (std::rename(cleanSrc.c_str(), cleanDst.c_str()) == 0) {
             util::logLine("file_ops: movePath file rename succeeded");
             return true;
         }
         // Fallback: copy file and delete source
-        if (copySingleFile(src, dst, outError)) {
-            std::remove(src.c_str());
+        if (copySingleFile(cleanSrc, cleanDst, outError)) {
+            std::remove(cleanSrc.c_str());
             return true;
         }
         return false;
@@ -385,36 +415,42 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
 
     // ── FOLDER MERGE ──
     // src is a directory, and dst either already exists as a directory or rename failed.
-    std::string srcNorm = src;
-    std::replace(srcNorm.begin(), srcNorm.end(), '\\', '/');
+    std::string srcNorm = cleanSrc;
     if (srcNorm.back() != '/') srcNorm += '/';
-    std::string dstNorm = dst;
-    std::replace(dstNorm.begin(), dstNorm.end(), '\\', '/');
+    std::string dstNorm = cleanDst;
     if (dstNorm.back() != '/') dstNorm += '/';
 
-    if (dstNorm.rfind(srcNorm, 0) == 0) {
+    bool isIntoItself = false;
+#if defined(_WIN32) || defined(PLATFORM_DESKTOP)
+    std::string s1 = dstNorm, s2 = srcNorm;
+    std::transform(s1.begin(), s1.end(), s1.begin(), ::tolower);
+    std::transform(s2.begin(), s2.end(), s2.begin(), ::tolower);
+    if (s1.rfind(s2, 0) == 0) isIntoItself = true;
+#else
+    if (dstNorm.rfind(srcNorm, 0) == 0) isIntoItself = true;
+#endif
+    if (isIntoItself) {
         outError = "Cannot move directory into its own subdirectory";
         return false;
     }
 
-    safeCreateDirectories(dst);
+    safeCreateDirectories(cleanDst);
 
-    std::string srcBase = src;
-    std::replace(srcBase.begin(), srcBase.end(), '\\', '/');
+    std::string srcBase = cleanSrc;
     while (!srcBase.empty() && srcBase.back() == '/') srcBase.pop_back();
 
-    util::logLine("file_ops: movePath starting directory merge: " + srcBase + " -> " + dst);
+    util::logLine("file_ops: movePath starting directory merge: " + srcBase + " -> " + cleanDst);
 
     // Iterate all items in source directory
     for (const auto& entry : std::filesystem::recursive_directory_iterator(srcP, std::filesystem::directory_options::skip_permission_denied, ec)) {
-        std::string entryPath = entry.path().generic_string();
+        std::string entryPath = normalizeFsPath(entry.path().generic_string());
         std::string rel = entryPath.substr(srcBase.length());
         while (!rel.empty() && (rel.front() == '/' || rel.front() == '\\')) {
             rel.erase(0, 1);
         }
         if (rel.empty()) continue;
 
-        std::string target = dst;
+        std::string target = cleanDst;
         if (!target.empty() && target.back() != '/') target += '/';
         target += rel;
 
@@ -438,7 +474,7 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
 
     // Now delete the empty source directory tree
     std::string delErr;
-    if (!deletePathRecursive(src, delErr)) {
+    if (!deletePathRecursive(cleanSrc, delErr)) {
         util::logLine("file_ops: movePath clean up source dir warning: " + delErr);
     }
 
@@ -447,7 +483,7 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
 }
 
 bool createFolder(const std::string& path, std::string& outError) {
-    if (!safeCreateDirectories(path)) {
+    if (!safeCreateDirectories(normalizeFsPath(path))) {
         outError = "Failed to create folder";
         return false;
     }

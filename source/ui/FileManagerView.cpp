@@ -29,6 +29,53 @@ bool isTextFile(const std::string& path) {
     return textExts.count(ext) > 0;
 }
 
+static std::string joinPath(const std::string& dir, const std::string& file) {
+    if (dir.empty()) return file;
+    if (dir.back() == '/' || dir.back() == '\\') return dir + file;
+    return dir + "/" + file;
+}
+
+static std::string normalizeDir(const std::string& path) {
+    std::string p = util::normalizeFsPath(path);
+    if (p.size() == 2 && p[1] == ':') {
+        p += "/";
+    }
+    if (p == "sdmc:" || p == "sdmc") {
+        p = "sdmc:/";
+    }
+    while (p.size() > 1 && p.back() == '/') {
+        if (p.size() == 3 && p[1] == ':') break;
+        if (p == "sdmc:/") break;
+        p.pop_back();
+    }
+    return p;
+}
+
+static std::string getParentDir(const std::string& path) {
+    std::string p = normalizeDir(path);
+    if (p == "sdmc:/" || p == "sdmc:" || p == "/" || p == "." || p.empty()) {
+        return "";
+    }
+    if (p.size() <= 3 && p.find(':') != std::string::npos) {
+        return "";
+    }
+
+    size_t lastSlash = p.find_last_of('/');
+    if (lastSlash == std::string::npos) {
+        return "";
+    }
+    if (lastSlash == 0) {
+        return "/";
+    }
+    if (p.size() >= 5 && p.substr(0, 5) == "sdmc:" && lastSlash == 5) {
+        return "sdmc:/";
+    }
+    if (lastSlash == 2 && p[1] == ':') {
+        return p.substr(0, 3);
+    }
+    return p.substr(0, lastSlash);
+}
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,11 +84,16 @@ bool isTextFile(const std::string& path) {
 
 FileManagerCell::FileManagerCell() {
     this->inflateFromXMLRes("xml/file_manager_cell.xml");
-    this->getFocusEvent()->subscribe([this](bool focused) {
-        if (focused && parentView) {
-            parentView->setFocusedRow(static_cast<int>(rowIndex));
-        }
-    });
+    if (cellRoot) {
+        cellRoot->getFocusEvent()->subscribe([this](bool focused) {
+            if (focused && parentView) {
+                parentView->setFocusedRow(panelIndex, static_cast<int>(rowIndex));
+                if (parentView->getActivePanel() != panelIndex) {
+                    parentView->setActivePanel(panelIndex);
+                }
+            }
+        });
+    }
 }
 
 FileManagerCell* FileManagerCell::create() {
@@ -60,104 +112,155 @@ void FileManagerCell::setSelectedVisual(bool selected) {
     }
 }
 
+void FileManagerCell::setCompactMode(bool compact) {
+    if (isCompact_ == compact && compactConfigured_) return;
+    isCompact_ = compact;
+    compactConfigured_ = true;
+
+    if (date) {
+        date->setVisibility(compact ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+    }
+    if (size) {
+        size->setWidth(compact ? 80.0f : 130.0f);
+        size->setMarginRight(compact ? 6.0f : 12.0f);
+    }
+    if (cellRoot) {
+        cellRoot->setPaddingLeft(compact ? 10.0f : 16.0f);
+        cellRoot->setPaddingRight(compact ? 12.0f : 16.0f);
+    }
+    if (name) {
+        name->setMarginRight(compact ? 8.0f : 16.0f);
+        name->setShrink(1.0f);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FileManagerView
 // ─────────────────────────────────────────────────────────────────────────────
 
-static std::string joinPath(const std::string& dir, const std::string& file) {
-    if (dir.empty()) return file;
-    if (dir.back() == '/' || dir.back() == '\\') return dir + file;
-    return dir + "/" + file;
-}
-
-static std::string normalizeDir(const std::string& path) {
-    std::string p = path;
-    std::replace(p.begin(), p.end(), '\\', '/');
-    if (p.size() == 2 && p[1] == ':') {
-        p += "/";
-    }
-    if (p == "sdmc:" || p == "sdmc") {
-        p = "sdmc:/";
-    }
-    while (p.size() > 1 && p.back() == '/') {
-        if (p.size() == 3 && p[1] == ':') break;
-        if (p == "sdmc:/") break;
-        p.pop_back();
-    }
-    return p;
-}
-
-static std::string getParentDir(const std::string& path) {
-    std::string p = normalizeDir(path);
-    // If it's a root path, it has no parent
-    if (p == "sdmc:/" || p == "sdmc:" || p == "/" || p == "." || p.empty()) {
-        return "";
-    }
-    // Check for Windows drive root like "C:/" or "C:"
-    if (p.size() <= 3 && p.find(':') != std::string::npos) {
-        return "";
-    }
-
-    // Find the last slash
-    size_t lastSlash = p.rfind('/');
-    if (lastSlash == std::string::npos) {
-        return "";
-    }
-
-    // Check if the slash is right after the scheme, e.g. "sdmc:/"
-    size_t colon = p.find(':');
-    if (colon != std::string::npos && lastSlash == colon + 1) {
-        // Parent is root, e.g. "sdmc:/folder" -> "sdmc:/"
-        return p.substr(0, lastSlash + 1);
-    }
-
-    if (lastSlash == 0) {
-        // Root slash, e.g. "/folder" -> "/"
-        return "/";
-    }
-
-    // e.g. "sdmc:/folder/sub" -> "sdmc:/folder"
-    return p.substr(0, lastSlash);
-}
-
 FileManagerView::FileManagerView(const std::string& initialPath, const std::string& focusChild, const std::string& rootDir) {
-    if (!rootDir.empty()) {
-        rootDir_ = normalizeDir(rootDir);
+    panels_[0].index = 0;
+    panels_[0].rootDir = rootDir.empty() ? "" : normalizeDir(rootDir);
+    if (!initialPath.empty()) {
+        panels_[0].currentDir = normalizeDir(initialPath);
     } else {
-        rootDir_ = normalizeDir(util::getDefaultRootPath());
+        std::string defRoot = util::getDefaultRootPath();
+        panels_[0].currentDir = defRoot.empty() ? "sdmc:/" : normalizeDir(defRoot);
     }
 
-    if (!initialPath.empty()) {
-        currentDir_ = normalizeDir(initialPath);
-    } else {
-        currentDir_ = rootDir_;
-    }
+    panels_[1].index = 1;
+    panels_[1].rootDir = panels_[0].rootDir;
+    panels_[1].currentDir = panels_[0].currentDir;
+
     initialFocusChild_ = focusChild;
+}
+
+void FileManagerView::initPanelBindings() {
+    // Panel 0 (Left)
+    panels_[0].container = leftPanelBox;
+    panels_[0].panelIcon = leftPanelIcon;
+    panels_[0].currentPath = currentPath;
+    panels_[0].spaceInfo = spaceInfo;
+    panels_[0].selectionBar = selectionBar;
+    panels_[0].selectionText = selectionText;
+    panels_[0].selectionHint = selectionHint;
+    panels_[0].colHeaders = leftColHeaders;
+    panels_[0].colSize = leftColSize;
+    panels_[0].colDate = leftColDate;
+    panels_[0].recycler = recycler;
+    panels_[0].emptyLabel = emptyLabel;
+
+    // Panel 1 (Right)
+    panels_[1].container = rightPanelBox;
+    panels_[1].panelIcon = rightPanelIcon;
+    panels_[1].currentPath = currentPathRight;
+    panels_[1].spaceInfo = spaceInfoRight;
+    panels_[1].selectionBar = selectionBarRight;
+    panels_[1].selectionText = selectionTextRight;
+    panels_[1].selectionHint = selectionHintRight;
+    panels_[1].colHeaders = rightColHeaders;
+    panels_[1].colSize = rightColSize;
+    panels_[1].colDate = rightColDate;
+    panels_[1].recycler = recyclerRight;
+    panels_[1].emptyLabel = emptyLabelRight;
+
+    if (leftPanelIcon) leftPanelIcon->setText("\uE2C7");
+    if (rightPanelIcon) rightPanelIcon->setText("\uE2C7");
 }
 
 void FileManagerView::onContentAvailable() {
     util::logLine("FileManagerView: onContentAvailable start");
+    initPanelBindings();
+
     if (recycler) {
-        util::logLine("FileManagerView: registering Cell and setting DataSource");
+        util::logLine("FileManagerView: registering Cell and setting DataSource for Left Recycler");
         recycler->estimatedRowHeight = 56.0f;
-        recycler->setPaddingRight(30.0f);
+        recycler->setPaddingRight(26.0f);
         recycler->registerCell("Cell", []() { return FileManagerCell::create(); });
-        recycler->setDataSource(new FileManagerDataSource(this));
+        recycler->setDataSource(new FileManagerDataSource(this, 0));
+    }
+
+    if (recyclerRight) {
+        util::logLine("FileManagerView: registering Cell and setting DataSource for Right Recycler");
+        recyclerRight->estimatedRowHeight = 56.0f;
+        recyclerRight->setPaddingRight(26.0f);
+        recyclerRight->registerCell("Cell", []() { return FileManagerCell::create(); });
+        recyclerRight->setDataSource(new FileManagerDataSource(this, 1));
+    }
+
+    if (leftPanelBox) {
+        leftPanelBox->addGestureRecognizer(new brls::TapGestureRecognizer(leftPanelBox, [this]() {
+            if (activePanel_ != 0) switchActivePanel(0);
+        }));
+    }
+
+    if (rightPanelBox) {
+        rightPanelBox->addGestureRecognizer(new brls::TapGestureRecognizer(rightPanelBox, [this]() {
+            if (activePanel_ != 1) switchActivePanel(1);
+        }));
     }
 
     if (selectionBar) {
         selectionBar->addGestureRecognizer(new brls::TapGestureRecognizer(selectionBar, [this]() {
+            setActivePanel(0);
+            showActionsMenu();
+        }));
+    }
+
+    if (selectionBarRight) {
+        selectionBarRight->addGestureRecognizer(new brls::TapGestureRecognizer(selectionBarRight, [this]() {
+            setActivePanel(1);
             showActionsMenu();
         }));
     }
 
     if (currentPath) {
         currentPath->addGestureRecognizer(new brls::TapGestureRecognizer(currentPath, [this]() {
-            if (hasParentDir_) navigateUp();
+            if (panels_[0].hasParentDir) navigateUp(0);
         }));
     }
 
-    // Register Activity Level Actions for Borealis Hints (compact text to avoid wrapping the clock)
+    if (currentPathRight) {
+        currentPathRight->addGestureRecognizer(new brls::TapGestureRecognizer(currentPathRight, [this]() {
+            if (panels_[1].hasParentDir) navigateUp(1);
+        }));
+    }
+
+    if (splitToggleHint) {
+        splitToggleHint->addGestureRecognizer(new brls::TapGestureRecognizer(splitToggleHint, [this]() {
+            toggleSplitMode();
+        }));
+    }
+
+    if (splitNavHint) {
+        splitNavHint->addGestureRecognizer(new brls::TapGestureRecognizer(splitNavHint, [this]() {
+            if (isSplitMode_) {
+                switchActivePanel(1 - activePanel_);
+            }
+        }));
+    }
+
+    // Register Activity Level Actions for Borealis Hints
     this->registerAction("app/file_manager/action_btn"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         showActionsMenu();
         return true;
@@ -169,20 +272,87 @@ void FileManagerView::onContentAvailable() {
     });
 
     this->registerAction("app/file_manager/select_all"_i18n, brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
-        selectAll();
+        selectAll(activePanel_);
         return true;
     }, true);
 
     this->registerAction("app/file_manager/deselect_all"_i18n, brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
-        clearSelection();
+        clearSelection(activePanel_);
         return true;
     }, true);
 
-    // Custom B button handling: navigate up if inside subfolder, else exit activity
+    // Toggle split mode: [-] button (BUTTON_BACK) - hidden from footer (shown in top-right header)
+    this->registerAction("app/file_manager/split_toggle"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        toggleSplitMode();
+        return true;
+    }, true);
+
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
+        toggleSplitMode();
+        return true;
+    });
+
+    // Panel switching with Stick, D-Pad, and Arrow Keys (Left / Right)
+    auto handleNavRight = [this](brls::View* view) {
+        if (isSplitMode_ && activePanel_ == 0) {
+            switchActivePanel(1);
+            return true;
+        }
+        return false;
+    };
+
+    auto handleNavLeft = [this](brls::View* view) {
+        if (isSplitMode_ && activePanel_ == 1) {
+            switchActivePanel(0);
+            return true;
+        }
+        return false;
+    };
+
+    this->registerAction("", brls::ControllerButton::BUTTON_NAV_RIGHT, handleNavRight, true);
+    this->registerAction("", brls::ControllerButton::BUTTON_RIGHT, handleNavRight, true);
+    this->registerAction("", brls::ControllerButton::BUTTON_NAV_LEFT, handleNavLeft, true);
+    this->registerAction("", brls::ControllerButton::BUTTON_LEFT, handleNavLeft, true);
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_RIGHT), handleNavRight);
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_LEFT), handleNavLeft);
+
+    // Also support ZL and ZR / Tab for panel switching
+    this->registerAction("", brls::ControllerButton::BUTTON_LT, [this](brls::View* view) {
+        if (isSplitMode_) {
+            switchActivePanel(0);
+            return true;
+        }
+        return false;
+    }, true);
+
+    this->registerAction("", brls::ControllerButton::BUTTON_RT, [this](brls::View* view) {
+        if (isSplitMode_) {
+            switchActivePanel(1);
+            return true;
+        }
+        return false;
+    }, true);
+
+    // Keyboard bindings for panel switching and split toggling
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
+        if (isSplitMode_) {
+            switchActivePanel(1 - activePanel_);
+            return true;
+        }
+        return false;
+    });
+
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F6), [this](brls::View* view) {
+        toggleSplitMode();
+        return true;
+    });
+
+    // Custom B button handling: navigate up in active panel if inside subfolder, else exit activity
     this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
-        if (currentDir_ != rootDir_ && hasParentDir_) {
+        auto& cur = panels_[activePanel_];
+        if (cur.currentDir != cur.rootDir && cur.hasParentDir) {
             brls::sync([this]() {
-                navigateUp();
+                navigateUp(activePanel_);
             });
             return true;
         }
@@ -191,9 +361,10 @@ void FileManagerView::onContentAvailable() {
     });
 
     this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_BACKSPACE), [this](brls::View* view) {
-        if (currentDir_ != rootDir_ && hasParentDir_) {
+        auto& cur = panels_[activePanel_];
+        if (cur.currentDir != cur.rootDir && cur.hasParentDir) {
             brls::sync([this]() {
-                navigateUp();
+                navigateUp(activePanel_);
             });
             return true;
         }
@@ -209,100 +380,276 @@ void FileManagerView::onContentAvailable() {
     util::logLine("FileManagerView: calling initial refresh");
     std::string focus = initialFocusChild_;
     initialFocusChild_.clear();
-    refresh(focus);
+    refresh(0, focus);
+    updateSplitHints();
+    updateCompactMode();
+    updateActivePanelVisuals();
     util::logLine("FileManagerView: onContentAvailable end");
 }
 
 void FileManagerView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
-    if (resetState && recycler) {
-        int targetRow = (currentFocusedRow_ >= 0) ? currentFocusedRow_ : (hasParentDir_ && !items_.empty() ? 1 : 0);
-        recycler->setDefaultCellFocus(brls::IndexPath(0, targetRow));
-        recycler->selectRowAt(brls::IndexPath(0, targetRow), false);
-        brls::Application::giveFocus(recycler);
+    if (resetState) {
+        auto* rec = panels_[activePanel_].recycler;
+        if (rec) {
+            int targetRow = (panels_[activePanel_].currentFocusedRow >= 0) ? panels_[activePanel_].currentFocusedRow : (panels_[activePanel_].hasParentDir && !panels_[activePanel_].items.empty() ? 1 : 0);
+            rec->setDefaultCellFocus(brls::IndexPath(0, targetRow));
+            rec->selectRowAt(brls::IndexPath(0, targetRow), false);
+            brls::Application::giveFocus(rec);
+        }
     }
 }
 
-void FileManagerView::navigateTo(const std::string& path, const std::string& focusChild) {
-    currentDir_ = normalizeDir(path);
-    selectedPaths_.clear();
-    refresh(focusChild);
+void FileManagerView::navigateTo(int panelIdx, const std::string& path, const std::string& focusChild) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    panels_[panelIdx].currentDir = normalizeDir(path);
+    panels_[panelIdx].selectedPaths.clear();
+    refresh(panelIdx, focusChild);
+    updateActivePanelVisuals();
 }
 
-void FileManagerView::navigateUp() {
-    std::string parentDir = getParentDir(currentDir_);
-    if (parentDir.empty() || parentDir == currentDir_) {
+void FileManagerView::navigateUp(int panelIdx) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    auto& cur = panels_[panelIdx];
+    if (!cur.rootDir.empty() && cur.currentDir == cur.rootDir) {
         return;
     }
-    std::filesystem::path p(currentDir_);
+    std::string parentDir = getParentDir(cur.currentDir);
+    if (parentDir.empty() || parentDir == cur.currentDir) {
+        return;
+    }
+    std::filesystem::path p(cur.currentDir);
     std::string childName = p.filename().generic_string();
-    navigateTo(parentDir, childName);
+    navigateTo(panelIdx, parentDir, childName);
 }
 
-void FileManagerView::refresh(const std::string& focusChild) {
-    currentDir_ = normalizeDir(currentDir_);
+void FileManagerView::refresh(int panelIdx, const std::string& focusChild) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    auto& p = panels_[panelIdx];
+    p.currentDir = normalizeDir(p.currentDir);
 
     // Check if we have a parent directory
-    std::string parentDir = getParentDir(currentDir_);
-    hasParentDir_ = (currentDir_ != rootDir_) && (!parentDir.empty() && parentDir != currentDir_);
+    std::string parentDir = getParentDir(p.currentDir);
+    bool atRoot = (!p.rootDir.empty() && p.currentDir == p.rootDir);
+    p.hasParentDir = !atRoot && (!parentDir.empty() && parentDir != p.currentDir);
 
     std::string err;
     std::string archPath, innerPath;
-    if (util::parseArchiveVirtualPath(currentDir_, archPath, innerPath)) {
-        hasParentDir_ = true;
-        items_.clear();
-        if (!util::listArchiveFolder(archPath, innerPath, items_, err)) {
+    if (util::parseArchiveVirtualPath(p.currentDir, archPath, innerPath)) {
+        p.hasParentDir = true;
+        p.items.clear();
+        if (!util::listArchiveFolder(archPath, innerPath, p.items, err)) {
             util::logLine("FileManagerView: listArchiveFolder failed: " + err);
             brls::Application::notify(err.empty() ? "Failed to read archive" : err);
         }
     } else {
-        items_ = util::listFolder(currentDir_, err);
+        p.items = util::listFolder(p.currentDir, err);
     }
 
-    if (currentPath) {
-        currentPath->setText(currentDir_);
+    if (p.currentPath) {
+        p.currentPath->setText(p.currentDir);
     }
 
-    if (emptyLabel) {
-        emptyLabel->setVisibility((items_.empty() && !hasParentDir_) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    if (p.emptyLabel) {
+        p.emptyLabel->setVisibility((p.items.empty() && !p.hasParentDir) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 
-    updateSpaceInfo();
-    updateSelectionBar();
+    updateSpaceInfo(panelIdx);
+    updateSelectionBar(panelIdx);
 
     // Determine target focus row
     int targetRow = 0;
     if (!focusChild.empty()) {
-        for (size_t i = 0; i < items_.size(); ++i) {
-            if (items_[i].name == focusChild) {
-                targetRow = static_cast<int>(i) + (hasParentDir_ ? 1 : 0);
+        for (size_t i = 0; i < p.items.size(); ++i) {
+            if (p.items[i].name == focusChild) {
+                targetRow = static_cast<int>(i) + (p.hasParentDir ? 1 : 0);
                 break;
             }
         }
-    } else if (hasParentDir_ && !items_.empty()) {
+    } else if (p.hasParentDir && !p.items.empty()) {
         targetRow = 1;
     }
 
-    currentFocusedRow_ = targetRow;
+    p.currentFocusedRow = targetRow;
 
-    if (recycler) {
-        recycler->reloadData();
-        brls::sync([this, targetRow]() {
-            if (recycler) {
-                recycler->setDefaultCellFocus(brls::IndexPath(0, targetRow));
-                recycler->selectRowAt(brls::IndexPath(0, targetRow), false);
-                brls::Application::giveFocus(recycler);
-            }
-        });
+    if (p.recycler) {
+        p.recycler->reloadData();
+        if (panelIdx == activePanel_) {
+            brls::sync([this, panelIdx, targetRow]() {
+                auto* rec = panels_[panelIdx].recycler;
+                if (rec) {
+                    rec->setDefaultCellFocus(brls::IndexPath(0, targetRow));
+                    rec->selectRowAt(brls::IndexPath(0, targetRow), false);
+                    brls::Application::giveFocus(rec);
+                }
+            });
+        }
     }
 }
 
-void FileManagerView::updateSpaceInfo() {
-    if (!spaceInfo) return;
+void FileManagerView::setFocusedRow(int panelIdx, int row) {
+    if (panelIdx >= 0 && panelIdx <= 1) {
+        panels_[panelIdx].currentFocusedRow = row;
+    }
+}
+
+void FileManagerView::setActivePanel(int panelIdx) {
+    if (panelIdx < 0 || panelIdx > 1) return;
+    if (activePanel_ == panelIdx) return;
+    activePanel_ = panelIdx;
+    updateActivePanelVisuals();
+}
+
+void FileManagerView::switchActivePanel(int panelIdx) {
+    if (!isSplitMode_ || panelIdx < 0 || panelIdx > 1) return;
+    setActivePanel(panelIdx);
+    auto* rec = panels_[activePanel_].recycler;
+    if (rec) {
+        int targetRow = panels_[activePanel_].currentFocusedRow;
+        if (targetRow < 0) {
+            targetRow = (panels_[activePanel_].hasParentDir && !panels_[activePanel_].items.empty()) ? 1 : 0;
+        }
+        int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+        targetRow = std::clamp(targetRow, 0, std::max(0, maxRow));
+        panels_[activePanel_].currentFocusedRow = targetRow;
+        rec->focusRow(targetRow);
+    }
+}
+
+void FileManagerView::toggleSplitMode() {
+    isSplitMode_ = !isSplitMode_;
+
+    if (isSplitMode_) {
+        if (panels_[1].currentDir.empty()) {
+            panels_[1].currentDir = panels_[0].currentDir;
+            panels_[1].rootDir = panels_[0].rootDir;
+        }
+        if (rightPanelBox) rightPanelBox->setVisibility(brls::Visibility::VISIBLE);
+        if (panelDivider) panelDivider->setVisibility(brls::Visibility::VISIBLE);
+        refresh(1);
+    } else {
+        if (activePanel_ == 1) {
+            panels_[0].currentDir = panels_[1].currentDir;
+            panels_[0].selectedPaths = panels_[1].selectedPaths;
+            activePanel_ = 0;
+            refresh(0);
+        }
+        if (rightPanelBox) rightPanelBox->setVisibility(brls::Visibility::GONE);
+        if (panelDivider) panelDivider->setVisibility(brls::Visibility::GONE);
+    }
+
+    updateSplitHints();
+    updateCompactMode();
+    updateActivePanelVisuals();
+
+    brls::Application::getGlobalHintsUpdateEvent()->fire();
+
+    auto* rec = panels_[activePanel_].recycler;
+    if (rec) {
+        int targetRow = panels_[activePanel_].currentFocusedRow;
+        if (targetRow < 0) {
+            targetRow = (panels_[activePanel_].hasParentDir && !panels_[activePanel_].items.empty()) ? 1 : 0;
+        }
+        rec->focusRow(targetRow);
+    }
+}
+
+void FileManagerView::updateSplitHints() {
+    if (splitToggleHint) {
+        if (isSplitMode_) {
+            splitToggleHint->setText("[-] " + brls::getStr("app/file_manager/split_mode_disable"));
+        } else {
+            splitToggleHint->setText("[-] " + brls::getStr("app/file_manager/split_toggle"));
+        }
+    }
+    if (splitNavHint) {
+        splitNavHint->setVisibility(isSplitMode_ ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+}
+
+void FileManagerView::updateCompactMode() {
+    // Strictly equal widths: flex-basis 0 with equal grow & shrink
+    if (leftPanelBox) {
+        leftPanelBox->setWidth(0.0f);
+        leftPanelBox->setGrow(1.0f);
+        leftPanelBox->setShrink(1.0f);
+    }
+    if (rightPanelBox) {
+        rightPanelBox->setWidth(0.0f);
+        rightPanelBox->setGrow(1.0f);
+        rightPanelBox->setShrink(1.0f);
+    }
+
+    if (leftColDate) {
+        leftColDate->setVisibility(isSplitMode_ ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+    }
+    if (leftColSize) {
+        leftColSize->setWidth(isSplitMode_ ? 80.0f : 130.0f);
+    }
+    if (leftColHeaders) {
+        leftColHeaders->setPaddingLeft(isSplitMode_ ? 56.0f : 72.0f);
+        leftColHeaders->setPaddingRight(36.0f);
+    }
+    if (rightColHeaders) {
+        rightColHeaders->setPaddingLeft(56.0f);
+        rightColHeaders->setPaddingRight(36.0f);
+    }
+    if (rightColDate) {
+        rightColDate->setVisibility(brls::Visibility::GONE);
+    }
+    if (rightColSize) {
+        rightColSize->setWidth(80.0f);
+    }
+
+    if (recycler) recycler->reloadData();
+    if (recyclerRight && isSplitMode_) recyclerRight->reloadData();
+}
+
+void FileManagerView::updateActivePanelVisuals() {
+    if (isSplitMode_) {
+        for (int i = 0; i < 2; ++i) {
+            bool isActive = (i == activePanel_);
+            if (panels_[i].container) {
+                panels_[i].container->setBorderThickness(1.0f);
+                panels_[i].container->setBorderColor(isActive ? nvgRGBA(0, 224, 165, 120) : nvgRGBA(255, 255, 255, 18));
+                panels_[i].container->setBackgroundColor(isActive ? nvgRGBA(255, 255, 255, 8) : nvgRGBA(0, 0, 0, 40));
+            }
+            if (panels_[i].panelIcon) {
+                panels_[i].panelIcon->setTextColor(isActive ? nvgRGB(0, 224, 165) : nvgRGB(90, 100, 110));
+            }
+            if (panels_[i].currentPath) {
+                panels_[i].currentPath->setTextColor(isActive ? nvgRGB(255, 255, 255) : nvgRGB(130, 140, 150));
+            }
+            if (panels_[i].spaceInfo) {
+                panels_[i].spaceInfo->setTextColor(isActive ? nvgRGB(136, 204, 136) : nvgRGB(90, 120, 90));
+            }
+        }
+    } else {
+        if (panels_[0].container) {
+            panels_[0].container->setBorderThickness(0.0f);
+            panels_[0].container->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+        }
+        if (panels_[0].panelIcon) {
+            panels_[0].panelIcon->setTextColor(nvgRGB(0, 224, 165));
+        }
+        if (panels_[0].currentPath) {
+            panels_[0].currentPath->setTextColor(nvgRGB(255, 255, 255));
+        }
+        if (panels_[0].spaceInfo) {
+            panels_[0].spaceInfo->setTextColor(nvgRGB(136, 204, 136));
+        }
+    }
+}
+
+void FileManagerView::updateSpaceInfo(int panelIdx) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    auto& p = panels_[panelIdx];
+    if (!p.spaceInfo) return;
+
     uint64_t freeB = 0, totalB = 0;
-    std::string checkPath = currentDir_;
+    std::string checkPath = p.currentDir;
     std::string archPath, innerPath;
-    if (util::parseArchiveVirtualPath(currentDir_, archPath, innerPath)) {
+    if (util::parseArchiveVirtualPath(p.currentDir, archPath, innerPath)) {
         checkPath = archPath;
     }
     if (util::getStorageSpace(checkPath, freeB, totalB) && totalB > 0) {
@@ -310,25 +657,27 @@ void FileManagerView::updateSpaceInfo() {
         std::string freeStr = util::formatFileSize(freeB);
         std::string totalStr = util::formatFileSize(totalB);
         std::snprintf(buf, sizeof(buf), "%s / %s", freeStr.c_str(), totalStr.c_str());
-        spaceInfo->setText(buf);
+        p.spaceInfo->setText(buf);
     } else {
-        spaceInfo->setText("");
+        p.spaceInfo->setText("");
     }
 }
 
-void FileManagerView::updateSelectionBar() {
-    if (!selectionBar || !selectionText) return;
+void FileManagerView::updateSelectionBar(int panelIdx) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    auto& p = panels_[panelIdx];
+    if (!p.selectionBar || !p.selectionText) return;
 
-    if (selectedPaths_.empty()) {
-        selectionBar->setVisibility(brls::Visibility::GONE);
+    if (p.selectedPaths.empty()) {
+        p.selectionBar->setVisibility(brls::Visibility::GONE);
     } else {
-        selectionBar->setVisibility(brls::Visibility::VISIBLE);
+        p.selectionBar->setVisibility(brls::Visibility::VISIBLE);
         size_t filesCount = 0;
         size_t dirsCount = 0;
         uint64_t totalSize = 0;
 
-        for (const auto& it : items_) {
-            if (selectedPaths_.count(it.path)) {
+        for (const auto& it : p.items) {
+            if (p.selectedPaths.count(it.path)) {
                 if (it.isDir) dirsCount++;
                 else {
                     filesCount++;
@@ -348,7 +697,7 @@ void FileManagerView::updateSelectionBar() {
         } else {
             std::string sizeStr = util::formatFileSize(totalSize);
             std::string formatted = brls::getStr("app/file_manager/selected_summary_format",
-                                                 std::to_string(selectedPaths_.size()),
+                                                 std::to_string(p.selectedPaths.size()),
                                                  std::to_string(filesCount),
                                                  std::to_string(dirsCount),
                                                  sizeStr);
@@ -356,24 +705,26 @@ void FileManagerView::updateSelectionBar() {
         }
 
         std::string selPrefix = "app/file_manager/selected_count"_i18n;
-        selectionText->setText(selPrefix + buf);
+        p.selectionText->setText(selPrefix + buf);
     }
 }
 
-void FileManagerView::toggleSelectionOnCell(size_t index, FileManagerCell* cell) {
-    if (hasParentDir_ && index == 0) {
+void FileManagerView::toggleSelectionOnCell(int panelIdx, size_t index, FileManagerCell* cell) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    auto& p = panels_[panelIdx];
+    if (p.hasParentDir && index == 0) {
         return; // Cannot select ".."
     }
-    size_t itemIdx = hasParentDir_ ? (index - 1) : index;
-    if (itemIdx >= items_.size()) return;
+    size_t itemIdx = p.hasParentDir ? (index - 1) : index;
+    if (itemIdx >= p.items.size()) return;
 
-    const std::string& path = items_[itemIdx].path;
+    const std::string& path = p.items[itemIdx].path;
     bool isNowSelected = false;
-    if (selectedPaths_.count(path)) {
-        selectedPaths_.erase(path);
+    if (p.selectedPaths.count(path)) {
+        p.selectedPaths.erase(path);
         isNowSelected = false;
     } else {
-        selectedPaths_.insert(path);
+        p.selectedPaths.insert(path);
         isNowSelected = true;
     }
 
@@ -381,37 +732,41 @@ void FileManagerView::toggleSelectionOnCell(size_t index, FileManagerCell* cell)
         cell->setSelectedVisual(isNowSelected);
     }
 
-    updateSelectionBar();
+    updateSelectionBar(panelIdx);
 }
 
-void FileManagerView::toggleSelection(size_t index) {
-    toggleSelectionOnCell(index, nullptr);
-    brls::sync([this]() {
-        if (recycler) {
-            recycler->reloadData();
+void FileManagerView::toggleSelection(int panelIdx, size_t index) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    toggleSelectionOnCell(panelIdx, index, nullptr);
+    brls::sync([this, panelIdx]() {
+        if (panels_[panelIdx].recycler) {
+            panels_[panelIdx].recycler->reloadData();
         }
     });
 }
 
-void FileManagerView::selectAll() {
-    selectedPaths_.clear();
-    for (const auto& item : items_) {
-        selectedPaths_.insert(item.path);
+void FileManagerView::selectAll(int panelIdx) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    auto& p = panels_[panelIdx];
+    p.selectedPaths.clear();
+    for (const auto& item : p.items) {
+        p.selectedPaths.insert(item.path);
     }
-    updateSelectionBar();
-    brls::sync([this]() {
-        if (recycler) {
-            recycler->reloadData();
+    updateSelectionBar(panelIdx);
+    brls::sync([this, panelIdx]() {
+        if (panels_[panelIdx].recycler) {
+            panels_[panelIdx].recycler->reloadData();
         }
     });
 }
 
-void FileManagerView::clearSelection() {
-    selectedPaths_.clear();
-    updateSelectionBar();
-    brls::sync([this]() {
-        if (recycler) {
-            recycler->reloadData();
+void FileManagerView::clearSelection(int panelIdx) {
+    if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    panels_[panelIdx].selectedPaths.clear();
+    updateSelectionBar(panelIdx);
+    brls::sync([this, panelIdx]() {
+        if (panels_[panelIdx].recycler) {
+            panels_[panelIdx].recycler->reloadData();
         }
     });
 }
@@ -485,7 +840,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
         applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
     }
 
-    int restoreRow = currentFocusedRow_;
+    int restoreRow = panels_[activePanel_].currentFocusedRow;
     brls::View* firstOption = nullptr;
 
     auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action) {
@@ -528,19 +883,18 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
                             util::logLine("FileManagerView: executing archive action");
                             action();
                         });
-                    } else {
-                        // Cancelled - restore focus to recycler
-                        brls::sync([this, restoreRow]() {
-                            if (recycler) {
-                                int maxRow = static_cast<int>(items_.size()) + (hasParentDir_ ? 1 : 0) - 1;
-                                int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
-                                currentFocusedRow_ = validRow;
-                                recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
-                                recycler->selectRowAt(brls::IndexPath(0, validRow), false);
-                                brls::Application::giveFocus(recycler);
-                            }
-                        });
                     }
+                    brls::sync([this, restoreRow]() {
+                        auto* rec = panels_[activePanel_].recycler;
+                        if (rec) {
+                            int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+                            int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
+                            panels_[activePanel_].currentFocusedRow = validRow;
+                            rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                            rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                            brls::Application::giveFocus(rec);
+                        }
+                    });
                 });
             });
             return true;
@@ -549,95 +903,92 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
         content->addView(row);
     };
 
-    std::filesystem::path ap(item.path);
-    std::string baseDir = ap.parent_path().generic_string();
-    if (baseDir.empty()) baseDir = currentDir_;
+    auto executeExtract = [this, item](const std::string& targetDir) {
+        std::string baseDir = targetDir;
+        if (baseDir.empty()) baseDir = panels_[activePanel_].currentDir;
 
-    // Option 1: Extract here
-    addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_here"_i18n, [this, item, baseDir]() {
-        // Extract into a hidden temp folder first, then merge up, so a failed
-        // extraction never leaves partial files in the real destination.
-        const std::string tmpDir = joinPath(baseDir, ".tsnx_extract_tmp");
-        {
-            std::string delErr;
-            util::deletePathRecursive(tmpDir, delErr);
-        }
-        auto* progressDlg = new ArchiveProgressDialog(item.path, tmpDir, [this, item, tmpDir, baseDir](bool ok, const std::string& msg) {
-            std::string err;
+        std::string tmpDir = joinPath(baseDir, ".extract_tmp_" + std::to_string(std::time(nullptr)));
+        std::string err;
+        util::createFolder(tmpDir, err);
+
+        auto* prog = new ArchiveProgressDialog(item.path, tmpDir, [this, item, tmpDir, targetDir, baseDir](bool ok, const std::string& msg) {
             if (ok) {
-                bool merged = true;
-                std::vector<util::FileItem> entries = util::listFolder(tmpDir, err);
-                for (const auto& e : entries) {
-                    std::string dst = joinPath(baseDir, e.name);
-                    std::string moveErr;
-                    if (!util::movePath(e.path, dst, moveErr)) {
-                        util::logLine("FileManagerView: merge move failed: " + e.path + " -> " + dst + " (" + moveErr + ")");
-                        merged = false;
+                if (targetDir == baseDir) {
+                    std::string listErr;
+                    std::vector<util::FileItem> extracted = util::listFolder(tmpDir, listErr);
+                    bool allMoved = true;
+                    for (const auto& e : extracted) {
+                        std::string dst = joinPath(targetDir, e.name);
+                        std::string moveErr;
+                        if (!util::movePath(e.path, dst, moveErr)) {
+                            allMoved = false;
+                            util::logLine("FileManagerView: merge move failed: " + e.path + " -> " + dst + " (" + moveErr + ")");
+                        }
+                    }
+                    std::string rmErr;
+                    util::deletePathRecursive(tmpDir, rmErr);
+                    if (allMoved) {
+                        brls::Application::notify("app/file_manager/extract_success"_i18n);
+                        refresh(activePanel_);
+                        if (isSplitMode_) refresh(1 - activePanel_);
+                        promptDeleteSourceFile(item.path, item.name);
+                    } else {
+                        brls::Application::notify("app/file_manager/extract_partial_fail"_i18n);
+                        refresh(activePanel_);
+                        if (isSplitMode_) refresh(1 - activePanel_);
+                    }
+                } else {
+                    std::string err;
+                    if (util::movePath(tmpDir, targetDir, err)) {
+                        brls::Application::notify("app/file_manager/extract_success"_i18n);
+                        refresh(activePanel_);
+                        if (isSplitMode_) refresh(1 - activePanel_);
+                        promptDeleteSourceFile(item.path, item.name);
+                    } else {
+                        util::logLine("FileManagerView: finalize move failed: " + tmpDir + " -> " + targetDir + " (" + err + ")");
+                        brls::Application::notify("app/file_manager/extract_temp_fail"_i18n);
+                        refresh(activePanel_);
+                        if (isSplitMode_) refresh(1 - activePanel_);
                     }
                 }
-                std::string delErr;
-                util::deletePathRecursive(tmpDir, delErr);
-                if (merged) {
-                    brls::Application::notify("app/file_manager/archive_complete"_i18n);
-                    refresh(item.name);
-                } else {
-                    brls::Application::notify("app/file_manager/extract_partial_fail"_i18n);
-                    refresh(item.name);
-                }
             } else {
-                std::string delErr;
-                util::deletePathRecursive(tmpDir, delErr);
+                std::string rmErr;
+                util::deletePathRecursive(tmpDir, rmErr);
                 brls::Application::notify(msg.empty() ? "app/file_manager/extract_error"_i18n : msg);
-                refresh(item.name);
+                refresh(activePanel_);
+                if (isSplitMode_) refresh(1 - activePanel_);
             }
         });
-        progressDlg->startExtraction();
+        prog->open();
+    };
+
+    // Option 1: Extract Here
+    addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_here"_i18n, [this, executeExtract]() {
+        executeExtract(panels_[activePanel_].currentDir);
     });
 
-    // Option 2: Extract to subfolder named after archive
-    std::string folderName = ap.stem().generic_string();
-    std::string targetDir = joinPath(baseDir, folderName);
-    const std::string tmpDir = targetDir + ".tsnx_tmp";
-    std::string optText = brls::getStr("app/file_manager/extract_to_folder_named", folderName);
-    addOption("\uE2CC", nvgRGB(0, 224, 165), optText, [this, targetDir, folderName, item, tmpDir]() {
-        // Extract into a sibling temp folder, then atomically move it over the
-        // real destination, so a failed extraction leaves no partial content.
-        {
-            std::string delErr;
-            util::deletePathRecursive(tmpDir, delErr);
-        }
-        auto* progressDlg = new ArchiveProgressDialog(item.path, tmpDir, [this, targetDir, folderName, item, tmpDir](bool ok, const std::string& msg) {
-            std::string err;
-            if (ok) {
-                std::string delErr;
-                util::deletePathRecursive(targetDir, delErr);
-                if (util::movePath(tmpDir, targetDir, err)) {
-                    brls::Application::notify("app/file_manager/archive_complete"_i18n);
-                    refresh(folderName);
-                } else {
-                    util::logLine("FileManagerView: finalize move failed: " + tmpDir + " -> " + targetDir + " (" + err + ")");
-                    brls::Application::notify("app/file_manager/extract_temp_fail"_i18n);
-                    refresh(item.name);
-                }
-            } else {
-                std::string delErr;
-                util::deletePathRecursive(tmpDir, delErr);
-                brls::Application::notify(msg.empty() ? "app/file_manager/extract_error"_i18n : msg);
-                refresh(item.name);
-            }
+    // Option 2: Extract to Subfolder
+    std::filesystem::path p(item.path);
+    std::string stem = p.stem().generic_string();
+    std::string subfolderDir = joinPath(panels_[activePanel_].currentDir, stem);
+    std::string toFolderText = brls::getStr("app/file_manager/extract_to_folder_named", stem);
+    addOption("\uE2CC", nvgRGB(0, 224, 165), toFolderText, [this, executeExtract, subfolderDir]() {
+        executeExtract(subfolderDir);
+    });
+
+    // Option 3: Extract to Opposite Panel (if split mode active)
+    if (isSplitMode_) {
+        int oppIdx = 1 - activePanel_;
+        const std::string& oppDir = panels_[oppIdx].currentDir;
+        std::filesystem::path op(oppDir);
+        std::string oppDirName = op.filename().generic_string();
+        if (oppDirName.empty()) oppDirName = oppDir;
+        addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/extract_to_other_panel", oppDirName), [this, executeExtract, oppDir]() {
+            executeExtract(oppDir);
         });
-        progressDlg->startExtraction();
-    });
+    }
 
-    // Separator
-    auto* cancelSep = new brls::Box();
-    cancelSep->setHeight(1.0f);
-    cancelSep->setMarginTop(6.0f);
-    cancelSep->setMarginBottom(6.0f);
-    cancelSep->setBackgroundColor(nvgRGBA(255, 255, 255, 20));
-    content->addView(cancelSep);
-
-    // Cancel option
+    // Cancel Option
     addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, nullptr);
 
     if (firstOption) {
@@ -650,8 +1001,8 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     util::logLine("FileManagerView: showArchiveDialog dialog opened successfully");
 
     if (firstOption) {
-        brls::Application::giveFocus(firstOption);
-        brls::sync([firstOption]() {
+        brls::sync([dialog, firstOption]() {
+            dialog->setLastFocusedView(firstOption);
             brls::Application::giveFocus(firstOption);
         });
     }
@@ -660,74 +1011,67 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
 void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& targets) {
     if (targets.empty()) return;
 
-    // Determine default archive name
     std::string defaultName;
     if (targets.size() == 1) {
         std::filesystem::path p(targets[0]);
-        if (std::filesystem::is_directory(p)) {
-            defaultName = p.filename().generic_string() + ".zip";
-        } else {
-            defaultName = p.stem().generic_string() + ".zip";
-        }
+        defaultName = p.stem().generic_string() + ".zip";
     } else {
-        std::filesystem::path cur(currentDir_);
+        std::filesystem::path cur(panels_[activePanel_].currentDir);
         std::string folderName = cur.filename().generic_string();
         if (folderName.empty() || folderName == "." || folderName == "/") {
-            defaultName = "archive.zip";
-        } else {
-            defaultName = folderName + ".zip";
+            folderName = "Archive";
         }
+        defaultName = folderName + ".zip";
     }
 
-    brls::Application::getImeManager()->openForText([this, targets](std::string text) {
-        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.erase(text.begin());
-        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.pop_back();
+    std::string promptTitle = brls::getStr("app/file_manager/create_archive_title");
+    int actIdx = activePanel_;
 
-        if (text.empty()) return;
+    brls::Application::getImeManager()->openForText([this, actIdx, targets](std::string fileName) {
+        if (fileName.empty()) return;
 
-        std::string lower = text;
-        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (lower.size() < 4 || lower.substr(lower.size() - 4) != ".zip") {
-            text += ".zip";
+        if (fileName.size() < 4 || fileName.substr(fileName.size() - 4) != ".zip") {
+            fileName += ".zip";
         }
 
-        std::filesystem::path sanitized(text);
-        std::string fileName = sanitized.filename().generic_string();
-        if (fileName.empty() || fileName == ".zip") {
-            brls::Application::notify("app/file_manager/create_archive_error"_i18n);
-            return;
-        }
+        std::string targetArchivePath = joinPath(panels_[actIdx].currentDir, fileName);
 
-        std::string targetArchivePath = joinPath(currentDir_, fileName);
-
-        auto startArchiving = [this, targetArchivePath, targets, fileName]() {
-            auto* dlg = new ArchiveProgressDialog(targetArchivePath, targets, currentDir_, [this, fileName](bool ok, const std::string& msg) {
-                if (ok) {
-                    brls::Application::notify("app/file_manager/create_archive_success"_i18n);
-                    clearSelection();
-                    refresh(fileName);
-                } else {
-                    brls::Application::notify(msg.empty() ? "app/file_manager/create_archive_error"_i18n : msg);
-                    refresh();
-                }
-            });
-            dlg->startCreation();
-        };
-
-        std::error_code ec;
-        if (std::filesystem::exists(targetArchivePath, ec)) {
-            std::string promptMsg = brls::getStr("app/file_manager/archive_exists_overwrite", fileName);
-            auto* confirmDialog = new brls::Dialog(promptMsg);
+        if (std::filesystem::exists(targetArchivePath)) {
+            std::string confirmMsg = brls::getStr("app/file_manager/archive_exists_overwrite", fileName);
+            auto* confirmDialog = new brls::Dialog(confirmMsg);
             confirmDialog->setCancelable(true);
-            confirmDialog->addButton("app/common/yes"_i18n, [startArchiving]() {
-                startArchiving();
+            confirmDialog->addButton("app/common/yes"_i18n, [this, actIdx, targetArchivePath, targets, fileName]() {
+                auto* dlg = new ArchiveProgressDialog(targetArchivePath, targets, panels_[actIdx].currentDir, [this, fileName, actIdx](bool ok, const std::string& msg) {
+                    if (ok) {
+                        brls::Application::notify("app/file_manager/create_archive_success"_i18n);
+                        refresh(actIdx, fileName);
+                        if (isSplitMode_) refresh(1 - actIdx);
+                    } else {
+                        brls::Application::notify(msg.empty() ? "app/file_manager/create_archive_error"_i18n : msg);
+                        refresh(actIdx);
+                        if (isSplitMode_) refresh(1 - actIdx);
+                    }
+                });
+                dlg->open();
             });
             confirmDialog->addButton("app/common/cancel"_i18n, []() {});
             confirmDialog->open();
-        } else {
-            startArchiving();
+            return;
         }
-    }, brls::getStr("app/file_manager/create_archive_title"), "", 64, defaultName);
+
+        auto* dlg = new ArchiveProgressDialog(targetArchivePath, targets, panels_[actIdx].currentDir, [this, fileName, actIdx](bool ok, const std::string& msg) {
+            if (ok) {
+                brls::Application::notify("app/file_manager/create_archive_success"_i18n);
+                refresh(actIdx, fileName);
+                if (isSplitMode_) refresh(1 - actIdx);
+            } else {
+                brls::Application::notify(msg.empty() ? "app/file_manager/create_archive_error"_i18n : msg);
+                refresh(actIdx);
+                if (isSplitMode_) refresh(1 - actIdx);
+            }
+        });
+        dlg->open();
+    }, promptTitle, "", 64, defaultName);
 }
 
 void FileManagerView::showInstallDialog(const util::FileItem& item) {
@@ -738,16 +1082,14 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     content->setWidthPercentage(100.0f);
     content->setPadding(20.0f, 22.0f, 16.0f, 22.0f);
 
-    // Header Box (Emerald / Turquoise theme)
     auto* headerBox = new brls::Box();
     headerBox->setAxis(brls::Axis::ROW);
     headerBox->setAlignItems(brls::AlignItems::CENTER);
     headerBox->setMarginBottom(14.0f);
     headerBox->setPaddingBottom(12.0f);
     headerBox->setLineBottom(1.0f);
-    headerBox->setLineColor(nvgRGBA(0, 224, 165, 80)); // Emerald line
+    headerBox->setLineColor(nvgRGBA(0, 224, 165, 80));
 
-    // Icon Badge
     auto* iconBadge = new brls::Box();
     iconBadge->setWidth(42.0f);
     iconBadge->setHeight(42.0f);
@@ -755,12 +1097,12 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     iconBadge->setJustifyContent(brls::JustifyContent::CENTER);
     iconBadge->setAlignItems(brls::AlignItems::CENTER);
     iconBadge->setMarginRight(14.0f);
-    iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 35)); // Emerald tint
+    iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
 
     auto* badgeIcon = new brls::Label();
     badgeIcon->setText("\uE0E0"); // Gamepad
     badgeIcon->setFontSize(22.0f);
-    badgeIcon->setTextColor(nvgRGB(0, 224, 165)); // Emerald
+    badgeIcon->setTextColor(nvgRGB(0, 224, 165));
     iconBadge->addView(badgeIcon);
     headerBox->addView(iconBadge);
 
@@ -778,7 +1120,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/type_package"_i18n + util::formatFileSize(item.size));
     subLbl->setFontSize(13.0f);
-    subLbl->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald subtitle
+    subLbl->setTextColor(nvgRGBA(0, 224, 165, 210));
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
 
@@ -795,12 +1137,202 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
     }
 
-    int restoreRow = currentFocusedRow_;
+    int restoreRow = panels_[activePanel_].currentFocusedRow;
     brls::View* firstOption = nullptr;
 
-    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, const std::string& subText, std::function<void()> action) {
+    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, const std::string& spaceText, std::function<void()> action) {
         auto* row = new brls::Box();
         row->setHeight(48.0f);
+        row->setWidthPercentage(100.0f);
+        row->setFocusable(true);
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setPaddingLeft(14.0f);
+        row->setPaddingRight(14.0f);
+        row->setMarginBottom(4.0f);
+        row->setCornerRadius(8.0f);
+        row->setBackgroundColor(nvgRGBA(36, 39, 46, 190));
+
+        auto* ic = new brls::Label();
+        ic->setText(iconGlyph);
+        ic->setFontSize(22.0f);
+        ic->setTextColor(iconCol);
+        ic->setMarginRight(14.0f);
+        row->addView(ic);
+
+        auto* colText = new brls::Box();
+        colText->setAxis(brls::Axis::COLUMN);
+        colText->setGrow(1.0f);
+
+        auto* lb = new brls::Label();
+        lb->setText(labelText);
+        lb->setFontSize(15.0f);
+        lb->setTextColor(nvgRGB(240, 245, 255));
+        colText->addView(lb);
+
+        if (!spaceText.empty()) {
+            auto* sp = new brls::Label();
+            sp->setText(spaceText);
+            sp->setFontSize(12.0f);
+            sp->setTextColor(nvgRGB(140, 150, 160));
+            colText->addView(sp);
+        }
+
+        row->addView(colText);
+
+        if (!firstOption) firstOption = row;
+
+        row->registerClickAction([dialog, action, this, restoreRow, labelText](brls::View* v) {
+            util::logLine("FileManagerView: showInstallDialog option clicked: " + labelText);
+            brls::sync([dialog, action, this, restoreRow]() {
+                util::logLine("FileManagerView: closing install option dialog");
+                dialog->close([action, this, restoreRow]() {
+                    util::logLine("FileManagerView: install option dialog closed");
+                    if (action) {
+                        brls::sync([action]() {
+                            util::logLine("FileManagerView: executing install action");
+                            action();
+                        });
+                    }
+                    brls::sync([this, restoreRow]() {
+                        auto* rec = panels_[activePanel_].recycler;
+                        if (rec) {
+                            int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+                            int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
+                            panels_[activePanel_].currentFocusedRow = validRow;
+                            rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                            rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                            brls::Application::giveFocus(rec);
+                        }
+                    });
+                });
+            });
+            return true;
+        });
+
+        content->addView(row);
+    };
+
+    uint64_t sdFree = 0, sdTotal = 0;
+    util::getStorageSpace("sdmc:/", sdFree, sdTotal);
+    std::string sdSpaceInfo = sdTotal > 0 ? ("app/file_manager/free_prefix"_i18n + util::formatFileSize(sdFree)) : "";
+
+    addOption("\uE2C7", nvgRGB(0, 224, 165), "app/file_manager/install_to_sd"_i18n, sdSpaceInfo, [this, item]() {
+        auto* prog = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& err) {
+            if (ok) {
+                brls::Application::notify("app/file_manager/install_success"_i18n);
+                promptDeleteSourceFile(item.path, item.name);
+            } else {
+                brls::Application::notify(err.empty() ? "app/file_manager/install_error"_i18n : err);
+            }
+        });
+        prog->open();
+    });
+
+#if defined(__SWITCH__)
+    uint64_t nandFree = 0, nandTotal = 0;
+    util::getStorageSpace("user:/", nandFree, nandTotal);
+    std::string nandSpaceInfo = nandTotal > 0 ? ("app/file_manager/free_prefix"_i18n + util::formatFileSize(nandFree)) : "";
+
+    addOption("\uE318", nvgRGB(255, 179, 0), "app/file_manager/install_to_nand"_i18n, nandSpaceInfo, [this, item]() {
+        auto* prog = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& err) {
+            if (ok) {
+                brls::Application::notify("app/file_manager/install_success"_i18n);
+                promptDeleteSourceFile(item.path, item.name);
+            } else {
+                brls::Application::notify(err.empty() ? "app/file_manager/install_error"_i18n : err);
+            }
+        });
+        prog->open();
+    });
+#endif
+
+    addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, "", nullptr);
+
+    if (firstOption) {
+        dialog->setLastFocusedView(firstOption);
+        content->setLastFocusedView(firstOption);
+    }
+
+    util::logLine("FileManagerView: showInstallDialog opening dialog");
+    dialog->open();
+    util::logLine("FileManagerView: showInstallDialog dialog opened successfully");
+
+    if (firstOption) {
+        brls::sync([dialog, firstOption]() {
+            dialog->setLastFocusedView(firstOption);
+            brls::Application::giveFocus(firstOption);
+        });
+    }
+}
+
+void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const std::string& fileName) {
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::COLUMN);
+    content->setWidthPercentage(100.0f);
+    content->setPadding(20.0f, 22.0f, 16.0f, 22.0f);
+
+    auto* headerBox = new brls::Box();
+    headerBox->setAxis(brls::Axis::ROW);
+    headerBox->setAlignItems(brls::AlignItems::CENTER);
+    headerBox->setMarginBottom(14.0f);
+    headerBox->setPaddingBottom(12.0f);
+    headerBox->setLineBottom(1.0f);
+    headerBox->setLineColor(nvgRGBA(255, 179, 0, 80));
+
+    auto* iconBadge = new brls::Box();
+    iconBadge->setWidth(42.0f);
+    iconBadge->setHeight(42.0f);
+    iconBadge->setCornerRadius(8.0f);
+    iconBadge->setJustifyContent(brls::JustifyContent::CENTER);
+    iconBadge->setAlignItems(brls::AlignItems::CENTER);
+    iconBadge->setMarginRight(14.0f);
+    iconBadge->setBackgroundColor(nvgRGBA(255, 179, 0, 40));
+
+    auto* badgeIcon = new brls::Label();
+    badgeIcon->setText("\uE872"); // Trash icon
+    badgeIcon->setFontSize(22.0f);
+    badgeIcon->setTextColor(nvgRGB(255, 179, 0));
+    iconBadge->addView(badgeIcon);
+    headerBox->addView(iconBadge);
+
+    auto* headerTextCol = new brls::Box();
+    headerTextCol->setAxis(brls::Axis::COLUMN);
+    headerTextCol->setGrow(1.0f);
+
+    auto* titleLbl = new brls::Label();
+    titleLbl->setText("app/file_manager/free_space_prompt"_i18n);
+    titleLbl->setFontSize(18.0f);
+    titleLbl->setTextColor(nvgRGB(255, 255, 255));
+    titleLbl->setSingleLine(true);
+    headerTextCol->addView(titleLbl);
+
+    auto* subLbl = new brls::Label();
+    subLbl->setText("app/file_manager/delete_source_prompt"_i18n + fileName);
+    subLbl->setFontSize(13.0f);
+    subLbl->setTextColor(nvgRGBA(255, 179, 0, 210));
+    subLbl->setSingleLine(true);
+    headerTextCol->addView(subLbl);
+
+    headerBox->addView(headerTextCol);
+    content->addView(headerBox);
+
+    auto* dialog = new brls::Dialog(content);
+    dialog->setCancelable(true);
+
+    auto* applet = dialog->getAppletFrame();
+    if (applet) {
+        applet->setWidth(540.0f);
+        applet->setCornerRadius(14.0f);
+        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+    }
+
+    int restoreRow = panels_[activePanel_].currentFocusedRow;
+    brls::View* firstOption = nullptr;
+
+    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action) {
+        auto* row = new brls::Box();
+        row->setHeight(42.0f);
         row->setWidthPercentage(100.0f);
         row->setFocusable(true);
         row->setAxis(brls::Axis::ROW);
@@ -818,54 +1350,34 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         ic->setMarginRight(14.0f);
         row->addView(ic);
 
-        auto* textCol = new brls::Box();
-        textCol->setAxis(brls::Axis::COLUMN);
-        textCol->setGrow(1.0f);
-
         auto* lb = new brls::Label();
         lb->setText(labelText);
         lb->setFontSize(15.0f);
         lb->setTextColor(nvgRGB(240, 245, 255));
-        lb->setSingleLine(true);
-        textCol->addView(lb);
-
-        if (!subText.empty()) {
-            auto* sb = new brls::Label();
-            sb->setText(subText);
-            sb->setFontSize(12.0f);
-            sb->setTextColor(nvgRGBA(0, 224, 165, 200)); // Emerald detail
-            sb->setSingleLine(true);
-            textCol->addView(sb);
-        }
-
-        row->addView(textCol);
+        lb->setGrow(1.0f);
+        row->addView(lb);
 
         if (!firstOption) firstOption = row;
 
-        row->registerClickAction([dialog, action, this, restoreRow, labelText](brls::View* v) {
-            util::logLine("FileManagerView: showInstallDialog option clicked: " + labelText);
+        row->registerClickAction([dialog, action, this, restoreRow](brls::View* v) {
             brls::sync([dialog, action, this, restoreRow]() {
-                util::logLine("FileManagerView: closing install option dialog");
                 dialog->close([action, this, restoreRow]() {
-                    util::logLine("FileManagerView: install option dialog closed");
                     if (action) {
                         brls::sync([action]() {
-                            util::logLine("FileManagerView: executing install action");
                             action();
                         });
-                    } else {
-                        // Cancelled - restore focus to recycler
-                        brls::sync([this, restoreRow]() {
-                            if (recycler) {
-                                int maxRow = static_cast<int>(items_.size()) + (hasParentDir_ ? 1 : 0) - 1;
-                                int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
-                                currentFocusedRow_ = validRow;
-                                recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
-                                recycler->selectRowAt(brls::IndexPath(0, validRow), false);
-                                brls::Application::giveFocus(recycler);
-                            }
-                        });
                     }
+                    brls::sync([this, restoreRow]() {
+                        auto* rec = panels_[activePanel_].recycler;
+                        if (rec) {
+                            int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+                            int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
+                            panels_[activePanel_].currentFocusedRow = validRow;
+                            rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                            rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                            brls::Application::giveFocus(rec);
+                        }
+                    });
                 });
             });
             return true;
@@ -874,176 +1386,43 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         content->addView(row);
     };
 
-    // Query storage free space
-    int64_t sdFree = 0, nandFree = 0;
-    util::getStorageFreeSpace(1, sdFree);
-    util::getStorageFreeSpace(0, nandFree);
-
-    std::string sdFreeStr = "app/file_manager/free_prefix"_i18n + util::formatFileSize(sdFree > 0 ? static_cast<uint64_t>(sdFree) : 0);
-    std::string nandFreeStr = "app/file_manager/free_prefix"_i18n + util::formatFileSize(nandFree > 0 ? static_cast<uint64_t>(nandFree) : 0);
-
-    // Option 1: SD Card (Emerald)
-    addOption("\uE1DB", nvgRGB(0, 224, 165), "app/file_manager/install_to_sd"_i18n, sdFreeStr, [this, item]() {
-        auto* progressDlg = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& msg) {
-            if (ok) {
-                brls::sync([this, item]() {
-                    promptDeleteSourceFile(item.path, item.name);
-                });
-            } else {
-                brls::Application::notify(msg.empty() ? "app/file_manager/install_error"_i18n : msg);
-                refresh(item.name);
-            }
-        });
-        progressDlg->startInstallation();
-    });
-
-    // Option 2: NAND System Storage (Emerald)
-    addOption("\uE318", nvgRGB(0, 224, 165), "app/file_manager/install_to_nand"_i18n, nandFreeStr, [this, item]() {
-        auto* progressDlg = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& msg) {
-            if (ok) {
-                brls::sync([this, item]() {
-                    promptDeleteSourceFile(item.path, item.name);
-                });
-            } else {
-                brls::Application::notify(msg.empty() ? "app/file_manager/install_error"_i18n : msg);
-                refresh(item.name);
-            }
-        });
-        progressDlg->startInstallation();
-    });
-
-    // Separator
-    auto* cancelSep = new brls::Box();
-    cancelSep->setHeight(1.0f);
-    cancelSep->setMarginTop(6.0f);
-    cancelSep->setMarginBottom(6.0f);
-    cancelSep->setBackgroundColor(nvgRGBA(255, 255, 255, 20));
-    content->addView(cancelSep);
-
-    // Option 3: Cancel
-    addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, "", nullptr);
-
-    if (firstOption) {
-        dialog->setLastFocusedView(firstOption);
-        content->setLastFocusedView(firstOption);
-    }
-
-    util::logLine("FileManagerView: showInstallDialog opening dialog");
-    dialog->open();
-    util::logLine("FileManagerView: showInstallDialog dialog opened successfully");
-
-    if (firstOption) {
-        brls::Application::giveFocus(firstOption);
-        brls::sync([firstOption]() {
-            brls::Application::giveFocus(firstOption);
-        });
-    }
-}
-
-void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const std::string& fileName) {
-    auto* content = new brls::Box();
-    content->setAxis(brls::Axis::COLUMN);
-    content->setWidthPercentage(100.0f);
-    content->setPadding(20.0f, 22.0f, 16.0f, 22.0f);
-
-    // Header Box (Emerald theme)
-    auto* headerBox = new brls::Box();
-    headerBox->setAxis(brls::Axis::ROW);
-    headerBox->setAlignItems(brls::AlignItems::CENTER);
-    headerBox->setMarginBottom(14.0f);
-    headerBox->setPaddingBottom(12.0f);
-    headerBox->setLineBottom(1.0f);
-    headerBox->setLineColor(nvgRGBA(0, 224, 165, 80));
-
-    auto* iconBadge = new brls::Box();
-    iconBadge->setWidth(42.0f);
-    iconBadge->setHeight(42.0f);
-    iconBadge->setCornerRadius(8.0f);
-    iconBadge->setJustifyContent(brls::JustifyContent::CENTER);
-    iconBadge->setAlignItems(brls::AlignItems::CENTER);
-    iconBadge->setMarginRight(14.0f);
-    iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 35));
-
-    auto* badgeIcon = new brls::Label();
-    badgeIcon->setText("\uE876"); // Check mark
-    badgeIcon->setFontSize(22.0f);
-    badgeIcon->setTextColor(nvgRGB(0, 224, 165));
-    iconBadge->addView(badgeIcon);
-    headerBox->addView(iconBadge);
-
-    auto* headerTextCol = new brls::Box();
-    headerTextCol->setAxis(brls::Axis::COLUMN);
-    headerTextCol->setGrow(1.0f);
-
-    auto* titleLbl = new brls::Label();
-    titleLbl->setText("app/file_manager/install_success"_i18n);
-    titleLbl->setFontSize(18.0f);
-    titleLbl->setTextColor(nvgRGB(255, 255, 255));
-    titleLbl->setSingleLine(true);
-    headerTextCol->addView(titleLbl);
-
-    auto* subLbl = new brls::Label();
-    subLbl->setText("app/file_manager/free_space_prompt"_i18n);
-    subLbl->setFontSize(13.0f);
-    subLbl->setTextColor(nvgRGBA(0, 224, 165, 220));
-    subLbl->setSingleLine(true);
-    headerTextCol->addView(subLbl);
-
-    headerBox->addView(headerTextCol);
-    content->addView(headerBox);
-
-    auto* descLbl = new brls::Label();
-    descLbl->setText("app/file_manager/delete_source_prompt"_i18n + fileName + "?");
-    descLbl->setFontSize(14.0f);
-    descLbl->setTextColor(nvgRGB(200, 205, 215));
-    descLbl->setMarginBottom(16.0f);
-    content->addView(descLbl);
-
-    auto* dialog = new brls::Dialog(content);
-    dialog->setCancelable(true);
-
-    auto* applet = dialog->getAppletFrame();
-    if (applet) {
-        applet->setWidth(540.0f);
-        applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
-    }
-
-    dialog->addButton("app/file_manager/delete_file_btn"_i18n, [this, filePath]() {
+    addOption("\uE872", nvgRGB(255, 82, 82), "app/file_manager/delete_file_btn"_i18n, [this, filePath]() {
         std::string err;
         if (util::deletePathRecursive(filePath, err)) {
             brls::Application::notify("app/file_manager/source_deleted"_i18n);
         } else {
-            brls::Application::notify(err.empty() ? "app/file_manager/delete_failed"_i18n : err);
+            brls::Application::notify("app/file_manager/delete_failed"_i18n);
         }
-        refresh();
+        refresh(activePanel_);
+        if (isSplitMode_) refresh(1 - activePanel_);
     });
 
-    dialog->addButton("app/file_manager/keep_file_btn"_i18n, [this, fileName]() {
-        refresh(fileName);
-    });
+    addOption("\uE5CD", nvgRGB(140, 150, 160), "app/file_manager/keep_file_btn"_i18n, nullptr);
 
     dialog->open();
 }
 
 void FileManagerView::showDeleteConfirmDialog() {
-    if (selectedPaths_.empty()) return;
+    auto& cur = panels_[activePanel_];
+    if (cur.selectedPaths.empty()) return;
 
-    std::string msg = brls::getStr("app/file_manager/confirm_delete_selected", std::to_string(selectedPaths_.size()));
+    std::string msg = brls::getStr("app/file_manager/confirm_delete_selected", std::to_string(cur.selectedPaths.size()));
 
     auto* dialog = new brls::Dialog(msg);
     dialog->setCancelable(true);
 
-    dialog->addButton("app/common/yes"_i18n, [this]() {
-        std::vector<std::string> toDelete(selectedPaths_.begin(), selectedPaths_.end());
+    int actIdx = activePanel_;
+    dialog->addButton("app/common/yes"_i18n, [this, actIdx]() {
+        std::vector<std::string> toDelete(panels_[actIdx].selectedPaths.begin(), panels_[actIdx].selectedPaths.end());
         std::string err;
         if (util::deleteMultiplePaths(toDelete, err)) {
             brls::Application::notify("app/file_manager/deleted_success"_i18n);
         } else {
             brls::Application::notify(err.empty() ? "app/common/error"_i18n : err);
         }
-        selectedPaths_.clear();
-        refresh();
+        panels_[actIdx].selectedPaths.clear();
+        refresh(actIdx);
+        if (isSplitMode_) refresh(1 - actIdx);
     });
 
     dialog->addButton("app/common/cancel"_i18n, []() {});
@@ -1051,13 +1430,15 @@ void FileManagerView::showDeleteConfirmDialog() {
 }
 
 void FileManagerView::showNewFolderDialog() {
-    brls::Application::getImeManager()->openForText([this](std::string text) {
+    int actIdx = activePanel_;
+    brls::Application::getImeManager()->openForText([this, actIdx](std::string text) {
         if (text.empty()) return;
-        std::string newPath = joinPath(currentDir_, text);
+        std::string newPath = joinPath(panels_[actIdx].currentDir, text);
         std::string err;
         if (util::createFolder(newPath, err)) {
             brls::Application::notify("app/file_manager/folder_created"_i18n);
-            refresh();
+            refresh(actIdx);
+            if (isSplitMode_) refresh(1 - actIdx);
         } else {
             brls::Application::notify(err.empty() ? "app/common/error"_i18n : err);
         }
@@ -1065,13 +1446,15 @@ void FileManagerView::showNewFolderDialog() {
 }
 
 void FileManagerView::showRenameDialog(const util::FileItem& item) {
-    brls::Application::getImeManager()->openForText([this, item](std::string text) {
+    int actIdx = activePanel_;
+    brls::Application::getImeManager()->openForText([this, actIdx, item](std::string text) {
         if (text.empty() || text == item.name) return;
         std::string err;
         if (util::renameItem(item.path, text, err)) {
             brls::Application::notify("app/file_manager/renamed_success"_i18n);
-            selectedPaths_.clear();
-            refresh();
+            panels_[actIdx].selectedPaths.clear();
+            refresh(actIdx);
+            if (isSplitMode_) refresh(1 - actIdx);
         } else {
             brls::Application::notify(err.empty() ? "app/common/error"_i18n : err);
         }
@@ -1084,8 +1467,10 @@ void FileManagerView::pasteClipboard() {
 
     bool isCut = (clip.op == util::ClipboardOp::Cut);
     std::vector<std::string> paths = clip.paths;
+    int actIdx = activePanel_;
+    std::string targetDir = panels_[actIdx].currentDir;
 
-    brls::async([this, paths, isCut]() {
+    brls::async([this, paths, isCut, actIdx, targetDir]() {
         bool allOk = true;
         std::string lastErr;
 
@@ -1095,7 +1480,7 @@ void FileManagerView::pasteClipboard() {
                 cleanSrc.pop_back();
             }
             std::filesystem::path sp(cleanSrc);
-            std::string dest = joinPath(currentDir_, sp.filename().generic_string());
+            std::string dest = joinPath(targetDir, sp.filename().generic_string());
             std::string err;
 
             util::logLine("FileManagerView: pasteClipboard src=" + cleanSrc + " dest=" + dest + " isCut=" + std::to_string(isCut));
@@ -1119,36 +1504,205 @@ void FileManagerView::pasteClipboard() {
             util::clearClipboard();
         }
 
-        brls::sync([this, allOk, lastErr]() {
+        brls::sync([this, allOk, lastErr, actIdx]() {
             if (allOk) {
                 brls::Application::notify("app/file_manager/paste_success"_i18n);
             } else {
                 brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
             }
-            refresh();
+            refresh(actIdx);
+            if (isSplitMode_) refresh(1 - actIdx);
+        });
+    });
+}
+
+void FileManagerView::copyToOppositePanel() {
+    if (!isSplitMode_) return;
+    int oppIdx = 1 - activePanel_;
+    const std::string& oppDir = panels_[oppIdx].currentDir;
+    if (oppDir.empty()) return;
+
+    std::vector<std::string> targets;
+    auto& cur = panels_[activePanel_];
+    if (!cur.selectedPaths.empty()) {
+        targets.assign(cur.selectedPaths.begin(), cur.selectedPaths.end());
+    } else if (cur.currentFocusedRow >= 0) {
+        size_t idx = cur.hasParentDir ? (cur.currentFocusedRow - 1) : cur.currentFocusedRow;
+        if ((cur.currentFocusedRow > 0 || !cur.hasParentDir) && idx < cur.items.size()) {
+            targets.push_back(cur.items[idx].path);
+        }
+    }
+    if (targets.empty()) return;
+
+    std::string cleanOpp = normalizeDir(oppDir);
+    while (cleanOpp.size() > 1 && cleanOpp.back() == '/') cleanOpp.pop_back();
+
+    for (const auto& src : targets) {
+        std::string cleanSrc = normalizeDir(src);
+        while (cleanSrc.size() > 1 && cleanSrc.back() == '/') cleanSrc.pop_back();
+
+        bool isIntoItself = false;
+#if defined(_WIN32) || defined(PLATFORM_DESKTOP)
+        std::string s1 = cleanOpp, s2 = cleanSrc;
+        std::transform(s1.begin(), s1.end(), s1.begin(), ::tolower);
+        std::transform(s2.begin(), s2.end(), s2.begin(), ::tolower);
+        if (s1 == s2 || (s1.size() > s2.size() && s1.rfind(s2 + "/", 0) == 0)) {
+            isIntoItself = true;
+        }
+#else
+        if (cleanOpp == cleanSrc || (cleanOpp.size() > cleanSrc.size() && cleanOpp.rfind(cleanSrc + "/", 0) == 0)) {
+            isIntoItself = true;
+        }
+#endif
+        if (isIntoItself) {
+            brls::Application::notify("app/file_manager/cannot_copy_into_itself"_i18n);
+            return;
+        }
+    }
+
+    int actIdx = activePanel_;
+    brls::async([this, targets, cleanOpp, actIdx, oppIdx]() {
+        bool allOk = true;
+        std::string lastErr;
+        for (const auto& src : targets) {
+            std::string cleanSrc = normalizeDir(src);
+            while (cleanSrc.size() > 1 && (cleanSrc.back() == '/' || cleanSrc.back() == '\\')) {
+                cleanSrc.pop_back();
+            }
+            std::filesystem::path sp(cleanSrc);
+            std::string dest = joinPath(cleanOpp, sp.filename().generic_string());
+
+            if (cleanSrc == dest) {
+                std::string stem = sp.stem().generic_string();
+                std::string ext = sp.extension().generic_string();
+                dest = joinPath(cleanOpp, stem + "_copy" + ext);
+                int copyIdx = 2;
+                std::error_code ec;
+                while (std::filesystem::exists(dest, ec)) {
+                    dest = joinPath(cleanOpp, stem + "_copy" + std::to_string(copyIdx++) + ext);
+                }
+            }
+
+            std::string err;
+            if (!util::copyPathRecursive(cleanSrc, dest, nullptr, nullptr, err)) {
+                allOk = false;
+                lastErr = err;
+            }
+        }
+        brls::sync([this, allOk, lastErr, actIdx, oppIdx]() {
+            if (allOk) {
+                brls::Application::notify("app/file_manager/copied_success"_i18n);
+            } else {
+                brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
+            }
+            refresh(actIdx);
+            refresh(oppIdx);
+        });
+    });
+}
+
+void FileManagerView::moveToOppositePanel() {
+    if (!isSplitMode_) return;
+    int oppIdx = 1 - activePanel_;
+    const std::string& oppDir = panels_[oppIdx].currentDir;
+    if (oppDir.empty()) return;
+
+    std::vector<std::string> targets;
+    auto& cur = panels_[activePanel_];
+    if (!cur.selectedPaths.empty()) {
+        targets.assign(cur.selectedPaths.begin(), cur.selectedPaths.end());
+    } else if (cur.currentFocusedRow >= 0) {
+        size_t idx = cur.hasParentDir ? (cur.currentFocusedRow - 1) : cur.currentFocusedRow;
+        if ((cur.currentFocusedRow > 0 || !cur.hasParentDir) && idx < cur.items.size()) {
+            targets.push_back(cur.items[idx].path);
+        }
+    }
+    if (targets.empty()) return;
+
+    std::string cleanOpp = normalizeDir(oppDir);
+    while (cleanOpp.size() > 1 && cleanOpp.back() == '/') cleanOpp.pop_back();
+
+    std::string cleanAct = normalizeDir(cur.currentDir);
+    while (cleanAct.size() > 1 && cleanAct.back() == '/') cleanAct.pop_back();
+
+    if (cleanOpp == cleanAct) {
+        brls::Application::notify("app/file_manager/cannot_copy_into_itself"_i18n);
+        return;
+    }
+
+    for (const auto& src : targets) {
+        std::string cleanSrc = normalizeDir(src);
+        while (cleanSrc.size() > 1 && cleanSrc.back() == '/') cleanSrc.pop_back();
+
+        bool isIntoItself = false;
+#if defined(_WIN32) || defined(PLATFORM_DESKTOP)
+        std::string s1 = cleanOpp, s2 = cleanSrc;
+        std::transform(s1.begin(), s1.end(), s1.begin(), ::tolower);
+        std::transform(s2.begin(), s2.end(), s2.begin(), ::tolower);
+        if (s1 == s2 || (s1.size() > s2.size() && s1.rfind(s2 + "/", 0) == 0)) {
+            isIntoItself = true;
+        }
+#else
+        if (cleanOpp == cleanSrc || (cleanOpp.size() > cleanSrc.size() && cleanOpp.rfind(cleanSrc + "/", 0) == 0)) {
+            isIntoItself = true;
+        }
+#endif
+        if (isIntoItself) {
+            brls::Application::notify("app/file_manager/cannot_copy_into_itself"_i18n);
+            return;
+        }
+    }
+
+    int actIdx = activePanel_;
+    brls::async([this, targets, cleanOpp, actIdx, oppIdx]() {
+        bool allOk = true;
+        std::string lastErr;
+        for (const auto& src : targets) {
+            std::string cleanSrc = normalizeDir(src);
+            while (cleanSrc.size() > 1 && (cleanSrc.back() == '/' || cleanSrc.back() == '\\')) {
+                cleanSrc.pop_back();
+            }
+            std::filesystem::path sp(cleanSrc);
+            std::string dest = joinPath(cleanOpp, sp.filename().generic_string());
+            std::string err;
+            if (!util::movePath(cleanSrc, dest, err)) {
+                allOk = false;
+                lastErr = err;
+            }
+        }
+        brls::sync([this, allOk, lastErr, actIdx, oppIdx]() {
+            if (allOk) {
+                panels_[actIdx].selectedPaths.clear();
+                brls::Application::notify("app/file_manager/move_success"_i18n);
+            } else {
+                brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
+            }
+            refresh(actIdx);
+            refresh(oppIdx);
         });
     });
 }
 
 void FileManagerView::showActionsMenu() {
-    int restoreRow = currentFocusedRow_;
+    auto& cur = panels_[activePanel_];
+    int restoreRow = cur.currentFocusedRow;
 
     auto& clip = util::getClipboard();
-    bool hasSelection = !selectedPaths_.empty();
+    bool hasSelection = !cur.selectedPaths.empty();
     bool hasClipboard = (!clip.paths.empty() && clip.op != util::ClipboardOp::None);
 
     // Identify target items
     const util::FileItem* targetSingleItem = nullptr;
-    if (selectedPaths_.size() == 1) {
-        std::string sel = *selectedPaths_.begin();
-        for (const auto& it : items_) {
+    if (cur.selectedPaths.size() == 1) {
+        std::string sel = *cur.selectedPaths.begin();
+        for (const auto& it : cur.items) {
             if (it.path == sel) { targetSingleItem = &it; break; }
         }
     } else if (!hasSelection) {
-        if (currentFocusedRow_ >= 0) {
-            size_t idx = hasParentDir_ ? (currentFocusedRow_ - 1) : currentFocusedRow_;
-            if ((currentFocusedRow_ > 0 || !hasParentDir_) && idx < items_.size()) {
-                targetSingleItem = &items_[idx];
+        if (cur.currentFocusedRow >= 0) {
+            size_t idx = cur.hasParentDir ? (cur.currentFocusedRow - 1) : cur.currentFocusedRow;
+            if ((cur.currentFocusedRow > 0 || !cur.hasParentDir) && idx < cur.items.size()) {
+                targetSingleItem = &cur.items[idx];
             }
         }
     }
@@ -1159,7 +1713,7 @@ void FileManagerView::showActionsMenu() {
     content->setWidthPercentage(100.0f);
     content->setPadding(20.0f, 22.0f, 16.0f, 22.0f);
 
-    // --- 1. Header Card ---
+    // Header Card
     auto* headerBox = new brls::Box();
     headerBox->setAxis(brls::Axis::ROW);
     headerBox->setAlignItems(brls::AlignItems::CENTER);
@@ -1168,7 +1722,6 @@ void FileManagerView::showActionsMenu() {
     headerBox->setLineBottom(1.0f);
     headerBox->setLineColor(nvgRGBA(0, 224, 165, 80));
 
-    // Header Icon Badge
     auto* iconBadge = new brls::Box();
     iconBadge->setWidth(42.0f);
     iconBadge->setHeight(42.0f);
@@ -1181,7 +1734,7 @@ void FileManagerView::showActionsMenu() {
     badgeIcon->setFontSize(22.0f);
 
     std::string archPath, innerPath;
-    bool inArchive = util::parseArchiveVirtualPath(currentDir_, archPath, innerPath);
+    bool inArchive = util::parseArchiveVirtualPath(cur.currentDir, archPath, innerPath);
 
     std::string titleText, subtitleText;
     if (inArchive) {
@@ -1207,40 +1760,40 @@ void FileManagerView::showActionsMenu() {
             titleText = ap.filename().generic_string();
             subtitleText = innerPath.empty() ? "/" : ("/" + innerPath);
         }
-    } else if (hasSelection && selectedPaths_.size() > 1) {
+    } else if (hasSelection && cur.selectedPaths.size() > 1) {
         iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
         badgeIcon->setText("\uE834"); // Multiple select icon
         badgeIcon->setTextColor(nvgRGB(0, 224, 165));
-        titleText = "app/file_manager/selected_items_count"_i18n + std::to_string(selectedPaths_.size());
+        titleText = "app/file_manager/selected_items_count"_i18n + std::to_string(cur.selectedPaths.size());
         subtitleText = "app/file_manager/bulk_operations"_i18n;
     } else if (targetSingleItem) {
         if (targetSingleItem->isDir) {
             iconBadge->setBackgroundColor(nvgRGBA(255, 193, 7, 40));
-            badgeIcon->setText("\uE2C7"); // Folder
+            badgeIcon->setText("\uE2C7");
             badgeIcon->setTextColor(nvgRGB(255, 193, 7));
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/folder_type"_i18n;
         } else if (util::isArchiveFile(targetSingleItem->path)) {
             iconBadge->setBackgroundColor(nvgRGBA(255, 110, 64, 40));
-            badgeIcon->setText("\uE2C6"); // Archive
+            badgeIcon->setText("\uE2C6");
             badgeIcon->setTextColor(nvgRGB(255, 110, 64));
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/type_archive"_i18n + util::formatFileSize(targetSingleItem->size);
         } else if (util::isGamePackage(targetSingleItem->path)) {
             iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
-            badgeIcon->setText("\uE0E0"); // Gamepad
-            badgeIcon->setTextColor(nvgRGB(0, 224, 165)); // Emerald
+            badgeIcon->setText("\uE0E0");
+            badgeIcon->setTextColor(nvgRGB(0, 224, 165));
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/type_game_pkg"_i18n + util::formatFileSize(targetSingleItem->size);
         } else if (isTextFile(targetSingleItem->path)) {
             iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
-            badgeIcon->setText("\uE873"); // Document
+            badgeIcon->setText("\uE873");
             badgeIcon->setTextColor(nvgRGB(0, 224, 165));
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/type_text"_i18n + util::formatFileSize(targetSingleItem->size);
         } else {
             iconBadge->setBackgroundColor(nvgRGBA(33, 150, 243, 40));
-            badgeIcon->setText("\uE24D"); // File
+            badgeIcon->setText("\uE24D");
             badgeIcon->setTextColor(nvgRGB(33, 150, 243));
             titleText = targetSingleItem->name;
             subtitleText = util::formatFileSize(targetSingleItem->size);
@@ -1250,7 +1803,7 @@ void FileManagerView::showActionsMenu() {
         badgeIcon->setText("\uE2C7");
         badgeIcon->setTextColor(nvgRGB(0, 224, 165));
         titleText = "app/file_manager/action_menu"_i18n;
-        subtitleText = currentDir_;
+        subtitleText = cur.currentDir;
     }
     iconBadge->addView(badgeIcon);
     headerBox->addView(iconBadge);
@@ -1288,7 +1841,6 @@ void FileManagerView::showActionsMenu() {
 
     brls::View* firstOption = nullptr;
 
-    // Safe option adder
     auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action, bool opensSubDialog = false) {
         auto* row = new brls::Box();
         row->setHeight(42.0f);
@@ -1328,15 +1880,15 @@ void FileManagerView::showActionsMenu() {
                         });
                     }
                     if (!opensSubDialog) {
-                        // Restore focus safely on next tick ONLY if not opening another modal dialog
                         brls::sync([this, restoreRow]() {
-                            if (recycler) {
-                                int maxRow = static_cast<int>(items_.size()) + (hasParentDir_ ? 1 : 0) - 1;
+                            auto* rec = panels_[activePanel_].recycler;
+                            if (rec) {
+                                int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
                                 int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
-                                currentFocusedRow_ = validRow;
-                                recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
-                                recycler->selectRowAt(brls::IndexPath(0, validRow), false);
-                                brls::Application::giveFocus(recycler);
+                                panels_[activePanel_].currentFocusedRow = validRow;
+                                rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                                rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                                brls::Application::giveFocus(rec);
                             }
                         });
                     }
@@ -1347,6 +1899,16 @@ void FileManagerView::showActionsMenu() {
 
         content->addView(row);
     };
+
+    // Calculate opposite panel details for dual-pane mode
+    std::string oppDirName;
+    int oppIdx = 1 - activePanel_;
+    if (isSplitMode_) {
+        const std::string& oppDir = panels_[oppIdx].currentDir;
+        std::filesystem::path op(oppDir);
+        oppDirName = op.filename().generic_string();
+        if (oppDirName.empty() || oppDirName == "/" || oppDirName == ".") oppDirName = oppDir;
+    }
 
     if (inArchive) {
         // Option 1: Extract entire archive
@@ -1374,8 +1936,44 @@ void FileManagerView::showActionsMenu() {
                     brls::Application::notify(err.empty() ? "app/file_manager/extract_error"_i18n : err);
                 }
             }, true);
+
+            // Option 3: Extract this file to opposite panel (if split mode active)
+            if (isSplitMode_) {
+                addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/extract_to_other_panel", oppDirName), [this, archPath, oppIdx, item = *targetSingleItem]() {
+                    const std::string& oppDir = panels_[oppIdx].currentDir;
+                    std::string relInner = item.path.substr(archPath.size());
+                    while (!relInner.empty() && (relInner.front() == '/' || relInner.front() == '\\')) relInner.erase(relInner.begin());
+                    std::string err;
+                    bool ok = util::extractSingleFileFromArchive(archPath, relInner, oppDir, nullptr, nullptr, err);
+                    if (ok) {
+                        brls::Application::notify("app/file_manager/archive_complete"_i18n);
+                        refresh(oppIdx);
+                    } else {
+                        brls::Application::notify(err.empty() ? "app/file_manager/extract_error"_i18n : err);
+                    }
+                }, true);
+            }
         }
     } else {
+        // Inter-panel Copy & Move (Split Mode priority actions)
+        if (isSplitMode_) {
+            if (hasSelection) {
+                addOption("\uE14D", nvgRGB(0, 224, 165), brls::getStr("app/file_manager/copy_to_other_panel", oppDirName), [this]() {
+                    copyToOppositePanel();
+                });
+                addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/move_to_other_panel", oppDirName), [this]() {
+                    moveToOppositePanel();
+                });
+            } else if (targetSingleItem) {
+                addOption("\uE14D", nvgRGB(0, 224, 165), brls::getStr("app/file_manager/copy_to_other_panel", oppDirName), [this]() {
+                    copyToOppositePanel();
+                });
+                addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/move_to_other_panel", oppDirName), [this]() {
+                    moveToOppositePanel();
+                });
+            }
+        }
+
         // Install Game (if target is game package)
         if (targetSingleItem && util::isGamePackage(targetSingleItem->path)) {
             addOption("\uE0E0", nvgRGB(0, 224, 165), "app/file_manager/install_game_btn"_i18n, [this, item = *targetSingleItem]() {
@@ -1386,7 +1984,7 @@ void FileManagerView::showActionsMenu() {
         // Browse / Extract archive (if target is archive)
         if (targetSingleItem && util::isArchiveFile(targetSingleItem->path)) {
             addOption("\uE2C7", nvgRGB(0, 224, 165), "app/archive/browse_archive"_i18n, [this, item = *targetSingleItem]() {
-                navigateTo(item.path);
+                navigateTo(activePanel_, item.path);
             });
 
             addOption("\uE2C6", nvgRGB(255, 110, 64), "app/file_manager/extract_archive_btn"_i18n, [this, item = *targetSingleItem]() {
@@ -1403,8 +2001,8 @@ void FileManagerView::showActionsMenu() {
 
         // Create Archive (if selection or target single item)
         if (hasSelection) {
-            addOption("\uE2C6", nvgRGB(255, 110, 64), brls::getStr("app/file_manager/create_archive_count", std::to_string(selectedPaths_.size())), [this]() {
-                std::vector<std::string> targets(selectedPaths_.begin(), selectedPaths_.end());
+            addOption("\uE2C6", nvgRGB(255, 110, 64), brls::getStr("app/file_manager/create_archive_count", std::to_string(cur.selectedPaths.size())), [this]() {
+                std::vector<std::string> targets(panels_[activePanel_].selectedPaths.begin(), panels_[activePanel_].selectedPaths.end());
                 showCreateArchiveDialog(targets);
             }, true);
         } else if (targetSingleItem) {
@@ -1413,7 +2011,7 @@ void FileManagerView::showActionsMenu() {
             }, true);
         }
 
-        // 2. Paste (if clipboard active)
+        // Paste (if clipboard active)
         if (hasClipboard) {
             std::string pasteText = (clip.op == util::ClipboardOp::Cut ?
                                     brls::getStr("app/file_manager/paste_cut", std::to_string(clip.paths.size())) :
@@ -1423,12 +2021,12 @@ void FileManagerView::showActionsMenu() {
             });
         }
 
-        // 3. Copy
+        // Copy (to clipboard)
         if (hasSelection) {
-            addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/copy_count", std::to_string(selectedPaths_.size())), [this]() {
+            addOption("\uE14D", nvgRGB(64, 196, 255), brls::getStr("app/file_manager/copy_count", std::to_string(cur.selectedPaths.size())), [this]() {
                 auto& c = util::getClipboard();
                 c.op = util::ClipboardOp::Copy;
-                c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
+                c.paths.assign(panels_[activePanel_].selectedPaths.begin(), panels_[activePanel_].selectedPaths.end());
                 brls::Application::notify(brls::getStr("app/file_manager/copied_count", std::to_string(c.paths.size())));
             });
         } else if (targetSingleItem) {
@@ -1440,12 +2038,12 @@ void FileManagerView::showActionsMenu() {
             });
         }
 
-        // 4. Cut
+        // Cut (to clipboard)
         if (hasSelection) {
-            addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/cut_count", std::to_string(selectedPaths_.size())), [this]() {
+            addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/cut_count", std::to_string(cur.selectedPaths.size())), [this]() {
                 auto& c = util::getClipboard();
                 c.op = util::ClipboardOp::Cut;
-                c.paths.assign(selectedPaths_.begin(), selectedPaths_.end());
+                c.paths.assign(panels_[activePanel_].selectedPaths.begin(), panels_[activePanel_].selectedPaths.end());
                 brls::Application::notify(brls::getStr("app/file_manager/cut_done_count", std::to_string(c.paths.size())));
             });
         } else if (targetSingleItem) {
@@ -1457,45 +2055,57 @@ void FileManagerView::showActionsMenu() {
             });
         }
 
-        // 5. Rename
+        // Rename
         if (targetSingleItem) {
             addOption("\uE254", nvgRGB(179, 136, 255), "app/file_manager/rename"_i18n, [this, item = *targetSingleItem]() {
                 showRenameDialog(item);
             }, true);
         }
 
-        // 6. Delete
+        // Delete
         if (hasSelection) {
-            addOption("\uE872", nvgRGB(255, 82, 82), brls::getStr("app/file_manager/delete_count", std::to_string(selectedPaths_.size())), [this]() {
+            addOption("\uE872", nvgRGB(255, 82, 82), brls::getStr("app/file_manager/delete_count", std::to_string(cur.selectedPaths.size())), [this]() {
                 showDeleteConfirmDialog();
             }, true);
         } else if (targetSingleItem) {
             addOption("\uE872", nvgRGB(255, 82, 82), "app/file_manager/delete_single"_i18n, [this, item = *targetSingleItem]() {
-                selectedPaths_.clear();
-                selectedPaths_.insert(item.path);
+                panels_[activePanel_].selectedPaths.clear();
+                panels_[activePanel_].selectedPaths.insert(item.path);
                 showDeleteConfirmDialog();
             }, true);
         }
 
-        // 7. New Folder (always available)
+        // New Folder (always available)
         addOption("\uE2CC", nvgRGB(38, 198, 218), "app/file_manager/new_folder"_i18n, [this]() {
             showNewFolderDialog();
         }, true);
     }
-    // 8. Selection helpers
-    if (hasSelection) {
-        addOption("\uE835", nvgRGB(180, 190, 200), "app/file_manager/deselect_all"_i18n, [this]() {
-            clearSelection();
+
+    // Split Screen Toggle option
+    if (isSplitMode_) {
+        addOption("\uE8F2", nvgRGB(100, 181, 246), "app/file_manager/split_mode_disable"_i18n, [this]() {
+            toggleSplitMode();
         });
-    } else if (targetSingleItem && currentFocusedRow_ >= 0) {
-        addOption("\uE834", nvgRGB(0, 224, 165), "app/file_manager/select_this_item"_i18n, [this, row = currentFocusedRow_]() {
-            toggleSelection(row);
+    } else {
+        addOption("\uE8F1", nvgRGB(100, 181, 246), "app/file_manager/split_mode_enable"_i18n, [this]() {
+            toggleSplitMode();
         });
     }
 
-    if (!items_.empty()) {
-        addOption("\uE834", nvgRGB(100, 181, 246), brls::getStr("app/file_manager/select_all_count", std::to_string(items_.size())), [this]() {
-            selectAll();
+    // Selection helpers
+    if (hasSelection) {
+        addOption("\uE835", nvgRGB(180, 190, 200), "app/file_manager/deselect_all"_i18n, [this]() {
+            clearSelection(activePanel_);
+        });
+    } else if (targetSingleItem && cur.currentFocusedRow >= 0) {
+        addOption("\uE834", nvgRGB(0, 224, 165), "app/file_manager/select_this_item"_i18n, [this, row = cur.currentFocusedRow]() {
+            toggleSelection(activePanel_, row);
+        });
+    }
+
+    if (!cur.items.empty()) {
+        addOption("\uE834", nvgRGB(100, 181, 246), brls::getStr("app/file_manager/select_all_count", std::to_string(cur.items.size())), [this]() {
+            selectAll(activePanel_);
         });
     }
 
@@ -1507,7 +2117,7 @@ void FileManagerView::showActionsMenu() {
     cancelSep->setBackgroundColor(nvgRGBA(255, 255, 255, 20));
     content->addView(cancelSep);
 
-    // Clean Cancel option for mouse / touch users
+    // Cancel option
     addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, nullptr);
 
     if (firstOption) {
@@ -1518,8 +2128,8 @@ void FileManagerView::showActionsMenu() {
     dialog->open();
 
     if (firstOption) {
-        brls::Application::giveFocus(firstOption);
-        brls::sync([firstOption]() {
+        brls::sync([dialog, firstOption]() {
+            dialog->setLastFocusedView(firstOption);
             brls::Application::giveFocus(firstOption);
         });
     }
@@ -1530,11 +2140,12 @@ void FileManagerView::showActionsMenu() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 int FileManagerView::FileManagerDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section) {
-    return static_cast<int>(parent_->items_.size()) + (parent_->hasParentDir_ ? 1 : 0);
+    if (panelIndex_ < 0 || panelIndex_ > 1) return 0;
+    const auto& cur = parent_->panels_[panelIndex_];
+    return static_cast<int>(cur.items.size()) + (cur.hasParentDir ? 1 : 0);
 }
 
 brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    util::logLine("FileManagerView: cellForRow " + std::to_string(index.row));
     FileManagerCell* cell = dynamic_cast<FileManagerCell*>(recycler->dequeueReusableCell("Cell"));
     if (!cell) {
         cell = FileManagerCell::create();
@@ -1543,9 +2154,12 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
 
     cell->clearRegisteredActions();
     cell->rowIndex = index.row;
+    cell->panelIndex = panelIndex_;
     cell->parentView = parent_;
+    cell->setCompactMode(parent_->isSplitMode_);
 
-    bool isParentRow = (parent_->hasParentDir_ && index.row == 0);
+    const auto& curPanel = parent_->panels_[panelIndex_];
+    bool isParentRow = (curPanel.hasParentDir && index.row == 0);
 
     if (isParentRow) {
         if (cell->accentBar) cell->accentBar->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
@@ -1557,22 +2171,23 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
         cell->size->setText(brls::getStr("app/file_manager/parent_folder"));
         cell->date->setText("");
 
-        cell->registerClickAction([parent = parent_](brls::View* view) {
-            brls::sync([parent]() {
-                parent->navigateUp();
+        cell->registerClickAction([parent = parent_, pIdx = panelIndex_](brls::View* view) {
+            brls::sync([parent, pIdx]() {
+                parent->setActivePanel(pIdx);
+                parent->navigateUp(pIdx);
             });
             return true;
         });
         return cell;
     }
 
-    size_t itemIdx = parent_->hasParentDir_ ? (index.row - 1) : index.row;
-    if (itemIdx >= parent_->items_.size()) return cell;
+    size_t itemIdx = curPanel.hasParentDir ? (index.row - 1) : index.row;
+    if (itemIdx >= curPanel.items.size()) return cell;
 
-    const auto& item = parent_->items_[itemIdx];
-    bool isSelected = parent_->selectedPaths_.count(item.path) > 0;
+    const auto& item = curPanel.items[itemIdx];
+    bool isSelected = curPanel.selectedPaths.count(item.path) > 0;
 
-    // Apply visual selection style (emerald glow & accent bar, no ugly checkboxes)
+    // Apply visual selection style
     cell->setSelectedVisual(isSelected);
 
     // Icon & Name coloring
@@ -1590,10 +2205,10 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
         bool isGame = util::isGamePackage(item.path);
         if (isGame) {
             cell->icon->setText("\uE0E0"); // Gamepad
-            cell->icon->setTextColor(nvgRGB(0, 224, 165)); // Emerald icon for game packages
+            cell->icon->setTextColor(nvgRGB(0, 224, 165)); // Emerald
         } else if (isTextFile(item.path)) {
-            cell->icon->setText("\uE873"); // Material document / article icon
-            cell->icon->setTextColor(nvgRGB(0, 224, 165)); // Emerald green for text!
+            cell->icon->setText("\uE873"); // Material document
+            cell->icon->setTextColor(nvgRGB(0, 224, 165));
         } else {
             cell->icon->setText("\uE24D"); // Generic file
             cell->icon->setTextColor(nvgRGB(140, 150, 160));
@@ -1628,18 +2243,19 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
     }
 
     // Click action (A button)
-    cell->registerClickAction([parent = parent_, item](brls::View* view) {
-        util::logLine("FileManagerView: cell clicked on " + item.name);
+    cell->registerClickAction([parent = parent_, pIdx = panelIndex_, item](brls::View* view) {
+        util::logLine("FileManagerView: cell clicked on " + item.name + " on panel " + std::to_string(pIdx));
+        parent->setActivePanel(pIdx);
         std::string archPath, innerPath;
-        bool inArchive = util::parseArchiveVirtualPath(parent->currentDir_, archPath, innerPath);
+        bool inArchive = util::parseArchiveVirtualPath(parent->panels_[pIdx].currentDir, archPath, innerPath);
 
         if (item.isDir) {
-            brls::sync([parent, target = item.path]() {
-                parent->navigateTo(target);
+            brls::sync([parent, pIdx, target = item.path]() {
+                parent->navigateTo(pIdx, target);
             });
         } else if (util::isArchiveFile(item.path) && !inArchive) {
-            brls::sync([parent, target = item.path]() {
-                parent->navigateTo(target);
+            brls::sync([parent, pIdx, target = item.path]() {
+                parent->navigateTo(pIdx, target);
             });
         } else if (inArchive) {
             brls::sync([parent]() {
@@ -1654,7 +2270,6 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
                 parent->openTextViewer(item.path, item.name);
             });
         } else {
-            // Give brief info notification
             brls::Application::notify(item.name + " (" + util::formatFileSize(item.size) + ")");
         }
         return true;
@@ -1662,20 +2277,23 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
 
     // Selection toggle action (Y button on gamepad, Space / Y on keyboard)
     cell->registerAction("app/file_manager/action_toggle_select"_i18n, brls::ControllerButton::BUTTON_Y,
-        [parent = parent_, rowIndex = index.row, cell](brls::View* view) {
-            parent->toggleSelectionOnCell(rowIndex, cell);
+        [parent = parent_, pIdx = panelIndex_, rowIndex = index.row, cell](brls::View* view) {
+            parent->setActivePanel(pIdx);
+            parent->toggleSelectionOnCell(pIdx, rowIndex, cell);
             return true;
         });
 
     cell->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_SPACE),
-        [parent = parent_, rowIndex = index.row, cell](brls::View* view) {
-            parent->toggleSelectionOnCell(rowIndex, cell);
+        [parent = parent_, pIdx = panelIndex_, rowIndex = index.row, cell](brls::View* view) {
+            parent->setActivePanel(pIdx);
+            parent->toggleSelectionOnCell(pIdx, rowIndex, cell);
             return true;
         });
 
     cell->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_Y),
-        [parent = parent_, rowIndex = index.row, cell](brls::View* view) {
-            parent->toggleSelectionOnCell(rowIndex, cell);
+        [parent = parent_, pIdx = panelIndex_, rowIndex = index.row, cell](brls::View* view) {
+            parent->setActivePanel(pIdx);
+            parent->toggleSelectionOnCell(pIdx, rowIndex, cell);
             return true;
         });
 

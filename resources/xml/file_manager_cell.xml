@@ -1,4 +1,5 @@
 <brls:Box
+    id="cellRoot"
     width="auto"
     height="56px"
     focusable="true"
@@ -6,7 +7,6 @@
     paddingBottom="6"
     paddingLeft="16"
     paddingRight="16"
-    marginRight="24"
     axis="row"
     alignItems="center">
 
@@ -30,6 +30,7 @@
         width="auto"
         height="auto"
         grow="1.0"
+        shrink="1.0"
         fontSize="16"
         singleLine="true"
         marginRight="16" />

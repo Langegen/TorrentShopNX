@@ -30,6 +30,9 @@ struct ClipboardData {
     std::vector<std::string> paths;
 };
 
+// Normalizes path separators and drive formats across platforms (e.g., converts MSYS /d/ to D:/ on Windows)
+std::string normalizeFsPath(const std::string& path);
+
 // Returns default root browsing directory ("sdmc:/" on Switch, "./" or root on PC)
 std::string getDefaultRootPath();
 
