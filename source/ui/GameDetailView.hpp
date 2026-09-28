@@ -34,6 +34,7 @@ private:
     BRLS_BIND(brls::Label, metaFormat, "metaFormat");
     BRLS_BIND(brls::Label, metaVoice, "metaVoice");
     BRLS_BIND(brls::Label, description, "description");
+    BRLS_BIND(brls::Box, screenshotsContainer, "screenshotsContainer");
     BRLS_BIND(brls::Box, screenshotsBox, "screenshotsBox");
     BRLS_BIND(brls::HScrollingFrame, screenshotsScroll, "screenshotsScroll");
     BRLS_BIND(brls::Button, btnDownload, "btnDownload");

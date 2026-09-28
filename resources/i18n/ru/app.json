@@ -204,7 +204,7 @@
         "download_btn": "Скачать",
         "add_favorite_btn": "В избранное",
         "remove_favorite_btn": "Из избранного",
-        "torrent_link_btn": "Ссылка на раздачу",
+        "torrent_link_btn": "QR / Ссылка",
         "qr_hint": "Отсканируйте QR-код телефоном, чтобы открыть страницу раздачи",
         "qr_no_url": "Для этой игры нет ссылки на раздачу",
         "download_rom": "Скачать РОМ",

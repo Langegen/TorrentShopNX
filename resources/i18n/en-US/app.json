@@ -204,7 +204,7 @@
         "download_btn": "Download",
         "add_favorite_btn": "Add to Favorites",
         "remove_favorite_btn": "Remove Favorite",
-        "torrent_link_btn": "Torrent Link",
+        "torrent_link_btn": "QR / Link",
         "qr_hint": "Scan the QR code with your phone to open the torrent page",
         "qr_no_url": "No torrent page link for this game",
         "download_rom": "Download ROM",

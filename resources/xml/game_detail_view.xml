@@ -1,10 +1,19 @@
 <brls:AppletFrame headerHidden="true" footerHidden="false">
 
-    <brls:Box width="auto" height="auto" axis="row" padding="40" grow="1.0">
+    <brls:Box width="auto" height="auto" axis="row" padding="35" grow="1.0">
         
-        <!-- Left Column: Cover -->
-        <brls:Box width="300px" height="auto" axis="column" marginRight="40" alignItems="center">
-            <brls:Image id="cover" width="300px" height="490px" />
+        <!-- Left Column: Cover & Actions -->
+        <brls:Box width="280px" height="auto" axis="column" marginRight="35" alignItems="center">
+            <brls:Image id="cover" width="280px" height="390px" cornerRadius="8" />
+
+            <!-- Action: Download -->
+            <brls:Button id="btnDownload" text="@i18n/app/detail/download_btn" width="280px" height="48px" marginTop="15" style="primary" />
+
+            <!-- Secondary Actions: Favorite & QR -->
+            <brls:Box width="280px" height="auto" axis="row" justifyContent="spaceBetween" marginTop="10">
+                <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="135px" height="42px" fontSize="13" />
+                <brls:Button id="btnQr" text="@i18n/app/detail/torrent_link_btn" width="135px" height="42px" fontSize="13" />
+            </brls:Box>
         </brls:Box>
         
         <!-- Right Column: Scrollable Content -->
@@ -12,10 +21,10 @@
             <brls:Box id="contentBox" width="auto" height="auto" axis="column" paddingRight="20">
                 
                 <!-- Game Title -->
-                <brls:Label id="title" fontSize="30" marginBottom="10" />
+                <brls:Label id="title" fontSize="28" marginBottom="10" />
 
                 <!-- Badges (Genre & Lang) -->
-                <brls:Box id="badgesBox" width="auto" height="auto" axis="row" marginBottom="20" />
+                <brls:Box id="badgesBox" width="auto" height="auto" axis="row" marginBottom="15" />
 
                 <!-- Metadata Block -->
                 <brls:Box width="auto" height="auto" axis="column" marginBottom="20" padding="15" backgroundColor="#1E2A3A88" cornerRadius="8">
@@ -26,22 +35,17 @@
                     <brls:Label id="metaVoice" fontSize="15" textColor="#AAAAAA" />
                 </brls:Box>
 
+                <!-- Screenshots Section (directly above Description) -->
+                <brls:Box id="screenshotsContainer" width="auto" height="auto" axis="column" marginBottom="20">
+                    <brls:Label text="@i18n/app/detail/screenshots_header" fontSize="20" marginBottom="10" />
+                    <brls:HScrollingFrame id="screenshotsScroll" width="auto" height="150px">
+                        <brls:Box id="screenshotsBox" width="auto" height="auto" axis="row" alignItems="center" />
+                    </brls:HScrollingFrame>
+                </brls:Box>
+
                 <!-- Description -->
                 <brls:Label text="@i18n/app/detail/description_header" fontSize="20" marginBottom="10" />
                 <brls:Label id="description" fontSize="16" marginBottom="30" />
-
-                <!-- Screenshots -->
-                <brls:Label text="@i18n/app/detail/screenshots_header" fontSize="20" marginBottom="10" />
-                <brls:HScrollingFrame id="screenshotsScroll" width="auto" height="160px" marginBottom="30">
-                    <brls:Box id="screenshotsBox" width="auto" height="auto" axis="row" alignItems="center" />
-                </brls:HScrollingFrame>
-
-                <!-- Action Buttons -->
-                <brls:Box width="auto" height="auto" axis="row" justifyContent="flexStart" marginTop="10" marginBottom="40">
-                    <brls:Button id="btnDownload" text="@i18n/app/detail/download_btn" width="220px" height="50px" marginRight="20" style="primary" />
-                    <brls:Button id="btnQr" text="@i18n/app/detail/torrent_link_btn" width="220px" height="50px" marginRight="20" />
-                    <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="220px" height="50px" />
-                </brls:Box>
 
             </brls:Box>
         </brls:ScrollingFrame>
