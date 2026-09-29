@@ -1,4 +1,5 @@
 #include "RetroUpdateDialog.hpp"
+#include "ui/ThemeManager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/log.h"
 #include <borealis.hpp>
@@ -55,7 +56,7 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         progressFill->setWidth(0.0f);
         progressFill->setHeight(10.0f);
         progressFill->setCornerRadius(5.0f);
-        progressFill->setBackgroundColor(nvgRGB(0, 224, 165));
+        progressFill->setBackgroundColor(ThemeManager::instance().getAccentColor());
         progressBg->addView(progressFill);
         content->addView(progressBg);
 

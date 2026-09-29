@@ -643,7 +643,8 @@
         "update_catalog_downloading_diff": "Téléchargement des modifications...",
         "update_catalog_applying_diff": "Application des modifications...",
         "update_catalog_diff_success": "Catalogue mis à jour : +{0} nouveaux, {1} modifiés",
-        "update_catalog_up_to_date": "Le catalogue est déjà à jour"
+        "update_catalog_up_to_date": "Le catalogue est déjà à jour",
+        "cat_appearance": "Apparence"
     },
     "applet": {
         "title": "Mode Applet détecté",
@@ -929,7 +930,9 @@
         "header_updated_prefix": "  •  Mis à jour: ",
         "header_storage_title": "Gestion du stockage",
         "library_inst_count": "{0} jeux",
-        "library_upd_count": "{0} mises à jour"
+        "library_upd_count": "{0} mises à jour",
+        "retro_c2_val": "20 plateformes",
+        "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
         "step_init": "Initialisation...",
@@ -1004,5 +1007,46 @@
         "hidden_objects": "Objets cachés",
         "stealth": "Infiltration",
         "education": "Éducatif"
+    },
+    "appearance": {
+        "theme_title": "Thème de couleur",
+        "theme_applied": "Thème de couleur appliqué",
+        "bg_title": "Fond d'écran",
+        "bg_auto": "Par défaut du thème actuel",
+        "bg_custom": "Fichier personnalisé de la carte SD...",
+        "bg_applied": "Fond d'écran mis à jour",
+        "choose_file": "Sélectionner un fichier sur la carte SD",
+        "no_file_selected": "Aucun fichier sélectionné",
+        "reset_bg": "Réinitialiser le fond d'écran",
+        "reset_bg_desc": "Restaurer le fond d'écran par défaut du thème actuel",
+        "bg_reset_done": "Fond d'écran réinitialisé",
+        "file_picker_title": "Sélectionner une image de fond",
+        "folder_parent": "Dossier parent",
+        "folder_type": "Dossier",
+        "folder_empty": "Aucune image (.jpg, .png) trouvée dans ce dossier",
+        "bg_blur_title": "Flou d'arrière-plan",
+        "bg_blur_0": "Désactivé (Net)",
+        "bg_blur_1": "Léger",
+        "bg_blur_2": "Moyen",
+        "bg_blur_3": "Fort",
+        "bg_blur_applied": "Flou d'arrière-plan mis à jour",
+        "bg_dim_title": "Assombrissement du fond dans le menu",
+        "bg_dim_0": "Sans assombrissement (0%)",
+        "bg_dim_1": "Clair (15%)",
+        "bg_dim_2": "Standard (28%)",
+        "bg_dim_3": "Atténué (45%)",
+        "bg_dim_4": "Sombre (65%)",
+        "bg_dim_applied": "Assombrissement du fond mis à jour",
+        "show_bottom_dashboard": "Afficher le panneau d'informations",
+        "show_bottom_dashboard_desc": "Afficher le panneau inférieur avec détails et statistiques dans le menu principal"
+    },
+    "theme": {
+        "emerald": "Émeraude (Par défaut)",
+        "cyberpunk": "Cyan néon (Cyberpunk)",
+        "ruby": "Rouge rubis (Switch Red)",
+        "amethyst": "Violet améthyste",
+        "amber": "Or ambré",
+        "light": "Clair",
+        "graphite": "Graphite"
     }
 }

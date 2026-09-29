@@ -1,5 +1,6 @@
 #include "DashboardSummaryView.hpp"
 #include "SpeedSparklineView.hpp"
+#include "../ThemeManager.hpp"
 #include "../GameDetailView.hpp"
 #include "../../utils/switch_utils.h"
 #include "../../utils/app_paths.h"
@@ -14,6 +15,43 @@ using namespace brls::literals;
 extern std::vector<Game> g_games;
 
 namespace ui {
+
+static inline NVGcolor themeAccent(unsigned char alpha = 255) {
+    NVGcolor c = ThemeManager::instance().getTextAccentColor();
+    return nvgRGBA(c.r * 255, c.g * 255, c.b * 255, alpha);
+}
+
+static inline NVGcolor themeTextPrimary() {
+    return ThemeManager::instance().getTextPrimaryColor();
+}
+
+static inline NVGcolor themeTextSecondary() {
+    return ThemeManager::instance().getTextSecondaryColor();
+}
+
+static inline NVGcolor themeDim() {
+    return ThemeManager::instance().getAccentDimColor();
+}
+
+static inline NVGcolor themeMedium() {
+    return ThemeManager::instance().getAccentMediumColor();
+}
+
+static inline NVGcolor themeCardBg() {
+    return ThemeManager::instance().getCardBgColor();
+}
+
+static inline NVGcolor themeCardBorder() {
+    return ThemeManager::instance().getCardBorderColor();
+}
+
+static inline NVGcolor themeCardTitle() {
+    return ThemeManager::instance().getCardTitleColor();
+}
+
+static inline NVGcolor themeCardSub() {
+    return ThemeManager::instance().getCardSubColor();
+}
 
 static std::string formatBytes(unsigned long long bytes) {
     double size = static_cast<double>(bytes);
@@ -53,7 +91,7 @@ public:
         imgBox->setWidth(68.0f);
         imgBox->setHeight(108.0f);
         imgBox->setCornerRadius(6.0f);
-        imgBox->setBackgroundColor(nvgRGBA(15, 25, 38, 140));
+        imgBox->setBackgroundColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGBA(210, 225, 240, 180) : nvgRGBA(15, 25, 38, 140));
         imgBox->setAlignItems(brls::AlignItems::CENTER);
         imgBox->setJustifyContent(brls::JustifyContent::CENTER);
         imgBox->setMarginRight(10.0f);
@@ -96,7 +134,7 @@ public:
         titleLbl_ = new brls::Label();
         titleLbl_->setText(truncateStr(game.title, 18));
         titleLbl_->setFontSize(13.0f);
-        titleLbl_->setTextColor(nvgRGBA(255, 255, 255, 255));
+        titleLbl_->setTextColor(themeTextPrimary());
         titleLbl_->setSingleLine(true);
         topDetails->addView(titleLbl_);
 
@@ -107,7 +145,7 @@ public:
         brls::Label* gMeta = new brls::Label();
         gMeta->setText(metaText);
         gMeta->setFontSize(11.5f);
-        gMeta->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+        gMeta->setTextColor(themeAccent(240));
         gMeta->setMarginTop(4.0f);
         gMeta->setSingleLine(true);
         topDetails->addView(gMeta);
@@ -116,26 +154,26 @@ public:
             brls::Label* gGenre = new brls::Label();
             gGenre->setText(truncateStr(game.genre, 16));
             gGenre->setFontSize(10.5f);
-            gGenre->setTextColor(nvgRGBA(130, 155, 185, 180));
+            gGenre->setTextColor(themeTextSecondary());
             gGenre->setMarginTop(3.0f);
             gGenre->setSingleLine(true);
             topDetails->addView(gGenre);
         }
         infoCol->addView(topDetails);
 
-        // Bottom Action Pill in Emerald
+        // Bottom Action Pill
         actPill_ = new brls::Box();
         actPill_->setWidthPercentage(100.0f);
         actPill_->setHeight(22.0f);
         actPill_->setCornerRadius(5.0f);
-        actPill_->setBackgroundColor(nvgRGBA(0, 224, 165, 28)); // Emerald tint
+        actPill_->setBackgroundColor(themeDim());
         actPill_->setAlignItems(brls::AlignItems::CENTER);
         actPill_->setJustifyContent(brls::JustifyContent::CENTER);
 
         actLbl_ = new brls::Label();
         actLbl_->setText("app/dashboard/btn_download"_i18n);
         actLbl_->setFontSize(11.5f);
-        actLbl_->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald text
+        actLbl_->setTextColor(themeAccent(255));
         actPill_->addView(actLbl_);
         infoCol->addView(actPill_);
 
@@ -170,16 +208,16 @@ public:
 
     void onFocusGained() override {
         Box::onFocusGained();
-        if (titleLbl_) titleLbl_->setTextColor(nvgRGBA(0, 245, 195, 255));
-        if (actPill_) actPill_->setBackgroundColor(nvgRGBA(0, 224, 165, 80));
-        if (actLbl_) actLbl_->setTextColor(nvgRGBA(255, 255, 255, 255));
+        if (titleLbl_) titleLbl_->setTextColor(themeAccent(255));
+        if (actPill_) actPill_->setBackgroundColor(themeAccent(230));
+        if (actLbl_) actLbl_->setTextColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGB(255, 255, 255) : nvgRGB(10, 18, 26));
     }
 
     void onFocusLost() override {
         Box::onFocusLost();
-        if (titleLbl_) titleLbl_->setTextColor(nvgRGBA(255, 255, 255, 255));
-        if (actPill_) actPill_->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
-        if (actLbl_) actLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        if (titleLbl_) titleLbl_->setTextColor(themeTextPrimary());
+        if (actPill_) actPill_->setBackgroundColor(themeDim());
+        if (actLbl_) actLbl_->setTextColor(themeAccent(255));
     }
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
@@ -201,19 +239,33 @@ public:
         if (glow_ > 0.01f) {
             NVGpaint glowPaint = nvgBoxGradient(vg, x - 2.0f, y - 2.0f, width + 4.0f, height + 4.0f,
                                                 10.0f, 6.0f,
-                                                nvgRGBA(0, 224, 165, static_cast<unsigned char>(90.0f * glow_)),
-                                                nvgRGBA(0, 224, 165, 0));
+                                                themeAccent(static_cast<unsigned char>(90.0f * glow_)),
+                                                themeAccent(0));
             nvgBeginPath(vg);
             nvgRect(vg, x - 10.0f, y - 10.0f, width + 20.0f, height + 20.0f);
             nvgFillPaint(vg, glowPaint);
             nvgFill(vg);
         }
 
-        // 2. Base Background
+        // 2. Base Background: Light delicate frosted glass (no heavy opaque slabs)
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x, y, width, height, 10.0f);
-        NVGcolor bgTop = isFocused() ? nvgRGBA(0, 180, 140, 65) : nvgRGBA(25, 45, 70, 85);
-        NVGcolor bgBot = isFocused() ? nvgRGBA(12, 32, 48, 120) : nvgRGBA(15, 28, 45, 95);
+        bool isLight = ThemeManager::instance().isCurrentThemeLight();
+        NVGcolor bgTop, bgBot;
+        if (isLight) {
+            bgTop = isFocused() ? nvgRGBA(255, 255, 255, 255) : nvgRGBA(255, 255, 255, 235);
+            bgBot = isFocused() ? nvgRGBA(240, 248, 255, 250) : nvgRGBA(242, 246, 250, 220);
+        } else {
+            NVGcolor acc = ThemeManager::instance().getAccentColor();
+            bgTop = isFocused()
+                ? nvgRGBA(acc.r * 255 * 0.85f,
+                          acc.g * 255 * 0.85f,
+                          acc.b * 255 * 0.85f, 60)
+                : nvgRGBA(255, 255, 255, 14);
+            bgBot = isFocused()
+                ? nvgRGBA(12, 22, 34, 155)
+                : nvgRGBA(8, 16, 26, 50);
+        }
         NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height, bgTop, bgBot);
         nvgFillPaint(vg, bgPaint);
         nvgFill(vg);
@@ -223,7 +275,7 @@ public:
         nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, 9.0f);
         NVGpaint glossPaint = nvgLinearGradient(
             vg, x, y, x, y + height * 0.45f,
-            nvgRGBA(255, 255, 255, static_cast<unsigned char>(isFocused() ? 45 : 25)),
+            nvgRGBA(255, 255, 255, static_cast<unsigned char>(isFocused() ? (isLight ? 90 : 38) : (isLight ? 60 : 16))),
             nvgRGBA(255, 255, 255, 0)
         );
         nvgFillPaint(vg, glossPaint);
@@ -233,10 +285,10 @@ public:
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x, y, width, height, 10.0f);
         if (glow_ > 0.01f) {
-            nvgStrokeColor(vg, nvgRGBA(0, 240, 185, static_cast<unsigned char>(255.0f * glow_)));
-            nvgStrokeWidth(vg, 2.0f);
+            nvgStrokeColor(vg, themeAccent(static_cast<unsigned char>(255.0f * glow_)));
+            nvgStrokeWidth(vg, isLight ? 2.5f : 2.0f);
         } else {
-            nvgStrokeColor(vg, nvgRGBA(160, 200, 220, 60));
+            nvgStrokeColor(vg, themeCardBorder());
             nvgStrokeWidth(vg, 1.0f);
         }
         nvgStroke(vg);
@@ -267,10 +319,10 @@ private:
 DashboardSummaryView::DashboardSummaryView() {
     imageToken_ = std::make_shared<bool>(true);
     this->setWidthPercentage(95.0f);
-    this->setHeight(175.0f);
+    this->setHeight(178.0f);
     this->setAxis(brls::Axis::COLUMN);
-    this->setPadding(10.0f, 20.0f, 10.0f, 20.0f);
-    this->setCornerRadius(14.0f);
+    this->setPadding(10.0f, 18.0f, 10.0f, 18.0f);
+    this->setCornerRadius(16.0f);
 
     content_container_ = new brls::Box();
     content_container_->setAxis(brls::Axis::COLUMN);
@@ -279,6 +331,10 @@ DashboardSummaryView::DashboardSummaryView() {
     this->addView(content_container_);
 
     rebuildContent();
+
+    ThemeManager::instance().subscribe([this]() {
+        rebuildContent();
+    });
 }
 
 DashboardSummaryView::~DashboardSummaryView() {
@@ -540,7 +596,7 @@ void DashboardSummaryView::buildCatalogSection() {
     brls::Label* title = new brls::Label();
     title->setText("app/dashboard/catalog_title"_i18n);
     title->setFontSize(13.0f);
-    title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+    title->setTextColor(themeAccent(240));
     headerRow->addView(title);
     content_container_->addView(headerRow);
 
@@ -553,7 +609,7 @@ void DashboardSummaryView::buildCatalogSection() {
         brls::Label* emptyLbl = new brls::Label();
         emptyLbl->setText("app/dashboard/catalog_loading"_i18n);
         emptyLbl->setFontSize(13.0f);
-        emptyLbl->setTextColor(nvgRGBA(160, 180, 205, 200));
+        emptyLbl->setTextColor(themeTextSecondary());
         cardsRow->addView(emptyLbl);
     } else {
         for (const auto& g : catalog_sample_) {
@@ -590,7 +646,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* title = new brls::Label();
     title->setText("app/dashboard/retro_title"_i18n);
     title->setFontSize(13.0f);
-    title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+    title->setTextColor(themeAccent(240));
     headerRow->addView(title);
     content_container_->addView(headerRow);
 
@@ -607,7 +663,9 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c1->setHeight(124.0f);
     c1->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c1->setCornerRadius(10.0f);
-    c1->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c1->setBackgroundColor(themeCardBg());
+    c1->setBorderThickness(1.0f);
+    c1->setBorderColor(themeCardBorder());
     c1->setFocusable(true);
     c1->registerClickAction(openRetro);
 
@@ -619,13 +677,13 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* c1Title = new brls::Label();
     c1Title->setText("app/dashboard/retro_c1_title"_i18n);
     c1Title->setFontSize(11.5f);
-    c1Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c1Title->setTextColor(themeCardTitle());
     c1Top->addView(c1Title);
 
     brls::Label* c1TopTag = new brls::Label();
     c1TopTag->setText("app/dashboard/retro_c1_tag"_i18n);
     c1TopTag->setFontSize(11.5f);
-    c1TopTag->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
+    c1TopTag->setTextColor(themeCardSub());
     c1Top->addView(c1TopTag);
     c1->addView(c1Top);
 
@@ -636,18 +694,18 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* c1Val = new brls::Label();
     c1Val->setText("app/dashboard/retro_c1_val"_i18n);
     c1Val->setFontSize(22.0f);
-    c1Val->setTextColor(nvgRGBA(255, 255, 255, 255));
+    c1Val->setTextColor(themeTextPrimary());
     c1Mid->addView(c1Val);
 
     brls::Box* c1Badge = new brls::Box();
     c1Badge->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
     c1Badge->setCornerRadius(4.0f);
-    c1Badge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
+    c1Badge->setBackgroundColor(themeDim());
     c1Badge->setMarginLeft(12.0f);
     brls::Label* c1BadgeLbl = new brls::Label();
     c1BadgeLbl->setText("app/dashboard/retro_c1_badge"_i18n);
     c1BadgeLbl->setFontSize(12.0f);
-    c1BadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
+    c1BadgeLbl->setTextColor(themeAccent(255));
     c1Badge->addView(c1BadgeLbl);
     c1Mid->addView(c1Badge);
     c1->addView(c1Mid);
@@ -655,11 +713,11 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* c1Sub = new brls::Label();
     c1Sub->setText("NES • SNES • GBA • N64 • PS1 • PS2 • PSP • MD...");
     c1Sub->setFontSize(11.0f);
-    c1Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c1Sub->setTextColor(themeCardSub());
     c1->addView(c1Sub);
     cardsRow->addView(c1);
 
-    // Card 2: Ecosystems & Brand Pills
+    // Card 2: Ecosystems & Platforms
     brls::Box* c2 = new brls::Box();
     c2->setAxis(brls::Axis::COLUMN);
     c2->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -667,7 +725,9 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c2->setHeight(124.0f);
     c2->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c2->setCornerRadius(10.0f);
-    c2->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c2->setBackgroundColor(themeCardBg());
+    c2->setBorderThickness(1.0f);
+    c2->setBorderColor(themeCardBorder());
     c2->setFocusable(true);
     c2->registerClickAction(openRetro);
 
@@ -679,61 +739,43 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* c2Title = new brls::Label();
     c2Title->setText("app/dashboard/retro_c2_title"_i18n);
     c2Title->setFontSize(11.5f);
-    c2Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c2Title->setTextColor(themeCardTitle());
     c2Top->addView(c2Title);
 
     brls::Label* c2TopTag = new brls::Label();
     c2TopTag->setText("RetroArch / Core");
     c2TopTag->setFontSize(11.5f);
-    c2TopTag->setTextColor(nvgRGBA(130, 160, 195, 200));
+    c2TopTag->setTextColor(themeCardSub());
     c2Top->addView(c2TopTag);
     c2->addView(c2Top);
 
-    brls::Box* pillsRow = new brls::Box();
-    pillsRow->setAxis(brls::Axis::ROW);
-    pillsRow->setAlignItems(brls::AlignItems::CENTER);
+    brls::Box* c2Mid = new brls::Box();
+    c2Mid->setAxis(brls::Axis::ROW);
+    c2Mid->setAlignItems(brls::AlignItems::CENTER);
 
-    brls::Box* nPill = new brls::Box();
-    nPill->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
-    nPill->setCornerRadius(4.0f);
-    nPill->setBackgroundColor(nvgRGBA(229, 57, 53, 35));
-    nPill->setMarginRight(6.0f);
-    brls::Label* nLbl = new brls::Label();
-    nLbl->setText("Nintendo (10)");
-    nLbl->setFontSize(11.5f);
-    nLbl->setTextColor(nvgRGBA(255, 110, 110, 255));
-    nPill->addView(nLbl);
-    pillsRow->addView(nPill);
+    brls::Label* c2Val = new brls::Label();
+    c2Val->setText("app/dashboard/retro_c2_val"_i18n);
+    c2Val->setFontSize(22.0f);
+    c2Val->setTextColor(themeTextPrimary());
+    c2Mid->addView(c2Val);
 
-    brls::Box* sPill = new brls::Box();
-    sPill->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
-    sPill->setCornerRadius(4.0f);
-    sPill->setBackgroundColor(nvgRGBA(30, 136, 229, 35));
-    sPill->setMarginRight(6.0f);
-    brls::Label* sLbl = new brls::Label();
-    sLbl->setText("Sony (4)");
-    sLbl->setFontSize(11.5f);
-    sLbl->setTextColor(nvgRGBA(100, 185, 255, 255));
-    sPill->addView(sLbl);
-    pillsRow->addView(sPill);
-
-    brls::Box* segaPill = new brls::Box();
-    segaPill->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
-    segaPill->setCornerRadius(4.0f);
-    segaPill->setBackgroundColor(nvgRGBA(0, 172, 193, 35));
-    brls::Label* segaLbl = new brls::Label();
-    segaLbl->setText("Sega (6)");
-    segaLbl->setFontSize(11.5f);
-    segaLbl->setTextColor(nvgRGBA(75, 225, 245, 255));
-    segaPill->addView(segaLbl);
-    pillsRow->addView(segaPill);
-
-    c2->addView(pillsRow);
+    brls::Box* c2Badge = new brls::Box();
+    c2Badge->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
+    c2Badge->setCornerRadius(4.0f);
+    c2Badge->setBackgroundColor(themeDim());
+    c2Badge->setMarginLeft(12.0f);
+    brls::Label* c2BadgeLbl = new brls::Label();
+    c2BadgeLbl->setText("app/dashboard/retro_c2_badge"_i18n);
+    c2BadgeLbl->setFontSize(12.0f);
+    c2BadgeLbl->setTextColor(themeAccent(255));
+    c2Badge->addView(c2BadgeLbl);
+    c2Mid->addView(c2Badge);
+    c2->addView(c2Mid);
 
     brls::Label* c2Sub = new brls::Label();
     c2Sub->setText("app/dashboard/retro_c2_sub"_i18n);
     c2Sub->setFontSize(11.0f);
-    c2Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c2Sub->setTextColor(themeCardSub());
     c2->addView(c2Sub);
     cardsRow->addView(c2);
 
@@ -745,7 +787,9 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3->setHeight(124.0f);
     c3->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c3->setCornerRadius(10.0f);
-    c3->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c3->setBackgroundColor(themeCardBg());
+    c3->setBorderThickness(1.0f);
+    c3->setBorderColor(themeCardBorder());
     c3->setFocusable(true);
     c3->registerClickAction(openRetro);
 
@@ -763,13 +807,13 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* c3Title = new brls::Label();
     c3Title->setText("app/dashboard/retro_c3_title"_i18n);
     c3Title->setFontSize(11.5f);
-    c3Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c3Title->setTextColor(themeCardTitle());
     c3Top->addView(c3Title);
 
     brls::Label* c3TopTag = new brls::Label();
     c3TopTag->setText(modeTag);
     c3TopTag->setFontSize(11.5f);
-    c3TopTag->setTextColor(nvgRGBA(0, 230, 175, 255));
+    c3TopTag->setTextColor(themeCardSub());
     c3Top->addView(c3TopTag);
     c3->addView(c3Top);
 
@@ -784,7 +828,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     }
     c3Val->setText(effDir);
     c3Val->setFontSize(18.0f);
-    c3Val->setTextColor(nvgRGBA(255, 255, 255, 255));
+    c3Val->setTextColor(themeTextPrimary());
     c3Mid->addView(c3Val);
 
     if (cfg.getRetroAutoExtract()) {
@@ -805,7 +849,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     brls::Label* c3Sub = new brls::Label();
     c3Sub->setText("app/dashboard/retro_c3_sub"_i18n);
     c3Sub->setFontSize(11.0f);
-    c3Sub->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald action hint
+    c3Sub->setTextColor(themeCardSub());
     c3->addView(c3Sub);
 
     cardsRow->addView(c3);
@@ -841,7 +885,7 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Label* title = new brls::Label();
     title->setText("app/dashboard/library_title"_i18n);
     title->setFontSize(13.0f);
-    title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+    title->setTextColor(themeAccent(240));
     headerRow->addView(title);
     content_container_->addView(headerRow);
 
@@ -854,11 +898,13 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Box* instCard = new brls::Box();
     instCard->setAxis(brls::Axis::COLUMN);
     instCard->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    instCard->setWidth(555.0f);
+    instCard->setWidth(420.0f);
     instCard->setHeight(124.0f);
-    instCard->setPadding(12.0f, 18.0f, 12.0f, 18.0f);
+    instCard->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     instCard->setCornerRadius(10.0f);
-    instCard->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    instCard->setBackgroundColor(themeCardBg());
+    instCard->setBorderThickness(1.0f);
+    instCard->setBorderColor(themeCardBorder());
     instCard->setFocusable(true);
     instCard->registerClickAction(openLib);
 
@@ -870,13 +916,13 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Label* instTitle = new brls::Label();
     instTitle->setText("app/dashboard/library_inst_title"_i18n);
     instTitle->setFontSize(12.0f);
-    instTitle->setTextColor(nvgRGBA(160, 185, 215, 220));
+    instTitle->setTextColor(themeCardTitle());
     instTop->addView(instTitle);
 
     brls::Label* instStorage = new brls::Label();
     instStorage->setText("app/dashboard/library_inst_storage"_i18n);
     instStorage->setFontSize(11.5f);
-    instStorage->setTextColor(nvgRGBA(130, 160, 195, 200));
+    instStorage->setTextColor(themeCardSub());
     instTop->addView(instStorage);
     instCard->addView(instTop);
 
@@ -887,18 +933,18 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Label* instCountLbl = new brls::Label();
     instCountLbl->setText(brls::getStr("app/dashboard/library_inst_count", std::to_string(installed_count_)));
     instCountLbl->setFontSize(26.0f);
-    instCountLbl->setTextColor(nvgRGBA(255, 255, 255, 255));
+    instCountLbl->setTextColor(themeTextPrimary());
     instMid->addView(instCountLbl);
 
     brls::Box* instBadge = new brls::Box();
     instBadge->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
     instBadge->setCornerRadius(4.0f);
-    instBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
+    instBadge->setBackgroundColor(themeDim());
     instBadge->setMarginLeft(14.0f);
     brls::Label* instBadgeLbl = new brls::Label();
     instBadgeLbl->setText("app/dashboard/library_inst_badge"_i18n);
     instBadgeLbl->setFontSize(12.0f);
-    instBadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
+    instBadgeLbl->setTextColor(themeAccent(255));
     instBadge->addView(instBadgeLbl);
     instMid->addView(instBadge);
     instCard->addView(instMid);
@@ -906,7 +952,7 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Label* instSub = new brls::Label();
     instSub->setText("app/dashboard/library_inst_sub"_i18n);
     instSub->setFontSize(11.5f);
-    instSub->setTextColor(nvgRGBA(140, 170, 200, 200));
+    instSub->setTextColor(themeCardSub());
     instCard->addView(instSub);
     cardsRow->addView(instCard);
 
@@ -914,11 +960,13 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Box* updCard = new brls::Box();
     updCard->setAxis(brls::Axis::COLUMN);
     updCard->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    updCard->setWidth(555.0f);
+    updCard->setWidth(720.0f);
     updCard->setHeight(124.0f);
     updCard->setPadding(12.0f, 18.0f, 12.0f, 18.0f);
     updCard->setCornerRadius(10.0f);
-    updCard->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    updCard->setBackgroundColor(themeCardBg());
+    updCard->setBorderThickness(1.0f);
+    updCard->setBorderColor(themeCardBorder());
     updCard->setFocusable(true);
     updCard->registerClickAction(openLib);
 
@@ -930,13 +978,13 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Label* updTitle = new brls::Label();
     updTitle->setText("app/dashboard/library_upd_title"_i18n);
     updTitle->setFontSize(12.0f);
-    updTitle->setTextColor(nvgRGBA(160, 185, 215, 220));
+    updTitle->setTextColor(themeCardTitle());
     updTop->addView(updTitle);
 
     brls::Label* updSync = new brls::Label();
     updSync->setText("app/dashboard/library_upd_sync"_i18n);
     updSync->setFontSize(11.5f);
-    updSync->setTextColor(nvgRGBA(130, 160, 195, 200));
+    updSync->setTextColor(themeCardSub());
     updTop->addView(updSync);
     updCard->addView(updTop);
 
@@ -966,18 +1014,18 @@ void DashboardSummaryView::buildLibrarySection() {
         brls::Label* updCountLbl = new brls::Label();
         updCountLbl->setText("app/dashboard/library_upd_all_updated"_i18n);
         updCountLbl->setFontSize(22.0f);
-        updCountLbl->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
+        updCountLbl->setTextColor(themeAccent(255));
         updMid->addView(updCountLbl);
 
         brls::Box* updBadge = new brls::Box();
         updBadge->setPadding(3.0f, 8.0f, 3.0f, 8.0f);
         updBadge->setCornerRadius(4.0f);
-        updBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 28));
+        updBadge->setBackgroundColor(themeDim());
         updBadge->setMarginLeft(14.0f);
         brls::Label* updBadgeLbl = new brls::Label();
         updBadgeLbl->setText("app/dashboard/library_upd_badge_ok"_i18n);
         updBadgeLbl->setFontSize(12.0f);
-        updBadgeLbl->setTextColor(nvgRGBA(0, 230, 175, 255));
+        updBadgeLbl->setTextColor(themeAccent(255));
         updBadge->addView(updBadgeLbl);
         updMid->addView(updBadge);
     }
@@ -986,7 +1034,7 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Label* updSub = new brls::Label();
     updSub->setText("app/dashboard/library_upd_sub"_i18n);
     updSub->setFontSize(11.5f);
-    updSub->setTextColor(nvgRGBA(140, 170, 200, 200));
+    updSub->setTextColor(themeCardSub());
     updCard->addView(updSub);
 
     cardsRow->addView(updCard);
@@ -1038,7 +1086,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         brls::Label* title = new brls::Label();
         title->setText("app/dashboard/downloads_title"_i18n);
         title->setFontSize(13.0f);
-        title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+        title->setTextColor(themeAccent(240));
         headerRow->addView(title);
         content_container_->addView(headerRow);
 
@@ -1055,7 +1103,9 @@ void DashboardSummaryView::buildDownloadsSection() {
         mainCard->setHeight(124.0f);
         mainCard->setPadding(8.0f, 14.0f, 8.0f, 14.0f);
         mainCard->setCornerRadius(10.0f);
-        mainCard->setBackgroundColor(nvgRGBA(25, 45, 70, 85));
+        mainCard->setBackgroundColor(themeCardBg());
+        mainCard->setBorderThickness(1.0f);
+        mainCard->setBorderColor(themeCardBorder());
         mainCard->setFocusable(true);
         mainCard->registerClickAction(openDl);
 
@@ -1064,7 +1114,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         coverBox->setWidth(68.0f);
         coverBox->setHeight(108.0f);
         coverBox->setCornerRadius(6.0f);
-        coverBox->setBackgroundColor(nvgRGBA(15, 25, 38, 140));
+        coverBox->setBackgroundColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGBA(210, 225, 240, 180) : nvgRGBA(15, 25, 38, 140));
         coverBox->setAlignItems(brls::AlignItems::CENTER);
         coverBox->setJustifyContent(brls::JustifyContent::CENTER);
         coverBox->setMarginRight(14.0f);
@@ -1112,7 +1162,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_titleLbl_ = new brls::Label();
         dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
         dl_titleLbl_->setFontSize(15.0f);
-        dl_titleLbl_->setTextColor(nvgRGBA(255, 255, 255, 255));
+        dl_titleLbl_->setTextColor(themeTextPrimary());
         dl_titleLbl_->setSingleLine(true);
         topRow->addView(dl_titleLbl_);
 
@@ -1121,7 +1171,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_stLbl_ = new brls::Label();
         dl_stLbl_->setText(stText);
         dl_stLbl_->setFontSize(12.0f);
-        dl_stLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        dl_stLbl_->setTextColor(themeAccent(255));
         topRow->addView(dl_stLbl_);
         detailsCol->addView(topRow);
 
@@ -1134,14 +1184,14 @@ void DashboardSummaryView::buildDownloadsSection() {
         barBg->setGrow(1.0f);
         barBg->setHeight(6.0f);
         barBg->setCornerRadius(3.0f);
-        barBg->setBackgroundColor(nvgRGBA(18, 32, 50, 180));
+        barBg->setBackgroundColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGBA(210, 220, 235, 180) : nvgRGBA(18, 32, 50, 180));
         barBg->setMarginRight(10.0f);
 
         dl_barFill_ = new brls::Box();
         dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
         dl_barFill_->setHeight(6.0f);
         dl_barFill_->setCornerRadius(3.0f);
-        dl_barFill_->setBackgroundColor(nvgRGBA(0, 224, 165, 255));
+        dl_barFill_->setBackgroundColor(themeAccent(255));
         barBg->addView(dl_barFill_);
         barRow->addView(barBg);
 
@@ -1150,7 +1200,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_pctLbl_ = new brls::Label();
         dl_pctLbl_->setText(pctBuf);
         dl_pctLbl_->setFontSize(13.0f);
-        dl_pctLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        dl_pctLbl_->setTextColor(themeAccent(255));
         barRow->addView(dl_pctLbl_);
         detailsCol->addView(barRow);
 
@@ -1164,7 +1214,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_spdLbl_ = new brls::Label();
         dl_spdLbl_->setText(spdBuf);
         dl_spdLbl_->setFontSize(12.0f);
-        dl_spdLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        dl_spdLbl_->setTextColor(themeAccent(255));
         metricsRow->addView(dl_spdLbl_);
 
         unsigned long long inst_written = activeItem->install_written;
@@ -1177,14 +1227,14 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_szLbl_ = new brls::Label();
         dl_szLbl_->setText(szStr);
         dl_szLbl_->setFontSize(11.5f);
-        dl_szLbl_->setTextColor(nvgRGBA(180, 205, 230, 220));
+        dl_szLbl_->setTextColor(themeCardTitle());
         metricsRow->addView(dl_szLbl_);
 
         std::string peersStr = "app/dashboard/downloads_peers"_i18n + std::to_string(activeItem->peers) + "app/dashboard/downloads_seeds"_i18n + std::to_string(activeItem->seeds);
         dl_peersLbl_ = new brls::Label();
         dl_peersLbl_->setText(peersStr);
         dl_peersLbl_->setFontSize(11.5f);
-        dl_peersLbl_->setTextColor(nvgRGBA(150, 175, 205, 200));
+        dl_peersLbl_->setTextColor(themeCardSub());
         metricsRow->addView(dl_peersLbl_);
 
         std::string etaStr = "app/dashboard/downloads_in_progress"_i18n;
@@ -1197,7 +1247,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_etaLbl_ = new brls::Label();
         dl_etaLbl_->setText("app/dashboard/downloads_eta_prefix"_i18n + etaStr);
         dl_etaLbl_->setFontSize(11.5f);
-        dl_etaLbl_->setTextColor(nvgRGBA(150, 175, 205, 200));
+        dl_etaLbl_->setTextColor(themeCardSub());
         metricsRow->addView(dl_etaLbl_);
 
         detailsCol->addView(metricsRow);
@@ -1212,7 +1262,9 @@ void DashboardSummaryView::buildDownloadsSection() {
         graphCard->setHeight(124.0f);
         graphCard->setPadding(8.0f, 12.0f, 8.0f, 12.0f);
         graphCard->setCornerRadius(10.0f);
-        graphCard->setBackgroundColor(nvgRGBA(25, 45, 70, 75));
+        graphCard->setBackgroundColor(themeCardBg());
+        graphCard->setBorderThickness(1.0f);
+        graphCard->setBorderColor(themeCardBorder());
         graphCard->setFocusable(true);
         graphCard->registerClickAction(openDl);
 
@@ -1223,13 +1275,13 @@ void DashboardSummaryView::buildDownloadsSection() {
         brls::Label* gLbl = new brls::Label();
         gLbl->setText("app/dashboard/downloads_speed_graph"_i18n);
         gLbl->setFontSize(11.5f);
-        gLbl->setTextColor(nvgRGBA(160, 185, 215, 220));
+        gLbl->setTextColor(themeCardTitle());
         gHeader->addView(gLbl);
 
         dl_qCountLbl_ = new brls::Label();
         dl_qCountLbl_->setText("app/dashboard/downloads_queue_prefix"_i18n + std::to_string(cached_downloads_.size()));
         dl_qCountLbl_->setFontSize(11.5f);
-        dl_qCountLbl_->setTextColor(nvgRGBA(0, 230, 175, 255));
+        dl_qCountLbl_->setTextColor(themeAccent(255));
         gHeader->addView(dl_qCountLbl_);
         graphCard->addView(gHeader);
 
@@ -1242,7 +1294,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         brls::Label* gFooter = new brls::Label();
         gFooter->setText("app/dashboard/downloads_storage_dest"_i18n);
         gFooter->setFontSize(11.0f);
-        gFooter->setTextColor(nvgRGBA(130, 160, 190, 200));
+        gFooter->setTextColor(themeCardSub());
         graphCard->addView(gFooter);
 
         bodyRow->addView(graphCard);
@@ -1269,7 +1321,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         brls::Label* title = new brls::Label();
         title->setText("app/dashboard/downloads_empty_title"_i18n);
         title->setFontSize(13.0f);
-        title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+        title->setTextColor(themeAccent(240));
         headerRow->addView(title);
         content_container_->addView(headerRow);
 
@@ -1282,7 +1334,7 @@ void DashboardSummaryView::buildDownloadsSection() {
             brls::Label* emptyLbl = new brls::Label();
             emptyLbl->setText("app/dashboard/catalog_loading"_i18n);
             emptyLbl->setFontSize(13.0f);
-            emptyLbl->setTextColor(nvgRGBA(160, 180, 205, 200));
+            emptyLbl->setTextColor(themeTextSecondary());
             cardsRow->addView(emptyLbl);
         } else {
             for (const auto& g : catalog_sample_) {
@@ -1317,7 +1369,7 @@ void DashboardSummaryView::buildToolsSection() {
     brls::Label* title = new brls::Label();
     title->setText("app/dashboard/tools_title"_i18n);
     title->setFontSize(13.0f);
-    title->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+    title->setTextColor(themeAccent(240));
     headerRow->addView(title);
     content_container_->addView(headerRow);
 
@@ -1334,26 +1386,28 @@ void DashboardSummaryView::buildToolsSection() {
     c1->setHeight(124.0f);
     c1->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c1->setCornerRadius(10.0f);
-    c1->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c1->setBackgroundColor(themeCardBg());
+    c1->setBorderThickness(1.0f);
+    c1->setBorderColor(themeCardBorder());
     c1->setFocusable(true);
     c1->registerClickAction(openTools);
 
     brls::Label* c1Title = new brls::Label();
     c1Title->setText("app/dashboard/tools_c1_title"_i18n);
     c1Title->setFontSize(11.5f);
-    c1Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c1Title->setTextColor(themeCardTitle());
     c1->addView(c1Title);
 
     brls::Label* c1Val = new brls::Label();
     c1Val->setText(engine_mode_);
     c1Val->setFontSize(21.0f);
-    c1Val->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
+    c1Val->setTextColor(themeAccent(255));
     c1->addView(c1Val);
 
     brls::Label* c1Sub = new brls::Label();
     c1Sub->setText("app/dashboard/tools_c1_sub"_i18n);
     c1Sub->setFontSize(11.0f);
-    c1Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c1Sub->setTextColor(themeCardSub());
     c1->addView(c1Sub);
     cardsRow->addView(c1);
 
@@ -1365,26 +1419,28 @@ void DashboardSummaryView::buildToolsSection() {
     c2->setHeight(124.0f);
     c2->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c2->setCornerRadius(10.0f);
-    c2->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c2->setBackgroundColor(themeCardBg());
+    c2->setBorderThickness(1.0f);
+    c2->setBorderColor(themeCardBorder());
     c2->setFocusable(true);
     c2->registerClickAction(openTools);
 
     brls::Label* c2Title = new brls::Label();
     c2Title->setText("app/dashboard/tools_c2_title"_i18n);
     c2Title->setFontSize(11.5f);
-    c2Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c2Title->setTextColor(themeCardTitle());
     c2->addView(c2Title);
 
     brls::Label* c2Val = new brls::Label();
     c2Val->setText(formatBytes(cache_size_bytes_));
     c2Val->setFontSize(21.0f);
-    c2Val->setTextColor(nvgRGBA(255, 255, 255, 255));
+    c2Val->setTextColor(themeTextPrimary());
     c2->addView(c2Val);
 
     brls::Label* c2Sub = new brls::Label();
     c2Sub->setText("app/dashboard/tools_c2_sub"_i18n);
     c2Sub->setFontSize(11.0f);
-    c2Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c2Sub->setTextColor(themeCardSub());
     c2->addView(c2Sub);
     cardsRow->addView(c2);
 
@@ -1396,14 +1452,16 @@ void DashboardSummaryView::buildToolsSection() {
     c3->setHeight(124.0f);
     c3->setPadding(12.0f, 16.0f, 12.0f, 16.0f);
     c3->setCornerRadius(10.0f);
-    c3->setBackgroundColor(nvgRGBA(25, 45, 70, 80));
+    c3->setBackgroundColor(themeCardBg());
+    c3->setBorderThickness(1.0f);
+    c3->setBorderColor(themeCardBorder());
     c3->setFocusable(true);
     c3->registerClickAction(openTools);
 
     brls::Label* c3Title = new brls::Label();
     c3Title->setText("app/dashboard/tools_c3_title"_i18n);
     c3Title->setFontSize(11.5f);
-    c3Title->setTextColor(nvgRGBA(160, 185, 215, 220));
+    c3Title->setTextColor(themeCardTitle());
     c3->addView(c3Title);
 
     brls::Label* c3Val = new brls::Label();
@@ -1412,7 +1470,7 @@ void DashboardSummaryView::buildToolsSection() {
         c3Val->setTextColor(nvgRGBA(255, 185, 70, 255)); // Amber
     } else {
         c3Val->setText("app/dashboard/tools_c3_clean"_i18n);
-        c3Val->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald
+        c3Val->setTextColor(themeAccent(255));
     }
     c3Val->setFontSize(21.0f);
     c3->addView(c3Val);
@@ -1420,7 +1478,7 @@ void DashboardSummaryView::buildToolsSection() {
     brls::Label* c3Sub = new brls::Label();
     c3Sub->setText("app/dashboard/tools_c3_sub"_i18n);
     c3Sub->setFontSize(11.0f);
-    c3Sub->setTextColor(nvgRGBA(130, 160, 190, 200));
+    c3Sub->setTextColor(themeCardSub());
     c3->addView(c3Sub);
     cardsRow->addView(c3);
 
@@ -1438,39 +1496,64 @@ void DashboardSummaryView::buildToolsSection() {
 
 void DashboardSummaryView::draw(NVGcontext* vg, float x, float y, float width, float height,
                                 brls::Style style, brls::FrameContext* ctx) {
-    // 1. True Translucent Frosted Glass Base
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+    NVGcolor accent = ThemeManager::instance().getAccentColor();
+
+    // 1. Frosted Glass Base: Translucent, tinted with the active theme color
     nvgBeginPath(vg);
-    nvgRoundedRect(vg, x, y, width, height, 14.0f);
-    NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height,
-                                         nvgRGBA(140, 180, 230, 45),
-                                         nvgRGBA(12, 22, 36, 85));
+    nvgRoundedRect(vg, x, y, width, height, 16.0f);
+    NVGpaint bgPaint;
+    if (isLight) {
+        bgPaint = nvgLinearGradient(
+            vg, x, y, x, y + height,
+            nvgRGBA(255, 255, 255, 230),
+            nvgRGBA(242, 246, 252, 210)
+        );
+    } else {
+        bgPaint = nvgLinearGradient(
+            vg, x, y, x, y + height,
+            nvgRGBA(accent.r * 255 * 0.35f, accent.g * 255 * 0.35f, accent.b * 255 * 0.35f, 40),
+            nvgRGBA(8, 14, 22, 90)
+        );
+    }
     nvgFillPaint(vg, bgPaint);
     nvgFill(vg);
 
     // 2. Specular Top Glass Highlight Sheen
     nvgBeginPath(vg);
-    nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, 13.0f);
+    nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, 15.0f);
     NVGpaint glossPaint = nvgLinearGradient(
         vg, x, y, x, y + height * 0.45f,
-        nvgRGBA(255, 255, 255, 38),
+        nvgRGBA(255, 255, 255, isLight ? 70 : 30),
         nvgRGBA(255, 255, 255, 0)
     );
     nvgFillPaint(vg, glossPaint);
     nvgFill(vg);
 
-    // 3. Subtle Glass Beveled Border Stroke in Emerald-Teal tone
+    // 3. Subtle Glass Beveled Border Stroke in Theme Tone
     nvgBeginPath(vg);
-    nvgRoundedRect(vg, x, y, width, height, 14.0f);
-    NVGpaint borderPaint = nvgLinearGradient(
-        vg, x, y, x, y + height,
-        nvgRGBA(180, 225, 215, 120),
-        nvgRGBA(40, 85, 95, 40)
-    );
+    nvgRoundedRect(vg, x, y, width, height, 16.0f);
+    NVGpaint borderPaint;
+    if (isLight) {
+        borderPaint = nvgLinearGradient(
+            vg, x, y, x, y + height,
+            nvgRGBA(210, 220, 232, 200),
+            nvgRGBA(185, 198, 215, 150)
+        );
+    } else {
+        borderPaint = nvgLinearGradient(
+            vg, x, y, x, y + height,
+            nvgRGBA(std::min<int>(255, accent.r * 255 * 0.7f + 40),
+                    std::min<int>(255, accent.g * 255 * 0.7f + 40),
+                    std::min<int>(255, accent.b * 255 * 0.7f + 40), 95),
+            nvgRGBA(accent.r * 255 * 0.3f, accent.g * 255 * 0.3f, accent.b * 255 * 0.3f, 30)
+        );
+    }
     nvgStrokePaint(vg, borderPaint);
     nvgStrokeWidth(vg, 1.2f);
     nvgStroke(vg);
 
-    // 4. Draw content
+    // 4. Draw children views (cards)
     Box::draw(vg, x, y, width, height, style, ctx);
 }
 

@@ -1,4 +1,5 @@
 #include "TextViewerActivity.hpp"
+#include "ui/ThemeManager.hpp"
 #include "../utils/file_ops.h"
 #include "../utils/log.h"
 #include <fstream>
@@ -85,7 +86,7 @@ brls::View* TextViewerActivity::createContentView() {
     headerBox->setMarginBottom(12.0f);
     headerBox->setPaddingBottom(12.0f);
     headerBox->setLineBottom(1.0f);
-    headerBox->setLineColor(nvgRGBA(0, 224, 165, 75));
+    headerBox->setLineColor(ui::ThemeManager::instance().getMediumAccentColor());
 
     // Icon Badge
     auto* iconBadge = new brls::Box();
@@ -95,12 +96,12 @@ brls::View* TextViewerActivity::createContentView() {
     iconBadge->setJustifyContent(brls::JustifyContent::CENTER);
     iconBadge->setAlignItems(brls::AlignItems::CENTER);
     iconBadge->setMarginRight(14.0f);
-    iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 30));
+    iconBadge->setBackgroundColor(ui::ThemeManager::instance().getDimAccentColor());
 
     auto* badgeIcon = new brls::Label();
     badgeIcon->setText("\uE873"); // Material document / article icon
     badgeIcon->setFontSize(22.0f);
-    badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+    badgeIcon->setTextColor(ui::ThemeManager::instance().getAccentColor());
     iconBadge->addView(badgeIcon);
     headerBox->addView(iconBadge);
 

@@ -71,18 +71,7 @@ brls::View* MainMenu::createContentView() {
         rootContainer_->setWidthPercentage(100.0f);
         rootContainer_->setHeightPercentage(100.0f);
 
-        // 1. Fullscreen Wallpaper covering entire 1280x720 window
-        bgImage_ = new brls::Image();
-        bgImage_->setPositionType(brls::PositionType::ABSOLUTE);
-        bgImage_->setPositionTop(0.0f);
-        bgImage_->setPositionLeft(0.0f);
-        bgImage_->setWidthPercentage(100.0f);
-        bgImage_->setHeightPercentage(100.0f);
-        bgImage_->setScalingType(brls::ImageScalingType::FILL);
-        bgImage_->setImageFromFile(std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg");
-        rootContainer_->addView(bgImage_);
-
-        // 2. Setup content view
+        // 1. Setup content view
         setupLayout();
 
         // 3. AppletFrame with transparent background over the wallpaper
@@ -281,6 +270,47 @@ void MainMenu::setupLayout() {
         refreshDashboardState();
         return true;
     }, true);
+
+    updateDashboardVisibility();
+}
+
+void MainMenu::updateDashboardVisibility() {
+    bool show = config::ConfigManager::instance().getShowBottomDashboard();
+    if (summaryView_) {
+        summaryView_->setVisibility(show ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+    if (tilesBox_) {
+        if (show) {
+            tilesBox_->setGrow(0.0f);
+            tilesBox_->setMarginTop(30.0f);
+            tilesBox_->setMarginBottom(18.0f);
+        } else {
+            tilesBox_->setGrow(1.0f);
+            tilesBox_->setMarginTop(0.0f);
+            tilesBox_->setMarginBottom(0.0f);
+        }
+    }
+    if (rootBox_) {
+        rootBox_->invalidate();
+    }
+    if (rootContainer_) {
+        rootContainer_->invalidate();
+    }
+    if (!show && current_focused_index_ >= 0 && current_focused_index_ < static_cast<int>(tiles_.size())) {
+        if (tiles_[current_focused_index_]) {
+            brls::Application::giveFocus(tiles_[current_focused_index_]);
+        }
+    }
+}
+
+void MainMenu::onResume() {
+    brls::Activity::onResume();
+    updateDashboardVisibility();
+    refreshDashboardState();
+    for (auto* tile : tiles_) {
+        if (tile) tile->refreshTheme();
+    }
+    if (header_) header_->refreshTheme();
 }
 
 static int s_cachedInstalledCount = 0;
@@ -295,6 +325,8 @@ static std::atomic<bool> s_calculatingSettingsStats{false};
 
 void MainMenu::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
+
+    updateDashboardVisibility();
 
     std::string newLocale = brls::Application::getLocale();
     bool localeChanged = (newLocale != current_locale_);
@@ -322,7 +354,7 @@ void MainMenu::willAppear(bool resetState) {
             brls::Application::giveFocus(tiles_[0]);
         }
     }
-    if (summaryView_) {
+    if (summaryView_ && config::ConfigManager::instance().getShowBottomDashboard()) {
         onTileFocused(current_focused_index_);
     }
 }
@@ -331,6 +363,9 @@ void MainMenu::onTileFocused(int index) {
     current_focused_index_ = index;
     if (tilesBox_ && index >= 0 && index < static_cast<int>(tiles_.size())) {
         tilesBox_->setDefaultFocusedIndex(index);
+    }
+    if (!config::ConfigManager::instance().getShowBottomDashboard()) {
+        return;
     }
     if (summaryView_) {
         if (index == 2) {
@@ -564,7 +599,7 @@ void MainMenu::refreshDashboardState() {
 
     updateDownloadsBadge(activeCount);
 
-    if (summaryView_) {
+    if (summaryView_ && config::ConfigManager::instance().getShowBottomDashboard()) {
         summaryView_->updateDownloads(items);
         if (!catalog->empty()) {
             summaryView_->setCatalogSample(*catalog);

@@ -643,7 +643,8 @@
         "update_catalog_downloading_diff": "差分データをダウンロード中...",
         "update_catalog_applying_diff": "変更を適用中...",
         "update_catalog_diff_success": "カタログを更新しました：新規 +{0}、更新 {1}",
-        "update_catalog_up_to_date": "カタログはすでに最新です"
+        "update_catalog_up_to_date": "カタログはすでに最新です",
+        "cat_appearance": "外観"
     },
     "applet": {
         "title": "アプレットモードを検出しました",
@@ -929,7 +930,9 @@
         "header_updated_prefix": "  •  更新日: ",
         "header_storage_title": "ストレージ管理",
         "library_inst_count": "{0} 本のゲーム",
-        "library_upd_count": "{0} 件のアップデート"
+        "library_upd_count": "{0} 件のアップデート",
+        "retro_c2_val": "20機種",
+        "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
         "step_init": "初期化中...",
@@ -1004,5 +1007,46 @@
         "hidden_objects": "アイテム探し",
         "stealth": "ステルス",
         "education": "教育"
+    },
+    "appearance": {
+        "theme_title": "カラーテーマ",
+        "theme_applied": "カラーテーマを適用しました",
+        "bg_title": "背景画像",
+        "bg_auto": "現在のテーマのデフォルト",
+        "bg_custom": "SDカードからカスタムファイル...",
+        "bg_applied": "背景画像を更新しました",
+        "choose_file": "SDカードからファイルを選択",
+        "no_file_selected": "ファイルが選択されていません",
+        "reset_bg": "背景をデフォルトに戻す",
+        "reset_bg_desc": "現在のテーマのデフォルト背景を復元",
+        "bg_reset_done": "背景をデフォルトに戻しました",
+        "file_picker_title": "壁紙画像の選択",
+        "folder_parent": "親フォルダー",
+        "folder_type": "フォルダー",
+        "folder_empty": "このフォルダーには画像（.jpg、.png）がありません",
+        "bg_blur_title": "背景のぼかし",
+        "bg_blur_0": "オフ（鮮明）",
+        "bg_blur_1": "弱",
+        "bg_blur_2": "中",
+        "bg_blur_3": "強",
+        "bg_blur_applied": "背景のぼかしを変更しました",
+        "bg_dim_title": "メニュー背景の減光",
+        "bg_dim_0": "減光なし (0%)",
+        "bg_dim_1": "明 (15%)",
+        "bg_dim_2": "標準 (28%)",
+        "bg_dim_3": "やや暗 (45%)",
+        "bg_dim_4": "暗 (65%)",
+        "bg_dim_applied": "背景の減光を変更しました",
+        "show_bottom_dashboard": "情報パネルを表示",
+        "show_bottom_dashboard_desc": "メインメニューの下部に詳細と統計情報を表示する情報パネルを表示します"
+    },
+    "theme": {
+        "emerald": "エメラルド（デフォルト）",
+        "cyberpunk": "ネオンシアン（サイバーパンク）",
+        "ruby": "ルビーレッド（Switch Red）",
+        "amethyst": "アメジストパープル",
+        "amber": "アンバーゴールド",
+        "light": "ライト",
+        "graphite": "グラファイト"
     }
 }

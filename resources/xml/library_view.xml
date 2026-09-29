@@ -19,7 +19,7 @@
 
     <!-- Free space bar -->
     <brls:Box width="auto" height="24px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="8">
-        <brls:Label id="spaceHint" text="@i18n/app/library/space_unknown" fontSize="14" textColor="#88CC88" />
+        <brls:Label id="spaceHint" text="@i18n/app/library/space_unknown" fontSize="14" textColor="@theme/brls/accent" />
     </brls:Box>
 
     <!-- Table header (aligned with the row columns) -->

@@ -63,14 +63,14 @@
             paddingTop="5"
             paddingBottom="5"
             cornerRadius="6"
-            backgroundColor="#00e0a520"
+            backgroundColor="#ffffff10"
             alignItems="center"
             justifyContent="center">
             <brls:Label
                 id="actionLabel"
                 text="@i18n/app/retro/btn_download_rom"
                 fontSize="11"
-                textColor="#00e6af" />
+                textColor="@theme/brls/accent" />
         </brls:Box>
     </brls:Box>
 

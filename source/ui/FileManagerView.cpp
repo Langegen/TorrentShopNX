@@ -1,4 +1,5 @@
 #include "FileManagerView.hpp"
+#include "ui/ThemeManager.hpp"
 #include "ArchiveProgressDialog.hpp"
 #include "InstallProgressDialog.hpp"
 #include "TextViewerActivity.hpp"
@@ -102,9 +103,9 @@ FileManagerCell* FileManagerCell::create() {
 
 void FileManagerCell::setSelectedVisual(bool selected) {
     if (selected) {
-        if (accentBar) accentBar->setBackgroundColor(nvgRGB(0, 224, 165));
-        this->setBackgroundColor(nvgRGBA(0, 224, 165, 38));
-        if (name) name->setTextColor(nvgRGB(0, 240, 180));
+        if (accentBar) accentBar->setBackgroundColor(ThemeManager::instance().getAccentColor());
+        this->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
+        if (name) name->setTextColor(ThemeManager::instance().getAccentColor());
     } else {
         if (accentBar) accentBar->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
         this->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
@@ -611,17 +612,17 @@ void FileManagerView::updateActivePanelVisuals() {
             bool isActive = (i == activePanel_);
             if (panels_[i].container) {
                 panels_[i].container->setBorderThickness(1.0f);
-                panels_[i].container->setBorderColor(isActive ? nvgRGBA(0, 224, 165, 120) : nvgRGBA(255, 255, 255, 18));
+                panels_[i].container->setBorderColor(isActive ? ThemeManager::instance().getMediumAccentColor() : nvgRGBA(255, 255, 255, 18));
                 panels_[i].container->setBackgroundColor(isActive ? nvgRGBA(255, 255, 255, 8) : nvgRGBA(0, 0, 0, 40));
             }
             if (panels_[i].panelIcon) {
-                panels_[i].panelIcon->setTextColor(isActive ? nvgRGB(0, 224, 165) : nvgRGB(90, 100, 110));
+                panels_[i].panelIcon->setTextColor(isActive ? ThemeManager::instance().getAccentColor() : nvgRGB(90, 100, 110));
             }
             if (panels_[i].currentPath) {
                 panels_[i].currentPath->setTextColor(isActive ? nvgRGB(255, 255, 255) : nvgRGB(130, 140, 150));
             }
             if (panels_[i].spaceInfo) {
-                panels_[i].spaceInfo->setTextColor(isActive ? nvgRGB(136, 204, 136) : nvgRGB(90, 120, 90));
+                panels_[i].spaceInfo->setTextColor(isActive ? ThemeManager::instance().getAccentColor() : nvgRGB(90, 120, 90));
             }
         }
     } else {
@@ -630,13 +631,13 @@ void FileManagerView::updateActivePanelVisuals() {
             panels_[0].container->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
         }
         if (panels_[0].panelIcon) {
-            panels_[0].panelIcon->setTextColor(nvgRGB(0, 224, 165));
+            panels_[0].panelIcon->setTextColor(ThemeManager::instance().getAccentColor());
         }
         if (panels_[0].currentPath) {
             panels_[0].currentPath->setTextColor(nvgRGB(255, 255, 255));
         }
         if (panels_[0].spaceInfo) {
-            panels_[0].spaceInfo->setTextColor(nvgRGB(136, 204, 136));
+            panels_[0].spaceInfo->setTextColor(ThemeManager::instance().getAccentColor());
         }
     }
 }
@@ -972,7 +973,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     std::string stem = p.stem().generic_string();
     std::string subfolderDir = joinPath(panels_[activePanel_].currentDir, stem);
     std::string toFolderText = brls::getStr("app/file_manager/extract_to_folder_named", stem);
-    addOption("\uE2CC", nvgRGB(0, 224, 165), toFolderText, [this, executeExtract, subfolderDir]() {
+    addOption("\uE2CC", ThemeManager::instance().getAccentColor(), toFolderText, [this, executeExtract, subfolderDir]() {
         executeExtract(subfolderDir);
     });
 
@@ -1088,7 +1089,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     headerBox->setMarginBottom(14.0f);
     headerBox->setPaddingBottom(12.0f);
     headerBox->setLineBottom(1.0f);
-    headerBox->setLineColor(nvgRGBA(0, 224, 165, 80));
+    headerBox->setLineColor(ThemeManager::instance().getMediumAccentColor());
 
     auto* iconBadge = new brls::Box();
     iconBadge->setWidth(42.0f);
@@ -1097,12 +1098,12 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     iconBadge->setJustifyContent(brls::JustifyContent::CENTER);
     iconBadge->setAlignItems(brls::AlignItems::CENTER);
     iconBadge->setMarginRight(14.0f);
-    iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+    iconBadge->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
 
     auto* badgeIcon = new brls::Label();
     badgeIcon->setText("\uE0E0"); // Gamepad
     badgeIcon->setFontSize(22.0f);
-    badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+    badgeIcon->setTextColor(ThemeManager::instance().getAccentColor());
     iconBadge->addView(badgeIcon);
     headerBox->addView(iconBadge);
 
@@ -1120,7 +1121,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/type_package"_i18n + util::formatFileSize(item.size));
     subLbl->setFontSize(13.0f);
-    subLbl->setTextColor(nvgRGBA(0, 224, 165, 210));
+    subLbl->setTextColor(ThemeManager::instance().getAccentColor());
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
 
@@ -1217,7 +1218,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     util::getStorageSpace("sdmc:/", sdFree, sdTotal);
     std::string sdSpaceInfo = sdTotal > 0 ? ("app/file_manager/free_prefix"_i18n + util::formatFileSize(sdFree)) : "";
 
-    addOption("\uE2C7", nvgRGB(0, 224, 165), "app/file_manager/install_to_sd"_i18n, sdSpaceInfo, [this, item]() {
+    addOption("\uE2C7", ThemeManager::instance().getAccentColor(), "app/file_manager/install_to_sd"_i18n, sdSpaceInfo, [this, item]() {
         auto* prog = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& err) {
             if (ok) {
                 brls::Application::notify("app/file_manager/install_success"_i18n);
@@ -1720,7 +1721,7 @@ void FileManagerView::showActionsMenu() {
     headerBox->setMarginBottom(14.0f);
     headerBox->setPaddingBottom(12.0f);
     headerBox->setLineBottom(1.0f);
-    headerBox->setLineColor(nvgRGBA(0, 224, 165, 80));
+    headerBox->setLineColor(ThemeManager::instance().getMediumAccentColor());
 
     auto* iconBadge = new brls::Box();
     iconBadge->setWidth(42.0f);
@@ -1746,9 +1747,9 @@ void FileManagerView::showActionsMenu() {
                 titleText = targetSingleItem->name;
                 subtitleText = "app/archive/folder_type"_i18n;
             } else {
-                iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+                iconBadge->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
                 badgeIcon->setText("\uE24D"); // File
-                badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+                badgeIcon->setTextColor(ThemeManager::instance().getAccentColor());
                 titleText = targetSingleItem->name;
                 subtitleText = util::formatFileSize(targetSingleItem->size);
             }
@@ -1761,9 +1762,9 @@ void FileManagerView::showActionsMenu() {
             subtitleText = innerPath.empty() ? "/" : ("/" + innerPath);
         }
     } else if (hasSelection && cur.selectedPaths.size() > 1) {
-        iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+        iconBadge->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
         badgeIcon->setText("\uE834"); // Multiple select icon
-        badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+        badgeIcon->setTextColor(ThemeManager::instance().getAccentColor());
         titleText = "app/file_manager/selected_items_count"_i18n + std::to_string(cur.selectedPaths.size());
         subtitleText = "app/file_manager/bulk_operations"_i18n;
     } else if (targetSingleItem) {
@@ -1780,15 +1781,15 @@ void FileManagerView::showActionsMenu() {
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/type_archive"_i18n + util::formatFileSize(targetSingleItem->size);
         } else if (util::isGamePackage(targetSingleItem->path)) {
-            iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+            iconBadge->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
             badgeIcon->setText("\uE0E0");
-            badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+            badgeIcon->setTextColor(ThemeManager::instance().getAccentColor());
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/type_game_pkg"_i18n + util::formatFileSize(targetSingleItem->size);
         } else if (isTextFile(targetSingleItem->path)) {
-            iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+            iconBadge->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
             badgeIcon->setText("\uE873");
-            badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+            badgeIcon->setTextColor(ThemeManager::instance().getAccentColor());
             titleText = targetSingleItem->name;
             subtitleText = "app/file_manager/type_text"_i18n + util::formatFileSize(targetSingleItem->size);
         } else {
@@ -1799,9 +1800,9 @@ void FileManagerView::showActionsMenu() {
             subtitleText = util::formatFileSize(targetSingleItem->size);
         }
     } else {
-        iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 40));
+        iconBadge->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
         badgeIcon->setText("\uE2C7");
-        badgeIcon->setTextColor(nvgRGB(0, 224, 165));
+        badgeIcon->setTextColor(ThemeManager::instance().getAccentColor());
         titleText = "app/file_manager/action_menu"_i18n;
         subtitleText = cur.currentDir;
     }
@@ -1822,7 +1823,7 @@ void FileManagerView::showActionsMenu() {
     auto* subLbl = new brls::Label();
     subLbl->setText(subtitleText);
     subLbl->setFontSize(13.0f);
-    subLbl->setTextColor(nvgRGBA(0, 224, 165, 210));
+    subLbl->setTextColor(ThemeManager::instance().getAccentColor());
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
 
@@ -1923,7 +1924,7 @@ void FileManagerView::showActionsMenu() {
 
         // Option 2: Extract selected file
         if (targetSingleItem && !targetSingleItem->isDir) {
-            addOption("\uE2C6", nvgRGB(0, 224, 165), "app/archive/extract_this_file"_i18n, [this, archPath, item = *targetSingleItem]() {
+            addOption("\uE2C6", ThemeManager::instance().getAccentColor(), "app/archive/extract_this_file"_i18n, [this, archPath, item = *targetSingleItem]() {
                 std::filesystem::path ap(archPath);
                 std::string baseDir = ap.parent_path().generic_string();
                 std::string relInner = item.path.substr(archPath.size());
@@ -1958,14 +1959,14 @@ void FileManagerView::showActionsMenu() {
         // Inter-panel Copy & Move (Split Mode priority actions)
         if (isSplitMode_) {
             if (hasSelection) {
-                addOption("\uE14D", nvgRGB(0, 224, 165), brls::getStr("app/file_manager/copy_to_other_panel", oppDirName), [this]() {
+                addOption("\uE14D", ThemeManager::instance().getAccentColor(), brls::getStr("app/file_manager/copy_to_other_panel", oppDirName), [this]() {
                     copyToOppositePanel();
                 });
                 addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/move_to_other_panel", oppDirName), [this]() {
                     moveToOppositePanel();
                 });
             } else if (targetSingleItem) {
-                addOption("\uE14D", nvgRGB(0, 224, 165), brls::getStr("app/file_manager/copy_to_other_panel", oppDirName), [this]() {
+                addOption("\uE14D", ThemeManager::instance().getAccentColor(), brls::getStr("app/file_manager/copy_to_other_panel", oppDirName), [this]() {
                     copyToOppositePanel();
                 });
                 addOption("\uE14E", nvgRGB(255, 179, 0), brls::getStr("app/file_manager/move_to_other_panel", oppDirName), [this]() {
@@ -1976,14 +1977,14 @@ void FileManagerView::showActionsMenu() {
 
         // Install Game (if target is game package)
         if (targetSingleItem && util::isGamePackage(targetSingleItem->path)) {
-            addOption("\uE0E0", nvgRGB(0, 224, 165), "app/file_manager/install_game_btn"_i18n, [this, item = *targetSingleItem]() {
+            addOption("\uE0E0", ThemeManager::instance().getAccentColor(), "app/file_manager/install_game_btn"_i18n, [this, item = *targetSingleItem]() {
                 showInstallDialog(item);
             }, true);
         }
 
         // Browse / Extract archive (if target is archive)
         if (targetSingleItem && util::isArchiveFile(targetSingleItem->path)) {
-            addOption("\uE2C7", nvgRGB(0, 224, 165), "app/archive/browse_archive"_i18n, [this, item = *targetSingleItem]() {
+            addOption("\uE2C7", ThemeManager::instance().getAccentColor(), "app/archive/browse_archive"_i18n, [this, item = *targetSingleItem]() {
                 navigateTo(activePanel_, item.path);
             });
 
@@ -1994,7 +1995,7 @@ void FileManagerView::showActionsMenu() {
 
         // View as text (if single file)
         if (targetSingleItem && !targetSingleItem->isDir) {
-            addOption("\uE873", nvgRGB(0, 224, 165), "app/file_manager/view_as_text_btn"_i18n, [this, item = *targetSingleItem]() {
+            addOption("\uE873", ThemeManager::instance().getAccentColor(), "app/file_manager/view_as_text_btn"_i18n, [this, item = *targetSingleItem]() {
                 openTextViewer(item.path, item.name);
             }, true);
         }
@@ -2016,7 +2017,7 @@ void FileManagerView::showActionsMenu() {
             std::string pasteText = (clip.op == util::ClipboardOp::Cut ?
                                     brls::getStr("app/file_manager/paste_cut", std::to_string(clip.paths.size())) :
                                     brls::getStr("app/file_manager/paste_copy", std::to_string(clip.paths.size())));
-            addOption("\uE14F", nvgRGB(0, 224, 165), pasteText, [this]() {
+            addOption("\uE14F", ThemeManager::instance().getAccentColor(), pasteText, [this]() {
                 pasteClipboard();
             });
         }
@@ -2098,7 +2099,7 @@ void FileManagerView::showActionsMenu() {
             clearSelection(activePanel_);
         });
     } else if (targetSingleItem && cur.currentFocusedRow >= 0) {
-        addOption("\uE834", nvgRGB(0, 224, 165), "app/file_manager/select_this_item"_i18n, [this, row = cur.currentFocusedRow]() {
+        addOption("\uE834", ThemeManager::instance().getAccentColor(), "app/file_manager/select_this_item"_i18n, [this, row = cur.currentFocusedRow]() {
             toggleSelection(activePanel_, row);
         });
     }
@@ -2205,10 +2206,10 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
         bool isGame = util::isGamePackage(item.path);
         if (isGame) {
             cell->icon->setText("\uE0E0"); // Gamepad
-            cell->icon->setTextColor(nvgRGB(0, 224, 165)); // Emerald
+            cell->icon->setTextColor(ThemeManager::instance().getAccentColor());
         } else if (isTextFile(item.path)) {
             cell->icon->setText("\uE873"); // Material document
-            cell->icon->setTextColor(nvgRGB(0, 224, 165));
+            cell->icon->setTextColor(ThemeManager::instance().getAccentColor());
         } else {
             cell->icon->setText("\uE24D"); // Generic file
             cell->icon->setTextColor(nvgRGB(140, 150, 160));

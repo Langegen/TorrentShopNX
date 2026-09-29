@@ -28,6 +28,7 @@
 #include "ui/FavoritesView.hpp"
 #include "ui/DownloadsView.hpp"
 #include "ui/SettingsTab.hpp"
+#include "ui/ThemeManager.hpp"
 #include "ui/FavoritesManager.hpp"
 #include "catalog/IgnoredUpdatesManager.hpp"
 #include "ui/DownloadUiManager.hpp"
@@ -415,6 +416,11 @@ int main(int argc, char** argv) {
     brls::Application::createWindow("TorrentShopNX");
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
     brls::Application::setGlobalQuit(false);
+    ui::ThemeManager::instance().init();
+    brls::Application::setGlobalWallpaper(ui::ThemeManager::instance().getEffectiveWallpaperPath());
+    ui::ThemeManager::instance().subscribe([]() {
+        brls::Application::setGlobalWallpaper(ui::ThemeManager::instance().getEffectiveWallpaperPath());
+    });
     brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
 
     // Register focus change listener to handle console sleep / wake safely (Title Mode only)

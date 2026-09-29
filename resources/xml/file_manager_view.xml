@@ -83,7 +83,7 @@
                         id="leftPanelIcon"
                         text="&#xE2C7;"
                         fontSize="16"
-                        textColor="#00e0a5"
+                        textColor="@theme/brls/accent"
                         marginRight="8" />
                     <brls:Label
                         id="currentPath"
@@ -98,7 +98,7 @@
                         id="spaceInfo"
                         text="---"
                         fontSize="12"
-                        textColor="#88CC88"
+                        textColor="@theme/brls/accent"
                         shrink="0.0" />
                 </brls:Box>
 

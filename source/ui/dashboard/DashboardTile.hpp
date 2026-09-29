@@ -17,6 +17,7 @@ public:
 
     void onFocusGained() override;
     void onFocusLost() override;
+    void refreshTheme();
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;

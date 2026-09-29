@@ -60,7 +60,13 @@ bool parseConfigBody(const std::string& body,
                      std::string& retro_roms_mode,
                      std::string& retro_custom_path,
                      bool& retro_auto_extract,
-                     std::string& retro_romset_mode) {
+                     std::string& retro_romset_mode,
+                     std::string& theme,
+                     std::string& background_mode,
+                     std::string& custom_background_path,
+                     int& background_blur,
+                     int& background_dim,
+                     bool& show_bottom_dashboard) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
 
@@ -142,6 +148,24 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "retro_romset_mode") {
                     retro_romset_mode = val;
+                    parsed_known_keys = true;
+                } else if (key == "theme") {
+                    theme = val;
+                    parsed_known_keys = true;
+                } else if (key == "background_mode") {
+                    background_mode = val;
+                    parsed_known_keys = true;
+                } else if (key == "custom_background_path") {
+                    custom_background_path = val;
+                    parsed_known_keys = true;
+                } else if (key == "background_blur") {
+                    try { background_blur = std::stoi(val); } catch (...) {}
+                    parsed_known_keys = true;
+                } else if (key == "background_dim") {
+                    try { background_dim = std::stoi(val); } catch (...) {}
+                    parsed_known_keys = true;
+                } else if (key == "show_bottom_dashboard") {
+                    show_bottom_dashboard = parseBool(val, show_bottom_dashboard);
                     parsed_known_keys = true;
                 }
             } else if (legacy_single_value.empty()) {
@@ -226,6 +250,10 @@ ConfigManager::ConfigManager() {
     retro_custom_path_.clear();
     retro_auto_extract_ = false;
     retro_romset_mode_ = "full";
+    theme_ = "emerald";
+    background_mode_ = "auto";
+    custom_background_path_.clear();
+    show_bottom_dashboard_ = true;
     load();
 }
 
@@ -237,7 +265,10 @@ void ConfigManager::load() {
                         last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
                         install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_, language_,
-                        retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_);
+                        retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_,
+                        theme_, background_mode_, custom_background_path_,
+                        background_blur_, background_dim_,
+                        show_bottom_dashboard_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -247,7 +278,17 @@ void ConfigManager::load() {
         if (retro_romset_mode_ != "full" && retro_romset_mode_ != "select") {
             retro_romset_mode_ = "full";
         }
-        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", install_location: " + install_location_ + ", language: " + language_ + ", retro_roms_mode: " + retro_roms_mode_);
+        if (theme_ != "emerald" && theme_ != "cyberpunk" && theme_ != "ruby" && theme_ != "amethyst" && theme_ != "amber" && theme_ != "light" && theme_ != "graphite") {
+            theme_ = "emerald";
+        }
+        if (background_mode_ != "auto" && background_mode_ != "emerald" && background_mode_ != "cyberpunk" &&
+            background_mode_ != "ruby" && background_mode_ != "amethyst" && background_mode_ != "amber" &&
+            background_mode_ != "light" && background_mode_ != "graphite" && background_mode_ != "custom") {
+            background_mode_ = "auto";
+        }
+        if (background_blur_ < 0 || background_blur_ > 3) background_blur_ = 0;
+        if (background_dim_ < 0 || background_dim_ > 4) background_dim_ = 2;
+        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", theme: " + theme_ + ", background_mode: " + background_mode_);
         return;
     }
 
@@ -258,7 +299,10 @@ void ConfigManager::load() {
                         last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
                         install_location_, app_update_url_,
                         auto_app_update_, last_app_update_check_date_, language_,
-                        retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_);
+                        retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_,
+                        theme_, background_mode_, custom_background_path_,
+                        background_blur_, background_dim_,
+                        show_bottom_dashboard_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -268,6 +312,16 @@ void ConfigManager::load() {
         if (retro_romset_mode_ != "full" && retro_romset_mode_ != "select") {
             retro_romset_mode_ = "full";
         }
+        if (theme_ != "emerald" && theme_ != "cyberpunk" && theme_ != "ruby" && theme_ != "amethyst" && theme_ != "amber" && theme_ != "light" && theme_ != "graphite") {
+            theme_ = "emerald";
+        }
+        if (background_mode_ != "auto" && background_mode_ != "emerald" && background_mode_ != "cyberpunk" &&
+            background_mode_ != "ruby" && background_mode_ != "amethyst" && background_mode_ != "amber" &&
+            background_mode_ != "light" && background_mode_ != "graphite" && background_mode_ != "custom") {
+            background_mode_ = "auto";
+        }
+        if (background_blur_ < 0 || background_blur_ > 3) background_blur_ = 0;
+        if (background_dim_ < 0 || background_dim_ > 4) background_dim_ = 2;
         util::logLine("config: loaded legacy config.txt, migrating to config.ini");
         save();
         return;
@@ -313,6 +367,12 @@ void ConfigManager::save() {
     file << "retro_custom_path=" << retro_custom_path_ << "\n";
     file << "retro_auto_extract=" << (retro_auto_extract_ ? "true" : "false") << "\n";
     file << "retro_romset_mode=" << retro_romset_mode_ << "\n";
+    file << "theme=" << theme_ << "\n";
+    file << "background_mode=" << background_mode_ << "\n";
+    file << "custom_background_path=" << custom_background_path_ << "\n";
+    file << "background_blur=" << background_blur_ << "\n";
+    file << "background_dim=" << background_dim_ << "\n";
+    file << "show_bottom_dashboard=" << (show_bottom_dashboard_ ? "true" : "false") << "\n";
     file.flush();
     file.close();
 #ifdef __SWITCH__
@@ -673,6 +733,66 @@ std::string ConfigManager::getEffectiveRetroRomsDir(const std::string& console_d
         base += console_default_subfolder;
     }
     return base;
+}
+
+const std::string& ConfigManager::getTheme() const {
+    return theme_;
+}
+
+void ConfigManager::setTheme(const std::string& theme) {
+    if (!theme.empty()) {
+        theme_ = theme;
+        save();
+    }
+}
+
+const std::string& ConfigManager::getBackgroundMode() const {
+    return background_mode_;
+}
+
+void ConfigManager::setBackgroundMode(const std::string& mode) {
+    background_mode_ = mode;
+    save();
+}
+
+const std::string& ConfigManager::getCustomBackgroundPath() const {
+    return custom_background_path_;
+}
+
+void ConfigManager::setCustomBackgroundPath(const std::string& path) {
+    custom_background_path_ = path;
+    save();
+}
+
+int ConfigManager::getBackgroundBlur() const {
+    return background_blur_;
+}
+
+void ConfigManager::setBackgroundBlur(int level) {
+    if (level < 0) level = 0;
+    if (level > 3) level = 3;
+    background_blur_ = level;
+    save();
+}
+
+int ConfigManager::getBackgroundDim() const {
+    return background_dim_;
+}
+
+void ConfigManager::setBackgroundDim(int level) {
+    if (level < 0) level = 0;
+    if (level > 4) level = 4;
+    background_dim_ = level;
+    save();
+}
+
+bool ConfigManager::getShowBottomDashboard() const {
+    return show_bottom_dashboard_;
+}
+
+void ConfigManager::setShowBottomDashboard(bool enabled) {
+    show_bottom_dashboard_ = enabled;
+    save();
 }
 
 } // namespace config

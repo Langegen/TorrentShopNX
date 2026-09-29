@@ -1,4 +1,5 @@
 #include "GameDetailView.hpp"
+#include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
 #include "DownloadsView.hpp"
@@ -99,6 +100,13 @@ void GameDetailView::onContentAvailable() {
     metaFormat->setText(brls::getStr("app/detail/image_format", game_.image_format.empty() ? unknownStr : game_.image_format));
     metaVoice->setText(brls::getStr("app/detail/voice_lang", game_.voice_lang.empty() ? unknownStr : game_.voice_lang));
     
+    if (metaBox) {
+        metaBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+        metaBox->setBorderThickness(1.0f);
+        metaBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        metaBox->setCornerRadius(10.0f);
+    }
+
     // Clean description (remove leading ': ')
     std::string desc = game_.description;
     if (desc.size() >= 2 && desc.substr(0, 2) == ": ") {
@@ -178,13 +186,15 @@ void GameDetailView::onContentAvailable() {
         gBadge->setPadding(5, 10, 5, 10);
         gBadge->setMarginRight(10);
         gBadge->setMarginBottom(10);
-        gBadge->setBackgroundColor(nvgRGB(0, 150, 136)); // Teal genre badge
+        gBadge->setBackgroundColor(ThemeManager::instance().getAccentDimColor());
+        gBadge->setBorderThickness(1.0f);
+        gBadge->setBorderColor(ThemeManager::instance().getCardBorderColor());
         gBadge->setCornerRadius(6);
 
         brls::Label* gLabel = new brls::Label();
         gLabel->setText(genreTag);
         gLabel->setFontSize(14);
-        gLabel->setTextColor(nvgRGB(255, 255, 255));
+        gLabel->setTextColor(ThemeManager::instance().getAccentColor());
         gBadge->addView(gLabel);
 
         badgesBox->addView(gBadge);
@@ -199,13 +209,15 @@ void GameDetailView::onContentAvailable() {
             mpBadge->setPadding(5, 10, 5, 10);
             mpBadge->setMarginRight(10);
             mpBadge->setMarginBottom(10);
-            mpBadge->setBackgroundColor(nvgRGB(63, 81, 181)); // Indigo multiplayer badge
+            mpBadge->setBackgroundColor(nvgRGBA(255, 255, 255, 14));
+            mpBadge->setBorderThickness(1.0f);
+            mpBadge->setBorderColor(nvgRGBA(255, 255, 255, 22));
             mpBadge->setCornerRadius(6);
 
             brls::Label* mpLabel = new brls::Label();
             mpLabel->setText(mp);
             mpLabel->setFontSize(14);
-            mpLabel->setTextColor(nvgRGB(255, 255, 255));
+            mpLabel->setTextColor(ThemeManager::instance().getCardTitleColor());
             mpBadge->addView(mpLabel);
 
             badgesBox->addView(mpBadge);

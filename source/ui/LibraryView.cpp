@@ -1,4 +1,5 @@
 #include "LibraryView.hpp"
+#include "ThemeManager.hpp"
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
 #include "../utils/log.h"
@@ -526,6 +527,7 @@ void LibraryView::updateSpaceHint() {
     std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
 
     spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
+    spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
 }
 
 void LibraryView::scanForUpdates() {

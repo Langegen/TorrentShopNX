@@ -643,7 +643,8 @@
         "update_catalog_downloading_diff": "Änderungen herunterladen...",
         "update_catalog_applying_diff": "Änderungen anwenden...",
         "update_catalog_diff_success": "Katalog aktualisiert: +{0} neu, {1} aktualisiert",
-        "update_catalog_up_to_date": "Katalog ist bereits aktuell"
+        "update_catalog_up_to_date": "Katalog ist bereits aktuell",
+        "cat_appearance": "Erscheinungsbild"
     },
     "applet": {
         "title": "Applet-Modus erkannt",
@@ -929,7 +930,9 @@
         "header_updated_prefix": "  •  Aktualisiert: ",
         "header_storage_title": "Speicherverwaltung",
         "library_inst_count": "{0} Spiele",
-        "library_upd_count": "{0} Updates"
+        "library_upd_count": "{0} Updates",
+        "retro_c2_val": "20 Plattformen",
+        "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
         "step_init": "Initialisierung...",
@@ -1004,5 +1007,46 @@
         "hidden_objects": "Wimmelbild",
         "stealth": "Schleichspiel",
         "education": "Lernspiel"
+    },
+    "appearance": {
+        "theme_title": "Farbschema",
+        "theme_applied": "Farbschema angewendet",
+        "bg_title": "Hintergrundbild",
+        "bg_auto": "Standard des aktuellen Farbschemas",
+        "bg_custom": "Eigene Datei von SD-Karte...",
+        "bg_applied": "Hintergrundbild aktualisiert",
+        "choose_file": "Datei von SD-Karte auswählen",
+        "no_file_selected": "Keine Datei ausgewählt",
+        "reset_bg": "Hintergrund zurücksetzen",
+        "reset_bg_desc": "Standard-Hintergrundbild für aktuelles Thema wiederherstellen",
+        "bg_reset_done": "Hintergrund auf Standard zurückgesetzt",
+        "file_picker_title": "Hintergrundbild auswählen",
+        "folder_parent": "Übergeordneter Ordner",
+        "folder_type": "Ordner",
+        "folder_empty": "Keine Bilder (.jpg, .png) in diesem Ordner gefunden",
+        "bg_blur_title": "Hintergrundunschärfe",
+        "bg_blur_0": "Aus (Scharf)",
+        "bg_blur_1": "Leicht",
+        "bg_blur_2": "Mittel",
+        "bg_blur_3": "Stark",
+        "bg_blur_applied": "Hintergrundunschärfe geändert",
+        "bg_dim_title": "Hintergrundabdunklung im Menü",
+        "bg_dim_0": "Keine Abdunklung (0%)",
+        "bg_dim_1": "Hell (15%)",
+        "bg_dim_2": "Standard (28%)",
+        "bg_dim_3": "Gedämpft (45%)",
+        "bg_dim_4": "Dunkel (65%)",
+        "bg_dim_applied": "Hintergrundabdunklung geändert",
+        "show_bottom_dashboard": "Infoleiste anzeigen",
+        "show_bottom_dashboard_desc": "Untere Infoleiste mit Details und Statistiken im Hauptmenü anzeigen"
+    },
+    "theme": {
+        "emerald": "Smaragdgrün (Standard)",
+        "cyberpunk": "Neon-Cyan (Cyberpunk)",
+        "ruby": "Rubinrot (Switch Rot)",
+        "amethyst": "Amethystviolett",
+        "amber": "Bernsteingold",
+        "light": "Hell",
+        "graphite": "Graphit"
     }
 }

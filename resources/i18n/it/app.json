@@ -643,7 +643,8 @@
         "update_catalog_downloading_diff": "Download modifiche...",
         "update_catalog_applying_diff": "Applicazione modifiche...",
         "update_catalog_diff_success": "Catalogo aggiornato: +{0} nuovi, {1} aggiornati",
-        "update_catalog_up_to_date": "Il catalogo è già aggiornato"
+        "update_catalog_up_to_date": "Il catalogo è già aggiornato",
+        "cat_appearance": "Aspetto"
     },
     "applet": {
         "title": "Modalità Applet rilevata",
@@ -929,7 +930,9 @@
         "header_updated_prefix": "  •  Aggiornato: ",
         "header_storage_title": "Gestione memoria",
         "library_inst_count": "{0} giochi",
-        "library_upd_count": "{0} aggiornamenti"
+        "library_upd_count": "{0} aggiornamenti",
+        "retro_c2_val": "20 piattaforme",
+        "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
         "step_init": "Inizializzazione...",
@@ -1004,5 +1007,46 @@
         "hidden_objects": "Oggetti nascosti",
         "stealth": "Stealth",
         "education": "Educativo"
+    },
+    "appearance": {
+        "theme_title": "Tema colori",
+        "theme_applied": "Tema colori applicato",
+        "bg_title": "Sfondo",
+        "bg_auto": "Predefinito del tema attuale",
+        "bg_custom": "File personalizzato dalla scheda SD...",
+        "bg_applied": "Sfondo aggiornato",
+        "choose_file": "Seleziona file da scheda SD",
+        "no_file_selected": "Nessun file selezionato",
+        "reset_bg": "Ripristina sfondo",
+        "reset_bg_desc": "Ripristina lo sfondo predefinito per il tema attuale",
+        "bg_reset_done": "Sfondo ripristinato",
+        "file_picker_title": "Seleziona immagine di sfondo",
+        "folder_parent": "Cartella superiore",
+        "folder_type": "Cartella",
+        "folder_empty": "Nessuna immagine (.jpg, .png) trovata in questa cartella",
+        "bg_blur_title": "Sfocatura sfondo",
+        "bg_blur_0": "Disattivato (Nitido)",
+        "bg_blur_1": "Leggero",
+        "bg_blur_2": "Medio",
+        "bg_blur_3": "Forte",
+        "bg_blur_applied": "Sfocatura sfondo aggiornata",
+        "bg_dim_title": "Oscuramento sfondo nel menu",
+        "bg_dim_0": "Nessun oscuramento (0%)",
+        "bg_dim_1": "Chiaro (15%)",
+        "bg_dim_2": "Standard (28%)",
+        "bg_dim_3": "Attenuato (45%)",
+        "bg_dim_4": "Scuro (65%)",
+        "bg_dim_applied": "Oscuramento sfondo aggiornato",
+        "show_bottom_dashboard": "Mostra pannello informazioni",
+        "show_bottom_dashboard_desc": "Visualizza il pannello inferiore con dettagli e statistiche nel menu principale"
+    },
+    "theme": {
+        "emerald": "Smeraldo (Predefinito)",
+        "cyberpunk": "Ciano neon (Cyberpunk)",
+        "ruby": "Rosso rubino (Switch Red)",
+        "amethyst": "Viola ametista",
+        "amber": "Oro ambra",
+        "light": "Chiaro",
+        "graphite": "Grafite"
     }
 }

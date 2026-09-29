@@ -643,7 +643,8 @@
         "update_catalog_downloading_diff": "正在下载增量变更...",
         "update_catalog_applying_diff": "正在应用变更...",
         "update_catalog_diff_success": "目录已更新：新增 {0} 款，更新 {1} 款",
-        "update_catalog_up_to_date": "目录已是最新"
+        "update_catalog_up_to_date": "目录已是最新",
+        "cat_appearance": "外观"
     },
     "applet": {
         "title": "当前运行在 Applet 模式",
@@ -929,7 +930,9 @@
         "header_updated_prefix": "  •  已更新: ",
         "header_storage_title": "存储管理",
         "library_inst_count": "{0} 个游戏",
-        "library_upd_count": "{0} 个更新"
+        "library_upd_count": "{0} 个更新",
+        "retro_c2_val": "20个平台",
+        "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
         "step_init": "初始化中...",
@@ -1004,5 +1007,46 @@
         "hidden_objects": "寻找物品",
         "stealth": "潜行",
         "education": "教育"
+    },
+    "appearance": {
+        "theme_title": "色彩主题",
+        "theme_applied": "色彩主题已应用",
+        "bg_title": "背景壁纸",
+        "bg_auto": "当前主题默认",
+        "bg_custom": "来自SD卡的文件...",
+        "bg_applied": "背景壁纸已更新",
+        "choose_file": "从SD卡选择文件",
+        "no_file_selected": "未选择文件",
+        "reset_bg": "恢复默认背景",
+        "reset_bg_desc": "恢复当前主题的默认背景壁纸",
+        "bg_reset_done": "背景已恢复为默认",
+        "file_picker_title": "选择背景图片",
+        "folder_parent": "上一级文件夹",
+        "folder_type": "文件夹",
+        "folder_empty": "此文件夹中未找到图片 (.jpg, .png)",
+        "bg_blur_title": "背景模糊",
+        "bg_blur_0": "关闭 (清晰)",
+        "bg_blur_1": "低",
+        "bg_blur_2": "中",
+        "bg_blur_3": "高",
+        "bg_blur_applied": "背景模糊已更新",
+        "bg_dim_title": "菜单背景暗化",
+        "bg_dim_0": "无暗化 (0%)",
+        "bg_dim_1": "明亮 (15%)",
+        "bg_dim_2": "标准 (28%)",
+        "bg_dim_3": "较暗 (45%)",
+        "bg_dim_4": "很暗 (65%)",
+        "bg_dim_applied": "背景暗化已更新",
+        "show_bottom_dashboard": "显示信息面板",
+        "show_bottom_dashboard_desc": "在主菜单底部显示包含详情和统计信息的信息面板"
+    },
+    "theme": {
+        "emerald": "翡翠绿 (默认)",
+        "cyberpunk": "霓虹青 (赛博朋克)",
+        "ruby": "红宝石 (Switch红)",
+        "amethyst": "紫水晶",
+        "amber": "琥珀金",
+        "light": "明亮浅色",
+        "graphite": "石墨黑"
     }
 }

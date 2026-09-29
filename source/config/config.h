@@ -104,6 +104,25 @@ public:
 
     std::string getEffectiveRetroRomsDir(const std::string& console_default_subfolder = "") const;
 
+    // Appearance / Theme settings
+    const std::string& getTheme() const; // "emerald" (default), "cyberpunk", "ruby", "amethyst", "amber"
+    void setTheme(const std::string& theme);
+
+    const std::string& getBackgroundMode() const; // "auto" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "custom"
+    void setBackgroundMode(const std::string& mode);
+
+    const std::string& getCustomBackgroundPath() const;
+    void setCustomBackgroundPath(const std::string& path);
+
+    int getBackgroundBlur() const; // 0 (Off, default), 1 (Low), 2 (Medium), 3 (High)
+    void setBackgroundBlur(int level);
+
+    int getBackgroundDim() const; // 0 (0%), 1 (15%), 2 (28% default), 3 (45%), 4 (65%)
+    void setBackgroundDim(int level);
+
+    bool getShowBottomDashboard() const; // default true
+    void setShowBottomDashboard(bool enabled);
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -127,6 +146,12 @@ private:
     std::string retro_custom_path_;
     bool retro_auto_extract_;
     std::string retro_romset_mode_;
+    std::string theme_;
+    std::string background_mode_;
+    std::string custom_background_path_;
+    int background_blur_ = 0;
+    int background_dim_ = 2;
+    bool show_bottom_dashboard_ = true;
     std::string config_path_;
     std::string legacy_config_path_;
 };

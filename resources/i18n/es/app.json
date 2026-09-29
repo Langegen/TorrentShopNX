@@ -643,7 +643,8 @@
         "update_catalog_downloading_diff": "Descargando cambios...",
         "update_catalog_applying_diff": "Aplicando cambios...",
         "update_catalog_diff_success": "Catálogo actualizado: +{0} nuevos, {1} actualizados",
-        "update_catalog_up_to_date": "El catálogo ya está actualizado"
+        "update_catalog_up_to_date": "El catálogo ya está actualizado",
+        "cat_appearance": "Apariencia"
     },
     "applet": {
         "title": "Modo Applet detectado",
@@ -929,7 +930,9 @@
         "header_updated_prefix": "  •  Actualizado: ",
         "header_storage_title": "Gestión de almacenamiento",
         "library_inst_count": "{0} juegos",
-        "library_upd_count": "{0} actualizaciones"
+        "library_upd_count": "{0} actualizaciones",
+        "retro_c2_val": "20 plataformas",
+        "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
         "step_init": "Inicializando...",
@@ -1004,5 +1007,46 @@
         "hidden_objects": "Objetos ocultos",
         "stealth": "Sigilo",
         "education": "Educativo"
+    },
+    "appearance": {
+        "theme_title": "Tema de color",
+        "theme_applied": "Tema de color aplicado",
+        "bg_title": "Fondo de pantalla",
+        "bg_auto": "Predeterminado del tema actual",
+        "bg_custom": "Archivo personalizado de la tarjeta SD...",
+        "bg_applied": "Fondo de pantalla actualizado",
+        "choose_file": "Seleccionar archivo de la tarjeta SD",
+        "no_file_selected": "Ningún archivo seleccionado",
+        "reset_bg": "Restablecer fondo",
+        "reset_bg_desc": "Restaurar el fondo predeterminado del tema actual",
+        "bg_reset_done": "Fondo restablecido a predeterminado",
+        "file_picker_title": "Seleccionar imagen de fondo",
+        "folder_parent": "Carpeta superior",
+        "folder_type": "Carpeta",
+        "folder_empty": "No se encontraron imágenes (.jpg, .png) en esta carpeta",
+        "bg_blur_title": "Desenfoque de fondo",
+        "bg_blur_0": "Desactivado (Nítido)",
+        "bg_blur_1": "Ligero",
+        "bg_blur_2": "Medio",
+        "bg_blur_3": "Fuerte",
+        "bg_blur_applied": "Desenfoque de fondo actualizado",
+        "bg_dim_title": "Oscurecimiento de fondo en el menú",
+        "bg_dim_0": "Sin oscurecimiento (0%)",
+        "bg_dim_1": "Claro (15%)",
+        "bg_dim_2": "Estándar (28%)",
+        "bg_dim_3": "Atenuado (45%)",
+        "bg_dim_4": "Oscuro (65%)",
+        "bg_dim_applied": "Oscurecimiento de fondo actualizado",
+        "show_bottom_dashboard": "Mostrar panel de información",
+        "show_bottom_dashboard_desc": "Mostrar el panel inferior con detalles y estadísticas en el menú principal"
+    },
+    "theme": {
+        "emerald": "Esmeralda (Predeterminado)",
+        "cyberpunk": "Cian neón (Cyberpunk)",
+        "ruby": "Rojo rubí (Switch Red)",
+        "amethyst": "Morado amatista",
+        "amber": "Oro ámbar",
+        "light": "Claro",
+        "graphite": "Grafito"
     }
 }

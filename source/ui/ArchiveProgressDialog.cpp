@@ -1,4 +1,5 @@
 #include "ArchiveProgressDialog.hpp"
+#include "ui/ThemeManager.hpp"
 #include "../utils/file_ops.h"
 #include "../utils/log.h"
 #include <filesystem>
@@ -54,7 +55,7 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
     progressFill_->setWidth(0.0f);
     progressFill_->setHeight(10.0f);
     progressFill_->setCornerRadius(5.0f);
-    progressFill_->setBackgroundColor(nvgRGB(0, 224, 165));
+    progressFill_->setBackgroundColor(ui::ThemeManager::instance().getAccentColor());
     progressBg_->addView(progressFill_);
     contentBox_->addView(progressBg_);
 

@@ -327,6 +327,26 @@ class Application
      */
     static void setLocale(const std::string& locale);
 
+    /**
+     * Sets the global background wallpaper file path.
+     */
+    static void setGlobalWallpaper(const std::string& path);
+
+    /**
+     * Sets an extra dimming overlay alpha (0.0f - 1.0f) over the global wallpaper.
+     */
+    static void setGlobalWallpaperDimming(float alpha);
+
+    /**
+     * Sets the blur radius in pixels (0 for disabled).
+     */
+    static void setGlobalWallpaperBlur(int blurRadius);
+
+    /**
+     * Sets the main menu background dimming level (default 0.28f).
+     */
+    static void setGlobalWallpaperMainMenuDim(float alpha);
+
     static void addToFreeQueue(View* view);
 
     /**

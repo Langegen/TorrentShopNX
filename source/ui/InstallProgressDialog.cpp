@@ -1,4 +1,5 @@
 #include "InstallProgressDialog.hpp"
+#include "ui/ThemeManager.hpp"
 #include "../utils/file_ops.h"
 #include "../utils/switch_utils.h"
 #include "../utils/log.h"
@@ -101,7 +102,7 @@ InstallProgressDialog::InstallProgressDialog(
     headerBox->setMarginBottom(14.0f);
     headerBox->setPaddingBottom(12.0f);
     headerBox->setLineBottom(1.0f);
-    headerBox->setLineColor(nvgRGBA(0, 224, 165, 80)); // Emerald line
+    headerBox->setLineColor(ui::ThemeManager::instance().getMediumAccentColor());
 
     // Gamepad Badge
     auto* iconBadge = new brls::Box();
@@ -111,12 +112,12 @@ InstallProgressDialog::InstallProgressDialog(
     iconBadge->setJustifyContent(brls::JustifyContent::CENTER);
     iconBadge->setAlignItems(brls::AlignItems::CENTER);
     iconBadge->setMarginRight(14.0f);
-    iconBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 35)); // Emerald tint
+    iconBadge->setBackgroundColor(ui::ThemeManager::instance().getDimAccentColor());
 
     auto* badgeIcon = new brls::Label();
     badgeIcon->setText("\uE0E0"); // Gamepad icon
     badgeIcon->setFontSize(22.0f);
-    badgeIcon->setTextColor(nvgRGB(0, 224, 165)); // Emerald icon
+    badgeIcon->setTextColor(ui::ThemeManager::instance().getAccentColor());
     iconBadge->addView(badgeIcon);
     headerBox->addView(iconBadge);
 
@@ -137,7 +138,7 @@ InstallProgressDialog::InstallProgressDialog(
         : "app/installer/target_nand"_i18n;
     targetStorageLabel_->setText(storageText);
     targetStorageLabel_->setFontSize(13.0f);
-    targetStorageLabel_->setTextColor(nvgRGBA(0, 224, 165, 220)); // Emerald subtitle
+    targetStorageLabel_->setTextColor(ui::ThemeManager::instance().getAccentColor());
     targetStorageLabel_->setSingleLine(true);
     headerTextCol->addView(targetStorageLabel_);
 
@@ -152,7 +153,7 @@ InstallProgressDialog::InstallProgressDialog(
     statusLabel_->setMarginBottom(12.0f);
     contentBox_->addView(statusLabel_);
 
-    // ── 3. Progress Bar (Emerald fill on dark rail) ────────────────────────
+    // ── 3. Progress Bar (Theme fill on dark rail) ────────────────────────
     progressBg_ = new brls::Box();
     progressBg_->setWidthPercentage(100.0f);
     progressBg_->setHeight(10.0f);
@@ -164,7 +165,7 @@ InstallProgressDialog::InstallProgressDialog(
     progressFill_->setWidth(0.0f);
     progressFill_->setHeight(10.0f);
     progressFill_->setCornerRadius(5.0f);
-    progressFill_->setBackgroundColor(nvgRGB(0, 224, 165)); // Emerald fill
+    progressFill_->setBackgroundColor(ui::ThemeManager::instance().getAccentColor());
     progressBg_->addView(progressFill_);
     contentBox_->addView(progressBg_);
 

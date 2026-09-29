@@ -14,19 +14,20 @@ public:
     brls::View* createContentView() override;
     void onContentAvailable() override;
     void willAppear(bool resetState = false) override;
+    void onResume() override;
     void updateDownloadsBadge(int count);
     void refreshDashboardState();
     void openFileManager();
 
 private:
     void setupLayout();
+    void updateDashboardVisibility();
     void onTileFocused(int index);
     void onTileClicked(int index);
 
     brls::Box* rootContainer_ = nullptr;
     brls::AppletFrame* appletFrame_ = nullptr;
     brls::Box* rootBox_ = nullptr;
-    brls::Image* bgImage_ = nullptr;
     ui::DashboardHeader* header_ = nullptr;
     brls::Box* tilesBox_ = nullptr;
     std::vector<ui::DashboardTile*> tiles_;

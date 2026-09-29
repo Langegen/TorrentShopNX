@@ -1,4 +1,5 @@
 #include "RetroCatalogView.hpp"
+#include "ui/ThemeManager.hpp"
 #include "GameDetailView.hpp"
 #include "FilterSortDialog.hpp"
 #include "FavoritesManager.hpp"
@@ -594,8 +595,8 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                 cell->actionLabel->setText("app/retro/btn_download_set"_i18n);
             }
         } else {
-            cell->actionBox->setBackgroundColor(nvgRGBA(0, 224, 165, 32));
-            cell->actionLabel->setTextColor(nvgRGBA(0, 230, 175, 255));
+            cell->actionBox->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
+            cell->actionLabel->setTextColor(ThemeManager::instance().getAccentColor());
             cell->actionLabel->setText("app/retro/btn_download_rom"_i18n);
         }
 
@@ -613,8 +614,8 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             parent_->focusedSection_ = section;
             parent_->focusedGameIndex_ = gameIdx;
             net::ImageDownloader::instance().setFocusedPosition(effectivePriority, 0);
-            cell->title->setTextColor(nvgRGBA(0, 230, 175, 255));
-            cell->setBackgroundColor(nvgRGBA(0, 224, 165, 30));
+            cell->title->setTextColor(ThemeManager::instance().getAccentColor());
+            cell->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
         });
 
         cell->getFocusLostEvent()->subscribe([cell](brls::View*) {
@@ -687,7 +688,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                 cards[i].romBadge->setTextColor(nvgRGBA(255, 170, 0, 255));
             } else {
                 cards[i].romBadge->setText("ROM");
-                cards[i].romBadge->setTextColor(nvgRGBA(0, 230, 175, 255));
+                cards[i].romBadge->setTextColor(ThemeManager::instance().getAccentColor());
             }
 
             cardBox->getFocusEvent()->clear();
@@ -700,7 +701,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                     parent_->focusedGameIndex_ = gameIdx;
                     net::ImageDownloader::instance().setFocusedPosition(effectiveRow, i);
                 }
-                titleLabel->setTextColor(nvgRGBA(0, 230, 175, 255));
+                titleLabel->setTextColor(ThemeManager::instance().getAccentColor());
                 titleLabel->setText(fullTitle);
                 titleLabel->setAnimated(true);
             });

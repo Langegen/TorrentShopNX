@@ -29,7 +29,7 @@
         alignItems="center"
         justifyContent="center"
         marginTop="120px">
-        <brls:Label id="loadingLabel" text="@i18n/app/retro/loading_console" fontSize="22" marginBottom="14" textColor="#00e6af" />
+        <brls:Label id="loadingLabel" text="@i18n/app/retro/loading_console" fontSize="22" marginBottom="14" textColor="@theme/brls/accent" />
         <brls:ProgressSpinner id="progressSpinner" width="48px" height="48px" size="large" />
     </brls:Box>
 
