@@ -9,7 +9,7 @@
 
         <!-- Header -->
         <brls:Label id="title" text="@i18n/app/fileselect/title" fontSize="26" marginBottom="10" />
-        <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/text_secondary" marginBottom="20" />
+        <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/header/subtitle" marginBottom="20" />
 
         <!-- Scrollable file list -->
         <brls:ScrollingFrame
@@ -37,8 +37,8 @@
                     <brls:Label id="totalSizeText" text="0 MB" fontSize="16" textColor="@theme/brls/accent" />
                 </brls:Box>
                 <brls:Box axis="column" alignItems="flexEnd">
-                    <brls:Label id="freeSpaceSdText" text="---" fontSize="13" textColor="@theme/brls/text_secondary" />
-                    <brls:Label id="freeSpaceNandText" text="---" fontSize="13" textColor="@theme/brls/text_secondary" />
+                    <brls:Label id="freeSpaceSdText" text="---" fontSize="13" textColor="@theme/brls/header/subtitle" />
+                    <brls:Label id="freeSpaceNandText" text="---" fontSize="13" textColor="@theme/brls/header/subtitle" />
                 </brls:Box>
             </brls:Box>
             

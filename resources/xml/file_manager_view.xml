@@ -34,14 +34,14 @@
                     id="splitToggleHint"
                     text=""
                     fontSize="13"
-                    textColor="@theme/brls/text_secondary" />
+                    textColor="@theme/brls/header/subtitle" />
 
                 <!-- Navigation hint when in split mode -->
                 <brls:Label
                     id="splitNavHint"
                     text="@i18n/app/file_manager/switch_pane_hint"
                     fontSize="13"
-                    textColor="@theme/brls/text_secondary"
+                    textColor="@theme/brls/header/subtitle"
                     marginLeft="16"
                     visibility="gone" />
             </brls:Box>
@@ -131,9 +131,9 @@
                     paddingRight="36"
                     lineBottom="1px"
                     lineColor="@theme/brls/sidebar/separator">
-                    <brls:Label id="leftColName" text="@i18n/app/file_manager/col_name" fontSize="12" textColor="@theme/brls/text_secondary" grow="1.0" shrink="1.0" marginRight="12" />
-                    <brls:Label id="leftColSize" text="@i18n/app/file_manager/col_size" width="130px" fontSize="12" textColor="@theme/brls/text_secondary" horizontalAlign="right" marginRight="10" />
-                    <brls:Label id="leftColDate" text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="@theme/brls/text_secondary" horizontalAlign="right" />
+                    <brls:Label id="leftColName" text="@i18n/app/file_manager/col_name" fontSize="12" textColor="@theme/brls/header/subtitle" grow="1.0" shrink="1.0" marginRight="12" />
+                    <brls:Label id="leftColSize" text="@i18n/app/file_manager/col_size" width="130px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" marginRight="10" />
+                    <brls:Label id="leftColDate" text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" />
                 </brls:Box>
 
                 <!-- Recycler Left -->
@@ -150,7 +150,7 @@
                     id="emptyLabel"
                     text="@i18n/app/file_manager/empty_folder"
                     fontSize="16"
-                    textColor="@theme/brls/text_secondary"
+                    textColor="@theme/brls/header/subtitle"
                     horizontalAlign="center"
                     marginTop="30"
                     visibility="gone" />
@@ -195,13 +195,13 @@
                         id="rightPanelIcon"
                         text="&#xE2C7;"
                         fontSize="16"
-                        textColor="@theme/brls/text_secondary"
+                        textColor="@theme/brls/header/subtitle"
                         marginRight="8" />
                     <brls:Label
                         id="currentPathRight"
                         text="sdmc:/"
                         fontSize="14"
-                        textColor="@theme/brls/text_secondary"
+                        textColor="@theme/brls/header/subtitle"
                         singleLine="true"
                         grow="1.0"
                         shrink="1.0"
@@ -210,7 +210,7 @@
                         id="spaceInfoRight"
                         text="---"
                         fontSize="12"
-                        textColor="@theme/brls/text_secondary"
+                        textColor="@theme/brls/header/subtitle"
                         shrink="0.0" />
                 </brls:Box>
 
@@ -243,9 +243,9 @@
                     paddingRight="36"
                     lineBottom="1px"
                     lineColor="@theme/brls/sidebar/separator">
-                    <brls:Label id="rightColName" text="@i18n/app/file_manager/col_name" fontSize="12" textColor="@theme/brls/text_secondary" grow="1.0" shrink="1.0" marginRight="12" />
-                    <brls:Label id="rightColSize" text="@i18n/app/file_manager/col_size" width="80px" fontSize="12" textColor="@theme/brls/text_secondary" horizontalAlign="right" marginRight="10" />
-                    <brls:Label id="rightColDate" text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="@theme/brls/text_secondary" horizontalAlign="right" visibility="gone" />
+                    <brls:Label id="rightColName" text="@i18n/app/file_manager/col_name" fontSize="12" textColor="@theme/brls/header/subtitle" grow="1.0" shrink="1.0" marginRight="12" />
+                    <brls:Label id="rightColSize" text="@i18n/app/file_manager/col_size" width="80px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" marginRight="10" />
+                    <brls:Label id="rightColDate" text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" visibility="gone" />
                 </brls:Box>
 
                 <!-- Recycler Right -->
@@ -262,7 +262,7 @@
                     id="emptyLabelRight"
                     text="@i18n/app/file_manager/empty_folder"
                     fontSize="16"
-                    textColor="@theme/brls/text_secondary"
+                    textColor="@theme/brls/header/subtitle"
                     horizontalAlign="center"
                     marginTop="30"
                     visibility="gone" />
