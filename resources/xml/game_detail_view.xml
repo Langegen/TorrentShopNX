@@ -28,11 +28,11 @@
 
                 <!-- Metadata Block -->
                 <brls:Box id="metaBox" width="auto" height="auto" axis="column" marginBottom="20" padding="15" cornerRadius="10">
-                    <brls:Label id="metaDeveloper" fontSize="15" textColor="#CCCCCC" marginBottom="4" />
-                    <brls:Label id="metaPublisher" fontSize="15" textColor="#CCCCCC" marginBottom="4" />
-                    <brls:Label id="metaYear" fontSize="15" textColor="#CCCCCC" marginBottom="4" />
-                    <brls:Label id="metaFormat" fontSize="15" textColor="#CCCCCC" marginBottom="4" />
-                    <brls:Label id="metaVoice" fontSize="15" textColor="#CCCCCC" />
+                    <brls:Label id="metaDeveloper" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
+                    <brls:Label id="metaPublisher" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
+                    <brls:Label id="metaYear" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
+                    <brls:Label id="metaFormat" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
+                    <brls:Label id="metaVoice" fontSize="15" textColor="@theme/brls/header/subtitle" />
                 </brls:Box>
 
                 <!-- Screenshots Section (directly above Description) -->
