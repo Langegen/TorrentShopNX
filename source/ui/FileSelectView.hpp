@@ -37,7 +37,9 @@ private:
     BRLS_BIND(brls::Label,          totalSizeText,  "totalSizeText");
     BRLS_BIND(brls::Label,          freeSpaceSdText, "freeSpaceSdText");
     BRLS_BIND(brls::Label,          freeSpaceNandText, "freeSpaceNandText");
+    BRLS_BIND(brls::Box,            bottomSummaryBox, "bottomSummaryBox");
     BRLS_BIND(brls::Box,            installLocationBox, "installLocationBox");
+    BRLS_BIND(brls::Label,          installLocationLabel, "installLocationLabel");
     BRLS_BIND(brls::Label,          installLocationText, "installLocationText");
 
     // Rebuild the visible list from files_ / selected_

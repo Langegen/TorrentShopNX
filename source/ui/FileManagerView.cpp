@@ -109,7 +109,7 @@ void FileManagerCell::setSelectedVisual(bool selected) {
     } else {
         if (accentBar) accentBar->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
         this->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
-        if (name) name->setTextColor(nvgRGB(230, 230, 230));
+        if (name) name->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     }
 }
 
@@ -607,22 +607,23 @@ void FileManagerView::updateCompactMode() {
 }
 
 void FileManagerView::updateActivePanelVisuals() {
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
     if (isSplitMode_) {
         for (int i = 0; i < 2; ++i) {
             bool isActive = (i == activePanel_);
             if (panels_[i].container) {
                 panels_[i].container->setBorderThickness(1.0f);
-                panels_[i].container->setBorderColor(isActive ? ThemeManager::instance().getMediumAccentColor() : nvgRGBA(255, 255, 255, 18));
-                panels_[i].container->setBackgroundColor(isActive ? nvgRGBA(255, 255, 255, 8) : nvgRGBA(0, 0, 0, 40));
+                panels_[i].container->setBorderColor(isActive ? ThemeManager::instance().getMediumAccentColor() : (isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(255, 255, 255, 18)));
+                panels_[i].container->setBackgroundColor(isActive ? (isLight ? nvgRGBA(0, 0, 0, 10) : nvgRGBA(255, 255, 255, 8)) : (isLight ? nvgRGBA(0, 0, 0, 18) : nvgRGBA(0, 0, 0, 40)));
             }
             if (panels_[i].panelIcon) {
-                panels_[i].panelIcon->setTextColor(isActive ? ThemeManager::instance().getAccentColor() : nvgRGB(90, 100, 110));
+                panels_[i].panelIcon->setTextColor(isActive ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
             }
             if (panels_[i].currentPath) {
-                panels_[i].currentPath->setTextColor(isActive ? nvgRGB(255, 255, 255) : nvgRGB(130, 140, 150));
+                panels_[i].currentPath->setTextColor(isActive ? ThemeManager::instance().getTextPrimaryColor() : ThemeManager::instance().getTextSecondaryColor());
             }
             if (panels_[i].spaceInfo) {
-                panels_[i].spaceInfo->setTextColor(isActive ? ThemeManager::instance().getAccentColor() : nvgRGB(90, 120, 90));
+                panels_[i].spaceInfo->setTextColor(isActive ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
             }
         }
     } else {
@@ -634,7 +635,7 @@ void FileManagerView::updateActivePanelVisuals() {
             panels_[0].panelIcon->setTextColor(ThemeManager::instance().getAccentColor());
         }
         if (panels_[0].currentPath) {
-            panels_[0].currentPath->setTextColor(nvgRGB(255, 255, 255));
+            panels_[0].currentPath->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         }
         if (panels_[0].spaceInfo) {
             panels_[0].spaceInfo->setTextColor(ThemeManager::instance().getAccentColor());
@@ -817,7 +818,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     auto* titleLbl = new brls::Label();
     titleLbl->setText(item.name);
     titleLbl->setFontSize(18.0f);
-    titleLbl->setTextColor(nvgRGB(255, 255, 255));
+    titleLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLbl->setSingleLine(true);
     headerTextCol->addView(titleLbl);
 
@@ -834,17 +835,18 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
     auto* applet = dialog->getAppletFrame();
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
     }
 
     int restoreRow = panels_[activePanel_].currentFocusedRow;
     brls::View* firstOption = nullptr;
 
-    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action) {
+    auto addOption = [&firstOption, content, dialog, this, restoreRow, isLight](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action) {
         auto* row = new brls::Box();
         row->setHeight(42.0f);
         row->setWidthPercentage(100.0f);
@@ -855,7 +857,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
         row->setPaddingRight(14.0f);
         row->setMarginBottom(4.0f);
         row->setCornerRadius(8.0f);
-        row->setBackgroundColor(nvgRGBA(36, 39, 46, 190));
+        row->setBackgroundColor(isLight ? nvgRGBA(235, 240, 248, 200) : nvgRGBA(36, 39, 46, 190));
 
         auto* ic = new brls::Label();
         ic->setText(iconGlyph);
@@ -867,9 +869,17 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
         auto* lb = new brls::Label();
         lb->setText(labelText);
         lb->setFontSize(15.0f);
-        lb->setTextColor(nvgRGB(240, 245, 255));
+        lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         lb->setGrow(1.0f);
         row->addView(lb);
+
+        row->getFocusEvent()->subscribe([lb, isLight](bool focused) {
+            if (focused) {
+                lb->setTextColor(isLight ? ThemeManager::instance().getAccentColor() : nvgRGB(255, 255, 255));
+            } else {
+                lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+            }
+        });
 
         if (!firstOption) firstOption = row;
 
@@ -1114,7 +1124,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     auto* titleLbl = new brls::Label();
     titleLbl->setText(item.name);
     titleLbl->setFontSize(18.0f);
-    titleLbl->setTextColor(nvgRGB(255, 255, 255));
+    titleLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLbl->setSingleLine(true);
     headerTextCol->addView(titleLbl);
 
@@ -1131,17 +1141,18 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
     auto* applet = dialog->getAppletFrame();
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
     }
 
     int restoreRow = panels_[activePanel_].currentFocusedRow;
     brls::View* firstOption = nullptr;
 
-    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, const std::string& spaceText, std::function<void()> action) {
+    auto addOption = [&firstOption, content, dialog, this, restoreRow, isLight](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, const std::string& spaceText, std::function<void()> action) {
         auto* row = new brls::Box();
         row->setHeight(48.0f);
         row->setWidthPercentage(100.0f);
@@ -1152,7 +1163,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         row->setPaddingRight(14.0f);
         row->setMarginBottom(4.0f);
         row->setCornerRadius(8.0f);
-        row->setBackgroundColor(nvgRGBA(36, 39, 46, 190));
+        row->setBackgroundColor(isLight ? nvgRGBA(235, 240, 248, 200) : nvgRGBA(36, 39, 46, 190));
 
         auto* ic = new brls::Label();
         ic->setText(iconGlyph);
@@ -1168,18 +1179,28 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         auto* lb = new brls::Label();
         lb->setText(labelText);
         lb->setFontSize(15.0f);
-        lb->setTextColor(nvgRGB(240, 245, 255));
+        lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         colText->addView(lb);
 
-        if (!spaceText.empty()) {
-            auto* sp = new brls::Label();
+        auto* sp = spaceText.empty() ? nullptr : new brls::Label();
+        if (sp) {
             sp->setText(spaceText);
             sp->setFontSize(12.0f);
-            sp->setTextColor(nvgRGB(140, 150, 160));
+            sp->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             colText->addView(sp);
         }
 
         row->addView(colText);
+
+        row->getFocusEvent()->subscribe([lb, sp, isLight](bool focused) {
+            if (focused) {
+                lb->setTextColor(isLight ? ThemeManager::instance().getAccentColor() : nvgRGB(255, 255, 255));
+                if (sp) sp->setTextColor(isLight ? ThemeManager::instance().getTextPrimaryColor() : nvgRGB(200, 210, 220));
+            } else {
+                lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+                if (sp) sp->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            }
+        });
 
         if (!firstOption) firstOption = row;
 
@@ -1304,14 +1325,15 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     auto* titleLbl = new brls::Label();
     titleLbl->setText("app/file_manager/free_space_prompt"_i18n);
     titleLbl->setFontSize(18.0f);
-    titleLbl->setTextColor(nvgRGB(255, 255, 255));
+    titleLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLbl->setSingleLine(true);
     headerTextCol->addView(titleLbl);
 
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/delete_source_prompt"_i18n + fileName);
     subLbl->setFontSize(13.0f);
-    subLbl->setTextColor(nvgRGBA(255, 179, 0, 210));
+    subLbl->setTextColor(isLight ? nvgRGB(180, 100, 0) : nvgRGBA(255, 179, 0, 210));
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
 
@@ -1325,13 +1347,13 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
     }
 
     int restoreRow = panels_[activePanel_].currentFocusedRow;
     brls::View* firstOption = nullptr;
 
-    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action) {
+    auto addOption = [&firstOption, content, dialog, this, restoreRow, isLight](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action) {
         auto* row = new brls::Box();
         row->setHeight(42.0f);
         row->setWidthPercentage(100.0f);
@@ -1342,7 +1364,7 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
         row->setPaddingRight(14.0f);
         row->setMarginBottom(4.0f);
         row->setCornerRadius(8.0f);
-        row->setBackgroundColor(nvgRGBA(36, 39, 46, 190));
+        row->setBackgroundColor(isLight ? nvgRGBA(235, 240, 248, 200) : nvgRGBA(36, 39, 46, 190));
 
         auto* ic = new brls::Label();
         ic->setText(iconGlyph);
@@ -1354,9 +1376,17 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
         auto* lb = new brls::Label();
         lb->setText(labelText);
         lb->setFontSize(15.0f);
-        lb->setTextColor(nvgRGB(240, 245, 255));
+        lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         lb->setGrow(1.0f);
         row->addView(lb);
+
+        row->getFocusEvent()->subscribe([lb, isLight](bool focused) {
+            if (focused) {
+                lb->setTextColor(isLight ? ThemeManager::instance().getAccentColor() : nvgRGB(255, 255, 255));
+            } else {
+                lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+            }
+        });
 
         if (!firstOption) firstOption = row;
 
@@ -1816,7 +1846,7 @@ void FileManagerView::showActionsMenu() {
     auto* titleLbl = new brls::Label();
     titleLbl->setText(titleText);
     titleLbl->setFontSize(18.0f);
-    titleLbl->setTextColor(nvgRGB(255, 255, 255));
+    titleLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLbl->setSingleLine(true);
     headerTextCol->addView(titleLbl);
 
@@ -1833,16 +1863,17 @@ void FileManagerView::showActionsMenu() {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
 
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
     auto* applet = dynamic_cast<brls::AppletFrame*>(dialog->getView("brls/dialog/applet"));
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
     }
 
     brls::View* firstOption = nullptr;
 
-    auto addOption = [&firstOption, content, dialog, this, restoreRow](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action, bool opensSubDialog = false) {
+    auto addOption = [&firstOption, content, dialog, this, restoreRow, isLight](const std::string& iconGlyph, NVGcolor iconCol, const std::string& labelText, std::function<void()> action, bool opensSubDialog = false) {
         auto* row = new brls::Box();
         row->setHeight(42.0f);
         row->setWidthPercentage(100.0f);
@@ -1853,7 +1884,7 @@ void FileManagerView::showActionsMenu() {
         row->setPaddingRight(14.0f);
         row->setMarginBottom(3.0f);
         row->setCornerRadius(8.0f);
-        row->setBackgroundColor(nvgRGBA(36, 39, 46, 190));
+        row->setBackgroundColor(isLight ? nvgRGBA(235, 240, 248, 200) : nvgRGBA(36, 39, 46, 190));
 
         auto* ic = new brls::Label();
         ic->setText(iconGlyph);
@@ -1865,9 +1896,17 @@ void FileManagerView::showActionsMenu() {
         auto* lb = new brls::Label();
         lb->setText(labelText);
         lb->setFontSize(15.0f);
-        lb->setTextColor(nvgRGB(240, 245, 255));
+        lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         lb->setGrow(1.0f);
         row->addView(lb);
+
+        row->getFocusEvent()->subscribe([lb, isLight](bool focused) {
+            if (focused) {
+                lb->setTextColor(isLight ? ThemeManager::instance().getAccentColor() : nvgRGB(255, 255, 255));
+            } else {
+                lb->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+            }
+        });
 
         if (!firstOption) firstOption = row;
 
@@ -2115,7 +2154,7 @@ void FileManagerView::showActionsMenu() {
     cancelSep->setHeight(1.0f);
     cancelSep->setMarginTop(6.0f);
     cancelSep->setMarginBottom(6.0f);
-    cancelSep->setBackgroundColor(nvgRGBA(255, 255, 255, 20));
+    cancelSep->setBackgroundColor(isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(255, 255, 255, 20));
     content->addView(cancelSep);
 
     // Cancel option
@@ -2166,9 +2205,9 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
         if (cell->accentBar) cell->accentBar->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
         cell->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
         cell->icon->setText("\uE5D8"); // Material arrow up
-        cell->icon->setTextColor(nvgRGB(150, 150, 160));
+        cell->icon->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         cell->name->setText("..");
-        cell->name->setTextColor(nvgRGB(220, 220, 220));
+        cell->name->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         cell->size->setText(brls::getStr("app/file_manager/parent_folder"));
         cell->date->setText("");
 
@@ -2195,12 +2234,12 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
     if (item.isDir) {
         cell->icon->setText("\uE2C7"); // Material folder
         cell->icon->setTextColor(nvgRGB(255, 193, 7)); // Amber/Yellow
-        cell->name->setTextColor(nvgRGB(255, 255, 255));
+        cell->name->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         cell->size->setText(brls::getStr("app/file_manager/folder_type"));
     } else if (util::isArchiveFile(item.path)) {
         cell->icon->setText("\uE2C6"); // Material archive
         cell->icon->setTextColor(nvgRGB(255, 87, 34)); // Orange
-        cell->name->setTextColor(nvgRGB(255, 240, 230));
+        cell->name->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         cell->size->setText(util::formatFileSize(item.size));
     } else {
         bool isGame = util::isGamePackage(item.path);
@@ -2212,9 +2251,9 @@ brls::RecyclerCell* FileManagerView::FileManagerDataSource::cellForRow(brls::Rec
             cell->icon->setTextColor(ThemeManager::instance().getAccentColor());
         } else {
             cell->icon->setText("\uE24D"); // Generic file
-            cell->icon->setTextColor(nvgRGB(140, 150, 160));
+            cell->icon->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         }
-        cell->name->setTextColor(nvgRGB(230, 230, 230));
+        cell->name->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         cell->size->setText(util::formatFileSize(item.size));
     }
 

@@ -22,7 +22,7 @@ static std::string formatBytesLocal(uintmax_t bytes) {
 static bool isImageExtension(const std::string& ext) {
     std::string lower = ext;
     std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-    return (lower == ".jpg" || lower == ".jpeg" || lower == ".png");
+    return (lower == ".jpg" || lower == ".jpeg" || lower == ".png" || lower == ".webp");
 }
 
 BackgroundFilePicker::BackgroundFilePicker(const std::string& initialDir) {
@@ -53,7 +53,9 @@ brls::View* BackgroundFilePicker::createContentView() {
     pathBar->setAlignItems(brls::AlignItems::CENTER);
     pathBar->setMarginBottom(12.0f);
     pathBar->setPadding(8.0f, 16.0f, 8.0f, 16.0f);
-    pathBar->setBackgroundColor(nvgRGBA(18, 28, 42, 160));
+    pathBar->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+    pathBar->setBorderColor(ThemeManager::instance().getCardBorderColor());
+    pathBar->setBorderThickness(1.0f);
     pathBar->setCornerRadius(8.0f);
 
     auto* folderIcon = new brls::Label();
@@ -66,7 +68,7 @@ brls::View* BackgroundFilePicker::createContentView() {
     pathLabel_ = new brls::Label();
     pathLabel_->setText(currentDir_);
     pathLabel_->setFontSize(16.0f);
-    pathLabel_->setTextColor(nvgRGB(220, 225, 230));
+    pathLabel_->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     pathLabel_->setGrow(1.0f);
     pathLabel_->setSingleLine(true);
     pathBar->addView(pathLabel_);
@@ -75,12 +77,19 @@ brls::View* BackgroundFilePicker::createContentView() {
 
     // Scrollable File List Container
     scroll_ = new brls::ScrollingFrame();
-    scroll_->setWidthPercentage(100.0f);
+    scroll_->setWidth(brls::View::AUTO);
+    scroll_->setHeight(brls::View::AUTO);
     scroll_->setGrow(1.0f);
+    scroll_->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
 
     listContainer_ = new brls::Box(brls::Axis::COLUMN);
-    listContainer_->setWidthPercentage(100.0f);
-    listContainer_->setGrow(1.0f);
+    listContainer_->setWidth(10000);
+    listContainer_->setHeight(brls::View::AUTO);
+    listContainer_->setAlignItems(brls::AlignItems::STRETCH);
+    listContainer_->setPaddingTop(6.0f);
+    listContainer_->setPaddingRight(36.0f);
+    listContainer_->setPaddingBottom(16.0f);
+    listContainer_->setPaddingLeft(12.0f);
     scroll_->setContentView(listContainer_);
 
     rootBox_->addView(scroll_);
@@ -115,6 +124,9 @@ void BackgroundFilePicker::navigateTo(const std::string& path) {
         pathLabel_->setText(currentDir_);
     }
     refreshList();
+    if (scroll_) {
+        scroll_->setContentOffsetY(0.0f, false);
+    }
 }
 
 void BackgroundFilePicker::refreshList() {
@@ -129,6 +141,8 @@ void BackgroundFilePicker::refreshList() {
         auto* parentCell = new brls::DetailCell();
         parentCell->setText("..");
         parentCell->setDetailText("app/appearance/folder_parent"_i18n);
+        parentCell->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        parentCell->setDetailTextColor(ThemeManager::instance().getTextSecondaryColor());
         parentCell->registerClickAction([this, cur](brls::View* v) {
             navigateTo(cur.parent_path().generic_string());
             return true;
@@ -175,6 +189,8 @@ void BackgroundFilePicker::refreshList() {
         auto* cell = new brls::DetailCell();
         cell->setText(d.name + "/");
         cell->setDetailText("app/appearance/folder_type"_i18n);
+        cell->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        cell->setDetailTextColor(ThemeManager::instance().getAccentColor());
         cell->registerClickAction([this, path = d.fullPath](brls::View* v) {
             navigateTo(path);
             return true;
@@ -187,6 +203,8 @@ void BackgroundFilePicker::refreshList() {
         auto* cell = new brls::DetailCell();
         cell->setText(img.name);
         cell->setDetailText(formatBytesLocal(img.size));
+        cell->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        cell->setDetailTextColor(ThemeManager::instance().getTextSecondaryColor());
         cell->registerClickAction([this, fullPath = img.fullPath](brls::View* v) {
             onItemSelected(fullPath, false);
             return true;
@@ -203,9 +221,13 @@ void BackgroundFilePicker::refreshList() {
         auto* emptyLabel = new brls::Label();
         emptyLabel->setText("app/appearance/folder_empty"_i18n);
         emptyLabel->setFontSize(18.0f);
-        emptyLabel->setTextColor(nvgRGB(140, 150, 160));
+        emptyLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         emptyBox->addView(emptyLabel);
         listContainer_->addView(emptyBox);
+    } else {
+        if (!listContainer_->getChildren().empty()) {
+            brls::Application::giveFocus(listContainer_->getChildren().front());
+        }
     }
 }
 

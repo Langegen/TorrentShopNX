@@ -2,6 +2,7 @@
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
+#include "ThemeManager.hpp"
 #include "../datasource/custom_engine_client.h"
 #include "../config/config.h"
 #include "../catalog/retro_catalog_manager.h"
@@ -199,6 +200,27 @@ void FileSelectView::onContentAvailable() {
     title->setText(cleanTitle(game_.title));
     subtitle->setText("app/fileselect/subtitle"_i18n);
 
+    if (bottomSummaryBox) {
+        bottomSummaryBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+        bottomSummaryBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        bottomSummaryBox->setBorderThickness(1.0f);
+    }
+    if (installLocationBox) {
+        installLocationBox->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
+        installLocationBox->setBorderColor(ThemeManager::instance().getMediumAccentColor());
+        installLocationBox->setBorderThickness(1.5f);
+        installLocationBox->setCornerRadius(8.0f);
+        installLocationBox->getFocusEvent()->subscribe([this](bool focused) {
+            if (installLocationBox) {
+                installLocationBox->setBorderColor(focused ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getMediumAccentColor());
+                installLocationBox->setBackgroundColor(focused ? ThemeManager::instance().getMediumAccentColor() : ThemeManager::instance().getDimAccentColor());
+            }
+        });
+    }
+    if (totalSizeText) {
+        totalSizeText->setTextColor(ThemeManager::instance().getAccentColor());
+    }
+
     // Configure install location selector
     auto& cfg = config::ConfigManager::instance();
     if (!retro_console_id_.empty()) {
@@ -208,7 +230,7 @@ void FileSelectView::onContentAvailable() {
             const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
             if (cInfo && !cInfo->default_rom_subfolder.empty()) sub = cInfo->default_rom_subfolder;
             installLocationText->setText(cfg.getEffectiveRetroRomsDir(sub));
-            installLocationText->setTextColor(nvgRGB(52, 152, 219));
+            installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
     } else {
         auto updateInstallLocationDisplay = [this, &cfg]() {
@@ -222,7 +244,7 @@ void FileSelectView::onContentAvailable() {
                 installLocationText->setTextColor(nvgRGB(231, 76, 60)); // red/orange
             } else {
                 installLocationText->setText("app/fileselect/loc_auto"_i18n);
-                installLocationText->setTextColor(nvgRGB(52, 152, 219)); // blue
+                installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
             }
         };
         updateInstallLocationDisplay();
@@ -465,9 +487,9 @@ void FileSelectView::rebuildFileList() {
             label->setText(item.headerTitle);
             
             if (item.headerTitle == "app/fileselect/no_files"_i18n) {
-                label->setTextColor(nvgRGB(150, 150, 150));
+                label->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             } else {
-                label->setTextColor(nvgRGB(255, 87, 34)); // Orange/red accent for headers
+                label->setTextColor(ThemeManager::instance().getAccentColor());
             }
             row->addView(label);
             fileListBox->addView(row);
@@ -491,7 +513,7 @@ void FileSelectView::rebuildFileList() {
             chk->setHeight(brls::View::AUTO);
             chk->setFontSize(20);
             chk->setText(isSel ? "[V]" : "[ ]");
-            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : nvgRGB(180, 180, 180));
+            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
             row->addView(chk);
             checkboxLabels_[idx] = chk;
 
@@ -506,7 +528,9 @@ void FileSelectView::rebuildFileList() {
             
             uint64_t tid = parseTitleIdFromFilename(file.name);
             if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard)) {
-                nameLbl->setTextColor(nvgRGB(120, 120, 120)); // Gray out slightly
+                nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
+            } else {
+                nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             }
             row->addView(nameLbl);
 
@@ -516,7 +540,7 @@ void FileSelectView::rebuildFileList() {
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
             sizeLbl->setText(formatBytes(file.size));
-            sizeLbl->setTextColor(nvgRGB(136, 136, 136));
+            sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
             // Click to toggle
@@ -812,7 +836,7 @@ void FileSelectView::updateRowSelectionState(size_t idx) {
 
     bool isSel = (idx < selected_.size()) && selected_[idx];
     chk->setText(isSel ? "[V]" : "[ ]");
-    chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : nvgRGB(180, 180, 180));
+    chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
 }
 
 } // namespace ui

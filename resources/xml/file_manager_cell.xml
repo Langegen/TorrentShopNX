@@ -41,7 +41,7 @@
         height="auto"
         horizontalAlign="right"
         fontSize="14"
-        textColor="#999999"
+        textColor="@theme/brls/text_secondary"
         marginRight="12" />
 
     <brls:Label
@@ -50,6 +50,6 @@
         height="auto"
         horizontalAlign="right"
         fontSize="13"
-        textColor="#666666" />
+        textColor="@theme/brls/text_secondary" />
 
 </brls:Box>
