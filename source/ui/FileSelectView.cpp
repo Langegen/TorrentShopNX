@@ -823,9 +823,9 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
     }
 
     brls::sync([]() {
-        while (brls::Application::getActivitiesStack().size() > 1)
-            brls::Application::popActivity(brls::TransitionAnimation::NONE);
-        brls::Application::pushActivity(new ui::DownloadsView());
+        brls::Application::popActivity(brls::TransitionAnimation::NONE, []() {
+            brls::Application::pushActivity(new ui::DownloadsView());
+        });
     });
 }
 

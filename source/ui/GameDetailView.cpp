@@ -284,8 +284,6 @@ void GameDetailView::onContentAvailable() {
             } else {
                 ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
                 brls::sync([]() {
-                    while (brls::Application::getActivitiesStack().size() > 1)
-                        brls::Application::popActivity(brls::TransitionAnimation::NONE);
                     brls::Application::pushActivity(new ui::DownloadsView());
                 });
                 return true;
@@ -294,8 +292,6 @@ void GameDetailView::onContentAvailable() {
         if (isHomebrewGame(game_)) {
             ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
             brls::sync([]() {
-                while (brls::Application::getActivitiesStack().size() > 1)
-                    brls::Application::popActivity(brls::TransitionAnimation::NONE);
                 brls::Application::pushActivity(new ui::DownloadsView());
             });
             return true;

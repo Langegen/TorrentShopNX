@@ -17,7 +17,7 @@
                 <brls:Label id="emuBadgeText" text="" fontSize="13" />
             </brls:Box>
         </brls:Box>
-        <brls:Label id="statsHint" text="@i18n/app/common/loading" fontSize="14" textColor="#90caf9" />
+        <brls:Label id="statsHint" text="@i18n/app/common/loading" fontSize="14" textColor="@theme/brls/header/subtitle" />
     </brls:Box>
 
     <!-- Loading / Progress view -->

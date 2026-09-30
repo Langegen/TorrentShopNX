@@ -555,5 +555,11 @@ void CatalogView::willDisappear(bool resetState) {
     }
 }
 
+void CatalogView::onResume() {
+    brls::Activity::onResume();
+    g_activeCatalogView = this;
+    g_catalogViewAliveToken = std::make_shared<bool>(true);
+}
+
 
 } // namespace ui

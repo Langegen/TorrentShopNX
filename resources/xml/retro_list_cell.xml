@@ -10,7 +10,7 @@
     marginBottom="4">
 
     <!-- Cover Thumbnail -->
-    <brls:Box width="51px" height="68px" cornerRadius="6" backgroundColor="#121826" alignItems="center" justifyContent="center" marginRight="16">
+    <brls:Box width="51px" height="68px" cornerRadius="6" backgroundColor="@theme/brls/sidebar/separator" alignItems="center" justifyContent="center" marginRight="16">
         <brls:Image id="cover" width="51px" height="68px" cornerRadius="6" scalingType="fit" />
     </brls:Box>
 
@@ -33,7 +33,7 @@
             <brls:Label
                 id="meta"
                 fontSize="12"
-                textColor="#8da2b5"
+                textColor="@theme/brls/header/subtitle"
                 marginRight="10"
                 singleLine="true" />
 
@@ -53,7 +53,7 @@
         <brls:Label
             id="size"
             fontSize="13"
-            textColor="#8da2b5"
+            textColor="@theme/brls/header/subtitle"
             marginRight="16" />
 
         <brls:Box
@@ -63,7 +63,7 @@
             paddingTop="5"
             paddingBottom="5"
             cornerRadius="6"
-            backgroundColor="#ffffff10"
+            backgroundColor="@theme/brls/sidebar/separator"
             alignItems="center"
             justifyContent="center">
             <brls:Label

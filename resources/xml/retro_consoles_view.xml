@@ -13,7 +13,7 @@
         <brls:Box axis="row" alignItems="center">
             <brls:Label id="titleLabel" text="@i18n/app/retro/consoles_title" fontSize="28" />
         </brls:Box>
-        <brls:Label id="statsHint" text="@i18n/app/retro/consoles_stats" fontSize="14" textColor="#90caf9" />
+        <brls:Label id="statsHint" text="@i18n/app/retro/consoles_stats" fontSize="14" textColor="@theme/brls/header/subtitle" />
     </brls:Box>
 
     <!-- Console list in scrolling frame -->
@@ -23,7 +23,7 @@
         height="auto"
         grow="1.0"
         marginBottom="10">
-        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingLeft="14" paddingRight="24" />
+        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingLeft="14" paddingRight="24" paddingBottom="30" />
     </brls:ScrollingFrame>
 
 </brls:Box>

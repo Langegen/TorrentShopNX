@@ -86,6 +86,10 @@ public:
     void setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd);
     bool shouldCheckAppUpdateToday() const;
 
+    const std::string& getLastEmulatorManifestCheckDate() const;
+    void setLastEmulatorManifestCheckDate(const std::string& date_yyyy_mm_dd);
+    bool shouldCheckEmulatorManifestToday() const;
+
     const std::string& getLanguage() const;
     void setLanguage(const std::string& lang);
 
@@ -141,6 +145,7 @@ private:
     std::string app_update_url_;
     bool auto_app_update_;
     std::string last_app_update_check_date_;
+    std::string last_emulator_manifest_check_date_;
     std::string language_;
     std::string retro_roms_mode_;
     std::string retro_custom_path_;

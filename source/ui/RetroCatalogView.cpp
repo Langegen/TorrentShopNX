@@ -78,7 +78,7 @@ void RetroGridRowCell::prepareForReuse() {
         }
         if (titles[i]) {
             titles[i]->setAnimated(false);
-            titles[i]->setTextColor(nvgRGBA(255, 255, 255, 255));
+            titles[i]->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         }
     }
 }
@@ -121,7 +121,7 @@ void RetroListRowCell::prepareForReuse() {
     this->setHighlightProgress(0.0f);
     this->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
     if (title) {
-        title->setTextColor(nvgRGBA(255, 255, 255, 255));
+        title->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     }
 }
 
@@ -147,13 +147,25 @@ void RetroCatalogView::updateEmulatorBadge() {
     bool installed = catalog::RetroEmulatorManager::instance().isInstalled(consoleInfo_.recommended_emulator_id);
     emuBadge->setVisibility(brls::Visibility::VISIBLE);
 
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+
     if (installed) {
-        emuBadge->setBackgroundColor(nvgRGBA(38, 166, 91, 45));
-        emuBadgeText->setTextColor(nvgRGB(46, 204, 113));
+        if (isLight) {
+            emuBadge->setBackgroundColor(nvgRGBA(38, 166, 91, 35));
+            emuBadgeText->setTextColor(nvgRGB(22, 128, 61));
+        } else {
+            emuBadge->setBackgroundColor(nvgRGBA(38, 166, 91, 45));
+            emuBadgeText->setTextColor(nvgRGB(46, 204, 113));
+        }
         emuBadgeText->setText("app/retro/emu_prefix"_i18n + emuPkg->name + "app/retro/emu_ready_badge"_i18n);
     } else {
-        emuBadge->setBackgroundColor(nvgRGBA(255, 152, 0, 40));
-        emuBadgeText->setTextColor(nvgRGB(255, 183, 77));
+        if (isLight) {
+            emuBadge->setBackgroundColor(nvgRGBA(234, 88, 12, 35));
+            emuBadgeText->setTextColor(nvgRGB(194, 65, 12));
+        } else {
+            emuBadge->setBackgroundColor(nvgRGBA(255, 152, 0, 40));
+            emuBadgeText->setTextColor(nvgRGB(255, 183, 77));
+        }
         emuBadgeText->setText("app/retro/emu_prefix"_i18n + emuPkg->name + "app/retro/emu_not_installed_badge"_i18n);
     }
 }
@@ -619,7 +631,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         });
 
         cell->getFocusLostEvent()->subscribe([cell](brls::View*) {
-            cell->title->setTextColor(nvgRGBA(255, 255, 255, 255));
+            cell->title->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             cell->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
         });
 
@@ -664,6 +676,8 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         ? static_cast<int>((parent_->sections_[0].games->size() + 5) / 6) + row
         : row;
 
+    bool isLightCatalog = ThemeManager::instance().isCurrentThemeLight();
+
     for (int i = 0; i < 6; ++i) {
         size_t gameIdx = static_cast<size_t>(row * 6 + i);
         if (gameIdx < games.size()) {
@@ -679,13 +693,18 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             brls::Label* titleLabel = cards[i].title;
 
             titleLabel->setText(shortTitle);
+            titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             cards[i].size->setText(game.size);
 
             // Badge styling: ROMSET vs ROM
             bool isRom = isRomsetGame(game);
             if (isRom) {
                 cards[i].romBadge->setText("app/retro/badge_romset"_i18n);
-                cards[i].romBadge->setTextColor(nvgRGBA(255, 170, 0, 255));
+                if (isLightCatalog) {
+                    cards[i].romBadge->setTextColor(nvgRGB(194, 65, 12));
+                } else {
+                    cards[i].romBadge->setTextColor(nvgRGBA(255, 170, 0, 255));
+                }
             } else {
                 cards[i].romBadge->setText("ROM");
                 cards[i].romBadge->setTextColor(ThemeManager::instance().getAccentColor());
@@ -707,7 +726,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             });
 
             cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
-                titleLabel->setTextColor(nvgRGBA(255, 255, 255, 255));
+                titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
                 titleLabel->setAnimated(false);
                 titleLabel->setText(shortTitle);
             });

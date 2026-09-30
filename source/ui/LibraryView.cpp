@@ -137,6 +137,7 @@ static std::string cleanNameForMatching(const std::string& name) {
     
     // Replace common variants
     replaceAll(lower, "&", "and");
+    replaceAll(lower, "+", "plus");
     replaceAll(lower, "part 1", "1");
     replaceAll(lower, "part i", "1");
     replaceAll(lower, "part 2", "2");
@@ -227,6 +228,76 @@ static std::string getFirstTwoWords(const std::string& str) {
         return word1;
     }
     return "";
+}
+
+static std::vector<std::string> tokenizeNameForMatching(const std::string& name) {
+    std::string lower;
+    lower.reserve(name.size());
+    for (char c : name) {
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    replaceAll(lower, "&", "and");
+    replaceAll(lower, "+", "plus");
+
+    std::string noTags;
+    noTags.reserve(lower.size());
+    bool inBracket = false;
+    for (char c : lower) {
+        if (c == '[' || c == '{') inBracket = true;
+        else if (c == ']' || c == '}') inBracket = false;
+        else if (!inBracket) noTags.push_back(c);
+    }
+
+    std::vector<std::string> tokens;
+    std::string current;
+    for (char c : noTags) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            current.push_back(c);
+        } else {
+            if (!current.empty()) {
+                if (current != "repack" && current != "nsz" && current != "nsp" &&
+                    current != "xci" && current != "xcz" && current != "rus" &&
+                    current != "eng" && current != "multi" && current != "mod") {
+                    tokens.push_back(current);
+                }
+                current.clear();
+            }
+        }
+    }
+    if (!current.empty()) {
+        if (current != "repack" && current != "nsz" && current != "nsp" &&
+            current != "xci" && current != "xcz" && current != "rus" &&
+            current != "eng" && current != "multi" && current != "mod") {
+            tokens.push_back(current);
+        }
+    }
+    return tokens;
+}
+
+static bool tokensMatchGame(const std::vector<std::string>& instTokens, const std::vector<std::string>& catTokens) {
+    if (instTokens.empty() || catTokens.empty()) return false;
+    if (instTokens == catTokens) return true;
+    if (instTokens.size() == 1) {
+        const std::string& t = instTokens[0];
+        bool inCat = false;
+        for (const auto& ct : catTokens) {
+            if (ct == t) { inCat = true; break; }
+        }
+        return inCat && (catTokens.size() <= 3 || t.length() >= 5);
+    }
+    std::vector<std::string> sigInst;
+    for (const auto& t : instTokens) {
+        if (t.length() > 1) sigInst.push_back(t);
+    }
+    if (sigInst.empty()) sigInst = instTokens;
+    for (const auto& t : sigInst) {
+        bool found = false;
+        for (const auto& ct : catTokens) {
+            if (ct == t) { found = true; break; }
+        }
+        if (!found) return false;
+    }
+    return true;
 }
 
 static bool downloadVersionsDatabaseIfNeeded() {
@@ -656,10 +727,12 @@ void LibraryView::scanForUpdates() {
         struct CatalogIndex {
             std::unordered_map<uint64_t, const Game*> byTid;
             std::vector<std::pair<std::string, const Game*>> byCleanName;
+            std::vector<std::pair<std::vector<std::string>, const Game*>> byTokens;
         };
         CatalogIndex catIndex;
         catIndex.byTid.reserve(catalog->size());
         catIndex.byCleanName.reserve(catalog->size());
+        catIndex.byTokens.reserve(catalog->size());
         for (const auto& g : *catalog) {
             uint64_t tid = parseTitleIdFromGame(g);
             if (tid != 0) {
@@ -671,6 +744,8 @@ void LibraryView::scanForUpdates() {
             }
             std::string cn = cleanNameForMatching(g.title);
             if (!cn.empty()) catIndex.byCleanName.emplace_back(std::move(cn), &g);
+            auto tokens = tokenizeNameForMatching(g.title);
+            if (!tokens.empty()) catIndex.byTokens.emplace_back(std::move(tokens), &g);
         }
 
         auto makeItem = [](const Game& g, const std::string& currentVer,
@@ -769,13 +844,35 @@ void LibraryView::scanForUpdates() {
             // Fallback to name matching if Title ID match failed
             if (!foundInCatalog) {
                 std::string instClean = cleanNameForMatching(inst.name);
+                auto instTokens = tokenizeNameForMatching(inst.name);
                 if (!instClean.empty()) {
+                    // 1. Try exact clean name match first
                     for (const auto& entry : catIndex.byCleanName) {
-                        const std::string& catClean = entry.first;
-                        if (catClean == instClean || catClean.find(instClean) != std::string::npos || instClean.find(catClean) != std::string::npos) {
+                        if (entry.first == instClean) {
                             displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
                             foundInCatalog = true;
                             break;
+                        }
+                    }
+                    // 2. Try token-based matching (e.g. multi-packs like Shovel Knight: Treasure Trove)
+                    if (!foundInCatalog && !instTokens.empty()) {
+                        for (const auto& entry : catIndex.byTokens) {
+                            if (tokensMatchGame(instTokens, entry.first)) {
+                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
+                                foundInCatalog = true;
+                                break;
+                            }
+                        }
+                    }
+                    // 3. Fallback to substring matching ONLY if strings are >= 4 characters
+                    if (!foundInCatalog && instClean.length() >= 4) {
+                        for (const auto& entry : catIndex.byCleanName) {
+                            const std::string& catClean = entry.first;
+                            if (catClean.length() >= 4 && (catClean.find(instClean) != std::string::npos || (catClean.length() >= 8 && instClean.find(catClean) != std::string::npos))) {
+                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
+                                foundInCatalog = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -916,7 +1013,8 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
     }
 
     try {
-        cell->title->setText(cleanTitle(item.game.title));
+        std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+        cell->title->setText(displayName);
         
         char tidBuf[32];
         sprintf(tidBuf, "%016llX", (unsigned long long)item.titleId);
@@ -992,7 +1090,6 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         Game game = item.game;
         std::string rawName = item.rawName;
         uint64_t tid = item.titleId;
-        std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
 
         // Click action (A button)
         if (item.hasMods && !item.updateIgnored && item.status == GameUpdateStatus::UpdateAvailable) {

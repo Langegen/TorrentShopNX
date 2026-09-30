@@ -56,6 +56,7 @@ bool parseConfigBody(const std::string& body,
                      std::string& app_update_url,
                      bool& auto_app_update,
                      std::string& last_app_update_check_date,
+                     std::string& last_emulator_manifest_check_date,
                      std::string& language,
                      std::string& retro_roms_mode,
                      std::string& retro_custom_path,
@@ -133,6 +134,9 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "last_app_update_check_date") {
                     last_app_update_check_date = val;
+                    parsed_known_keys = true;
+                } else if (key == "last_emulator_manifest_check_date") {
+                    last_emulator_manifest_check_date = val;
                     parsed_known_keys = true;
                 } else if (key == "language") {
                     language = val;
@@ -245,6 +249,7 @@ ConfigManager::ConfigManager() {
     app_update_url_ = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
     auto_app_update_ = true;
     last_app_update_check_date_.clear();
+    last_emulator_manifest_check_date_.clear();
     language_ = "auto";
     retro_roms_mode_ = "retroarch";
     retro_custom_path_.clear();
@@ -264,7 +269,7 @@ void ConfigManager::load() {
                         keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
                         install_location_, app_update_url_,
-                        auto_app_update_, last_app_update_check_date_, language_,
+                        auto_app_update_, last_app_update_check_date_, last_emulator_manifest_check_date_, language_,
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_,
                         theme_, background_mode_, custom_background_path_,
                         background_blur_, background_dim_,
@@ -298,7 +303,7 @@ void ConfigManager::load() {
                         keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
                         install_location_, app_update_url_,
-                        auto_app_update_, last_app_update_check_date_, language_,
+                        auto_app_update_, last_app_update_check_date_, last_emulator_manifest_check_date_, language_,
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_,
                         theme_, background_mode_, custom_background_path_,
                         background_blur_, background_dim_,
@@ -362,6 +367,7 @@ void ConfigManager::save() {
     file << "app_update_url=" << app_update_url_ << "\n";
     file << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
     file << "last_app_update_check_date=" << last_app_update_check_date_ << "\n";
+    file << "last_emulator_manifest_check_date=" << last_emulator_manifest_check_date_ << "\n";
     file << "language=" << language_ << "\n";
     file << "retro_roms_mode=" << retro_roms_mode_ << "\n";
     file << "retro_custom_path=" << retro_custom_path_ << "\n";
@@ -664,6 +670,21 @@ bool ConfigManager::shouldCheckAppUpdateToday() const {
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_app_update_check_date_ != today;
+}
+
+const std::string& ConfigManager::getLastEmulatorManifestCheckDate() const {
+    return last_emulator_manifest_check_date_;
+}
+
+void ConfigManager::setLastEmulatorManifestCheckDate(const std::string& date_yyyy_mm_dd) {
+    last_emulator_manifest_check_date_ = date_yyyy_mm_dd;
+    save();
+}
+
+bool ConfigManager::shouldCheckEmulatorManifestToday() const {
+    const std::string today = currentDateString();
+    if (today.empty()) return false;
+    return last_emulator_manifest_check_date_ != today;
 }
 
 const std::string& ConfigManager::getLanguage() const {
