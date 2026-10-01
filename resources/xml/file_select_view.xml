@@ -9,7 +9,8 @@
 
         <!-- Header -->
         <brls:Label id="title" text="@i18n/app/fileselect/title" fontSize="26" marginBottom="10" />
-        <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/header/subtitle" marginBottom="20" />
+        <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/header/subtitle" marginBottom="10" />
+
 
         <!-- Scrollable file list -->
         <brls:ScrollingFrame

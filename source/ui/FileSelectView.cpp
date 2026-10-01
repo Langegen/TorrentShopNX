@@ -8,9 +8,14 @@
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/switch_utils.h"
 #include "../net/image_downloader.h"
+#include "../installer/nsp_header.h"
+#include "../installer/cnmt_parser.h"
+#include "../installer/ncz_parser.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <thread>
 
 #include <mutex>
 
@@ -184,8 +189,6 @@ FileSelectView::FileSelectView(const Game& game, const std::string& retro_consol
 }
 
 FileSelectView::~FileSelectView() {
-    // Signal both async threads that this object is being destroyed.
-    // They must NOT touch any member after this flag is false.
     alive_flag_->store(false);
     g_file_select_view_active = false;
     net::ImageDownloader::instance().resume();
@@ -348,6 +351,7 @@ void FileSelectView::onContentAvailable() {
                     }
                 }
                 subtitle->setText("app/fileselect/select_prompt"_i18n);
+                calculateUncompressedSizes();
                 updateTotalSize();
                 rebuildFileList();
                 util::logLine("FileSelectView: rebuildFileList done, rows=" +
@@ -547,8 +551,8 @@ void FileSelectView::rebuildFileList() {
             row->registerClickAction([this, idx](brls::View*) {
                 if (idx < selected_.size()) {
                     selected_[idx] = !selected_[idx];
-                    updateTotalSize();
                     updateRowSelectionState(idx);
+                    updateTotalSize();
                 }
                 return true;
             });
@@ -567,16 +571,74 @@ void FileSelectView::rebuildFileList() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// calculateUncompressedSizes
+// ─────────────────────────────────────────────────────────────────────────────
+
+void FileSelectView::calculateUncompressedSizes() {
+    if (files_.empty()) return;
+
+    uint64_t total_torrent_bytes = 0;
+    for (const auto& f : files_) {
+        total_torrent_bytes += f.size;
+    }
+
+    double nsz_ratio = util::parseNszCompressionRatio(game_.image_format, total_torrent_bytes);
+    util::logLine("FileSelectView: calculated NSZ ratio " + std::to_string(nsz_ratio) +
+                  " from image_format='" + game_.image_format + "'");
+
+    probe_info_.clear();
+    probe_info_.resize(files_.size());
+    for (size_t i = 0; i < files_.size(); ++i) {
+        if (!isSwitchGameFile(files_[i].name)) {
+            probe_info_[i].uncompressed_size = files_[i].size;
+            probe_info_[i].is_estimated = false;
+        } else {
+            std::string lower = files_[i].name;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower.size() >= 4 && (lower.rfind(".nsz") == lower.size() - 4 || lower.rfind(".xcz") == lower.size() - 4)) {
+                probe_info_[i].uncompressed_size = static_cast<uint64_t>(files_[i].size * nsz_ratio);
+                probe_info_[i].is_estimated = (std::abs(nsz_ratio - 1.0) > 0.001);
+            } else {
+                probe_info_[i].uncompressed_size = files_[i].size;
+                probe_info_[i].is_estimated = false;
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // updateTotalSize
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::updateTotalSize() {
-    unsigned long long total = 0;
+    unsigned long long totalCompressed = 0;
+    unsigned long long totalUnpacked = 0;
+    bool anyEstimated = false;
+
     for (size_t i = 0; i < files_.size(); ++i) {
-        if (i < selected_.size() && selected_[i])
-            total += files_[i].size;
+        if (i < selected_.size() && selected_[i]) {
+            totalCompressed += files_[i].size;
+            if (i < probe_info_.size()) {
+                totalUnpacked += probe_info_[i].uncompressed_size;
+                if (probe_info_[i].is_estimated) anyEstimated = true;
+            } else {
+                totalUnpacked += files_[i].size;
+            }
+        }
     }
-    totalSizeText->setText(formatBytes(total));
+
+    if (totalSizeText) {
+        std::string sizeStr = formatBytes(totalCompressed);
+        if (totalUnpacked > totalCompressed) {
+            std::string prefix = brls::getStr("app/fileselect/unpacked_prefix");
+            if (anyEstimated) {
+                sizeStr += " (" + prefix + ": ~" + formatBytes(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
+            } else {
+                sizeStr += " (" + prefix + ": " + formatBytes(totalUnpacked) + ")";
+            }
+        }
+        totalSizeText->setText(sizeStr);
+    }
 
     if (!retro_console_id_.empty()) {
         int64_t sdFree = 0;
@@ -638,7 +700,11 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     for (size_t i = 0; i < files_.size(); ++i) {
         if (i < selected_.size() && selected_[i]) {
             selectedIndices.push_back(files_[i].index);
-            totalNeededSize += files_[i].size;
+            uint64_t needed = files_[i].size;
+            if (i < probe_info_.size() && probe_info_[i].uncompressed_size > 0) {
+                needed = probe_info_[i].uncompressed_size;
+            }
+            totalNeededSize += needed;
             if (isSwitchGameFile(files_[i].name) && files_[i].size > largestGameSize) {
                 largestGameSize = files_[i].size;
                 forcedIndex     = files_[i].index;

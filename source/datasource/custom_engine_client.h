@@ -70,6 +70,15 @@ public:
     void markInUse(const std::string& hash);
     void unmarkInUse(const std::string& hash);
 
+    /* Kept probe torrent hash (or empty if none). */
+    std::string keptHash() const;
+
+    /* Reads bytes from the probed torrent stream. */
+    int64_t readTorrentData(const std::string& hash, int file_index, int64_t offset, void* buf, int64_t size);
+
+    /* Cancels an in-flight read on the torrent stream. */
+    void cancelRead(const std::string& hash);
+
 private:
     CustomEngineClient() = default;
     ~CustomEngineClient();
@@ -86,7 +95,7 @@ private:
     std::atomic<bool> probe_cancel_{false};
     bool probing_ = false;
 
-    std::mutex keep_mtx_;
+    mutable std::mutex keep_mtx_;
     std::string kept_hash_;              // probe torrent kept for download
     std::vector<std::string> in_use_;    // hashes adopted by a download
 };

@@ -24,6 +24,7 @@ struct LibraryItem {
     bool hasMods = false;
     bool updateIgnored = false;
     std::string modDetails;
+    std::string sdkVersion;
 };
 
 struct LibrarySection {
@@ -71,6 +72,7 @@ public:
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
     BRLS_BIND(brls::Label, spaceHint, "spaceHint");
+    BRLS_BIND(brls::Label, consoleSdkHint, "consoleSdkHint");
 
 private:
     std::vector<LibraryItem> rawItems_;

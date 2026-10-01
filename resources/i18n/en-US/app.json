@@ -229,6 +229,13 @@
     "fileselect": {
         "title": "File Selection",
         "subtitle": "Select files to download from torrent",
+        "sdk_game": "Game SDK: {0}",
+        "sdk_console": "Console SDK: {0}",
+        "sdk_warning": "⚠ Game SDK ({0}) exceeds console SDK ({1}) — game may not launch!",
+        "sdk_unknown": "N/A",
+        "unpacked_prefix": "unpacked",
+        "calculating": "calculating...",
+        "estimated": "est.",
         "total_selected": "Total selected: ",
         "free_sd": "Free on SD: {0}",
         "free_nand": "Free on Console: {0}",
@@ -316,6 +323,7 @@
     },
     "library": {
         "title": "Game Library",
+        "console_sdk": "Console SDK: {0}",
         "searching": "Scanning installed games...",
         "stats": "Updates: {0} of {1}",
         "space": "SD card: {0} free • Internal storage: {1} free",
@@ -959,6 +967,7 @@
         "library_upd_count": "{0} updates"
     },
     "installer": {
+        "sdk_mismatch_warning": "Warning! Game requires SDK {0}, but console firmware is {1}. It may not launch.",
         "step_init": "Initializing...",
         "step_header": "Reading package header...",
         "step_storage": "Preparing storage (NCM)...",

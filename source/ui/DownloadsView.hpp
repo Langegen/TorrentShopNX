@@ -33,6 +33,9 @@ public:
     BRLS_BIND(brls::Label, peersText, "peersText");
     BRLS_BIND(brls::Label, statusText, "statusText");
     BRLS_BIND(brls::Box, installProgressRow, "installProgressRow");
+    BRLS_BIND(brls::Box, sdkWarningBox, "sdkWarningBox");
+    BRLS_BIND(brls::Label, sdkConsoleLabel, "sdkConsoleLabel");
+    BRLS_BIND(brls::Label, sdkGameLabel, "sdkGameLabel");
 };
 
 class DownloadsView : public brls::Activity {

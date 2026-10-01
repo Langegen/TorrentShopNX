@@ -255,6 +255,13 @@
         "keep_installer": "インストール完了後もファイルを保持",
         "keep_installer_desc": "インストール完了後、microSDカードにNSP/XCIファイルを残します",
         "subtitle": "ダウンロードするファイルを選択してください",
+        "sdk_game": "ゲームSDK: {0}",
+        "sdk_console": "本体SDK: {0}",
+        "sdk_warning": "⚠ ゲームSDK ({0}) が本体SDK ({1}) より新しいため起動しない可能性があります！",
+        "sdk_unknown": "不明",
+        "unpacked_prefix": "展開後",
+        "calculating": "計算中...",
+        "estimated": "推定",
         "total_selected": "選択合計: {0}",
         "free_sd": "microSD空き: {0}",
         "free_nand": "本体メモリー空き: {0}",
@@ -316,6 +323,7 @@
     },
     "library": {
         "title": "ライブラリ",
+        "console_sdk": "本体SDK: {0}",
         "empty": "インストールされたゲームはありません",
         "space": "microSD: 空き {0} • 本体メモリー: 空き {1}",
         "search_hint": "ゲームタイトルで検索...",
@@ -935,6 +943,7 @@
         "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
+        "sdk_mismatch_warning": "警告！ゲームには SDK {0} が必要ですが、本体のファームウェアは {1} です。起動しない可能性があります。",
         "step_init": "初期化中...",
         "step_header": "パッケージヘッダーを読み込み中...",
         "step_storage": "ストレージ準備中 (NCM)...",

@@ -1588,6 +1588,12 @@ void DownloadManager::trackProgress() {
             item.install_written = item.hybrid_installer->bytesInstalled();
             item.install_total = item.hybrid_installer->totalBytes();
 
+            if (item.hybrid_installer->hasSdkMismatch()) {
+                item.sdk_mismatch = true;
+                item.game_sdk = item.hybrid_installer->gameSdk();
+                item.console_sdk = item.hybrid_installer->consoleSdk();
+            }
+
             if (item.hybrid_installer->isFinished()) {
                 if (item.hybrid_installer->hasError()) {
                     item.state = DownloadState::Failed;

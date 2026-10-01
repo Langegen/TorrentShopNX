@@ -67,6 +67,31 @@
 
     </brls:Box>
 
+    <!-- SDK Mismatch Warning Box -->
+    <brls:Box
+        id="sdkWarningBox"
+        width="auto"
+        height="auto"
+        axis="column"
+        alignItems="center"
+        justifyContent="center"
+        marginRight="20"
+        visibility="gone">
+
+        <brls:Label
+            id="sdkConsoleLabel"
+            text=""
+            fontSize="12"
+            textColor="@theme/brls/header/subtitle"
+            marginBottom="3" />
+
+        <brls:Label
+            id="sdkGameLabel"
+            text=""
+            fontSize="13"
+            textColor="#FF7043" />
+    </brls:Box>
+
     <!-- Status Text / Controls -->
     <brls:Label
         id="statusText"

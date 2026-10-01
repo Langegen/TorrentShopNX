@@ -255,6 +255,13 @@
         "keep_installer": "Mantener archivo de instalación después",
         "keep_installer_desc": "Guarda el archivo NSP/XCI en la tarjeta SD tras la instalación",
         "subtitle": "Seleccione los archivos a descargar",
+        "sdk_game": "SDK del juego: {0}",
+        "sdk_console": "SDK consola: {0}",
+        "sdk_warning": "⚠ ¡SDK del juego ({0}) supera SDK de consola ({1})!",
+        "sdk_unknown": "N/D",
+        "unpacked_prefix": "descomprimido",
+        "calculating": "calculando...",
+        "estimated": "estimado",
         "total_selected": "Total seleccionado: {0}",
         "free_sd": "Libre en SD: {0}",
         "free_nand": "Libre en NAND: {0}",
@@ -316,6 +323,7 @@
     },
     "library": {
         "title": "Gestor de juegos",
+        "console_sdk": "SDK consola: {0}",
         "empty": "No hay juegos instalados",
         "space": "Tarjeta SD: {0} libre • Memoria interna: {1} libre",
         "search_hint": "Buscar por título del juego...",
@@ -935,6 +943,7 @@
         "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
+        "sdk_mismatch_warning": "¡Advertencia! El juego requiere SDK {0}, pero el firmware de la consola es {1}. Es posible que no se ejecute.",
         "step_init": "Inicializando...",
         "step_header": "Leyendo cabecera del paquete...",
         "step_storage": "Preparando almacenamiento (NCM)...",

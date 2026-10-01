@@ -1,6 +1,7 @@
 #include "DownloadsView.hpp"
 #include "DownloadUiManager.hpp"
 #include "FileManagerView.hpp"
+#include "ThemeManager.hpp"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
 #include "../utils/screen_sleep_manager.h"
@@ -581,6 +582,25 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     
     cell->statusText->setText(statusStr);
     cell->statusText->setTextColor(statusColor);
+
+    // SDK Mismatch warning badge
+    if (cell->sdkWarningBox) {
+        if (item.sdk_mismatch && item.game_sdk.valid && item.console_sdk.valid) {
+            cell->sdkWarningBox->setVisibility(brls::Visibility::VISIBLE);
+            bool isLight = ThemeManager::instance().isCurrentThemeLight();
+            if (cell->sdkConsoleLabel) {
+                cell->sdkConsoleLabel->setText("FW: " + item.console_sdk.toString());
+                cell->sdkConsoleLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            }
+            if (cell->sdkGameLabel) {
+                cell->sdkGameLabel->setText("SDK: " + item.game_sdk.toString());
+                // In light theme: strong deep red (#D32F2F); in dark themes: vibrant orange-red (#FF7043)
+                cell->sdkGameLabel->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(255, 112, 67));
+            }
+        } else {
+            cell->sdkWarningBox->setVisibility(brls::Visibility::GONE);
+        }
+    }
 
     // Stats text
     if (item.state == download::DownloadState::Downloading || 

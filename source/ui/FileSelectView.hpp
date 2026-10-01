@@ -5,6 +5,7 @@
 #include <atomic>
 #include "../GameData.hpp"
 #include "../torrent/torrent_manager.h"
+#include "../utils/switch_utils.h"
 
 namespace ui {
 
@@ -42,9 +43,16 @@ private:
     BRLS_BIND(brls::Label,          installLocationLabel, "installLocationLabel");
     BRLS_BIND(brls::Label,          installLocationText, "installLocationText");
 
+    struct FileProbeInfo {
+        uint64_t uncompressed_size = 0;
+        bool is_estimated = false;
+    };
+    std::vector<FileProbeInfo> probe_info_;
+
     // Rebuild the visible list from files_ / selected_
     void rebuildFileList();
     void updateRowSelectionState(size_t idx);
+    void calculateUncompressedSizes();
 };
 
 } // namespace ui

@@ -22,6 +22,7 @@
 #include "ncm_installer.h"
 #include "ticket_installer.h"
 #include "cnmt_parser.h"
+#include "../utils/switch_utils.h"
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -110,6 +111,11 @@ public:
     /// Установить подсказку о формате контейнера по имени исходного файла.
     void setSourceFileNameHint(const std::string& name);
 
+    /// Статус несовместимости SDK
+    bool hasSdkMismatch() const { return sdk_mismatch_; }
+    util::SdkVersion gameSdk() const { return game_sdk_; }
+    util::SdkVersion consoleSdk() const { return console_sdk_; }
+
 private:
     // =========================================================================
     // Потоки
@@ -169,6 +175,13 @@ private:
 
     /// Установить ошибку и перейти в состояние Failed
     void setError(const std::string& message);
+
+    /// Проверка SDK для Program NCA и неблокирующее предупреждение
+    void checkNcaSdk(const uint8_t* header_data, const std::string& entry_name);
+    bool sdk_warning_shown_ = false;
+    bool sdk_mismatch_ = false;
+    util::SdkVersion game_sdk_;
+    util::SdkVersion console_sdk_;
 
     // =========================================================================
     // Данные

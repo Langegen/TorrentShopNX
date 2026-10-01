@@ -5,6 +5,7 @@
 #include "../buffer/ring_buffer.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include <borealis.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -1053,6 +1054,10 @@ void HybridNspInstaller::installerThreadFunc() {
                                 break;
                             }
 
+                            if (out_written == 0 && got >= 0x4000) {
+                                checkNcaSdk(out_buf.data(), current_entry->name);
+                            }
+
                             if (!ncm_.writePlaceHolder(current_entry->content_id, out_written, out_buf.data(), got)) {
                                 setError("NCZ: Failed to write placeholder " + current_entry->name);
                                 ok = false;
@@ -1133,6 +1138,9 @@ void HybridNspInstaller::installerThreadFunc() {
                     }
 
                     if (offset_in_file == 0) {
+                        if (to_process >= 0x4000) {
+                            checkNcaSdk(chunk_buf.data() + processed, current_entry->name);
+                        }
                         if (config_.verify_sha256) {
                             sha256ContextCreate(&sha_ctx);
                             hashing_active = true;
@@ -1762,6 +1770,42 @@ void HybridNspInstaller::hashReset() {}
 bool HybridNspInstaller::resumeFromOffset(uint64_t offset) {
     util::logLine("hybrid: Smart Resume from offset " + std::to_string(offset));
     return true;
+}
+
+void HybridNspInstaller::checkNcaSdk(const uint8_t* header_data, const std::string& entry_name) {
+    if (sdk_warning_shown_ || !header_data) return;
+
+    uint8_t hdr_key[0x20] = {};
+    if (!deriveNcaHeaderKey(hdr_key)) return;
+
+    NcaHeader nca_hdr = {};
+    if (!decryptNcaHeader(header_data, hdr_key, nca_hdr)) return;
+
+    // Only inspect Program NCA (content_type == 0)
+    if (nca_hdr.content_type != 0) return;
+
+    util::SdkVersion game_sdk = util::SdkVersion::parse(nca_hdr.sdk_addon_version);
+    if (!game_sdk.valid) return;
+
+    util::SdkVersion console_sdk = util::getConsoleSdkVersion();
+    util::logLine("hybrid: detected Program NCA SDK=" + game_sdk.toString() +
+                  " console SDK=" + (console_sdk.valid ? console_sdk.toString() : "unknown") +
+                  " file=" + entry_name);
+
+    if (console_sdk.valid && game_sdk > console_sdk) {
+        sdk_mismatch_ = true;
+        game_sdk_ = game_sdk;
+        console_sdk_ = console_sdk;
+        sdk_warning_shown_ = true;
+        util::logLine("hybrid: WARNING: Game SDK " + game_sdk.toString() +
+                      " > Console SDK " + console_sdk.toString() + " for " + entry_name);
+        brls::sync([game_sdk, console_sdk]() {
+            std::string msg = brls::getStr("app/installer/sdk_mismatch_warning",
+                                          game_sdk.toString(),
+                                          console_sdk.toString());
+            brls::Application::notify(msg);
+        });
+    }
 }
 
 } // namespace installer

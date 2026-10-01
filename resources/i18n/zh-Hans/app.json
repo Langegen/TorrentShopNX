@@ -255,6 +255,13 @@
         "keep_installer": "安装后保留安装包文件",
         "keep_installer_desc": "安装完成后在TF卡保留原始NSP/XCI文件",
         "subtitle": "请选择要下载的文件",
+        "sdk_game": "游戏SDK: {0}",
+        "sdk_console": "主机SDK: {0}",
+        "sdk_warning": "⚠ 游戏SDK ({0}) 高于主机SDK ({1}) — 游戏可能无法运行！",
+        "sdk_unknown": "未知",
+        "unpacked_prefix": "解压后",
+        "calculating": "计算中...",
+        "estimated": "预估",
         "total_selected": "已选总容量: {0}",
         "free_sd": "TF卡剩余: {0}",
         "free_nand": "内部存储剩余: {0}",
@@ -316,6 +323,7 @@
     },
     "library": {
         "title": "游戏管理",
+        "console_sdk": "主机SDK: {0}",
         "empty": "未安装任何游戏",
         "space": "TF卡: 剩余 {0} • 内置存储: 剩余 {1}",
         "search_hint": "搜索已安装游戏...",
@@ -935,6 +943,7 @@
         "retro_c2_badge": "Nintendo • Sony • Sega"
     },
     "installer": {
+        "sdk_mismatch_warning": "警告！游戏需要 SDK {0}，但主机固件版本为 {1}。可能无法正常启动。",
         "step_init": "初始化中...",
         "step_header": "读取安装包头信息...",
         "step_storage": "准备存储空间 (NCM)...",
