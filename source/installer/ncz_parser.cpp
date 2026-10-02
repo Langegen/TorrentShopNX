@@ -22,19 +22,7 @@ constexpr uint8_t kHeaderKeySource[0x20] = {
     0x71, 0xF6, 0x4D, 0x73, 0xF1, 0x50, 0xB9, 0xD2
 };
 
-struct NcaHeader {
-    uint8_t fixed_key_sig[0x100];
-    uint8_t npdm_key_sig[0x100];
-    uint32_t magic;
-    uint8_t distribution;
-    uint8_t content_type;
-    uint8_t crypto_type;
-    uint8_t kaek_index;
-    uint64_t nca_size;
-    uint8_t rest[0xC00 - 0x210];
-} NX_PACKED;
-
-static_assert(sizeof(NcaHeader) == 0xC00, "NcaHeader must be 0xC00 bytes");
+} // namespace
 
 bool deriveNcaHeaderKey(uint8_t out_key[0x20]) {
     Result rc = splCryptoInitialize();
@@ -92,8 +80,6 @@ bool decryptNcaHeader(const uint8_t header_bytes[0x4000], const uint8_t header_k
                          0x200);
     }
 }
-
-} // namespace
 
 NczDecompressor::NczDecompressor(FetchCallback fetch_cb)
     : fetch_cb_(fetch_cb) {
@@ -487,6 +473,8 @@ size_t NczDecompressor::read(void* buffer, size_t size) {
 } // namespace installer
 #else
 namespace installer {
+bool deriveNcaHeaderKey(uint8_t out_key[0x20]) { return false; }
+bool decryptNcaHeader(const uint8_t header_bytes[0x4000], const uint8_t header_key[0x20], NcaHeader& out_header) { return false; }
 NczDecompressor::NczDecompressor(FetchCallback fetch_cb) {}
 NczDecompressor::~NczDecompressor() {}
 bool NczDecompressor::init() { return true; }

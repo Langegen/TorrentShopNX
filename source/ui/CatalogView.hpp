@@ -63,6 +63,7 @@ public:
     void onContentAvailable() override;
     void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
+    void onResume() override;
     
     void filterCatalog();
     void resetFilters();

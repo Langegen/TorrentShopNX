@@ -202,4 +202,22 @@ void CustomEngineClient::unmarkInUse(const std::string& hash) {
                   in_use_.end());
 }
 
+std::string CustomEngineClient::keptHash() const {
+    std::lock_guard<std::mutex> keep(keep_mtx_);
+    return kept_hash_;
+}
+
+int64_t CustomEngineClient::readTorrentData(const std::string& hash, int file_index, int64_t offset, void* buf, int64_t size) {
+    if (!engine_ || hash.empty() || !buf || size <= 0) return -1;
+    if (!tsnx_engine_prepare_stream(engine_, hash.c_str(), file_index)) {
+        return -1;
+    }
+    return tsnx_engine_read(engine_, hash.c_str(), offset, buf, size);
+}
+
+void CustomEngineClient::cancelRead(const std::string& hash) {
+    if (!engine_ || hash.empty()) return;
+    tsnx_engine_cancel_read(engine_, hash.c_str());
+}
+
 } // namespace datasource

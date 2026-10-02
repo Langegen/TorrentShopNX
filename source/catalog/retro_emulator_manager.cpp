@@ -142,7 +142,8 @@ void RetroEmulatorManager::initPackages() {
             false,
             87 * 1024 * 1024,
             {"nds"},
-            nvgRGBA(0, 188, 212, 255)
+            nvgRGBA(0, 188, 212, 255),
+            "drastic_bios"
         },
 
         // --- 7. Nintendo DS (Альтернативный) ---
@@ -514,6 +515,30 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/retroarch/cores/system/bios_CD_E.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/retroarch/cores/system/bios_CD_J.bin", 131072}
             }
+        },
+
+        // --- 9. Nintendo DS (DraStic DS) ---
+        {
+            "drastic_bios",
+            "DraStic DS BIOS & Firmware",
+            "Nintendo / Dump",
+            "v1.0",
+            "Системные файлы ARM7/ARM9 BIOS и nds_firmware.bin для DraStic DS (/switch/drastic/system/)",
+            "bios",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
+            "nds_bios_arm7.bin",
+            "sdmc:/switch/drastic/system/nds_bios_arm7.bin",
+            "sdmc:/switch/drastic/system",
+            false,
+            282624,
+            {"nds"},
+            nvgRGBA(0, 188, 212, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/drastic/system/nds_bios_arm7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/drastic/system/nds_bios_arm9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/drastic/system/nds_firmware.bin", 262144}
+            }
         }
     };
 }
@@ -530,6 +555,8 @@ void RetroEmulatorManager::applyPackageDefaults() {
             if (p.bios_id.empty()) p.bios_id = "dreamcast_bios";
         } else if (p.id == "pgen") {
             if (p.bios_id.empty()) p.bios_id = "segacd_bios";
+        } else if (p.id == "drasticds") {
+            if (p.bios_id.empty()) p.bios_id = "drastic_bios";
         } else if (p.id == "melonds") {
             if (p.bios_id.empty()) p.bios_id = "nds_bios";
         } else if (p.id == "pnes") {
@@ -932,9 +959,9 @@ bool RetroEmulatorManager::loadLocalManifest() {
     std::string str = buffer.str();
     if (str.empty()) return false;
 
-    // Check if the cached manifest on disk is an obsolete pre-BIOS file
-    if (str.find("\"bios\"") == std::string::npos || str.find("\"ps2_bios\"") == std::string::npos) {
-        util::logLine("RetroEmulatorManager: detected obsolete local manifest without BIOS packages, updating cache to latest built-in definitions");
+    // Check if the cached manifest on disk is an obsolete pre-BIOS file or missing drastic_bios
+    if (str.find("\"bios\"") == std::string::npos || str.find("\"ps2_bios\"") == std::string::npos || str.find("\"drastic_bios\"") == std::string::npos) {
+        util::logLine("RetroEmulatorManager: detected obsolete local manifest without drastic_bios, updating cache to latest built-in definitions");
         saveLocalManifest();
         return true;
     }

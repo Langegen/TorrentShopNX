@@ -1,4 +1,5 @@
 #include "GameDetailView.hpp"
+#include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
 #include "DownloadsView.hpp"
@@ -14,42 +15,58 @@ namespace ui {
 
 class ScrollAndFocusController : public brls::View {
 public:
-    ScrollAndFocusController(brls::ScrollingFrame* targetScroll, brls::Button* btnDownload)
-        : targetScroll_(targetScroll), btnDownload_(btnDownload) {
+    ScrollAndFocusController(brls::ScrollingFrame* targetScroll,
+                             brls::Button* btnDownload,
+                             brls::Button* btnFavorite,
+                             brls::Button* btnQr)
+        : targetScroll_(targetScroll),
+          btnDownload_(btnDownload),
+          btnFavorite_(btnFavorite),
+          btnQr_(btnQr) {
         setHeight(0);
         setWidth(0);
     }
     
     void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override {
-        if (!targetScroll_ || !btnDownload_) return;
-        
-        float contentHeight = 0;
-        if (!targetScroll_->getChildren().empty()) {
-            contentHeight = targetScroll_->getChildren().front()->getHeight();
-        }
-        float viewHeight = targetScroll_->getHeight();
-        float maxOffset = contentHeight - viewHeight;
-        
-        if (contentHeight <= 0 || viewHeight <= 0) return;
-        
-        float currentOffset = targetScroll_->getContentOffsetY();
-        bool atBottom = (maxOffset <= 0) || (currentOffset >= maxOffset - 5.0f);
+        if (!targetScroll_) return;
         
         brls::View* currentFocus = brls::Application::getCurrentFocus();
-        if (currentFocus == targetScroll_) {
+        if (!currentFocus) return;
+        
+        // Focus is in right column if it is NOT on the left action buttons
+        bool inRightColumn = (currentFocus != btnDownload_ &&
+                              currentFocus != btnFavorite_ &&
+                              currentFocus != btnQr_);
+                              
+        if (inRightColumn) {
             auto& state = brls::Application::getControllerState();
-            bool dpadDown = state.buttons[brls::BUTTON_DOWN] || state.buttons[brls::BUTTON_NAV_DOWN];
             float leftY = state.axes[brls::LEFT_Y];
+            float rightY = state.axes[brls::RIGHT_Y];
             
-            // Left stick scrolling implementation
+            float currentOffset = targetScroll_->getContentOffsetY();
+            float contentHeight = 0;
+            if (!targetScroll_->getChildren().empty()) {
+                contentHeight = targetScroll_->getChildren().front()->getHeight();
+            }
+            float viewHeight = targetScroll_->getHeight();
+            float maxOffset = contentHeight - viewHeight;
+            if (maxOffset < 0) maxOffset = 0;
+            
+            float delta = 0.0f;
+            // Both Left stick Y and Right stick Y scroll smoothly when in right column
             if (std::abs(leftY) > 0.15f) {
-                float speed = leftY * 12.0f;
-                targetScroll_->setContentOffsetY(currentOffset + speed, false);
+                delta += leftY * 14.0f;
+            } else if (std::abs(rightY) > 0.15f) {
+                delta += rightY * 14.0f;
             }
             
-            if (atBottom && (dpadDown || leftY > 0.15f)) {
-                brls::Logger::info("ScrollAndFocusController: User pressed DOWN at bottom. Transferring focus to btnDownload.");
-                brls::Application::giveFocus(btnDownload_);
+            if (delta != 0.0f) {
+                float newOffset = currentOffset + delta;
+                if (newOffset < 0) newOffset = 0;
+                if (newOffset > maxOffset) newOffset = maxOffset;
+                if (newOffset != currentOffset) {
+                    targetScroll_->setContentOffsetY(newOffset, false);
+                }
             }
         }
     }
@@ -57,6 +74,8 @@ public:
 private:
     brls::ScrollingFrame* targetScroll_;
     brls::Button* btnDownload_;
+    brls::Button* btnFavorite_;
+    brls::Button* btnQr_;
 };
 
 GameDetailView::GameDetailView(const Game& game, const std::string& retro_console_id)
@@ -81,6 +100,13 @@ void GameDetailView::onContentAvailable() {
     metaFormat->setText(brls::getStr("app/detail/image_format", game_.image_format.empty() ? unknownStr : game_.image_format));
     metaVoice->setText(brls::getStr("app/detail/voice_lang", game_.voice_lang.empty() ? unknownStr : game_.voice_lang));
     
+    if (metaBox) {
+        metaBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+        metaBox->setBorderThickness(1.0f);
+        metaBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        metaBox->setCornerRadius(10.0f);
+    }
+
     // Clean description (remove leading ': ')
     std::string desc = game_.description;
     if (desc.size() >= 2 && desc.substr(0, 2) == ": ") {
@@ -154,27 +180,24 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Add genre badges
-    std::stringstream ss(game_.genre);
-    std::string genreTag;
-    while (std::getline(ss, genreTag, ',')) {
-        while (!genreTag.empty() && std::isspace(genreTag.front())) genreTag.erase(genreTag.begin());
-        while (!genreTag.empty() && std::isspace(genreTag.back())) genreTag.pop_back();
-        if (!genreTag.empty()) {
-            brls::Box* gBadge = new brls::Box();
-            gBadge->setPadding(5, 10, 5, 10);
-            gBadge->setMarginRight(10);
-            gBadge->setMarginBottom(10);
-            gBadge->setBackgroundColor(nvgRGB(0, 150, 136)); // Teal genre badge
-            gBadge->setCornerRadius(6);
+    std::vector<std::string> displayBadges = catalog::getDisplayGenreBadges(game_.genre);
+    for (const auto& genreTag : displayBadges) {
+        brls::Box* gBadge = new brls::Box();
+        gBadge->setPadding(5, 10, 5, 10);
+        gBadge->setMarginRight(10);
+        gBadge->setMarginBottom(10);
+        gBadge->setBackgroundColor(ThemeManager::instance().getAccentDimColor());
+        gBadge->setBorderThickness(1.0f);
+        gBadge->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        gBadge->setCornerRadius(6);
 
-            brls::Label* gLabel = new brls::Label();
-            gLabel->setText(genreTag);
-            gLabel->setFontSize(14);
-            gLabel->setTextColor(nvgRGB(255, 255, 255));
-            gBadge->addView(gLabel);
+        brls::Label* gLabel = new brls::Label();
+        gLabel->setText(genreTag);
+        gLabel->setFontSize(14);
+        gLabel->setTextColor(ThemeManager::instance().getAccentColor());
+        gBadge->addView(gLabel);
 
-            badgesBox->addView(gBadge);
-        }
+        badgesBox->addView(gBadge);
     }
 
     // Add multiplayer badge
@@ -186,13 +209,15 @@ void GameDetailView::onContentAvailable() {
             mpBadge->setPadding(5, 10, 5, 10);
             mpBadge->setMarginRight(10);
             mpBadge->setMarginBottom(10);
-            mpBadge->setBackgroundColor(nvgRGB(63, 81, 181)); // Indigo multiplayer badge
+            mpBadge->setBackgroundColor(nvgRGBA(255, 255, 255, 14));
+            mpBadge->setBorderThickness(1.0f);
+            mpBadge->setBorderColor(nvgRGBA(255, 255, 255, 22));
             mpBadge->setCornerRadius(6);
 
             brls::Label* mpLabel = new brls::Label();
             mpLabel->setText(mp);
             mpLabel->setFontSize(14);
-            mpLabel->setTextColor(nvgRGB(255, 255, 255));
+            mpLabel->setTextColor(ThemeManager::instance().getCardTitleColor());
             mpBadge->addView(mpLabel);
 
             badgesBox->addView(mpBadge);
@@ -200,10 +225,11 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Screenshots Horizontal Scroll
+    brls::View* firstScr = nullptr;
     if (game_.screenshots.empty()) {
-        screenshotsScroll->setVisibility(brls::Visibility::GONE);
+        screenshotsContainer->setVisibility(brls::Visibility::GONE);
     } else {
-        screenshotsScroll->setVisibility(brls::Visibility::VISIBLE);
+        screenshotsContainer->setVisibility(brls::Visibility::VISIBLE);
         for (size_t i = 0; i < game_.screenshots.size(); ++i) {
             const auto& scrUrl = game_.screenshots[i];
             if (scrUrl.empty()) continue;
@@ -218,8 +244,33 @@ void GameDetailView::onContentAvailable() {
                 brls::Application::pushActivity(new ScreenshotViewer(game_.screenshots, i));
                 return true;
             });
+            
+            // Allow D-pad down/up to scroll the description while on any screenshot
+            scrImg->registerAction("", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
+                float contentHeight = (!scroll->getChildren().empty()) ? scroll->getChildren().front()->getHeight() : 0;
+                float maxOffset = contentHeight - scroll->getHeight();
+                if (maxOffset > 0) {
+                    float currentOffset = scroll->getContentOffsetY();
+                    float newOffset = std::min(maxOffset, currentOffset + 60.0f);
+                    scroll->setContentOffsetY(newOffset, true);
+                }
+                return true;
+            }, true, true, brls::SOUND_NONE);
+
+            scrImg->registerAction("", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
+                float currentOffset = scroll->getContentOffsetY();
+                if (currentOffset > 0) {
+                    float newOffset = std::max(0.0f, currentOffset - 60.0f);
+                    scroll->setContentOffsetY(newOffset, true);
+                }
+                return true;
+            }, true, true, brls::SOUND_NONE);
+
             setImageFromHTTPS(scrImg, scrUrl, imageToken, "romfs:/img/borealis_96.png", false, "", -1, -1, 1900000 - static_cast<int>(i) * 10);
             screenshotsBox->addView(scrImg);
+            if (!firstScr) {
+                firstScr = scrImg;
+            }
         }
     }
     
@@ -233,8 +284,6 @@ void GameDetailView::onContentAvailable() {
             } else {
                 ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
                 brls::sync([]() {
-                    while (brls::Application::getActivitiesStack().size() > 1)
-                        brls::Application::popActivity(brls::TransitionAnimation::NONE);
                     brls::Application::pushActivity(new ui::DownloadsView());
                 });
                 return true;
@@ -243,8 +292,6 @@ void GameDetailView::onContentAvailable() {
         if (isHomebrewGame(game_)) {
             ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
             brls::sync([]() {
-                while (brls::Application::getActivitiesStack().size() > 1)
-                    brls::Application::popActivity(brls::TransitionAnimation::NONE);
                 brls::Application::pushActivity(new ui::DownloadsView());
             });
             return true;
@@ -279,9 +326,24 @@ void GameDetailView::onContentAvailable() {
     // Update initial button state
     updateFavoriteButton();
 
-    ScrollAndFocusController* scrollController = new ScrollAndFocusController(scroll, btnDownload);
+    ScrollAndFocusController* scrollController = new ScrollAndFocusController(scroll, btnDownload, btnFavorite, btnQr);
     contentBox->addView(scrollController);
 
+    // Custom navigation routes for seamless gamepad control
+    btnDownload->setCustomNavigationRoute(brls::FocusDirection::DOWN, btnFavorite);
+    btnFavorite->setCustomNavigationRoute(brls::FocusDirection::UP, btnDownload);
+    btnFavorite->setCustomNavigationRoute(brls::FocusDirection::RIGHT, btnQr);
+    btnQr->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnFavorite);
+    btnQr->setCustomNavigationRoute(brls::FocusDirection::UP, btnDownload);
+
+    brls::View* rightTarget = firstScr ? firstScr : static_cast<brls::View*>(scroll);
+    btnDownload->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+    btnQr->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+
+    if (firstScr) {
+        firstScr->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+    }
+    scroll->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
 
     // Explicitly set the last focused view on the activity content box to guarantee btnDownload gets default focus
     brls::Box* contentBoxView = dynamic_cast<brls::Box*>(getContentView());
@@ -309,7 +371,7 @@ brls::View* GameDetailView::create() {
 void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
-    brls::Application::giveFocus(scroll);
+    brls::Application::giveFocus(btnDownload);
 }
 
 void GameDetailView::willDisappear(bool resetState) {

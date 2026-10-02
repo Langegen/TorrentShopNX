@@ -578,22 +578,32 @@ void View::drawHighlight(NVGcontext* vg, Theme theme, float alpha, Style style, 
         }
     }
 
+    NVGcolor hlColor = theme["brls/highlight/color1"];
+
     // Draw
+    bool isLight = (Application::getPlatform() && Application::getPlatform()->getThemeVariant() == ThemeVariant::LIGHT);
+
     if (background)
     {
-        // 1. Soft Emerald Outer Glow
+        // 1. Soft Theme Outer Glow
         NVGpaint glowPaint = nvgBoxGradient(vg, x - 2.0f, y - 2.0f, width + 4.0f, height + 4.0f,
                                             cornerRadius, 8.0f,
-                                            nvgRGBA(0, 224, 165, static_cast<unsigned char>(65.0f * this->highlightAlpha)),
-                                            nvgRGBA(0, 224, 165, 0));
+                                            nvgRGBAf(hlColor.r, hlColor.g, hlColor.b, (65.0f / 255.0f) * this->highlightAlpha),
+                                            nvgRGBAf(hlColor.r, hlColor.g, hlColor.b, 0.0f));
         nvgBeginPath(vg);
         nvgRect(vg, x - 10.0f, y - 10.0f, width + 20.0f, height + 20.0f);
         nvgFillPaint(vg, glowPaint);
         nvgFill(vg);
 
-        // 2. Frosted Glass Base Gradient
-        NVGcolor topColor = nvgRGBA(0, 180, 140, static_cast<unsigned char>(55.0f * this->highlightAlpha));
-        NVGcolor botColor = nvgRGBA(10, 28, 45, static_cast<unsigned char>(205.0f * this->highlightAlpha));
+        // 2. Frosted Glass Base Gradient matching active theme
+        NVGcolor topColor, botColor;
+        if (isLight) {
+            topColor = nvgRGBAf(1.0f, 1.0f, 1.0f, (250.0f / 255.0f) * this->highlightAlpha);
+            botColor = nvgRGBAf(0.92f, 0.96f, 1.0f, (245.0f / 255.0f) * this->highlightAlpha);
+        } else {
+            topColor = nvgRGBAf(hlColor.r * 0.82f, hlColor.g * 0.82f, hlColor.b * 0.82f, (55.0f / 255.0f) * this->highlightAlpha);
+            botColor = nvgRGBAf(0.04f, 0.11f, 0.18f, (205.0f / 255.0f) * this->highlightAlpha);
+        }
         NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height, topColor, botColor);
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x, y, width, height, cornerRadius);
@@ -603,20 +613,29 @@ void View::drawHighlight(NVGcontext* vg, Theme theme, float alpha, Style style, 
         // 3. Top Gloss Sheen
         NVGpaint glossPaint = nvgLinearGradient(
             vg, x, y, x, y + height * 0.45f,
-            nvgRGBA(255, 255, 255, static_cast<unsigned char>(38.0f * this->highlightAlpha)),
+            nvgRGBA(255, 255, 255, static_cast<unsigned char>((isLight ? 70.0f : 38.0f) * this->highlightAlpha)),
             nvgRGBA(255, 255, 255, 0)
         );
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, std::max(0.0f, cornerRadius - 1.0f));
         nvgFillPaint(vg, glossPaint);
         nvgFill(vg);
+
+        if (isLight) {
+            // Crisp Nintendo Switch focus outline
+            nvgBeginPath(vg);
+            nvgStrokeColor(vg, nvgRGBAf(hlColor.r, hlColor.g, hlColor.b, (255.0f / 255.0f) * this->highlightAlpha));
+            nvgStrokeWidth(vg, 2.5f);
+            nvgRoundedRect(vg, x, y, width, height, cornerRadius);
+            nvgStroke(vg);
+        }
     }
     else
     {
-        // 4. Delicate Beveled Emerald Border
+        // 4. Delicate Beveled Theme Border
         nvgBeginPath(vg);
-        nvgStrokeColor(vg, nvgRGBA(0, 230, 175, static_cast<unsigned char>(240.0f * this->highlightAlpha)));
-        nvgStrokeWidth(vg, 1.8f);
+        nvgStrokeColor(vg, nvgRGBAf(hlColor.r, hlColor.g, hlColor.b, (240.0f / 255.0f) * this->highlightAlpha));
+        nvgStrokeWidth(vg, isLight ? 2.5f : 1.8f);
         nvgRoundedRect(vg, x, y, width, height, cornerRadius);
         nvgStroke(vg);
     }
@@ -642,14 +661,22 @@ void View::drawBackground(NVGcontext* vg, FrameContext* ctx, Style style, Rect f
     {
         case ViewBackground::SIDEBAR:
         {
+            bool isLight = (Application::getPlatform() && Application::getPlatform()->getThemeVariant() == ThemeVariant::LIGHT);
             float radius = (this->cornerRadius > 0.0f) ? this->cornerRadius : 14.0f;
 
             // 1. True Translucent Frosted Glass Base
             nvgBeginPath(vg);
             nvgRoundedRect(vg, x, y, width, height, radius);
-            NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height,
-                                                 nvgRGBA(140, 180, 230, 45),
-                                                 nvgRGBA(12, 22, 36, 85));
+            NVGpaint bgPaint;
+            if (isLight) {
+                bgPaint = nvgLinearGradient(vg, x, y, x, y + height,
+                                             nvgRGBA(255, 255, 255, 245),
+                                             nvgRGBA(245, 248, 252, 235));
+            } else {
+                bgPaint = nvgLinearGradient(vg, x, y, x, y + height,
+                                             nvgRGBA(140, 180, 230, 45),
+                                             nvgRGBA(12, 22, 36, 85));
+            }
             nvgFillPaint(vg, bgPaint);
             nvgFill(vg);
 
@@ -658,20 +685,29 @@ void View::drawBackground(NVGcontext* vg, FrameContext* ctx, Style style, Rect f
             nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, radius > 1.0f ? radius - 1.0f : 0.0f);
             NVGpaint glossPaint = nvgLinearGradient(
                 vg, x, y, x, y + height * 0.45f,
-                nvgRGBA(255, 255, 255, 38),
+                nvgRGBA(255, 255, 255, isLight ? 70 : 38),
                 nvgRGBA(255, 255, 255, 0)
             );
             nvgFillPaint(vg, glossPaint);
             nvgFill(vg);
 
-            // 3. Subtle Glass Beveled Border Stroke in Emerald-Teal tone
+            // 3. Subtle Glass Beveled Border Stroke
             nvgBeginPath(vg);
             nvgRoundedRect(vg, x, y, width, height, radius);
-            NVGpaint borderPaint = nvgLinearGradient(
-                vg, x, y, x, y + height,
-                nvgRGBA(180, 225, 215, 120),
-                nvgRGBA(40, 85, 95, 40)
-            );
+            NVGpaint borderPaint;
+            if (isLight) {
+                borderPaint = nvgLinearGradient(
+                    vg, x, y, x, y + height,
+                    nvgRGBA(210, 220, 232, 200),
+                    nvgRGBA(185, 198, 215, 150)
+                );
+            } else {
+                borderPaint = nvgLinearGradient(
+                    vg, x, y, x, y + height,
+                    nvgRGBA(180, 225, 215, 120),
+                    nvgRGBA(40, 85, 95, 40)
+                );
+            }
             nvgStrokePaint(vg, borderPaint);
             nvgStrokeWidth(vg, 1.2f);
             nvgStroke(vg);

@@ -2,6 +2,7 @@
 #include "RetroCatalogView.hpp"
 #include "RetroUpdateDialog.hpp"
 #include "RetroEmulatorsView.hpp"
+#include "ThemeManager.hpp"
 #include "../catalog/retro_emulator_manager.h"
 #include "../utils/log.h"
 #include <algorithm>
@@ -138,10 +139,12 @@ void RetroConsolesView::rebuildGrid() {
     std::string segaTitle = brls::getStr("app/retro/section_sega");
     if (segaTitle.empty() || segaTitle == "app/retro/section_sega") segaTitle = "Sega";
 
+    bool isLightConsoles = ThemeManager::instance().isCurrentThemeLight();
+
     std::vector<BrandSection> sections = {
-        {"Nintendo", nintendoTitle, nvgRGBA(230, 0, 18, 240)},
-        {"Sony",     sonyTitle,     nvgRGBA(33, 150, 243, 240)},
-        {"Sega",     segaTitle,     nvgRGBA(0, 224, 165, 240)}
+        {"Nintendo", nintendoTitle, isLightConsoles ? nvgRGB(210, 20, 20) : nvgRGBA(230, 0, 18, 240)},
+        {"Sony",     sonyTitle,     isLightConsoles ? nvgRGB(2, 132, 199) : nvgRGBA(33, 150, 243, 240)},
+        {"Sega",     segaTitle,     isLightConsoles ? nvgRGB(13, 148, 136) : nvgRGBA(0, 224, 165, 240)}
     };
 
     for (const auto& sec : sections) {
@@ -185,7 +188,7 @@ void RetroConsolesView::rebuildGrid() {
             );
 
             if (emuInstalled) {
-                card->setDescColor(nvgRGBA(76, 217, 100, 255));
+                card->setDescColor(isLightConsoles ? nvgRGBA(22, 128, 61, 255) : nvgRGBA(76, 217, 100, 255));
             }
 
             if (currentGridRow.size() < 3) {

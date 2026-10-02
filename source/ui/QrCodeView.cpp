@@ -1,4 +1,5 @@
 #include "QrCodeView.hpp"
+#include "ThemeManager.hpp"
 #include "../utils/qrcodegen.hpp"
 #include <vector>
 #include <algorithm>
@@ -69,6 +70,10 @@ void QrCodeView::draw(NVGcontext* vg, float x, float y, float width, float heigh
 }
 
 QrDialog::QrDialog(const std::string& title, const std::string& url, const std::string& hint) {
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+    NVGcolor primaryText = ThemeManager::instance().getTextPrimaryColor();
+    NVGcolor secondaryText = ThemeManager::instance().getTextSecondaryColor();
+
     // Root container covering 100% of the screen with a dimmed backdrop
     this->setWidthPercentage(100.0f);
     this->setHeightPercentage(100.0f);
@@ -88,7 +93,11 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
     card->setAxis(brls::Axis::COLUMN);
     card->setAlignItems(brls::AlignItems::CENTER);
     card->setJustifyContent(brls::JustifyContent::CENTER);
-    card->setBackgroundColor(nvgRGB(34, 36, 42));
+    card->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGB(34, 36, 42));
+    if (isLight) {
+        card->setBorderThickness(1.0f);
+        card->setBorderColor(nvgRGBA(215, 222, 232, 255));
+    }
     card->setCornerRadius(16.0f);
     card->setPadding(26.0f, 28.0f, 24.0f, 28.0f);
 
@@ -100,7 +109,7 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
         brls::Label* titleLabel = new brls::Label();
         titleLabel->setText(title);
         titleLabel->setFontSize(20.0f);
-        titleLabel->setTextColor(nvgRGB(255, 255, 255));
+        titleLabel->setTextColor(primaryText);
         titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         titleLabel->setMarginBottom(16.0f);
         card->addView(titleLabel);
@@ -111,6 +120,10 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
     qrCard->setWidth(220.0f);
     qrCard->setHeight(220.0f);
     qrCard->setBackgroundColor(nvgRGB(255, 255, 255));
+    if (isLight) {
+        qrCard->setBorderThickness(1.0f);
+        qrCard->setBorderColor(nvgRGBA(210, 218, 228, 255));
+    }
     qrCard->setCornerRadius(12.0f);
     qrCard->setJustifyContent(brls::JustifyContent::CENTER);
     qrCard->setAlignItems(brls::AlignItems::CENTER);
@@ -129,7 +142,7 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
         brls::Label* hintLabel = new brls::Label();
         hintLabel->setText(hint);
         hintLabel->setFontSize(14.5f);
-        hintLabel->setTextColor(nvgRGB(175, 180, 190));
+        hintLabel->setTextColor(secondaryText);
         hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         hintLabel->setWidth(420.0f);
         hintLabel->setIsWrapping(true);
@@ -141,7 +154,11 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
     if (!url.empty()) {
         brls::Box* urlBox = new brls::Box();
         urlBox->setWidth(420.0f);
-        urlBox->setBackgroundColor(nvgRGBA(18, 20, 24, 210));
+        urlBox->setBackgroundColor(isLight ? nvgRGBA(235, 240, 248, 200) : nvgRGBA(18, 20, 24, 210));
+        if (isLight) {
+            urlBox->setBorderThickness(1.0f);
+            urlBox->setBorderColor(nvgRGBA(215, 222, 232, 255));
+        }
         urlBox->setCornerRadius(8.0f);
         urlBox->setPadding(6.0f, 12.0f, 6.0f, 12.0f);
         urlBox->setAlignItems(brls::AlignItems::CENTER);
@@ -150,7 +167,7 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
         brls::Label* urlLabel = new brls::Label();
         urlLabel->setText(url);
         urlLabel->setFontSize(12.0f);
-        urlLabel->setTextColor(nvgRGB(100, 180, 245));
+        urlLabel->setTextColor(isLight ? ThemeManager::instance().getAccentColor() : nvgRGB(100, 180, 245));
         urlLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         urlLabel->setWidth(396.0f);
         urlLabel->setIsWrapping(true);

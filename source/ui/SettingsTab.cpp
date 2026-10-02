@@ -1,4 +1,6 @@
 #include "SettingsTab.hpp"
+#include "ThemeManager.hpp"
+#include "BackgroundFilePicker.hpp"
 #include "DownloadUiManager.hpp"
 #include "StorageTabView.hpp"
 #include "QrCodeView.hpp"
@@ -373,6 +375,7 @@ void SettingsTab::onContentAvailable() {
     }
 
     tabFrame->addTab("app/settings/cat_general"_i18n, [this]() { return buildGeneralTab(); });
+    tabFrame->addTab("app/settings/cat_appearance"_i18n, [this]() { return buildAppearanceTab(); });
     tabFrame->addTab("app/settings/cat_downloads"_i18n, [this]() { return buildDownloadsTab(); });
     tabFrame->addTab("app/settings/cat_retro"_i18n, [this]() { return buildRetroTab(); });
     tabFrame->addTab("app/settings/cat_storage"_i18n, [this]() { return buildStorageTab(); });
@@ -604,6 +607,156 @@ brls::View* SettingsTab::buildGeneralTab() {
         return true;
     });
     box->addView(communityCell);
+
+    return scroll;
+}
+
+brls::View* SettingsTab::buildAppearanceTab() {
+    auto& tm = ThemeManager::instance();
+    brls::Box* box = nullptr;
+    brls::ScrollingFrame* scroll = makeTabBox(&box);
+
+    // 1. Цветовая тема (Theme Preset)
+    const auto& allThemes = tm.getAllThemes();
+    std::vector<std::string> themeNames;
+    int initialThemeIdx = 0;
+    std::string curTheme = tm.getCurrentThemeId();
+    for (size_t i = 0; i < allThemes.size(); ++i) {
+        themeNames.push_back(brls::getStr(allThemes[i].nameKey));
+        if (allThemes[i].id == curTheme) {
+            initialThemeIdx = static_cast<int>(i);
+        }
+    }
+
+    auto* themeCell = new brls::SelectorCell();
+    themeCell->init("app/appearance/theme_title"_i18n, themeNames, initialThemeIdx, [](int selected) {}, [&tm, allThemes, this](int selected) {
+        if (selected >= 0 && selected < static_cast<int>(allThemes.size())) {
+            std::string newId = allThemes[selected].id;
+            if (newId != tm.getCurrentThemeId()) {
+                tm.setTheme(newId);
+                brls::Application::notify("app/appearance/theme_applied"_i18n);
+                // Instantly recreate SettingsTab to reflect updated theme colors in sidebar and controls
+                brls::Application::popActivity(brls::TransitionAnimation::NONE, []() {
+                    auto* newSettings = new ui::SettingsTab();
+                    brls::Application::pushActivity(newSettings, brls::TransitionAnimation::NONE);
+                });
+            }
+        }
+    });
+    box->addView(themeCell);
+
+    // 2. Отображать нижнюю информационную панель в главном меню
+    auto& cfg = config::ConfigManager::instance();
+    auto* showDashboardCell = new brls::BooleanCell();
+    showDashboardCell->init("app/appearance/show_bottom_dashboard"_i18n, cfg.getShowBottomDashboard(), [&cfg](bool value) {
+        cfg.setShowBottomDashboard(value);
+    });
+    box->addView(showDashboardCell);
+
+    // 3. Фоновое изображение (Wallpaper Preset)
+    std::vector<std::string> bgOptions;
+    std::vector<std::string> bgModes;
+    bgOptions.push_back("app/appearance/bg_auto"_i18n);
+    bgModes.push_back("auto");
+    for (const auto& th : allThemes) {
+        bgOptions.push_back(brls::getStr(th.nameKey));
+        bgModes.push_back(th.id);
+    }
+    bgOptions.push_back("app/appearance/bg_custom"_i18n);
+    bgModes.push_back("custom");
+
+    std::string curBgMode = tm.getBackgroundMode();
+    int initialBgIdx = 0;
+    for (size_t i = 0; i < bgModes.size(); ++i) {
+        if (bgModes[i] == curBgMode) {
+            initialBgIdx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    auto* customFileCell = new brls::DetailCell();
+    customFileCell->setText("app/appearance/choose_file"_i18n);
+
+    auto updateCustomFileDisplay = [customFileCell, &tm]() {
+        std::string p = tm.getCustomBackgroundPath();
+        if (p.empty()) {
+            p = "app/appearance/no_file_selected"_i18n;
+        } else if (p.length() > 38) {
+            p = "..." + p.substr(p.length() - 35);
+        }
+        customFileCell->setDetailText(p);
+    };
+    updateCustomFileDisplay();
+
+    customFileCell->registerClickAction([updateCustomFileDisplay](brls::View* view) {
+        brls::Application::pushActivity(new ui::BackgroundFilePicker());
+        return true;
+    });
+
+    auto* bgCell = new brls::SelectorCell();
+    bgCell->init("app/appearance/bg_title"_i18n, bgOptions, initialBgIdx, [](int selected) {}, [&tm, customFileCell, bgModes](int selected) {
+        if (selected >= 0 && selected < static_cast<int>(bgModes.size())) {
+            std::string mode = bgModes[selected];
+            tm.setBackgroundMode(mode);
+            customFileCell->setVisibility((mode == "custom") ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+            brls::Application::notify("app/appearance/bg_applied"_i18n);
+        }
+    });
+    box->addView(bgCell);
+
+    customFileCell->setVisibility((bgModes[initialBgIdx] == "custom") ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    box->addView(customFileCell);
+
+    // Размытие фона (Background Blur)
+    std::vector<std::string> blurOptions = {
+        "app/appearance/bg_blur_0"_i18n,
+        "app/appearance/bg_blur_1"_i18n,
+        "app/appearance/bg_blur_2"_i18n,
+        "app/appearance/bg_blur_3"_i18n
+    };
+    int initialBlurIdx = tm.getBackgroundBlurLevel();
+    if (initialBlurIdx < 0 || initialBlurIdx >= static_cast<int>(blurOptions.size())) initialBlurIdx = 0;
+
+    auto* bgBlurCell = new brls::SelectorCell();
+    bgBlurCell->init("app/appearance/bg_blur_title"_i18n, blurOptions, initialBlurIdx, [](int selected) {}, [&tm](int selected) {
+        tm.setBackgroundBlurLevel(selected);
+        brls::Application::notify("app/appearance/bg_blur_applied"_i18n);
+    });
+    box->addView(bgBlurCell);
+
+    // Затемнение фона в главном меню (Background Dimming)
+    std::vector<std::string> dimOptions = {
+        "app/appearance/bg_dim_0"_i18n,
+        "app/appearance/bg_dim_1"_i18n,
+        "app/appearance/bg_dim_2"_i18n,
+        "app/appearance/bg_dim_3"_i18n,
+        "app/appearance/bg_dim_4"_i18n
+    };
+    int initialDimIdx = tm.getBackgroundDimLevel();
+    if (initialDimIdx < 0 || initialDimIdx >= static_cast<int>(dimOptions.size())) initialDimIdx = 2;
+
+    auto* bgDimCell = new brls::SelectorCell();
+    bgDimCell->init("app/appearance/bg_dim_title"_i18n, dimOptions, initialDimIdx, [](int selected) {}, [&tm](int selected) {
+        tm.setBackgroundDimLevel(selected);
+        brls::Application::notify("app/appearance/bg_dim_applied"_i18n);
+    });
+    box->addView(bgDimCell);
+
+    // 3. Сброс фона на стандартный
+    auto* resetBgCell = new brls::DetailCell();
+    resetBgCell->setText("app/appearance/reset_bg"_i18n);
+    resetBgCell->registerClickAction([this, &tm](brls::View* view) {
+        tm.setBackgroundMode("auto");
+        tm.setCustomBackgroundPath("");
+        tm.setBackgroundBlurLevel(0);
+        tm.setBackgroundDimLevel(2);
+        brls::Application::notify("app/appearance/bg_reset_done"_i18n);
+        brls::Application::popActivity(brls::TransitionAnimation::NONE, []() {
+            brls::Application::pushActivity(new ui::SettingsTab(), brls::TransitionAnimation::NONE);
+        });
+        return true;
+    });
+    box->addView(resetBgCell);
 
     return scroll;
 }
@@ -845,7 +998,7 @@ brls::View* SettingsTab::buildAboutTab() {
     brls::Label* titleLabel = new brls::Label();
     titleLabel->setText(std::string("TorrentShopNX v") + config::ConfigManager::APP_VERSION);
     titleLabel->setFontSize(26.0f);
-    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     titleLabel->setMarginBottom(4.0f);
     headerBox->addView(titleLabel);
@@ -853,7 +1006,7 @@ brls::View* SettingsTab::buildAboutTab() {
     brls::Label* descLabel = new brls::Label();
     descLabel->setText("app/settings/about_desc"_i18n);
     descLabel->setFontSize(14.5f);
-    descLabel->setTextColor(nvgRGB(170, 175, 185));
+    descLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     descLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     descLabel->setMarginBottom(4.0f);
     headerBox->addView(descLabel);
@@ -861,7 +1014,7 @@ brls::View* SettingsTab::buildAboutTab() {
     brls::Label* authorLabel = new brls::Label();
     authorLabel->setText("app/settings/about_author"_i18n);
     authorLabel->setFontSize(13.0f);
-    authorLabel->setTextColor(nvgRGB(130, 135, 145));
+    authorLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     authorLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     authorLabel->setMarginBottom(10.0f);
     headerBox->addView(authorLabel);
@@ -869,7 +1022,7 @@ brls::View* SettingsTab::buildAboutTab() {
     brls::Label* hintLabel = new brls::Label();
     hintLabel->setText("app/settings/community_hint"_i18n);
     hintLabel->setFontSize(13.5f);
-    hintLabel->setTextColor(nvgRGB(100, 180, 245));
+    hintLabel->setTextColor(ThemeManager::instance().getTextAccentColor());
     hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     headerBox->addView(hintLabel);
 
@@ -887,7 +1040,9 @@ brls::View* SettingsTab::buildAboutTab() {
         brls::Box* card = new brls::Box(brls::Axis::COLUMN);
         card->setWidth(400.0f);
         card->setAlignItems(brls::AlignItems::CENTER);
-        card->setBackgroundColor(nvgRGBA(34, 38, 48, 220));
+        card->setBackgroundColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGBA(255, 255, 255, 245) : nvgRGBA(34, 38, 48, 220));
+        card->setBorderThickness(1.0f);
+        card->setBorderColor(ThemeManager::instance().getCardBorderColor());
         card->setCornerRadius(16.0f);
         card->setPadding(18.0f, 18.0f, 16.0f, 18.0f);
         if (isLeft) {
@@ -908,7 +1063,7 @@ brls::View* SettingsTab::buildAboutTab() {
         brls::Label* lblDesc = new brls::Label();
         lblDesc->setText(desc);
         lblDesc->setFontSize(12.5f);
-        lblDesc->setTextColor(nvgRGB(160, 165, 175));
+        lblDesc->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         lblDesc->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         lblDesc->setMarginBottom(12.0f);
         card->addView(lblDesc);
@@ -932,7 +1087,7 @@ brls::View* SettingsTab::buildAboutTab() {
 
         brls::Box* urlBox = new brls::Box();
         urlBox->setWidth(350.0f);
-        urlBox->setBackgroundColor(nvgRGBA(18, 20, 26, 220));
+        urlBox->setBackgroundColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGBA(242, 246, 252, 240) : nvgRGBA(18, 20, 26, 220));
         urlBox->setCornerRadius(8.0f);
         urlBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
         urlBox->setAlignItems(brls::AlignItems::CENTER);
@@ -949,7 +1104,7 @@ brls::View* SettingsTab::buildAboutTab() {
         brls::Label* hintAction = new brls::Label();
         hintAction->setText("app/settings/qr_press_hint"_i18n);
         hintAction->setFontSize(11.5f);
-        hintAction->setTextColor(nvgRGB(120, 130, 145));
+        hintAction->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         hintAction->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         card->addView(hintAction);
 
@@ -966,11 +1121,10 @@ brls::View* SettingsTab::buildAboutTab() {
                                    "https://t.me/TorrentShopNX",
                                    nvgRGB(56, 170, 245),
                                    true));
-
     cardsRow->addView(createQrCard("app/settings/github_title"_i18n,
                                    "app/settings/github_desc"_i18n,
                                    "https://github.com/Langegen/TorrentShopNX",
-                                   nvgRGB(235, 240, 245),
+                                   ThemeManager::instance().isCurrentThemeLight() ? nvgRGB(36, 42, 54) : nvgRGB(235, 240, 245),
                                    false));
 
     box->addView(cardsRow);
@@ -987,7 +1141,7 @@ void SettingsTab::showCommunityDialog() {
     brls::Label* titleLabel = new brls::Label();
     titleLabel->setText("app/settings/links_dialog_title"_i18n);
     titleLabel->setFontSize(20.0f);
-    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     titleLabel->setMarginBottom(4.0f);
     content->addView(titleLabel);
@@ -995,7 +1149,7 @@ void SettingsTab::showCommunityDialog() {
     brls::Label* hintLabel = new brls::Label();
     hintLabel->setText("app/settings/community_hint"_i18n);
     hintLabel->setFontSize(13.5f);
-    hintLabel->setTextColor(nvgRGB(150, 160, 175));
+    hintLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     hintLabel->setMarginBottom(16.0f);
     content->addView(hintLabel);
@@ -1025,7 +1179,7 @@ void SettingsTab::showCommunityDialog() {
         brls::Label* lblDesc = new brls::Label();
         lblDesc->setText(desc);
         lblDesc->setFontSize(11.5f);
-        lblDesc->setTextColor(nvgRGB(140, 145, 155));
+        lblDesc->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         lblDesc->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         lblDesc->setMarginBottom(8.0f);
         col->addView(lblDesc);
@@ -1065,7 +1219,7 @@ void SettingsTab::showCommunityDialog() {
     addQrCol("app/settings/github_title"_i18n,
              "https://github.com/Langegen/TorrentShopNX",
              "app/settings/github_desc"_i18n,
-             nvgRGB(230, 235, 245));
+             ThemeManager::instance().isCurrentThemeLight() ? nvgRGB(36, 42, 54) : nvgRGB(230, 235, 245));
 
     content->addView(row);
 

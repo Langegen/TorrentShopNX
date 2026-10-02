@@ -28,6 +28,7 @@
 #include "ui/FavoritesView.hpp"
 #include "ui/DownloadsView.hpp"
 #include "ui/SettingsTab.hpp"
+#include "ui/ThemeManager.hpp"
 #include "ui/FavoritesManager.hpp"
 #include "catalog/IgnoredUpdatesManager.hpp"
 #include "ui/DownloadUiManager.hpp"
@@ -38,6 +39,7 @@
 #include "config/config.h"
 #include "utils/log.h"
 #include "utils/switch_utils.h"
+#include "utils/screen_sleep_manager.h"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
 #include <thread>
@@ -412,8 +414,13 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     brls::Application::createWindow("TorrentShopNX");
-    brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
+    brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::LIGHT);
     brls::Application::setGlobalQuit(false);
+    ui::ThemeManager::instance().init();
+    brls::Application::setGlobalWallpaper(ui::ThemeManager::instance().getEffectiveWallpaperPath());
+    ui::ThemeManager::instance().subscribe([]() {
+        brls::Application::setGlobalWallpaper(ui::ThemeManager::instance().getEffectiveWallpaperPath());
+    });
     brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
 
     // Register focus change listener to handle console sleep / wake safely (Title Mode only)
@@ -479,6 +486,9 @@ int main(int argc, char** argv) {
 #endif
     }
 
+    util::logLine("main: initializing ScreenSleepManager");
+    util::ScreenSleepManager::instance().init();
+
     util::logLine("main: entering mainLoop");
     // Execute Borealis main loop
     try {
@@ -497,7 +507,7 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
-    util::setBacklightOff(false);
+    util::ScreenSleepManager::instance().shutdown();
 
     // Signal background tasks and network transfers to cancel immediately
     g_appExiting.store(true);

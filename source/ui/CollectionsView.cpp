@@ -1,4 +1,5 @@
 #include "CollectionsView.hpp"
+#include "ui/ThemeManager.hpp"
 #include "CatalogView.hpp"
 #include "CollectionGamesView.hpp"
 #include "FavoritesView.hpp"
@@ -47,39 +48,21 @@ brls::Box* createSectionDivider(const std::string& title_text) {
     bar->setWidth(4.0f);
     bar->setHeight(18.0f);
     bar->setCornerRadius(2.0f);
-    bar->setBackgroundColor(nvgRGBA(0, 224, 165, 255)); // Emerald
+    bar->setBackgroundColor(ThemeManager::instance().getAccentColor());
     bar->setMarginRight(8.0f);
     headerBox->addView(bar);
 
     brls::Label* lbl = new brls::Label();
     lbl->setText(title_text);
     lbl->setFontSize(14.0f);
-    lbl->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald
+    lbl->setTextColor(ThemeManager::instance().getAccentColor());
     headerBox->addView(lbl);
 
     return headerBox;
 }
 
 NVGcolor getGenreColor(const std::string& id) {
-    if (id == "all_catalog")         return nvgRGBA(0, 224, 165, 255);   // Emerald
-    if (id == "favorites")           return nvgRGBA(255, 193, 7, 255);   // Gold
-    if (id == "new_release")         return nvgRGBA(0, 229, 255, 255);   // Cyan
-    if (id == "top_100")             return nvgRGBA(255, 215, 0, 255);   // Golden Trophy
-    if (id == "ports_homebrew")      return nvgRGBA(0, 188, 212, 255);   // Cyan-Teal
-    if (id == "action_adventure")    return nvgRGBA(255, 87, 34, 255);   // Orange-Red
-    if (id == "arcade")              return nvgRGBA(171, 71, 188, 255);  // Purple
-    if (id == "horror")              return nvgRGBA(239, 83, 80, 255);   // Crimson
-    if (id == "metroidvania")        return nvgRGBA(33, 150, 243, 255);  // Electric Blue
-    if (id == "party_multiplayer")   return nvgRGBA(76, 175, 80, 255);   // Green
-    if (id == "platformers")         return nvgRGBA(255, 167, 38, 255);  // Amber
-    if (id == "puzzles")             return nvgRGBA(38, 198, 218, 255);  // Teal
-    if (id == "roguelike_roguelite") return nvgRGBA(141, 110, 99, 255);  // Warm Bronze
-    if (id == "rpg_jrpg")            return nvgRGBA(236, 64, 122, 255);  // Rose
-    if (id == "shooters")            return nvgRGBA(229, 57, 53, 255);   // Red
-    if (id == "simulation_cozy")     return nvgRGBA(139, 195, 74, 255);  // Lime
-    if (id == "strategy_tactics")    return nvgRGBA(120, 144, 156, 255); // Steel
-    if (id == "visual_novels")       return nvgRGBA(186, 104, 200, 255); // Violet
-    return nvgRGBA(0, 224, 165, 255);
+    return ThemeManager::instance().getGenreColor(id);
 }
 
 } // namespace
@@ -121,6 +104,10 @@ void CollectionsView::onContentAvailable() {
             });
         });
     }
+
+    ThemeManager::instance().subscribe([this, flag = alive_flag_]() {
+        if (*flag) rebuildGrid();
+    });
 }
 
 void CollectionsView::rebuildGrid() {

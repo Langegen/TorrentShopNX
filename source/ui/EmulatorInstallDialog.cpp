@@ -1,4 +1,5 @@
 #include "EmulatorInstallDialog.hpp"
+#include "ThemeManager.hpp"
 #include "../catalog/retro_emulator_manager.h"
 #include "../net/http_client.h"
 #include "../utils/archive_utils.h"
@@ -28,6 +29,8 @@ std::string formatSizeMb(int64_t bytes) {
 
 void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
                                std::function<void(bool success)> onComplete) {
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setWidth(480.0f);
@@ -37,14 +40,14 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     auto* titleLabel = new brls::Label();
     titleLabel->setText("app/retro/installing_title"_i18n + pkg.name);
     titleLabel->setFontSize(20.0f);
-    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     titleLabel->setMarginBottom(8.0f);
     content->addView(titleLabel);
 
     auto* statusLabel = new brls::Label();
     statusLabel->setText("app/retro/preparing_download"_i18n);
     statusLabel->setFontSize(14.0f);
-    statusLabel->setTextColor(nvgRGB(180, 180, 190));
+    statusLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     statusLabel->setMarginBottom(12.0f);
     content->addView(statusLabel);
 
@@ -53,7 +56,7 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     progressBg->setWidth(440.0f);
     progressBg->setHeight(10.0f);
     progressBg->setCornerRadius(5.0f);
-    progressBg->setBackgroundColor(nvgRGBA(42, 45, 52, 255));
+    progressBg->setBackgroundColor(isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(42, 45, 52, 255));
     progressBg->setMarginBottom(8.0f);
 
     auto* progressFill = new brls::Box();
@@ -67,12 +70,19 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     auto* statsLabel = new brls::Label();
     statsLabel->setText("0.0 MB / " + formatSizeMb(pkg.file_size));
     statsLabel->setFontSize(12.0f);
-    statsLabel->setTextColor(nvgRGB(130, 130, 140));
+    statsLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     statsLabel->setMarginBottom(14.0f);
     content->addView(statsLabel);
 
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(false);
+
+    auto* applet = dialog->getAppletFrame();
+    if (applet) {
+        applet->setWidth(520.0f);
+        applet->setCornerRadius(14.0f);
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
+    }
 
     auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
     auto closedFlag = std::make_shared<std::atomic<bool>>(false);

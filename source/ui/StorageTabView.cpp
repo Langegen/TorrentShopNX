@@ -41,7 +41,7 @@ StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
 
     // ---- Кэш ----
     addSectionHeader(this, "app/settings/cache_section"_i18n);
-    addCacheRow("app/settings/cache_thumbnails"_i18n, TSNX_CACHE_THUMBNAILS, false);
+    addCacheRow("app/settings/storage_cache_thumbnails"_i18n, TSNX_CACHE_THUMBNAILS, false);
     addCacheRow("app/settings/cache_catalog"_i18n, TSNX_CACHE_CATALOG, false);
     addCacheRow("app/settings/cache_meta"_i18n, TSNX_CACHE_META, false);
     addCacheRow("app/settings/cache_collections"_i18n, TSNX_CACHE_COLLECTIONS, false);

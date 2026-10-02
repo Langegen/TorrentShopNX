@@ -36,7 +36,7 @@
             <brls:Label
                 id="titleId"
                 fontSize="13"
-                textColor="#888888"
+                textColor="@theme/brls/header/subtitle"
                 marginRight="10"
                 singleLine="true" />
 
@@ -65,7 +65,7 @@
         width="150px"
         height="auto"
         fontSize="16"
-        textColor="#FFFFFF"
+        textColor="@theme/brls/text"
         horizontalAlign="center"
         marginRight="15" />
 
@@ -75,7 +75,7 @@
         width="150px"
         height="auto"
         fontSize="16"
-        textColor="#FFFFFF"
+        textColor="@theme/brls/text"
         horizontalAlign="center"
         marginRight="15" />
 

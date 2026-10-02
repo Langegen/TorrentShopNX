@@ -155,9 +155,24 @@ void ScrollingFrame::naturalScrollingBehaviour()
 
     if (focused || childFocused)
     {
+        View* currentFocus = Application::getCurrentFocus();
+        bool isFocusInside = (currentFocus == this);
+        for (View* v = currentFocus; v != nullptr && !isFocusInside; v = v->getParent())
+        {
+            if (v == this)
+            {
+                isFocusInside = true;
+                break;
+            }
+        }
+        if (!isFocusInside)
+        {
+            this->childFocused = false;
+            return;
+        }
+
         // If current focus view is outside scrolling bounds,
         // change focus to this.
-        View* currentFocus = Application::getCurrentFocus();
         if (currentFocus && !currentFocus->getFrame().inscribed(getFrame()))
         {
             Application::giveFocus(this);

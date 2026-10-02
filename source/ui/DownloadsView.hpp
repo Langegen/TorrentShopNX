@@ -33,6 +33,9 @@ public:
     BRLS_BIND(brls::Label, peersText, "peersText");
     BRLS_BIND(brls::Label, statusText, "statusText");
     BRLS_BIND(brls::Box, installProgressRow, "installProgressRow");
+    BRLS_BIND(brls::Box, sdkWarningBox, "sdkWarningBox");
+    BRLS_BIND(brls::Label, sdkConsoleLabel, "sdkConsoleLabel");
+    BRLS_BIND(brls::Label, sdkGameLabel, "sdkGameLabel");
 };
 
 class DownloadsView : public brls::Activity {
@@ -54,14 +57,7 @@ public:
     int focusedRow_ = 0;
 
 private:
-    void checkBacklightState();
     void toggleBacklight();
-
-    std::chrono::steady_clock::time_point lastInputTime_;
-    std::chrono::steady_clock::time_point backlightToggleTime_;
-    brls::RepeatingTimer* backlightTimer_ = nullptr;
-    brls::ControllerState prevControllerState_{};
-    bool isFirstStateCheck_ = true;
 
     class DownloadsDataSource : public brls::RecyclerDataSource {
     public:

@@ -395,8 +395,7 @@ void RecyclerFrame::cacheCellFrames()
 
 bool RecyclerFrame::checkWidth()
 {
-    float width           = getWidth();
-    static float oldWidth = width;
+    float width = getWidth();
     if ((int)oldWidth != (int)width && width != 0)
     {
         oldWidth = width;
@@ -430,8 +429,6 @@ void RecyclerFrame::cellsRecyclingLoop()
         queueReusableCell(minCell);
         this->removeCell(minCell);
 
-        Logger::debug("Cell #{} - destroyed", visibleMin);
-
         visibleMin++;
     }
 
@@ -450,8 +447,6 @@ void RecyclerFrame::cellsRecyclingLoop()
 
         queueReusableCell(maxCell);
         this->removeCell(maxCell);
-
-        Logger::debug("Cell #{} - destroyed", visibleMax);
 
         visibleMax--;
     }
@@ -596,10 +591,53 @@ void RecyclerFrame::removeCell(View* view)
     this->invalidate();
 }
 
+View* RecyclerFrame::getDefaultFocus()
+{
+    if (this->contentBox)
+    {
+        View* last = this->contentBox->getLastFocusedView();
+        if (last)
+        {
+            View* def = last->getDefaultFocus();
+            if (def && def->isFocusable())
+                return def;
+        }
+
+        for (View* child : this->contentBox->getChildren())
+        {
+            View* def = child->getDefaultFocus();
+            if (def && def->isFocusable())
+                return def;
+        }
+    }
+    return Box::getDefaultFocus();
+}
+
+void RecyclerFrame::focusRow(size_t index)
+{
+    this->setDefaultCellFocus(IndexPath(0, index));
+    this->selectRowAt(IndexPath(0, index), false);
+    if (this->contentBox)
+    {
+        View* last = this->contentBox->getLastFocusedView();
+        if (last)
+        {
+            View* target = last->getDefaultFocus();
+            if (target && target->isFocusable())
+            {
+                Application::giveFocus(target);
+                return;
+            }
+        }
+    }
+    Application::giveFocus(this->getDefaultFocus());
+}
+
 void RecyclerFrame::onLayout()
 {
     ScrollingFrame::onLayout();
-    this->contentBox->setWidth(this->getWidth());
+    if (this->contentBox && (int)this->contentBox->getWidth() != (int)this->getWidth())
+        this->contentBox->setWidth(this->getWidth());
     if (checkWidth())
     {
         layouted = true;

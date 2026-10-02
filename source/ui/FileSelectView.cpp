@@ -2,14 +2,20 @@
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
+#include "ThemeManager.hpp"
 #include "../datasource/custom_engine_client.h"
 #include "../config/config.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/switch_utils.h"
 #include "../net/image_downloader.h"
+#include "../installer/nsp_header.h"
+#include "../installer/cnmt_parser.h"
+#include "../installer/ncz_parser.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <thread>
 
 #include <mutex>
 
@@ -183,8 +189,6 @@ FileSelectView::FileSelectView(const Game& game, const std::string& retro_consol
 }
 
 FileSelectView::~FileSelectView() {
-    // Signal both async threads that this object is being destroyed.
-    // They must NOT touch any member after this flag is false.
     alive_flag_->store(false);
     g_file_select_view_active = false;
     net::ImageDownloader::instance().resume();
@@ -199,6 +203,27 @@ void FileSelectView::onContentAvailable() {
     title->setText(cleanTitle(game_.title));
     subtitle->setText("app/fileselect/subtitle"_i18n);
 
+    if (bottomSummaryBox) {
+        bottomSummaryBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+        bottomSummaryBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        bottomSummaryBox->setBorderThickness(1.0f);
+    }
+    if (installLocationBox) {
+        installLocationBox->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
+        installLocationBox->setBorderColor(ThemeManager::instance().getMediumAccentColor());
+        installLocationBox->setBorderThickness(1.5f);
+        installLocationBox->setCornerRadius(8.0f);
+        installLocationBox->getFocusEvent()->subscribe([this](bool focused) {
+            if (installLocationBox) {
+                installLocationBox->setBorderColor(focused ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getMediumAccentColor());
+                installLocationBox->setBackgroundColor(focused ? ThemeManager::instance().getMediumAccentColor() : ThemeManager::instance().getDimAccentColor());
+            }
+        });
+    }
+    if (totalSizeText) {
+        totalSizeText->setTextColor(ThemeManager::instance().getAccentColor());
+    }
+
     // Configure install location selector
     auto& cfg = config::ConfigManager::instance();
     if (!retro_console_id_.empty()) {
@@ -208,7 +233,7 @@ void FileSelectView::onContentAvailable() {
             const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
             if (cInfo && !cInfo->default_rom_subfolder.empty()) sub = cInfo->default_rom_subfolder;
             installLocationText->setText(cfg.getEffectiveRetroRomsDir(sub));
-            installLocationText->setTextColor(nvgRGB(52, 152, 219));
+            installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
     } else {
         auto updateInstallLocationDisplay = [this, &cfg]() {
@@ -222,7 +247,7 @@ void FileSelectView::onContentAvailable() {
                 installLocationText->setTextColor(nvgRGB(231, 76, 60)); // red/orange
             } else {
                 installLocationText->setText("app/fileselect/loc_auto"_i18n);
-                installLocationText->setTextColor(nvgRGB(52, 152, 219)); // blue
+                installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
             }
         };
         updateInstallLocationDisplay();
@@ -326,6 +351,7 @@ void FileSelectView::onContentAvailable() {
                     }
                 }
                 subtitle->setText("app/fileselect/select_prompt"_i18n);
+                calculateUncompressedSizes();
                 updateTotalSize();
                 rebuildFileList();
                 util::logLine("FileSelectView: rebuildFileList done, rows=" +
@@ -465,9 +491,9 @@ void FileSelectView::rebuildFileList() {
             label->setText(item.headerTitle);
             
             if (item.headerTitle == "app/fileselect/no_files"_i18n) {
-                label->setTextColor(nvgRGB(150, 150, 150));
+                label->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             } else {
-                label->setTextColor(nvgRGB(255, 87, 34)); // Orange/red accent for headers
+                label->setTextColor(ThemeManager::instance().getAccentColor());
             }
             row->addView(label);
             fileListBox->addView(row);
@@ -491,7 +517,7 @@ void FileSelectView::rebuildFileList() {
             chk->setHeight(brls::View::AUTO);
             chk->setFontSize(20);
             chk->setText(isSel ? "[V]" : "[ ]");
-            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : nvgRGB(180, 180, 180));
+            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
             row->addView(chk);
             checkboxLabels_[idx] = chk;
 
@@ -506,7 +532,9 @@ void FileSelectView::rebuildFileList() {
             
             uint64_t tid = parseTitleIdFromFilename(file.name);
             if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard)) {
-                nameLbl->setTextColor(nvgRGB(120, 120, 120)); // Gray out slightly
+                nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
+            } else {
+                nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             }
             row->addView(nameLbl);
 
@@ -516,15 +544,15 @@ void FileSelectView::rebuildFileList() {
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
             sizeLbl->setText(formatBytes(file.size));
-            sizeLbl->setTextColor(nvgRGB(136, 136, 136));
+            sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
             // Click to toggle
             row->registerClickAction([this, idx](brls::View*) {
                 if (idx < selected_.size()) {
                     selected_[idx] = !selected_[idx];
-                    updateTotalSize();
                     updateRowSelectionState(idx);
+                    updateTotalSize();
                 }
                 return true;
             });
@@ -543,16 +571,74 @@ void FileSelectView::rebuildFileList() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// calculateUncompressedSizes
+// ─────────────────────────────────────────────────────────────────────────────
+
+void FileSelectView::calculateUncompressedSizes() {
+    if (files_.empty()) return;
+
+    uint64_t total_torrent_bytes = 0;
+    for (const auto& f : files_) {
+        total_torrent_bytes += f.size;
+    }
+
+    double nsz_ratio = util::parseNszCompressionRatio(game_.image_format, total_torrent_bytes);
+    util::logLine("FileSelectView: calculated NSZ ratio " + std::to_string(nsz_ratio) +
+                  " from image_format='" + game_.image_format + "'");
+
+    probe_info_.clear();
+    probe_info_.resize(files_.size());
+    for (size_t i = 0; i < files_.size(); ++i) {
+        if (!isSwitchGameFile(files_[i].name)) {
+            probe_info_[i].uncompressed_size = files_[i].size;
+            probe_info_[i].is_estimated = false;
+        } else {
+            std::string lower = files_[i].name;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (lower.size() >= 4 && (lower.rfind(".nsz") == lower.size() - 4 || lower.rfind(".xcz") == lower.size() - 4)) {
+                probe_info_[i].uncompressed_size = static_cast<uint64_t>(files_[i].size * nsz_ratio);
+                probe_info_[i].is_estimated = (std::abs(nsz_ratio - 1.0) > 0.001);
+            } else {
+                probe_info_[i].uncompressed_size = files_[i].size;
+                probe_info_[i].is_estimated = false;
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // updateTotalSize
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::updateTotalSize() {
-    unsigned long long total = 0;
+    unsigned long long totalCompressed = 0;
+    unsigned long long totalUnpacked = 0;
+    bool anyEstimated = false;
+
     for (size_t i = 0; i < files_.size(); ++i) {
-        if (i < selected_.size() && selected_[i])
-            total += files_[i].size;
+        if (i < selected_.size() && selected_[i]) {
+            totalCompressed += files_[i].size;
+            if (i < probe_info_.size()) {
+                totalUnpacked += probe_info_[i].uncompressed_size;
+                if (probe_info_[i].is_estimated) anyEstimated = true;
+            } else {
+                totalUnpacked += files_[i].size;
+            }
+        }
     }
-    totalSizeText->setText(formatBytes(total));
+
+    if (totalSizeText) {
+        std::string sizeStr = formatBytes(totalCompressed);
+        if (totalUnpacked > totalCompressed) {
+            std::string prefix = brls::getStr("app/fileselect/unpacked_prefix");
+            if (anyEstimated) {
+                sizeStr += " (" + prefix + ": ~" + formatBytes(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
+            } else {
+                sizeStr += " (" + prefix + ": " + formatBytes(totalUnpacked) + ")";
+            }
+        }
+        totalSizeText->setText(sizeStr);
+    }
 
     if (!retro_console_id_.empty()) {
         int64_t sdFree = 0;
@@ -614,7 +700,11 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     for (size_t i = 0; i < files_.size(); ++i) {
         if (i < selected_.size() && selected_[i]) {
             selectedIndices.push_back(files_[i].index);
-            totalNeededSize += files_[i].size;
+            uint64_t needed = files_[i].size;
+            if (i < probe_info_.size() && probe_info_[i].uncompressed_size > 0) {
+                needed = probe_info_[i].uncompressed_size;
+            }
+            totalNeededSize += needed;
             if (isSwitchGameFile(files_[i].name) && files_[i].size > largestGameSize) {
                 largestGameSize = files_[i].size;
                 forcedIndex     = files_[i].index;
@@ -799,9 +889,9 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
     }
 
     brls::sync([]() {
-        while (brls::Application::getActivitiesStack().size() > 1)
-            brls::Application::popActivity(brls::TransitionAnimation::NONE);
-        brls::Application::pushActivity(new ui::DownloadsView());
+        brls::Application::popActivity(brls::TransitionAnimation::NONE, []() {
+            brls::Application::pushActivity(new ui::DownloadsView());
+        });
     });
 }
 
@@ -812,7 +902,7 @@ void FileSelectView::updateRowSelectionState(size_t idx) {
 
     bool isSel = (idx < selected_.size()) && selected_[idx];
     chk->setText(isSel ? "[V]" : "[ ]");
-    chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : nvgRGB(180, 180, 180));
+    chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
 }
 
 } // namespace ui

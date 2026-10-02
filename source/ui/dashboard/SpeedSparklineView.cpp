@@ -1,4 +1,5 @@
 #include "SpeedSparklineView.hpp"
+#include "../ThemeManager.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <string>
@@ -77,7 +78,7 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     if (samples_.empty()) {
         nvgFontSize(vg, 11.0f);
         nvgFontFace(vg, "default");
-        nvgFillColor(vg, nvgRGBA(140, 165, 195, 180));
+        nvgFillColor(vg, ThemeManager::instance().getTextSecondaryColor());
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         std::string collStr = "app/dashboard/sparkline_collecting"_i18n;
         nvgText(vg, x + width * 0.5f, y + height * 0.5f, collStr.c_str(), nullptr);
@@ -94,8 +95,8 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     // Draw Peak Label in top-right
     std::string peakStr = "app/dashboard/sparkline_peak"_i18n + formatSpeedShort(peak);
     nvgFontSize(vg, 10.0f);
-    nvgFontFace(vg, "default");
-    nvgFillColor(vg, nvgRGBA(0, 230, 175, 220)); // Emerald
+    NVGcolor accent = ThemeManager::instance().getAccentColor();
+    nvgFillColor(vg, nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 220));
     nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
     nvgText(vg, x + width - padX - 2.0f, y + 4.0f, peakStr.c_str(), nullptr);
 
@@ -126,9 +127,10 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     nvgLineTo(vg, points.front().first, y + height - padY);
     nvgClosePath(vg);
 
-    NVGpaint areaPaint = nvgLinearGradient(vg, x, y + padY, x, y + height - padY,
-                                           nvgRGBA(0, 224, 165, 85),
-                                           nvgRGBA(0, 224, 165, 0));
+    NVGcolor spTop = ThemeManager::instance().getSparklineTopColor();
+    NVGcolor spBot = ThemeManager::instance().getSparklineBottomColor();
+
+    NVGpaint areaPaint = nvgLinearGradient(vg, x, y + padY, x, y + height - padY, spTop, spBot);
     nvgFillPaint(vg, areaPaint);
     nvgFill(vg);
 
@@ -138,7 +140,7 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     for (size_t i = 1; i < points.size(); ++i) {
         nvgLineTo(vg, points[i].first, points[i].second);
     }
-    nvgStrokeColor(vg, nvgRGBA(0, 245, 190, 255)); // Bright Emerald
+    nvgStrokeColor(vg, nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 255));
     nvgStrokeWidth(vg, 2.2f);
     nvgStroke(vg);
 
@@ -149,7 +151,7 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     // Outer glow ring
     nvgBeginPath(vg);
     nvgCircle(vg, lastX, lastY, 5.0f);
-    nvgFillColor(vg, nvgRGBA(0, 245, 190, 90));
+    nvgFillColor(vg, nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 90));
     nvgFill(vg);
 
     // White core

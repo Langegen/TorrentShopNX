@@ -1,8 +1,10 @@
 #include "DownloadsView.hpp"
 #include "DownloadUiManager.hpp"
 #include "FileManagerView.hpp"
+#include "ThemeManager.hpp"
 #include "../config/config.h"
 #include "../utils/switch_utils.h"
+#include "../utils/screen_sleep_manager.h"
 #include "../utils/app_paths.h"
 #include "../utils/file_ops.h"
 #include <engine/engine.h>
@@ -73,7 +75,6 @@ DownloadCell::~DownloadCell() {
 
 // DOWNLOADSVIEW IMPLEMENTATION
 DownloadsView::DownloadsView() {
-    lastInputTime_ = std::chrono::steady_clock::now();
 }
 
 void DownloadsView::onContentAvailable() {
@@ -109,14 +110,6 @@ void DownloadsView::onContentAvailable() {
         }
         return true;
     });
-
-    // Start repeating timer for auto-sleep / backlight timeout monitoring
-    backlightTimer_ = new brls::RepeatingTimer();
-    backlightTimer_->setPeriod(200);
-    backlightTimer_->setCallback([this]() {
-        checkBacklightState();
-    });
-    backlightTimer_->start();
 
     // Register callback for auto-refreshing the view when progress updates
     ui::DownloadManager::instance().setProgressCallback([this]() {
@@ -183,21 +176,13 @@ void DownloadsView::onContentAvailable() {
 }
 
 DownloadsView::~DownloadsView() {
-    if (backlightTimer_) {
-        backlightTimer_->stop();
-        delete backlightTimer_;
-        backlightTimer_ = nullptr;
-    }
-    if (util::isBacklightOff()) {
-        util::setBacklightOff(false);
-    }
     // Unregister callback on destruction to avoid crashes
     ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
-    lastInputTime_ = std::chrono::steady_clock::now();
+    util::ScreenSleepManager::instance().resetActivity();
     std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     if (!queue.empty()) {
@@ -210,98 +195,11 @@ void DownloadsView::willAppear(bool resetState) {
 
 void DownloadsView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    if (util::isBacklightOff()) {
-        util::setBacklightOff(false);
-    }
     ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
 void DownloadsView::toggleBacklight() {
-    bool isOff = util::isBacklightOff();
-    util::setBacklightOff(!isOff);
-    auto now = std::chrono::steady_clock::now();
-    lastInputTime_ = now;
-    backlightToggleTime_ = now;
-}
-
-void DownloadsView::checkBacklightState() {
-    const auto now = std::chrono::steady_clock::now();
-    const auto& cState = brls::Application::getControllerState();
-
-    if (isFirstStateCheck_) {
-        prevControllerState_ = cState;
-        isFirstStateCheck_ = false;
-        return;
-    }
-
-    // Check for NEW input (button pressed down on this frame, or stick moved)
-    bool hasNewButtonPress = false;
-    for (int i = 0; i < brls::_BUTTON_MAX; ++i) {
-        if (cState.buttons[i] && !prevControllerState_.buttons[i]) {
-            hasNewButtonPress = true;
-            break;
-        }
-    }
-
-    bool hasStickMoved = false;
-    const int axis_indices[] = { brls::LEFT_X, brls::LEFT_Y, brls::RIGHT_X, brls::RIGHT_Y };
-    for (int ax : axis_indices) {
-        float delta = std::abs(cState.axes[ax] - prevControllerState_.axes[ax]);
-        if (delta > 0.25f && std::abs(cState.axes[ax]) > 0.35f) {
-            hasStickMoved = true;
-            break;
-        }
-    }
-
-    bool hasAnyHeldButton = false;
-    for (int i = 0; i < brls::_BUTTON_MAX; ++i) {
-        if (cState.buttons[i]) {
-            hasAnyHeldButton = true;
-            break;
-        }
-    }
-
-    // If user is actively pressing buttons or moving sticks, update activity timestamp
-    if (hasNewButtonPress || hasStickMoved || hasAnyHeldButton) {
-        lastInputTime_ = now;
-    }
-
-    // If backlight is currently OFF:
-    if (util::isBacklightOff()) {
-        int activeCount = ui::DownloadManager::instance().getActiveDownloadsCount();
-
-        // If all downloads have completed, turn backlight back on to notify user
-        if (activeCount == 0) {
-            util::setBacklightOff(false);
-            prevControllerState_ = cState;
-            return;
-        }
-
-        // Debounce: ignore inputs during the first 800ms after toggling to avoid immediate re-wake
-        auto msSinceToggle = std::chrono::duration_cast<std::chrono::milliseconds>(now - backlightToggleTime_).count();
-        if (msSinceToggle >= 800) {
-            // Wake up on NEW button press or stick movement
-            if (hasNewButtonPress || hasStickMoved) {
-                util::setBacklightOff(false);
-                lastInputTime_ = now;
-            }
-        }
-        prevControllerState_ = cState;
-        return;
-    }
-
-    // If backlight is currently ON: check auto-dim timeout
-    int activeCount = ui::DownloadManager::instance().getActiveDownloadsCount();
-    int timeoutSec = config::ConfigManager::instance().getBacklightTimeout();
-    if (timeoutSec > 0 && activeCount > 0) {
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastInputTime_).count();
-        if (elapsed >= timeoutSec) {
-            util::setBacklightOff(true);
-            backlightToggleTime_ = now;
-        }
-    }
-
-    prevControllerState_ = cState;
+    util::ScreenSleepManager::instance().toggleScreen();
 }
 
 
@@ -374,6 +272,10 @@ static std::string formatProgressBytes(unsigned long long written, unsigned long
 }
 
 static void showPeerInspector(const download::DownloadItem& item) {
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+    NVGcolor primaryText = ThemeManager::instance().getTextPrimaryColor();
+    NVGcolor secondaryText = ThemeManager::instance().getTextSecondaryColor();
+
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setWidth(680.0f);
@@ -383,14 +285,14 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* headerTitle = new brls::Label();
     headerTitle->setText("app/downloads/peers_title"_i18n);
     headerTitle->setFontSize(22.0f);
-    headerTitle->setTextColor(nvgRGB(255, 255, 255));
+    headerTitle->setTextColor(primaryText);
     headerTitle->setMarginBottom(4.0f);
     content->addView(headerTitle);
 
     auto* subTitle = new brls::Label();
     subTitle->setText(cleanTitle(item.title));
     subTitle->setFontSize(14.0f);
-    subTitle->setTextColor(nvgRGB(180, 180, 180));
+    subTitle->setTextColor(secondaryText);
     subTitle->setSingleLine(true);
     subTitle->setMarginBottom(16.0f);
     content->addView(subTitle);
@@ -409,12 +311,16 @@ static void showPeerInspector(const download::DownloadItem& item) {
     // Diagnostics stats box
     auto* statsBox = new brls::Box();
     statsBox->setAxis(brls::Axis::COLUMN);
-    statsBox->setBackgroundColor(nvgRGBA(36, 39, 46, 180));
+    statsBox->setBackgroundColor(isLight ? nvgRGBA(242, 245, 248, 255) : nvgRGBA(36, 39, 46, 180));
     statsBox->setCornerRadius(8.0f);
     statsBox->setPadding(12.0f);
     statsBox->setMarginBottom(16.0f);
+    if (isLight) {
+        statsBox->setBorderThickness(1.0f);
+        statsBox->setBorderColor(nvgRGBA(215, 222, 232, 255));
+    }
 
-    auto addStatRow = [statsBox](const std::string& label, const std::string& val) {
+    auto addStatRow = [statsBox, primaryText, secondaryText](const std::string& label, const std::string& val) {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -423,12 +329,12 @@ static void showPeerInspector(const download::DownloadItem& item) {
         auto* l = new brls::Label();
         l->setText(label);
         l->setFontSize(14.0f);
-        l->setTextColor(nvgRGB(180, 180, 180));
+        l->setTextColor(secondaryText);
 
         auto* v = new brls::Label();
         v->setText(val);
         v->setFontSize(14.0f);
-        v->setTextColor(nvgRGB(255, 255, 255));
+        v->setTextColor(primaryText);
 
         row->addView(l);
         row->addView(v);
@@ -469,7 +375,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* peerListHeader = new brls::Label();
     peerListHeader->setText("Active Peer Sessions");
     peerListHeader->setFontSize(15.0f);
-    peerListHeader->setTextColor(nvgRGB(200, 200, 200));
+    peerListHeader->setTextColor(primaryText);
     peerListHeader->setMarginBottom(8.0f);
     content->addView(peerListHeader);
 
@@ -477,9 +383,13 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* peerListBox = new brls::Box();
     peerListBox->setAxis(brls::Axis::COLUMN);
     peerListBox->setHeight(180.0f);
-    peerListBox->setBackgroundColor(nvgRGBA(24, 26, 32, 200));
+    peerListBox->setBackgroundColor(isLight ? nvgRGBA(242, 245, 248, 255) : nvgRGBA(24, 26, 32, 200));
     peerListBox->setCornerRadius(8.0f);
     peerListBox->setPadding(8.0f);
+    if (isLight) {
+        peerListBox->setBorderThickness(1.0f);
+        peerListBox->setBorderColor(nvgRGBA(215, 222, 232, 255));
+    }
 
     tsnx_peer_info peers[32];
     int peerCount = 0;
@@ -504,24 +414,24 @@ static void showPeerInspector(const download::DownloadItem& item) {
             auto* ipLabel = new brls::Label();
             ipLabel->setText(ipBuf);
             ipLabel->setFontSize(13.0f);
-            ipLabel->setTextColor(nvgRGB(220, 220, 220));
+            ipLabel->setTextColor(primaryText);
 
             std::string statusStr;
-            NVGcolor statusCol = nvgRGB(180, 180, 180);
+            NVGcolor statusCol = secondaryText;
             if (p.connecting) {
                 statusStr = "Connecting...";
-                statusCol = nvgRGB(255, 193, 7);
+                statusCol = isLight ? nvgRGB(180, 110, 0) : nvgRGB(255, 193, 7);
             } else if (p.claim_piece >= 0) {
                 char speedBuf[32];
                 std::snprintf(speedBuf, sizeof(speedBuf), "%.1f KB/s", p.rate_bps / 1024.0);
                 statusStr = "Piece #" + std::to_string(p.claim_piece) + " (" + speedBuf + ")";
-                statusCol = nvgRGB(76, 175, 80);
+                statusCol = isLight ? nvgRGB(34, 139, 34) : nvgRGB(76, 175, 80);
             } else if (p.choked) {
                 statusStr = "Choked";
-                statusCol = nvgRGB(244, 67, 54);
+                statusCol = isLight ? nvgRGB(210, 40, 40) : nvgRGB(244, 67, 54);
             } else {
                 statusStr = "Idle (Unchoked)";
-                statusCol = nvgRGB(33, 150, 243);
+                statusCol = isLight ? nvgRGB(20, 100, 200) : nvgRGB(33, 150, 243);
             }
 
             if (p.rtt_ms >= 0) {
@@ -541,7 +451,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
         auto* emptyLabel = new brls::Label();
         emptyLabel->setText("app/downloads/peers_no_active"_i18n);
         emptyLabel->setFontSize(14.0f);
-        emptyLabel->setTextColor(nvgRGB(140, 140, 140));
+        emptyLabel->setTextColor(secondaryText);
         emptyLabel->setMarginTop(16.0f);
         peerListBox->addView(emptyLabel);
     }
@@ -550,6 +460,14 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
     dialog->addButton("app/common/ok"_i18n, []() {});
+
+    auto* applet = dialog->getAppletFrame();
+    if (applet) {
+        applet->setWidth(720.0f);
+        applet->setCornerRadius(14.0f);
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
+    }
+
     dialog->open();
 }
 
@@ -684,6 +602,25 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     
     cell->statusText->setText(statusStr);
     cell->statusText->setTextColor(statusColor);
+
+    // SDK Mismatch warning badge
+    if (cell->sdkWarningBox) {
+        if (item.sdk_mismatch && item.game_sdk.valid && item.console_sdk.valid) {
+            cell->sdkWarningBox->setVisibility(brls::Visibility::VISIBLE);
+            bool isLight = ThemeManager::instance().isCurrentThemeLight();
+            if (cell->sdkConsoleLabel) {
+                cell->sdkConsoleLabel->setText("FW: " + item.console_sdk.toString());
+                cell->sdkConsoleLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            }
+            if (cell->sdkGameLabel) {
+                cell->sdkGameLabel->setText("SDK: " + item.game_sdk.toString());
+                // In light theme: strong deep red (#D32F2F); in dark themes: vibrant orange-red (#FF7043)
+                cell->sdkGameLabel->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(255, 112, 67));
+            }
+        } else {
+            cell->sdkWarningBox->setVisibility(brls::Visibility::GONE);
+        }
+    }
 
     // Stats text
     if (item.state == download::DownloadState::Downloading || 

@@ -199,6 +199,14 @@ class Application
 
     static bool isInputBlocks();
 
+    /**
+     * Interceptor called at the beginning of processInput().
+     * If the interceptor returns true, all inputs in this frame are consumed/blocked:
+     * rawTouch is cleared, rawMouse is cleared, and controller buttons are not processed.
+     */
+    using InputInterceptor = std::function<bool(const ControllerState& controller, const std::vector<RawTouchState>& rawTouch, const RawMouseState& rawMouse)>;
+    static void setInputInterceptor(InputInterceptor interceptor);
+
     static const ControllerState& getControllerState();
 
     static void setCommonFooter(std::string footer);
@@ -319,6 +327,26 @@ class Application
      */
     static void setLocale(const std::string& locale);
 
+    /**
+     * Sets the global background wallpaper file path.
+     */
+    static void setGlobalWallpaper(const std::string& path);
+
+    /**
+     * Sets an extra dimming overlay alpha (0.0f - 1.0f) over the global wallpaper.
+     */
+    static void setGlobalWallpaperDimming(float alpha);
+
+    /**
+     * Sets the blur radius in pixels (0 for disabled).
+     */
+    static void setGlobalWallpaperBlur(int blurRadius);
+
+    /**
+     * Sets the main menu background dimming level (default 0.28f).
+     */
+    static void setGlobalWallpaperMainMenuDim(float alpha);
+
     static void addToFreeQueue(View* view);
 
     /**
@@ -426,6 +454,7 @@ class Application
 
     inline static unsigned blockInputsTokens = 0; // any value > 0 means inputs are blocked
     inline static bool muteSounds            = false;
+    inline static InputInterceptor inputInterceptor = nullptr;
 
     inline static std::string commonFooter;
 

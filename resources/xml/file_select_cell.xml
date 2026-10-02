@@ -30,6 +30,6 @@
         height="auto"
         horizontalAlign="right"
         fontSize="16"
-        textColor="#888888" />
+        textColor="@theme/brls/header/subtitle" />
 
 </brls:Box>

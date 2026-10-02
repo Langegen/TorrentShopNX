@@ -100,6 +100,8 @@ BottomBar::BottomBar()
 void BottomBar::draw(NVGcontext* vg, float x, float y, float width, float height, Style style, FrameContext* ctx)
 {
     this->updateText();
+    if (this->time)
+        this->time->setTextColor(ctx->theme["brls/text"]);
     Box::draw(vg, x, y, width, height, style, ctx);
 }
 

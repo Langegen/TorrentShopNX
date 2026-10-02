@@ -13,13 +13,14 @@
         <brls:Label text="@i18n/app/library/title" fontSize="28" />
         
         <brls:Box width="auto" height="auto" axis="row" alignItems="center">
-            <brls:Label id="statsHint" text="@i18n/app/library/searching" fontSize="16" textColor="#AAAAAA" />
+            <brls:Label id="statsHint" text="@i18n/app/library/searching" fontSize="16" textColor="@theme/brls/header/subtitle" />
         </brls:Box>
     </brls:Box>
 
     <!-- Free space bar -->
     <brls:Box width="auto" height="24px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="8">
-        <brls:Label id="spaceHint" text="@i18n/app/library/space_unknown" fontSize="14" textColor="#88CC88" />
+        <brls:Label id="spaceHint" text="@i18n/app/library/space_unknown" fontSize="14" textColor="@theme/brls/accent" />
+        <brls:Label id="consoleSdkHint" text="" fontSize="14" textColor="@theme/brls/header/subtitle" />
     </brls:Box>
 
     <!-- Table header (aligned with the row columns) -->
@@ -32,12 +33,12 @@
         paddingLeft="92"
         paddingRight="20"
         lineBottom="1px"
-        lineColor="#444444">
+        lineColor="@theme/brls/sidebar/separator">
 
         <brls:Label
             text="@i18n/app/library/col_title"
             fontSize="12"
-            textColor="#777777"
+            textColor="@theme/brls/header/subtitle"
             grow="1.0"
             marginRight="20"
             singleLine="true" />
@@ -46,7 +47,7 @@
             text="@i18n/app/library/installed"
             width="150px"
             fontSize="12"
-            textColor="#777777"
+            textColor="@theme/brls/header/subtitle"
             horizontalAlign="center"
             marginRight="15" />
 
@@ -54,7 +55,7 @@
             text="@i18n/app/library/available"
             width="150px"
             fontSize="12"
-            textColor="#777777"
+            textColor="@theme/brls/header/subtitle"
             horizontalAlign="center"
             marginRight="15" />
 
@@ -62,7 +63,7 @@
             text="@i18n/app/library/col_status"
             width="150px"
             fontSize="12"
-            textColor="#777777"
+            textColor="@theme/brls/header/subtitle"
             horizontalAlign="center" />
 
     </brls:Box>

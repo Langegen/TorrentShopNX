@@ -1,4 +1,5 @@
 #include "CollectionCard.hpp"
+#include "ui/ThemeManager.hpp"
 #include <cmath>
 
 using namespace brls::literals;
@@ -45,7 +46,7 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     title_label_ = new brls::Label();
     title_label_->setText(title);
     title_label_->setFontSize(14.0f);
-    title_label_->setTextColor(nvgRGBA(255, 255, 255, 255));
+    title_label_->setTextColor(ThemeManager::instance().getCardTitleColor());
     title_label_->setSingleLine(true);
     topBox->addView(title_label_);
 
@@ -53,7 +54,7 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     desc_label_->setText(desc);
     desc_label_->setFontSize(10.5f);
     desc_label_->setLineHeight(1.20f);
-    desc_label_->setTextColor(nvgRGBA(150, 175, 200, 210));
+    desc_label_->setTextColor(ThemeManager::instance().getCardSubColor());
     desc_label_->setMarginTop(3.5f);
     desc_label_->setSingleLine(false);
     topBox->addView(desc_label_);
@@ -67,14 +68,14 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     brls::Box* pill = new brls::Box();
     pill->setPadding(2.0f, 8.0f, 2.0f, 8.0f);
     pill->setCornerRadius(4.0f);
-    pill->setBackgroundColor(nvgRGBA(0, 224, 165, 26)); // Emerald tint
+    pill->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
     pill->setAlignItems(brls::AlignItems::CENTER);
     pill->setJustifyContent(brls::JustifyContent::CENTER);
 
     count_label_ = new brls::Label();
     count_label_->setText(count_text);
     count_label_->setFontSize(10.5f);
-    count_label_->setTextColor(nvgRGBA(0, 230, 175, 255)); // Emerald text
+    count_label_->setTextColor(ThemeManager::instance().getAccentColor());
     count_label_->setSingleLine(true);
     pill->addView(count_label_);
     badgeRow->addView(pill);
@@ -108,12 +109,12 @@ void CollectionCard::setDescColor(NVGcolor color) {
 
 void CollectionCard::onFocusGained() {
     Box::onFocusGained();
-    if (title_label_) title_label_->setTextColor(nvgRGBA(0, 230, 175, 255));
+    if (title_label_) title_label_->setTextColor(ThemeManager::instance().getTextAccentColor());
 }
 
 void CollectionCard::onFocusLost() {
     Box::onFocusLost();
-    if (title_label_) title_label_->setTextColor(nvgRGBA(255, 255, 255, 255));
+    if (title_label_) title_label_->setTextColor(ThemeManager::instance().getCardTitleColor());
 }
 
 void CollectionCard::drawIconGlyph(NVGcontext* vg, float bx, float by, float bw, float bh) {
@@ -926,12 +927,14 @@ void CollectionCard::draw(NVGcontext* vg, float x, float y, float width, float h
     nvgScale(vg, scale_, scale_);
     nvgTranslate(vg, -cx, -cy);
 
-    // 1. Subtle Emerald Glow on focus
+    NVGcolor accent = ThemeManager::instance().getAccentColor();
+
+    // 1. Subtle Theme Glow on focus
     if (glow_ > 0.01f) {
         NVGpaint glowPaint = nvgBoxGradient(vg, x - 2.0f, y - 2.0f, width + 4.0f, height + 4.0f,
                                             14.0f, 6.0f,
-                                            nvgRGBA(0, 224, 165, static_cast<unsigned char>(65.0f * glow_)),
-                                            nvgRGBA(0, 224, 165, 0));
+                                            nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, static_cast<unsigned char>(65.0f * glow_)),
+                                            nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 0));
         nvgBeginPath(vg);
         nvgRect(vg, x - 10.0f, y - 10.0f, width + 20.0f, height + 20.0f);
         nvgFillPaint(vg, glowPaint);
@@ -941,8 +944,24 @@ void CollectionCard::draw(NVGcontext* vg, float x, float y, float width, float h
     // 2. Frosted Glass Base
     nvgBeginPath(vg);
     nvgRoundedRect(vg, x, y, width, height, 14.0f);
-    NVGcolor topColor = isFocused() ? nvgRGBA(0, 180, 140, 55) : nvgRGBA(28, 45, 66, 140);
-    NVGcolor botColor = isFocused() ? nvgRGBA(10, 28, 45, 210) : nvgRGBA(12, 20, 32, 195);
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+    NVGcolor topColor, botColor;
+    if (isLight) {
+        topColor = isFocused()
+            ? nvgRGBA(255, 255, 255, 255)
+            : nvgRGBA(255, 255, 255, 245);
+        botColor = isFocused()
+            ? nvgRGBA(238, 246, 255, 255)
+            : nvgRGBA(242, 246, 252, 235);
+    } else {
+        NVGcolor cBg = ThemeManager::instance().getCardBgColor();
+        topColor = isFocused()
+            ? nvgRGBA(accent.r * 255 * 0.85f, accent.g * 255 * 0.85f, accent.b * 255 * 0.85f, 65)
+            : cBg;
+        botColor = isFocused()
+            ? nvgRGBA(cBg.r * 255 * 0.7f, cBg.g * 255 * 0.7f, cBg.b * 255 * 0.7f, 210)
+            : nvgRGBA(cBg.r * 255 * 0.6f, cBg.g * 255 * 0.6f, cBg.b * 255 * 0.6f, 195);
+    }
     NVGpaint bgPaint = nvgLinearGradient(vg, x, y, x, y + height, topColor, botColor);
     nvgFillPaint(vg, bgPaint);
     nvgFill(vg);
@@ -952,7 +971,7 @@ void CollectionCard::draw(NVGcontext* vg, float x, float y, float width, float h
     nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.45f, 13.0f);
     NVGpaint glossPaint = nvgLinearGradient(
         vg, x, y, x, y + height * 0.45f,
-        nvgRGBA(255, 255, 255, static_cast<unsigned char>(isFocused() ? 45 : 30)),
+        nvgRGBA(255, 255, 255, static_cast<unsigned char>(isFocused() ? (isLight ? 70 : 45) : (isLight ? 45 : 22))),
         nvgRGBA(255, 255, 255, 0)
     );
     nvgFillPaint(vg, glossPaint);
@@ -962,15 +981,10 @@ void CollectionCard::draw(NVGcontext* vg, float x, float y, float width, float h
     nvgBeginPath(vg);
     nvgRoundedRect(vg, x, y, width, height, 14.0f);
     if (glow_ > 0.01f) {
-        nvgStrokeColor(vg, nvgRGBA(0, 230, 175, static_cast<unsigned char>(240.0f * glow_)));
-        nvgStrokeWidth(vg, 1.8f);
+        nvgStrokeColor(vg, nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, static_cast<unsigned char>(255.0f * glow_)));
+        nvgStrokeWidth(vg, isLight ? 2.5f : 1.8f);
     } else {
-        NVGpaint borderPaint = nvgLinearGradient(
-            vg, x, y, x, y + height,
-            nvgRGBA(180, 220, 225, 90),
-            nvgRGBA(45, 80, 100, 35)
-        );
-        nvgStrokePaint(vg, borderPaint);
+        nvgStrokeColor(vg, isLight ? nvgRGBA(210, 220, 232, 200) : ThemeManager::instance().getCardBorderColor());
         nvgStrokeWidth(vg, 1.1f);
     }
     nvgStroke(vg);
@@ -981,6 +995,18 @@ void CollectionCard::draw(NVGcontext* vg, float x, float y, float width, float h
     drawIconGlyph(vg, iconX, iconY, 56.0f, 56.0f);
 
     nvgRestore(vg);
+
+    // Ensure labels match current theme colors dynamically
+    if (title_label_) {
+        title_label_->setTextColor(isFocused() ? ThemeManager::instance().getTextAccentColor()
+                                              : ThemeManager::instance().getCardTitleColor());
+    }
+    if (desc_label_) {
+        desc_label_->setTextColor(ThemeManager::instance().getCardSubColor());
+    }
+    if (count_label_) {
+        count_label_->setTextColor(ThemeManager::instance().getAccentColor());
+    }
 
     // Draw children (labels)
     Box::draw(vg, x, y, width, height, style, ctx);

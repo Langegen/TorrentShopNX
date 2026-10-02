@@ -4,72 +4,270 @@
         height="auto"
         grow="1.0"
         axis="column"
-        paddingTop="15"
-        paddingRight="20"
-        paddingBottom="10"
-        paddingLeft="20">
+        paddingTop="12"
+        paddingRight="16"
+        paddingBottom="8"
+        paddingLeft="16">
 
-        <!-- Top Bar: Title & Path & Space -->
-        <brls:Box width="auto" height="42px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="4">
-            <brls:Box axis="row" alignItems="center" grow="1.0" marginRight="20">
-                <brls:Label text="@i18n/app/file_manager/title" fontSize="24" marginRight="15" />
-                <brls:Label id="currentPath" text="sdmc:/" fontSize="15" textColor="#3498db" singleLine="true" grow="1.0" />
-            </brls:Box>
-            <brls:Label id="spaceInfo" text="---" fontSize="13" textColor="#88CC88" />
-        </brls:Box>
-
-        <!-- Selection Bar (hidden when nothing selected) -->
+        <!-- Top Header Bar: App Title & Navigation Hints -->
         <brls:Box
-            id="selectionBar"
+            id="topHeaderBar"
             width="auto"
-            height="34px"
+            height="36px"
             axis="row"
             alignItems="center"
             justifyContent="spaceBetween"
-            paddingLeft="12"
-            paddingRight="12"
-            marginBottom="6"
-            cornerRadius="5"
-            backgroundColor="#203a43">
+            marginBottom="4">
 
-            <brls:Label id="selectionText" text="" fontSize="14" textColor="#00e676" />
-            <brls:Label id="selectionHint" text="@i18n/app/file_manager/selection_actions_hint" fontSize="12" textColor="#b0bec5" />
+            <brls:Label text="@i18n/app/file_manager/title" fontSize="22" />
+
+            <!-- Top Right Hints Box -->
+            <brls:Box
+                id="topHintsBox"
+                width="auto"
+                height="auto"
+                axis="row"
+                alignItems="center">
+
+                <!-- Split toggle hint: [-] button -->
+                <brls:Label
+                    id="splitToggleHint"
+                    text=""
+                    fontSize="13"
+                    textColor="@theme/brls/header/subtitle" />
+
+                <!-- Navigation hint when in split mode -->
+                <brls:Label
+                    id="splitNavHint"
+                    text="@i18n/app/file_manager/switch_pane_hint"
+                    fontSize="13"
+                    textColor="@theme/brls/header/subtitle"
+                    marginLeft="16"
+                    visibility="gone" />
+            </brls:Box>
         </brls:Box>
 
-        <!-- Column Headers -->
+        <!-- Panels Container (Horizontal split) -->
         <brls:Box
-            width="auto"
-            height="24px"
-            axis="row"
-            alignItems="center"
-            marginBottom="2"
-            paddingLeft="88"
-            paddingRight="46"
-            lineBottom="1px"
-            lineColor="#333333">
-
-            <brls:Label text="@i18n/app/file_manager/col_name" fontSize="12" textColor="#777777" grow="1.0" marginRight="16" />
-            <brls:Label text="@i18n/app/file_manager/col_size" width="130px" fontSize="12" textColor="#777777" horizontalAlign="right" marginRight="12" />
-            <brls:Label text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="#777777" horizontalAlign="right" />
-        </brls:Box>
-
-        <!-- Recycler file list -->
-        <brls:RecyclerFrame
-            id="recycler"
+            id="panelsContainer"
             width="auto"
             height="auto"
             grow="1.0"
-            paddingRight="30" />
+            axis="row">
 
-        <!-- Empty list notification -->
-        <brls:Label
-            id="emptyLabel"
-            text="@i18n/app/file_manager/empty_folder"
-            fontSize="18"
-            textColor="#666666"
-            horizontalAlign="center"
-            marginTop="40"
-            visibility="gone" />
+            <!-- ══════════════ LEFT PANEL ══════════════ -->
+            <brls:Box
+                id="leftPanelBox"
+                width="0px"
+                height="auto"
+                grow="1.0"
+                shrink="1.0"
+                axis="column"
+                cornerRadius="8"
+                paddingTop="4"
+                paddingBottom="4"
+                paddingLeft="6"
+                paddingRight="6">
 
+                <!-- Left Panel Header: Icon + Path + Free Space -->
+                <brls:Box
+                    id="leftHeaderBox"
+                    width="auto"
+                    height="32px"
+                    axis="row"
+                    alignItems="center"
+                    paddingLeft="4"
+                    paddingRight="4"
+                    marginBottom="2">
+                    <brls:Label
+                        id="leftPanelIcon"
+                        text="&#xE2C7;"
+                        fontSize="16"
+                        textColor="@theme/brls/accent"
+                        marginRight="8" />
+                    <brls:Label
+                        id="currentPath"
+                        text="sdmc:/"
+                        fontSize="14"
+                        textColor="@theme/brls/text"
+                        singleLine="true"
+                        grow="1.0"
+                        shrink="1.0"
+                        marginRight="8" />
+                    <brls:Label
+                        id="spaceInfo"
+                        text="---"
+                        fontSize="12"
+                        textColor="@theme/brls/accent"
+                        shrink="0.0" />
+                </brls:Box>
+
+                <!-- Selection Bar Left -->
+                <brls:Box
+                    id="selectionBar"
+                    width="auto"
+                    height="32px"
+                    axis="row"
+                    alignItems="center"
+                    justifyContent="spaceBetween"
+                    paddingLeft="10"
+                    paddingRight="10"
+                    marginBottom="4"
+                    cornerRadius="5"
+                    backgroundColor="#203a43">
+                    <brls:Label id="selectionText" text="" fontSize="13" textColor="#00e676" />
+                    <brls:Label id="selectionHint" text="@i18n/app/file_manager/selection_actions_hint" fontSize="11" textColor="@theme/brls/header/subtitle" />
+                </brls:Box>
+
+                <!-- Column Headers Left -->
+                <brls:Box
+                    id="leftColHeaders"
+                    width="auto"
+                    height="22px"
+                    axis="row"
+                    alignItems="center"
+                    marginBottom="2"
+                    paddingLeft="72"
+                    paddingRight="36"
+                    lineBottom="1px"
+                    lineColor="@theme/brls/sidebar/separator">
+                    <brls:Label id="leftColName" text="@i18n/app/file_manager/col_name" fontSize="12" textColor="@theme/brls/header/subtitle" grow="1.0" shrink="1.0" marginRight="12" />
+                    <brls:Label id="leftColSize" text="@i18n/app/file_manager/col_size" width="130px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" marginRight="10" />
+                    <brls:Label id="leftColDate" text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" />
+                </brls:Box>
+
+                <!-- Recycler Left -->
+                <brls:RecyclerFrame
+                    id="recycler"
+                    width="auto"
+                    height="auto"
+                    grow="1.0"
+                    shrink="1.0"
+                    paddingRight="26" />
+
+                <!-- Empty List Left -->
+                <brls:Label
+                    id="emptyLabel"
+                    text="@i18n/app/file_manager/empty_folder"
+                    fontSize="16"
+                    textColor="@theme/brls/header/subtitle"
+                    horizontalAlign="center"
+                    marginTop="30"
+                    visibility="gone" />
+            </brls:Box>
+
+            <!-- ══════════════ PANEL DIVIDER ══════════════ -->
+            <brls:Box
+                id="panelDivider"
+                width="2px"
+                height="auto"
+                backgroundColor="@theme/brls/sidebar/separator"
+                marginLeft="4"
+                marginRight="4"
+                visibility="gone" />
+
+            <!-- ══════════════ RIGHT PANEL ══════════════ -->
+            <brls:Box
+                id="rightPanelBox"
+                width="0px"
+                height="auto"
+                grow="1.0"
+                shrink="1.0"
+                axis="column"
+                cornerRadius="8"
+                paddingTop="4"
+                paddingBottom="4"
+                paddingLeft="6"
+                paddingRight="6"
+                visibility="gone">
+
+                <!-- Right Panel Header: Icon + Path + Free Space -->
+                <brls:Box
+                    id="rightHeaderBox"
+                    width="auto"
+                    height="32px"
+                    axis="row"
+                    alignItems="center"
+                    paddingLeft="4"
+                    paddingRight="4"
+                    marginBottom="2">
+                    <brls:Label
+                        id="rightPanelIcon"
+                        text="&#xE2C7;"
+                        fontSize="16"
+                        textColor="@theme/brls/header/subtitle"
+                        marginRight="8" />
+                    <brls:Label
+                        id="currentPathRight"
+                        text="sdmc:/"
+                        fontSize="14"
+                        textColor="@theme/brls/header/subtitle"
+                        singleLine="true"
+                        grow="1.0"
+                        shrink="1.0"
+                        marginRight="8" />
+                    <brls:Label
+                        id="spaceInfoRight"
+                        text="---"
+                        fontSize="12"
+                        textColor="@theme/brls/header/subtitle"
+                        shrink="0.0" />
+                </brls:Box>
+
+                <!-- Selection Bar Right -->
+                <brls:Box
+                    id="selectionBarRight"
+                    width="auto"
+                    height="32px"
+                    axis="row"
+                    alignItems="center"
+                    justifyContent="spaceBetween"
+                    paddingLeft="10"
+                    paddingRight="10"
+                    marginBottom="4"
+                    cornerRadius="5"
+                    backgroundColor="#203a43">
+                    <brls:Label id="selectionTextRight" text="" fontSize="13" textColor="#00e676" />
+                    <brls:Label id="selectionHintRight" text="@i18n/app/file_manager/selection_actions_hint" fontSize="11" textColor="@theme/brls/header/subtitle" />
+                </brls:Box>
+
+                <!-- Column Headers Right -->
+                <brls:Box
+                    id="rightColHeaders"
+                    width="auto"
+                    height="22px"
+                    axis="row"
+                    alignItems="center"
+                    marginBottom="2"
+                    paddingLeft="56"
+                    paddingRight="36"
+                    lineBottom="1px"
+                    lineColor="@theme/brls/sidebar/separator">
+                    <brls:Label id="rightColName" text="@i18n/app/file_manager/col_name" fontSize="12" textColor="@theme/brls/header/subtitle" grow="1.0" shrink="1.0" marginRight="12" />
+                    <brls:Label id="rightColSize" text="@i18n/app/file_manager/col_size" width="80px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" marginRight="10" />
+                    <brls:Label id="rightColDate" text="@i18n/app/file_manager/col_date" width="140px" fontSize="12" textColor="@theme/brls/header/subtitle" horizontalAlign="right" visibility="gone" />
+                </brls:Box>
+
+                <!-- Recycler Right -->
+                <brls:RecyclerFrame
+                    id="recyclerRight"
+                    width="auto"
+                    height="auto"
+                    grow="1.0"
+                    shrink="1.0"
+                    paddingRight="26" />
+
+                <!-- Empty List Right -->
+                <brls:Label
+                    id="emptyLabelRight"
+                    text="@i18n/app/file_manager/empty_folder"
+                    fontSize="16"
+                    textColor="@theme/brls/header/subtitle"
+                    horizontalAlign="center"
+                    marginTop="30"
+                    visibility="gone" />
+            </brls:Box>
+
+        </brls:Box>
     </brls:Box>
 </brls:AppletFrame>

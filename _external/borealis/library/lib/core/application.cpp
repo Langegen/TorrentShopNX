@@ -66,12 +66,227 @@ namespace util {
 #include <chrono>
 #include <set>
 #include <thread>
+#include <vector>
+#include <cmath>
+#include <stb_image.h>
 
 #define BUTTOM_REPEAT_TRIGGER 250000 // 250ms
 #define BUTTON_REPEAT_DELAY   100000 // 100 ms
 
 namespace brls
 {
+
+static std::string s_globalWallpaperPath;
+static int s_globalWallpaperImage = 0;
+static bool s_globalWallpaperReload = true;
+static float s_globalWallpaperDimming = 0.0f;
+static float s_globalWallpaperMainMenuDim = 0.28f;
+static int s_globalWallpaperBlur = 0;
+
+static void fastStackBlurRGBA(unsigned char* pix, int w, int h, int radius) {
+    if (radius < 1 || !pix || w <= 0 || h <= 0) return;
+
+    int wm = w - 1;
+    int hm = h - 1;
+    int wh = w * h;
+    int div = radius + radius + 1;
+    int div_sum = (radius + 1) * (radius + 1);
+
+    std::vector<int> r(wh), g(wh), b(wh), a(wh);
+    std::vector<int> vmin(std::max(w, h));
+
+    int rsum, gsum, bsum, asum, x, y, i, p, yp, yi, yw;
+    yw = yi = 0;
+
+    std::vector<int> stack(div * 4);
+    int stackpointer;
+    int stackstart;
+    int rbs;
+    int r1 = radius + 1;
+    int routsum, goutsum, boutsum, aoutsum;
+    int rinsum, ginsum, binsum, ainsum;
+
+    for (y = 0; y < h; y++) {
+        rinsum = ginsum = binsum = ainsum = routsum = goutsum = boutsum = aoutsum = rsum = gsum = bsum = asum = 0;
+        for (i = -radius; i <= radius; i++) {
+            p = (yi + std::min(wm, std::max(i, 0))) * 4;
+            int s_idx = (i + radius) * 4;
+            stack[s_idx]     = pix[p];
+            stack[s_idx + 1] = pix[p + 1];
+            stack[s_idx + 2] = pix[p + 2];
+            stack[s_idx + 3] = pix[p + 3];
+
+            rbs = r1 - std::abs(i);
+            rsum += stack[s_idx]     * rbs;
+            gsum += stack[s_idx + 1] * rbs;
+            bsum += stack[s_idx + 2] * rbs;
+            asum += stack[s_idx + 3] * rbs;
+
+            if (i > 0) {
+                rinsum += stack[s_idx];
+                ginsum += stack[s_idx + 1];
+                binsum += stack[s_idx + 2];
+                ainsum += stack[s_idx + 3];
+            } else {
+                routsum += stack[s_idx];
+                goutsum += stack[s_idx + 1];
+                boutsum += stack[s_idx + 2];
+                aoutsum += stack[s_idx + 3];
+            }
+        }
+        stackpointer = radius;
+
+        for (x = 0; x < w; x++) {
+            r[yi] = std::clamp(rsum / div_sum, 0, 255);
+            g[yi] = std::clamp(gsum / div_sum, 0, 255);
+            b[yi] = std::clamp(bsum / div_sum, 0, 255);
+            a[yi] = std::clamp(asum / div_sum, 0, 255);
+
+            rsum -= routsum;
+            gsum -= goutsum;
+            bsum -= boutsum;
+            asum -= aoutsum;
+
+            stackstart = stackpointer - radius + div;
+            int s_start_idx = (stackstart % div) * 4;
+
+            routsum -= stack[s_start_idx];
+            goutsum -= stack[s_start_idx + 1];
+            boutsum -= stack[s_start_idx + 2];
+            aoutsum -= stack[s_start_idx + 3];
+
+            if (y == 0) {
+                vmin[x] = std::min(x + radius + 1, wm);
+            }
+            p = (yw + vmin[x]) * 4;
+
+            stack[s_start_idx]     = pix[p];
+            stack[s_start_idx + 1] = pix[p + 1];
+            stack[s_start_idx + 2] = pix[p + 2];
+            stack[s_start_idx + 3] = pix[p + 3];
+
+            rinsum += stack[s_start_idx];
+            ginsum += stack[s_start_idx + 1];
+            binsum += stack[s_start_idx + 2];
+            ainsum += stack[s_start_idx + 3];
+
+            rsum += rinsum;
+            gsum += ginsum;
+            bsum += binsum;
+            asum += ainsum;
+
+            stackpointer = (stackpointer + 1) % div;
+            int sp_idx = (stackpointer % div) * 4;
+
+            routsum += stack[sp_idx];
+            goutsum += stack[sp_idx + 1];
+            boutsum += stack[sp_idx + 2];
+            aoutsum += stack[sp_idx + 3];
+
+            rinsum -= stack[sp_idx];
+            ginsum -= stack[sp_idx + 1];
+            binsum -= stack[sp_idx + 2];
+            ainsum -= stack[sp_idx + 3];
+
+            yi++;
+        }
+        yw += w;
+    }
+
+    for (x = 0; x < w; x++) {
+        rinsum = ginsum = binsum = ainsum = routsum = goutsum = boutsum = aoutsum = rsum = gsum = bsum = asum = 0;
+        yp = -radius * w;
+        for (i = -radius; i <= radius; i++) {
+            yi = std::max(0, yp) + x;
+            int s_idx = (i + radius) * 4;
+
+            stack[s_idx]     = r[yi];
+            stack[s_idx + 1] = g[yi];
+            stack[s_idx + 2] = b[yi];
+            stack[s_idx + 3] = a[yi];
+
+            rbs = r1 - std::abs(i);
+
+            rsum += r[yi] * rbs;
+            gsum += g[yi] * rbs;
+            bsum += b[yi] * rbs;
+            asum += a[yi] * rbs;
+
+            if (i > 0) {
+                rinsum += stack[s_idx];
+                ginsum += stack[s_idx + 1];
+                binsum += stack[s_idx + 2];
+                ainsum += stack[s_idx + 3];
+            } else {
+                routsum += stack[s_idx];
+                goutsum += stack[s_idx + 1];
+                boutsum += stack[s_idx + 2];
+                aoutsum += stack[s_idx + 3];
+            }
+
+            if (i < hm) {
+                yp += w;
+            }
+        }
+        yi = x;
+        stackpointer = radius;
+        for (y = 0; y < h; y++) {
+            p = yi * 4;
+            pix[p]     = (unsigned char)std::clamp(rsum / div_sum, 0, 255);
+            pix[p + 1] = (unsigned char)std::clamp(gsum / div_sum, 0, 255);
+            pix[p + 2] = (unsigned char)std::clamp(bsum / div_sum, 0, 255);
+            pix[p + 3] = (unsigned char)std::clamp(asum / div_sum, 0, 255);
+
+            rsum -= routsum;
+            gsum -= goutsum;
+            bsum -= boutsum;
+            asum -= aoutsum;
+
+            stackstart = stackpointer - radius + div;
+            int s_start_idx = (stackstart % div) * 4;
+
+            routsum -= stack[s_start_idx];
+            goutsum -= stack[s_start_idx + 1];
+            boutsum -= stack[s_start_idx + 2];
+            aoutsum -= stack[s_start_idx + 3];
+
+            if (x == 0) {
+                vmin[y] = std::min(y + r1, hm) * w;
+            }
+            p = x + vmin[y];
+
+            stack[s_start_idx]     = r[p];
+            stack[s_start_idx + 1] = g[p];
+            stack[s_start_idx + 2] = b[p];
+            stack[s_start_idx + 3] = a[p];
+
+            rinsum += stack[s_start_idx];
+            ginsum += stack[s_start_idx + 1];
+            binsum += stack[s_start_idx + 2];
+            ainsum += stack[s_start_idx + 3];
+
+            rsum += rinsum;
+            gsum += ginsum;
+            bsum += binsum;
+            asum += ainsum;
+
+            stackpointer = (stackpointer + 1) % div;
+            int sp_idx = (stackpointer % div) * 4;
+
+            routsum += stack[sp_idx];
+            goutsum += stack[sp_idx + 1];
+            boutsum += stack[sp_idx + 2];
+            aoutsum += stack[sp_idx + 3];
+
+            rinsum -= stack[sp_idx];
+            ginsum -= stack[sp_idx + 1];
+            binsum -= stack[sp_idx + 2];
+            ainsum -= stack[sp_idx + 3];
+
+            yi += w;
+        }
+    }
+}
 
 bool Application::init()
 {
@@ -293,6 +508,18 @@ void Application::processInput()
 
         for (int i = 0; i < ControllerButton::_BUTTON_MAX; i++)
             controllerState.buttons[i] = swapKeys[i];
+    }
+
+    if (Application::inputInterceptor && Application::inputInterceptor(controllerState, rawTouch, rawMouse))
+    {
+        rawTouch.clear();
+        rawMouse = {};
+        currentTouchState.clear();
+        currentMouseState = {};
+        oldControllerState = controllerState;
+        for (size_t i = 0; i < watchedKeys.size(); i++)
+            oldWatchedKeys[i] = watchedKeys[i];
+        return;
     }
 
     std::vector<TouchState> touchState;
@@ -795,18 +1022,72 @@ void Application::frame()
     nvgScale(frameContext.vg, Application::windowScale, Application::windowScale);
 
     // Global Wallpaper background for all activities and windows
-    static int globalBgImage = 0;
-    if (globalBgImage == 0) {
-        if (s_fc <= 3) util::logLine("brls: frame() loading globalBgImage: " + std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg");
-        globalBgImage = nvgCreateImage(frameContext.vg, (std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg").c_str(), 0);
-        if (s_fc <= 3) util::logLine("brls: frame() globalBgImage=" + std::to_string(globalBgImage));
+    if (s_globalWallpaperReload) {
+        if (s_globalWallpaperImage > 0) {
+            nvgDeleteImage(frameContext.vg, s_globalWallpaperImage);
+            s_globalWallpaperImage = 0;
+        }
+        std::string path = s_globalWallpaperPath;
+        if (path.empty()) {
+            path = std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg";
+        }
+
+        if (s_globalWallpaperBlur > 0) {
+            int w = 0, h = 0, n = 0;
+            unsigned char* data = stbi_load(path.c_str(), &w, &h, &n, 4);
+            if (!data && path != (std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg")) {
+                std::string fallback = std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg";
+                data = stbi_load(fallback.c_str(), &w, &h, &n, 4);
+            }
+            if (data && w > 0 && h > 0) {
+                fastStackBlurRGBA(data, w, h, s_globalWallpaperBlur);
+                s_globalWallpaperImage = nvgCreateImageRGBA(frameContext.vg, w, h, 0, data);
+                stbi_image_free(data);
+            }
+        }
+
+        if (s_globalWallpaperImage <= 0) {
+            s_globalWallpaperImage = nvgCreateImage(frameContext.vg, path.c_str(), 0);
+            if (s_globalWallpaperImage <= 0 && path != (std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg")) {
+                s_globalWallpaperImage = nvgCreateImage(frameContext.vg, (std::string(BRLS_RESOURCES) + "img/dashboard_bg.jpg").c_str(), 0);
+            }
+        }
+        s_globalWallpaperReload = false;
+        util::logLine("brls: loaded globalBgImage=" + std::to_string(s_globalWallpaperImage) + " from " + path + " (blur=" + std::to_string(s_globalWallpaperBlur) + ")");
     }
-    if (globalBgImage > 0) {
-        NVGpaint bgPaint = nvgImagePattern(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f, 0.0f, globalBgImage, 1.0f);
+
+    if (s_globalWallpaperImage > 0) {
+        NVGpaint bgPaint = nvgImagePattern(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f, 0.0f, s_globalWallpaperImage, 1.0f);
         nvgBeginPath(frameContext.vg);
         nvgRect(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f);
         nvgFillPaint(frameContext.vg, bgPaint);
         nvgFill(frameContext.vg);
+    }
+
+    // Auto-dimming: dim the background for readability on both main menu and sub-activities
+    bool isSubActivity = (Application::activitiesStack.size() > 1);
+    bool isLight = (Application::getPlatform() && Application::getPlatform()->getThemeVariant() == ThemeVariant::LIGHT);
+
+    if (isLight) {
+        // In Light theme, maintain crisp Nintendo Switch brightness without dark murky veil
+        float lightDim = isSubActivity ? 0.04f : (s_globalWallpaperMainMenuDim * 0.25f);
+        if (s_globalWallpaperDimming > 0.0f) lightDim = s_globalWallpaperDimming * 0.25f;
+        if (lightDim > 0.0f) {
+            nvgBeginPath(frameContext.vg);
+            nvgRect(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f);
+            nvgFillColor(frameContext.vg, nvgRGBAf(0.85f, 0.88f, 0.92f, lightDim));
+            nvgFill(frameContext.vg);
+        }
+    } else {
+        float subActivityDim = std::clamp(0.35f + s_globalWallpaperMainMenuDim * 0.75f, 0.0f, 0.90f);
+        float defaultDim = isSubActivity ? subActivityDim : s_globalWallpaperMainMenuDim;
+        float dimAlpha = (s_globalWallpaperDimming > 0.0f) ? s_globalWallpaperDimming : defaultDim;
+        if (dimAlpha > 0.0f) {
+            nvgBeginPath(frameContext.vg);
+            nvgRect(frameContext.vg, 0.0f, 0.0f, 1280.0f, 720.0f);
+            nvgFillColor(frameContext.vg, nvgRGBAf(0.05f, 0.07f, 0.11f, dimAlpha));
+            nvgFill(frameContext.vg);
+        }
     }
 
     std::vector<View*> viewsToDraw;
@@ -1131,6 +1412,34 @@ void Application::setLocale(const std::string& locale)
     reloadTranslations(locale);
 }
 
+void Application::setGlobalWallpaper(const std::string& path)
+{
+    if (s_globalWallpaperPath != path)
+    {
+        s_globalWallpaperPath = path;
+        s_globalWallpaperReload = true;
+    }
+}
+
+void Application::setGlobalWallpaperDimming(float alpha)
+{
+    s_globalWallpaperDimming = alpha;
+}
+
+void Application::setGlobalWallpaperBlur(int blurRadius)
+{
+    if (s_globalWallpaperBlur != blurRadius)
+    {
+        s_globalWallpaperBlur = blurRadius;
+        s_globalWallpaperReload = true;
+    }
+}
+
+void Application::setGlobalWallpaperMainMenuDim(float alpha)
+{
+    s_globalWallpaperMainMenuDim = alpha;
+}
+
 void Application::addToFreeQueue(View* view)
 {
     if (std::binary_search(deletionPool.cbegin(), deletionPool.cend(), view))
@@ -1231,6 +1540,11 @@ void Application::unblockInputs()
 bool Application::isInputBlocks()
 {
     return Application::blockInputsTokens > 0;
+}
+
+void Application::setInputInterceptor(InputInterceptor interceptor)
+{
+    Application::inputInterceptor = std::move(interceptor);
 }
 
 void Application::setSwapInputKeys(bool swap)

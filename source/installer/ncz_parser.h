@@ -17,6 +17,30 @@ extern "C" {
 
 namespace installer {
 
+struct NcaHeader {
+    uint8_t fixed_key_sig[0x100];
+    uint8_t npdm_key_sig[0x100];
+    uint32_t magic;
+    uint8_t distribution;
+    uint8_t content_type;
+    uint8_t crypto_type;
+    uint8_t kaek_index;
+    uint64_t nca_size;
+    uint64_t title_id;          // offset 0x210 (ProgramId)
+    uint32_t content_index;     // offset 0x218
+    uint32_t sdk_addon_version; // offset 0x21C
+    uint8_t rest[0xC00 - 0x220];
+#ifdef __SWITCH__
+} NX_PACKED;
+#else
+} __attribute__((packed));
+#endif
+
+static_assert(sizeof(NcaHeader) == 0xC00, "NcaHeader must be 0xC00 bytes");
+
+bool deriveNcaHeaderKey(uint8_t out_key[0x20]);
+bool decryptNcaHeader(const uint8_t header_bytes[0x4000], const uint8_t header_key[0x20], NcaHeader& out_header);
+
 class NczDecompressor {
 public:
     using FetchCallback = std::function<size_t(void* buf, size_t size)>;

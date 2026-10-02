@@ -15,6 +15,7 @@
 #include "../installer/hybrid_nsp_installer.h"
 #include "../torrent/torrent_manager.h"
 #include "../datasource/data_source_manager.h"
+#include "../utils/switch_utils.h"
 
 namespace download {
 
@@ -63,6 +64,9 @@ struct DownloadItem {
     // Гибридный инсталлятор (новый режим)
     std::shared_ptr<installer::HybridNspInstaller> hybrid_installer;
     std::string torrent_hash;  // Хеш торрента для DataSource
+    bool sdk_mismatch = false;
+    util::SdkVersion game_sdk;
+    util::SdkVersion console_sdk;
 
     // Асинхронный open
     std::shared_ptr<std::future<bool>> open_future;

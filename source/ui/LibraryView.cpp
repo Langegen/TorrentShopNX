@@ -1,4 +1,5 @@
 #include "LibraryView.hpp"
+#include "ThemeManager.hpp"
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
 #include "../utils/log.h"
@@ -6,6 +7,7 @@
 #include "../utils/app_paths.h"
 #include "../utils/mod_utils.h"
 #include "../catalog/IgnoredUpdatesManager.hpp"
+#include "../installer/ncz_parser.h"
 #include <exception>
 #include <memory>
 #include <fstream>
@@ -21,31 +23,105 @@
 
 std::recursive_mutex g_switch_service_mutex;
 
-// Returns the raw installed patch version (Nintendo units) for each base title
-// id, using a single ncm service session instead of one init/exit per game.
-static std::unordered_map<uint64_t, uint32_t> getInstalledPatchVersions(const std::vector<uint64_t>& baseTids) {
-    std::unordered_map<uint64_t, uint32_t> result;
-    if (baseTids.empty()) return result;
+// Queries both patch version and running SDK version for installed titles in one NCM session.
+static void getInstalledTitleMetadata(
+    const std::vector<uint64_t>& baseTids,
+    std::unordered_map<uint64_t, uint32_t>& out_patch_versions,
+    std::unordered_map<uint64_t, std::string>& out_sdk_versions) {
+    if (baseTids.empty()) return;
 
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
     Result rc = ncmInitialize();
-    if (R_FAILED(rc)) return result;
+    if (R_FAILED(rc)) return;
 
-    NcmContentMetaDatabase db;
-    rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
-    if (R_FAILED(rc)) rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
-    if (R_SUCCEEDED(rc)) {
-        for (uint64_t baseTid : baseTids) {
-            uint64_t patchTid = baseTid | 0x800ULL;
-            NcmContentMetaKey key;
-            if (R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, patchTid))) {
-                result[baseTid] = key.version;
+    NcmContentMetaDatabase dbSd = {}, dbNand = {};
+    bool hasSdDb = R_SUCCEEDED(ncmOpenContentMetaDatabase(&dbSd, NcmStorageId_SdCard));
+    bool hasNandDb = R_SUCCEEDED(ncmOpenContentMetaDatabase(&dbNand, NcmStorageId_BuiltInUser));
+
+    NcmContentStorage csSd = {}, csNand = {};
+    bool hasSdCs = R_SUCCEEDED(ncmOpenContentStorage(&csSd, NcmStorageId_SdCard));
+    bool hasNandCs = R_SUCCEEDED(ncmOpenContentStorage(&csNand, NcmStorageId_BuiltInUser));
+
+    uint8_t header_key[0x20] = {};
+    bool have_key = installer::deriveNcaHeaderKey(header_key);
+
+    auto queryTidKey = [&](uint64_t tid, NcmContentMetaKey& out_key, NcmStorageId& out_storage) -> bool {
+        if (hasSdDb && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&dbSd, &out_key, tid))) {
+            out_storage = NcmStorageId_SdCard;
+            return true;
+        }
+        if (hasNandDb && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&dbNand, &out_key, tid))) {
+            out_storage = NcmStorageId_BuiltInUser;
+            return true;
+        }
+        return false;
+    };
+
+    auto readSdkForMetaKey = [&](const NcmContentMetaKey& metaKey, NcmStorageId storageId) -> std::string {
+        if (!have_key) return "";
+        NcmContentMetaDatabase* db = (storageId == NcmStorageId_SdCard) ? &dbSd : &dbNand;
+        NcmContentId cid = {};
+        if (R_FAILED(ncmContentMetaDatabaseGetContentIdByType(db, &cid, &metaKey, NcmContentType_Program))) {
+            return "";
+        }
+
+        NcmContentStorage* primaryCs = (storageId == NcmStorageId_SdCard) ? &csSd : &csNand;
+        NcmContentStorage* secondaryCs = (storageId == NcmStorageId_SdCard) ? &csNand : &csSd;
+
+        bool has = false;
+        NcmContentStorage* targetCs = nullptr;
+        if (primaryCs && R_SUCCEEDED(ncmContentStorageHas(primaryCs, &has, &cid)) && has) {
+            targetCs = primaryCs;
+        } else if (secondaryCs && R_SUCCEEDED(ncmContentStorageHas(secondaryCs, &has, &cid)) && has) {
+            targetCs = secondaryCs;
+        }
+        if (!targetCs) return "";
+
+        uint8_t header_buf[0x4000] = {};
+        if (R_FAILED(ncmContentStorageReadContentIdFile(targetCs, header_buf, sizeof(header_buf), &cid, 0))) {
+            return "";
+        }
+
+        installer::NcaHeader header = {};
+        if (installer::decryptNcaHeader(header_buf, header_key, header)) {
+            util::SdkVersion sdk = util::SdkVersion::parse(header.sdk_addon_version);
+            if (sdk.valid) {
+                return sdk.toString();
             }
         }
-        ncmContentMetaDatabaseClose(&db);
+        return "";
+    };
+
+    for (uint64_t baseTid : baseTids) {
+        uint64_t patchTid = baseTid | 0x800ULL;
+        NcmContentMetaKey patchKey = {};
+        NcmStorageId patchStorage = NcmStorageId_SdCard;
+        bool hasPatch = queryTidKey(patchTid, patchKey, patchStorage);
+
+        if (hasPatch) {
+            out_patch_versions[baseTid] = patchKey.version;
+            std::string sdkStr = readSdkForMetaKey(patchKey, patchStorage);
+            if (!sdkStr.empty()) {
+                out_sdk_versions[baseTid] = sdkStr;
+                continue;
+            }
+        }
+
+        NcmContentMetaKey baseKey = {};
+        NcmStorageId baseStorage = NcmStorageId_SdCard;
+        if (queryTidKey(baseTid, baseKey, baseStorage)) {
+            std::string sdkStr = readSdkForMetaKey(baseKey, baseStorage);
+            if (!sdkStr.empty()) {
+                out_sdk_versions[baseTid] = sdkStr;
+            }
+        }
     }
+
+    if (hasSdCs) ncmContentStorageClose(&csSd);
+    if (hasNandCs) ncmContentStorageClose(&csNand);
+    if (hasSdDb) ncmContentMetaDatabaseClose(&dbSd);
+    if (hasNandDb) ncmContentMetaDatabaseClose(&dbNand);
     ncmExit();
-    return result;
 }
 
 static std::string iconCachePathFor(uint64_t tid) {
@@ -136,6 +212,7 @@ static std::string cleanNameForMatching(const std::string& name) {
     
     // Replace common variants
     replaceAll(lower, "&", "and");
+    replaceAll(lower, "+", "plus");
     replaceAll(lower, "part 1", "1");
     replaceAll(lower, "part i", "1");
     replaceAll(lower, "part 2", "2");
@@ -226,6 +303,76 @@ static std::string getFirstTwoWords(const std::string& str) {
         return word1;
     }
     return "";
+}
+
+static std::vector<std::string> tokenizeNameForMatching(const std::string& name) {
+    std::string lower;
+    lower.reserve(name.size());
+    for (char c : name) {
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    replaceAll(lower, "&", "and");
+    replaceAll(lower, "+", "plus");
+
+    std::string noTags;
+    noTags.reserve(lower.size());
+    bool inBracket = false;
+    for (char c : lower) {
+        if (c == '[' || c == '{') inBracket = true;
+        else if (c == ']' || c == '}') inBracket = false;
+        else if (!inBracket) noTags.push_back(c);
+    }
+
+    std::vector<std::string> tokens;
+    std::string current;
+    for (char c : noTags) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            current.push_back(c);
+        } else {
+            if (!current.empty()) {
+                if (current != "repack" && current != "nsz" && current != "nsp" &&
+                    current != "xci" && current != "xcz" && current != "rus" &&
+                    current != "eng" && current != "multi" && current != "mod") {
+                    tokens.push_back(current);
+                }
+                current.clear();
+            }
+        }
+    }
+    if (!current.empty()) {
+        if (current != "repack" && current != "nsz" && current != "nsp" &&
+            current != "xci" && current != "xcz" && current != "rus" &&
+            current != "eng" && current != "multi" && current != "mod") {
+            tokens.push_back(current);
+        }
+    }
+    return tokens;
+}
+
+static bool tokensMatchGame(const std::vector<std::string>& instTokens, const std::vector<std::string>& catTokens) {
+    if (instTokens.empty() || catTokens.empty()) return false;
+    if (instTokens == catTokens) return true;
+    if (instTokens.size() == 1) {
+        const std::string& t = instTokens[0];
+        bool inCat = false;
+        for (const auto& ct : catTokens) {
+            if (ct == t) { inCat = true; break; }
+        }
+        return inCat && (catTokens.size() <= 3 || t.length() >= 5);
+    }
+    std::vector<std::string> sigInst;
+    for (const auto& t : instTokens) {
+        if (t.length() > 1) sigInst.push_back(t);
+    }
+    if (sigInst.empty()) sigInst = instTokens;
+    for (const auto& t : sigInst) {
+        bool found = false;
+        for (const auto& ct : catTokens) {
+            if (ct == t) { found = true; break; }
+        }
+        if (!found) return false;
+    }
+    return true;
 }
 
 static bool downloadVersionsDatabaseIfNeeded() {
@@ -356,7 +503,7 @@ void LibraryView::willDisappear(bool resetState) {
     brls::Application::giveFocus(nullptr);
 }
 
-void LibraryView::rebuildSections() {
+void LibraryView::rebuildSections(int targetSection, int targetRow) {
     sections_.clear();
 
     std::vector<LibraryItem> modsUpdates;
@@ -393,9 +540,9 @@ void LibraryView::rebuildSections() {
 
     sortAlpha(modsUpdates);
     sortAlpha(normalUpdates);
-    sortAlpha(ignoredItems);
     sortAlpha(upToDateItems);
     sortAlpha(otherItems);
+    sortAlpha(ignoredItems);
 
     if (!modsUpdates.empty()) {
         std::string title = brls::getStr("app/library/section_mods_updates", std::to_string(modsUpdates.size()));
@@ -405,10 +552,6 @@ void LibraryView::rebuildSections() {
         std::string title = brls::getStr("app/library/section_updates", std::to_string(normalUpdates.size()));
         sections_.push_back({title, std::move(normalUpdates)});
     }
-    if (!ignoredItems.empty()) {
-        std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
-        sections_.push_back({title, std::move(ignoredItems)});
-    }
     if (!upToDateItems.empty()) {
         std::string title = brls::getStr("app/library/section_uptodate", std::to_string(upToDateItems.size()));
         sections_.push_back({title, std::move(upToDateItems)});
@@ -417,16 +560,32 @@ void LibraryView::rebuildSections() {
         std::string title = brls::getStr("app/library/section_other", std::to_string(otherItems.size()));
         sections_.push_back({title, std::move(otherItems)});
     }
+    if (!ignoredItems.empty()) {
+        std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
+        sections_.push_back({title, std::move(ignoredItems)});
+    }
 
     if (recycler) {
+        if (targetSection >= 0 && targetRow >= 0 && !sections_.empty()) {
+            size_t sec = static_cast<size_t>(targetSection);
+            if (sec >= sections_.size()) sec = sections_.size() - 1;
+            int maxRow = static_cast<int>(sections_[sec].items.size()) - 1;
+            int r = targetRow;
+            if (r > maxRow) r = maxRow;
+            if (r < 0) r = 0;
+            recycler->setDefaultCellFocus(brls::IndexPath(sec, static_cast<size_t>(r)));
+        } else {
+            recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
+        }
         recycler->reloadData();
+        recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
     }
     updateStatsAndSpace();
 }
 
-void LibraryView::toggleUpdateIgnored(uint64_t titleId, const std::string& displayName) {
+void LibraryView::toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow) {
     bool nowIgnored = catalog::IgnoredUpdatesManager::instance().toggleIgnored(titleId);
-    rebuildSections();
+    rebuildSections(currentSection, currentRow);
     if (recycler && !sections_.empty()) {
         brls::Application::giveFocus(recycler);
     }
@@ -503,17 +662,27 @@ void LibraryView::updateStatsAndSpace() {
 }
 
 void LibraryView::updateSpaceHint() {
-    if (!spaceHint) return;
+    if (spaceHint) {
+        int64_t sdFree = 0;
+        int64_t nandFree = 0;
+        bool sdOk = util::getStorageFreeSpace(1, sdFree);
+        bool nandOk = util::getStorageFreeSpace(0, nandFree);
 
-    int64_t sdFree = 0;
-    int64_t nandFree = 0;
-    bool sdOk = util::getStorageFreeSpace(1, sdFree);
-    bool nandOk = util::getStorageFreeSpace(0, nandFree);
+        std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
+        std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
 
-    std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
-    std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
+        spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
+        spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
+    }
 
-    spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
+    if (consoleSdkHint) {
+        auto cSdk = util::getConsoleSdkVersion();
+        if (cSdk.valid) {
+            consoleSdkHint->setText(brls::getStr("app/library/console_sdk", cSdk.toString()));
+        } else {
+            consoleSdkHint->setText("");
+        }
+    }
 }
 
 void LibraryView::scanForUpdates() {
@@ -622,15 +791,20 @@ void LibraryView::scanForUpdates() {
             nsExit();
         }
 
-        // Query installed patch versions in one ncm session (instead of one
-        // init/exit per game — the old code was the main library slow-down).
-        std::unordered_map<uint64_t, uint32_t> installedPatchVersions = getInstalledPatchVersions(baseTids);
+        // Query installed patch versions and running SDK versions in one ncm session
+        std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
+        std::unordered_map<uint64_t, std::string> installedSdkVersions;
+        getInstalledTitleMetadata(baseTids, installedPatchVersions, installedSdkVersions);
 #else
         // Mock data for PC testing
         installedList.push_back({0x0100000000010000ULL, "Super Mario Odyssey", "1.0.0"});
         installedList.push_back({0x01007ef00011e000ULL, "The Legend of Zelda: Breath of the Wild", "1.0.0"});
         installedList.push_back({0x0100000000020000ULL, "Unmatched Dummy Game", "1.1.0"});
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
+        std::unordered_map<uint64_t, std::string> installedSdkVersions;
+        installedSdkVersions[0x0100000000010000ULL] = "17.0.0";
+        installedSdkVersions[0x01007ef00011e000ULL] = "18.1.0";
+        installedSdkVersions[0x0100000000020000ULL] = "16.0.3";
 #endif
 
         if (cancelToken && *cancelToken) return;
@@ -642,10 +816,12 @@ void LibraryView::scanForUpdates() {
         struct CatalogIndex {
             std::unordered_map<uint64_t, const Game*> byTid;
             std::vector<std::pair<std::string, const Game*>> byCleanName;
+            std::vector<std::pair<std::vector<std::string>, const Game*>> byTokens;
         };
         CatalogIndex catIndex;
         catIndex.byTid.reserve(catalog->size());
         catIndex.byCleanName.reserve(catalog->size());
+        catIndex.byTokens.reserve(catalog->size());
         for (const auto& g : *catalog) {
             uint64_t tid = parseTitleIdFromGame(g);
             if (tid != 0) {
@@ -657,12 +833,15 @@ void LibraryView::scanForUpdates() {
             }
             std::string cn = cleanNameForMatching(g.title);
             if (!cn.empty()) catIndex.byCleanName.emplace_back(std::move(cn), &g);
+            auto tokens = tokenizeNameForMatching(g.title);
+            if (!tokens.empty()) catIndex.byTokens.emplace_back(std::move(tokens), &g);
         }
 
         auto makeItem = [](const Game& g, const std::string& currentVer,
                            const std::string& latestVer, GameUpdateStatus status,
                            uint64_t baseTid, const std::string& rawName,
-                           bool hasMods, bool updateIgnored, const std::string& modDetails) {
+                           bool hasMods, bool updateIgnored, const std::string& modDetails,
+                           const std::string& sdkVersion) {
             LibraryItem item;
             item.game = g;
             item.currentVersion = currentVer;
@@ -673,6 +852,7 @@ void LibraryView::scanForUpdates() {
             item.hasMods = hasMods;
             item.updateIgnored = updateIgnored;
             item.modDetails = modDetails;
+            item.sdkVersion = sdkVersion;
             return item;
         };
 
@@ -685,6 +865,12 @@ void LibraryView::scanForUpdates() {
             uint64_t baseTid = inst.titleId;
             uint64_t patchTid = baseTid | 0x800ULL; // Patch ID
             
+            std::string sdkVersion;
+            auto sit = installedSdkVersions.find(baseTid);
+            if (sit != installedSdkVersions.end()) {
+                sdkVersion = sit->second;
+            }
+
             uint32_t latestVer = 0;
             bool foundVersionInDb = false;
             auto it = availableVersions.find(patchTid);
@@ -747,7 +933,7 @@ void LibraryView::scanForUpdates() {
                 auto mit = catIndex.byTid.find(baseTid);
                 if (mit == catIndex.byTid.end()) mit = catIndex.byTid.find(patchTid);
                 if (mit != catIndex.byTid.end()) {
-                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
+                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
                     foundInCatalog = true;
                 }
             }
@@ -755,13 +941,35 @@ void LibraryView::scanForUpdates() {
             // Fallback to name matching if Title ID match failed
             if (!foundInCatalog) {
                 std::string instClean = cleanNameForMatching(inst.name);
+                auto instTokens = tokenizeNameForMatching(inst.name);
                 if (!instClean.empty()) {
+                    // 1. Try exact clean name match first
                     for (const auto& entry : catIndex.byCleanName) {
-                        const std::string& catClean = entry.first;
-                        if (catClean == instClean || catClean.find(instClean) != std::string::npos || instClean.find(catClean) != std::string::npos) {
-                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
+                        if (entry.first == instClean) {
+                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
                             foundInCatalog = true;
                             break;
+                        }
+                    }
+                    // 2. Try token-based matching (e.g. multi-packs like Shovel Knight: Treasure Trove)
+                    if (!foundInCatalog && !instTokens.empty()) {
+                        for (const auto& entry : catIndex.byTokens) {
+                            if (tokensMatchGame(instTokens, entry.first)) {
+                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                                foundInCatalog = true;
+                                break;
+                            }
+                        }
+                    }
+                    // 3. Fallback to substring matching ONLY if strings are >= 4 characters
+                    if (!foundInCatalog && instClean.length() >= 4) {
+                        for (const auto& entry : catIndex.byCleanName) {
+                            const std::string& catClean = entry.first;
+                            if (catClean.length() >= 4 && (catClean.find(instClean) != std::string::npos || (catClean.length() >= 8 && instClean.find(catClean) != std::string::npos))) {
+                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                                foundInCatalog = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -773,7 +981,7 @@ void LibraryView::scanForUpdates() {
                 dummy.title = inst.name.empty() ? ("Unknown Game") : inst.name;
                 dummy.cover = "";
                 dummy.size = "";
-                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary));
+                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
             }
         }
         
@@ -902,7 +1110,8 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
     }
 
     try {
-        cell->title->setText(cleanTitle(item.game.title));
+        std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+        cell->title->setText(displayName);
         
         char tidBuf[32];
         sprintf(tidBuf, "%016llX", (unsigned long long)item.titleId);
@@ -912,7 +1121,11 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         sprintf(tidBufLower, "%016llx", (unsigned long long)item.titleId);
         std::string tidStrLower(tidBufLower);
 
-        cell->titleId->setText("ID: " + tidStrUpper);
+        std::string tidLine = "ID: " + tidStrUpper;
+        if (!item.sdkVersion.empty()) {
+            tidLine += " • SDK " + item.sdkVersion;
+        }
+        cell->titleId->setText(tidLine);
 
         if (cell->modBadgeBox && cell->modBadge) {
             if (item.hasMods) {
@@ -978,7 +1191,6 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         Game game = item.game;
         std::string rawName = item.rawName;
         uint64_t tid = item.titleId;
-        std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
 
         // Click action (A button)
         if (item.hasMods && !item.updateIgnored && item.status == GameUpdateStatus::UpdateAvailable) {
@@ -1007,16 +1219,18 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         }
 
         // Toggle update ignore action (X button)
+        int currentSection = static_cast<int>(index.section);
+        int currentRow = index.row;
         if (item.updateIgnored) {
             cell->registerAction("app/library/action_enable_update"_i18n, brls::ControllerButton::BUTTON_X,
-                [parent = parent_, tid, displayName](brls::View* view) {
-                    parent->toggleUpdateIgnored(tid, displayName);
+                [parent = parent_, tid, displayName, currentSection, currentRow](brls::View* view) {
+                    parent->toggleUpdateIgnored(tid, displayName, currentSection, currentRow);
                     return true;
                 });
         } else {
             cell->registerAction("app/library/action_disable_update"_i18n, brls::ControllerButton::BUTTON_X,
-                [parent = parent_, tid, displayName](brls::View* view) {
-                    parent->toggleUpdateIgnored(tid, displayName);
+                [parent = parent_, tid, displayName, currentSection, currentRow](brls::View* view) {
+                    parent->toggleUpdateIgnored(tid, displayName, currentSection, currentRow);
                     return true;
                 });
         }

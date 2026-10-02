@@ -24,6 +24,7 @@ struct LibraryItem {
     bool hasMods = false;
     bool updateIgnored = false;
     std::string modDetails;
+    std::string sdkVersion;
 };
 
 struct LibrarySection {
@@ -62,15 +63,16 @@ public:
 
     void scanForUpdates();
     void uninstallGame(uint64_t titleId, const std::string& displayName);
-    void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName);
+    void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection = -1, int currentRow = -1);
     void showModWarningDialog(const LibraryItem& item);
-    void rebuildSections();
+    void rebuildSections(int targetSection = -1, int targetRow = -1);
     void updateStatsAndSpace();
     void updateSpaceHint();
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
     BRLS_BIND(brls::Label, spaceHint, "spaceHint");
+    BRLS_BIND(brls::Label, consoleSdkHint, "consoleSdkHint");
 
 private:
     std::vector<LibraryItem> rawItems_;

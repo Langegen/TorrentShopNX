@@ -237,10 +237,14 @@ void CatalogView::onContentAvailable() {
     // RecyclerFrame will call reloadData() on its first onLayout()
     bool hasFilters = !filterState_.searchQuery.empty() ||
                       !filterState_.genre.empty() ||
+                      !filterState_.genres.empty() ||
                       filterState_.lang != catalog::LanguageFilter::ALL ||
+                      !filterState_.langs.empty() ||
                       filterState_.onlyFavorites ||
                       !filterState_.year.empty() ||
-                      filterState_.players != catalog::PlayersFilter::ALL;
+                      !filterState_.years.empty() ||
+                      filterState_.players != catalog::PlayersFilter::ALL ||
+                      !filterState_.playersList.empty();
     if (hasFilters) {
         filterCatalog();
     }
@@ -549,6 +553,12 @@ void CatalogView::willDisappear(bool resetState) {
     if (g_activeCatalogView == this) {
         g_activeCatalogView = nullptr;
     }
+}
+
+void CatalogView::onResume() {
+    brls::Activity::onResume();
+    g_activeCatalogView = this;
+    g_catalogViewAliveToken = std::make_shared<bool>(true);
 }
 
 

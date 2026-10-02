@@ -1,4 +1,5 @@
 #include "DashboardHeader.hpp"
+#include "../ThemeManager.hpp"
 #include "../StorageTabView.hpp"
 #include "../../config/config.h"
 #include "../../utils/log.h"
@@ -20,49 +21,52 @@ DashboardHeader::DashboardHeader() {
     leftBox->setAxis(brls::Axis::ROW);
     leftBox->setAlignItems(brls::AlignItems::CENTER);
 
-    // Equalizer Emerald Icon
-    brls::Label* eqIcon = new brls::Label();
-    eqIcon->setText("i|i");
-    eqIcon->setFontSize(36.0f);
-    eqIcon->setTextColor(nvgRGBA(0, 224, 165, 255)); // Emerald Turquoise
-    eqIcon->setMarginRight(12.0f);
-    eqIcon->setSingleLine(true);
-    leftBox->addView(eqIcon);
+    // Equalizer Icon
+    NVGcolor textAccent = ThemeManager::instance().getTextAccentColor();
+    NVGcolor accent = ThemeManager::instance().getAccentColor();
+
+    eqIcon_ = new brls::Label();
+    eqIcon_->setText("i|i");
+    eqIcon_->setFontSize(36.0f);
+    eqIcon_->setTextColor(textAccent);
+    eqIcon_->setMarginRight(12.0f);
+    eqIcon_->setSingleLine(true);
+    leftBox->addView(eqIcon_);
 
     // "TorrentShop"
-    brls::Label* titleLabel = new brls::Label();
-    titleLabel->setText("TorrentShop");
-    titleLabel->setFontSize(32.0f);
-    titleLabel->setTextColor(nvgRGBA(255, 255, 255, 255));
-    titleLabel->setSingleLine(true);
-    leftBox->addView(titleLabel);
+    titleLabel_ = new brls::Label();
+    titleLabel_->setText("TorrentShop");
+    titleLabel_->setFontSize(32.0f);
+    titleLabel_->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+    titleLabel_->setSingleLine(true);
+    leftBox->addView(titleLabel_);
 
     // "NX" Badge
-    brls::Box* nxBadge = new brls::Box();
-    nxBadge->setHeight(26.0f);
-    nxBadge->setPadding(2.0f, 8.0f, 2.0f, 8.0f);
-    nxBadge->setCornerRadius(6.0f);
-    nxBadge->setBackgroundColor(nvgRGBA(0, 224, 165, 230)); // Emerald Turquoise
-    nxBadge->setMarginLeft(12.0f);
-    nxBadge->setAlignItems(brls::AlignItems::CENTER);
-    nxBadge->setJustifyContent(brls::JustifyContent::CENTER);
+    nxBadge_ = new brls::Box();
+    nxBadge_->setHeight(26.0f);
+    nxBadge_->setPadding(2.0f, 8.0f, 2.0f, 8.0f);
+    nxBadge_->setCornerRadius(6.0f);
+    nxBadge_->setBackgroundColor(accent);
+    nxBadge_->setMarginLeft(12.0f);
+    nxBadge_->setAlignItems(brls::AlignItems::CENTER);
+    nxBadge_->setJustifyContent(brls::JustifyContent::CENTER);
 
-    brls::Label* nxText = new brls::Label();
-    nxText->setText("NX");
-    nxText->setFontSize(15.0f);
-    nxText->setTextColor(nvgRGBA(10, 16, 26, 255));
-    nxText->setSingleLine(true);
-    nxBadge->addView(nxText);
-    leftBox->addView(nxBadge);
+    nxText_ = new brls::Label();
+    nxText_->setText("NX");
+    nxText_->setFontSize(15.0f);
+    nxText_->setTextColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGB(255, 255, 255) : nvgRGB(10, 16, 26));
+    nxText_->setSingleLine(true);
+    nxBadge_->addView(nxText_);
+    leftBox->addView(nxBadge_);
 
     // Version
-    brls::Label* verLabel = new brls::Label();
-    verLabel->setText(std::string("v") + config::ConfigManager::APP_VERSION);
-    verLabel->setFontSize(15.0f);
-    verLabel->setTextColor(nvgRGBA(140, 165, 190, 200));
-    verLabel->setMarginLeft(14.0f);
-    verLabel->setSingleLine(true);
-    leftBox->addView(verLabel);
+    verLabel_ = new brls::Label();
+    verLabel_->setText(std::string("v") + config::ConfigManager::APP_VERSION);
+    verLabel_->setFontSize(15.0f);
+    verLabel_->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    verLabel_->setMarginLeft(14.0f);
+    verLabel_->setSingleLine(true);
+    leftBox->addView(verLabel_);
 
     this->addView(leftBox);
 
@@ -70,15 +74,15 @@ DashboardHeader::DashboardHeader() {
     rightBox_ = new brls::Box();
     rightBox_->setAxis(brls::Axis::COLUMN);
     rightBox_->setAlignItems(brls::AlignItems::FLEX_END);
-    rightBox_->setPadding(8.0f, 16.0f, 8.0f, 16.0f);
-    rightBox_->setCornerRadius(10.0f);
-    rightBox_->setBackgroundColor(nvgRGBA(20, 38, 55, 110)); // Translucent glass
+    rightBox_->setPadding(2.0f, 0.0f, 2.0f, 0.0f);
+    rightBox_->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+    rightBox_->setBorderThickness(0.0f);
 
     // Row 1: Catalog Count & Last Update Date
     catalog_info_label_ = new brls::Label();
     catalog_info_label_->setText("");
     catalog_info_label_->setFontSize(13.0f);
-    catalog_info_label_->setTextColor(nvgRGBA(0, 224, 165, 240)); // Emerald Turquoise
+    catalog_info_label_->setTextColor(textAccent);
     catalog_info_label_->setSingleLine(true);
     rightBox_->addView(catalog_info_label_);
 
@@ -86,7 +90,7 @@ DashboardHeader::DashboardHeader() {
     storage_info_label_ = new brls::Label();
     storage_info_label_->setText("SD: 0 GB / 0 GB  •  NAND: 0 GB / 0 GB");
     storage_info_label_->setFontSize(12.5f);
-    storage_info_label_->setTextColor(nvgRGBA(180, 205, 225, 220));
+    storage_info_label_->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     storage_info_label_->setMarginTop(4.0f);
     storage_info_label_->setSingleLine(true);
     rightBox_->addView(storage_info_label_);
@@ -101,6 +105,38 @@ DashboardHeader::DashboardHeader() {
     }));
 
     this->addView(rightBox_);
+
+    ThemeManager::instance().subscribe([this]() {
+        refreshTheme();
+    });
+}
+
+void DashboardHeader::refreshTheme() {
+    NVGcolor textAccent = ThemeManager::instance().getTextAccentColor();
+    NVGcolor accent = ThemeManager::instance().getAccentColor();
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+
+    if (eqIcon_) {
+        eqIcon_->setTextColor(textAccent);
+    }
+    if (titleLabel_) {
+        titleLabel_->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+    }
+    if (nxBadge_) {
+        nxBadge_->setBackgroundColor(accent);
+    }
+    if (nxText_) {
+        nxText_->setTextColor(isLight ? nvgRGB(255, 255, 255) : nvgRGB(10, 16, 26));
+    }
+    if (catalog_info_label_) {
+        catalog_info_label_->setTextColor(textAccent);
+    }
+    if (storage_info_label_) {
+        storage_info_label_->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    }
+    if (verLabel_) {
+        verLabel_->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    }
 }
 
 void DashboardHeader::updateStats(int game_count, const std::string& catalog_updated_str,

@@ -1,4 +1,5 @@
 #include "RetroUpdateDialog.hpp"
+#include "ui/ThemeManager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/log.h"
 #include <borealis.hpp>
@@ -23,6 +24,8 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
     chooseDialog->setCancelable(true);
 
     auto runUpdate = [onComplete](bool only_cached) {
+        bool isLight = ThemeManager::instance().isCurrentThemeLight();
+
         auto* content = new brls::Box();
         content->setAxis(brls::Axis::COLUMN);
         content->setWidth(480.0f);
@@ -32,14 +35,14 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         auto* titleLabel = new brls::Label();
         titleLabel->setText("app/retro/update_db_title"_i18n);
         titleLabel->setFontSize(20.0f);
-        titleLabel->setTextColor(nvgRGB(255, 255, 255));
+        titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
         titleLabel->setMarginBottom(10.0f);
         content->addView(titleLabel);
 
         auto* statusLabel = new brls::Label();
         statusLabel->setText("app/retro/preparing"_i18n);
         statusLabel->setFontSize(14.0f);
-        statusLabel->setTextColor(nvgRGB(180, 180, 190));
+        statusLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         statusLabel->setMarginBottom(14.0f);
         content->addView(statusLabel);
 
@@ -48,26 +51,33 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         progressBg->setWidth(440.0f);
         progressBg->setHeight(10.0f);
         progressBg->setCornerRadius(5.0f);
-        progressBg->setBackgroundColor(nvgRGBA(42, 45, 52, 255));
+        progressBg->setBackgroundColor(isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(42, 45, 52, 255));
         progressBg->setMarginBottom(8.0f);
 
         auto* progressFill = new brls::Box();
         progressFill->setWidth(0.0f);
         progressFill->setHeight(10.0f);
         progressFill->setCornerRadius(5.0f);
-        progressFill->setBackgroundColor(nvgRGB(0, 224, 165));
+        progressFill->setBackgroundColor(ThemeManager::instance().getAccentColor());
         progressBg->addView(progressFill);
         content->addView(progressBg);
 
         auto* counterLabel = new brls::Label();
         counterLabel->setText("0%");
         counterLabel->setFontSize(13.0f);
-        counterLabel->setTextColor(nvgRGB(150, 150, 160));
+        counterLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         counterLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
         content->addView(counterLabel);
 
         auto* progressDialog = new brls::Dialog(content);
         progressDialog->setCancelable(false);
+
+        auto* applet = progressDialog->getAppletFrame();
+        if (applet) {
+            applet->setWidth(520.0f);
+            applet->setCornerRadius(14.0f);
+            applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
+        }
 
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
         auto closedFlag = std::make_shared<std::atomic<bool>>(false);

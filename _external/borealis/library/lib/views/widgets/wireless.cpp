@@ -142,6 +142,7 @@ void WirelessWidget::updateState()
 void WirelessWidget::draw(NVGcontext* vg, float x, float y, float width, float height, Style style, FrameContext* ctx)
 {
     updateState();
+    applyTheme(platform->getThemeVariant());
 
     if (hasEthernetConnection)
     {
