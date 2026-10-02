@@ -1050,12 +1050,12 @@
         "show_bottom_dashboard_desc": "Afficher le panneau inférieur avec détails et statistiques dans le menu principal"
     },
     "theme": {
-        "emerald": "Émeraude (Par défaut)",
+        "emerald": "Émeraude",
         "cyberpunk": "Cyan néon (Cyberpunk)",
         "ruby": "Rouge rubis (Switch Red)",
         "amethyst": "Violet améthyste",
         "amber": "Or ambré",
-        "light": "Clair",
+        "light": "Clair (Par défaut)",
         "graphite": "Graphite"
     }
 }

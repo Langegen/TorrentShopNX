@@ -1049,12 +1049,12 @@
         "show_bottom_dashboard_desc": "Display the bottom information panel with details and stats in the main menu"
     },
     "theme": {
-        "emerald": "Emerald (Default)",
+        "emerald": "Emerald",
         "cyberpunk": "Cyberpunk Cyan",
         "ruby": "Ruby Red (Switch Red)",
         "amethyst": "Amethyst Purple",
         "amber": "Amber Gold",
-        "light": "Light",
+        "light": "Light (Default)",
         "graphite": "Graphite"
     }
 }

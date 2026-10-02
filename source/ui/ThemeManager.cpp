@@ -154,6 +154,13 @@ ThemeManager::ThemeManager() {
             nvgRGB(220, 230, 245)
         }
     };
+
+    for (size_t i = 0; i < themes_.size(); ++i) {
+        if (themes_[i].id == "light") {
+            currentThemeIdx_ = i;
+            break;
+        }
+    }
 }
 
 void ThemeManager::init() {

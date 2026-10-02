@@ -255,7 +255,7 @@ ConfigManager::ConfigManager() {
     retro_custom_path_.clear();
     retro_auto_extract_ = false;
     retro_romset_mode_ = "full";
-    theme_ = "emerald";
+    theme_ = "light";
     background_mode_ = "auto";
     custom_background_path_.clear();
     show_bottom_dashboard_ = true;
@@ -284,7 +284,7 @@ void ConfigManager::load() {
             retro_romset_mode_ = "full";
         }
         if (theme_ != "emerald" && theme_ != "cyberpunk" && theme_ != "ruby" && theme_ != "amethyst" && theme_ != "amber" && theme_ != "light" && theme_ != "graphite") {
-            theme_ = "emerald";
+            theme_ = "light";
         }
         if (background_mode_ != "auto" && background_mode_ != "emerald" && background_mode_ != "cyberpunk" &&
             background_mode_ != "ruby" && background_mode_ != "amethyst" && background_mode_ != "amber" &&
@@ -318,7 +318,7 @@ void ConfigManager::load() {
             retro_romset_mode_ = "full";
         }
         if (theme_ != "emerald" && theme_ != "cyberpunk" && theme_ != "ruby" && theme_ != "amethyst" && theme_ != "amber" && theme_ != "light" && theme_ != "graphite") {
-            theme_ = "emerald";
+            theme_ = "light";
         }
         if (background_mode_ != "auto" && background_mode_ != "emerald" && background_mode_ != "cyberpunk" &&
             background_mode_ != "ruby" && background_mode_ != "amethyst" && background_mode_ != "amber" &&

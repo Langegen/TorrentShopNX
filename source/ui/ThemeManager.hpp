@@ -95,7 +95,7 @@ private:
     void applyThemeToBorealis();
 
     std::vector<ThemePalette> themes_;
-    size_t currentThemeIdx_ = 0;
+    size_t currentThemeIdx_ = 5; // Default to "light" theme
     uint32_t wallpaperVersion_ = 1;
     std::vector<ThemeChangeCallback> listeners_;
 };

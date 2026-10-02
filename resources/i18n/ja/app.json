@@ -1050,12 +1050,12 @@
         "show_bottom_dashboard_desc": "メインメニューの下部に詳細と統計情報を表示する情報パネルを表示します"
     },
     "theme": {
-        "emerald": "エメラルド（デフォルト）",
+        "emerald": "エメラルド",
         "cyberpunk": "ネオンシアン（サイバーパンク）",
         "ruby": "ルビーレッド（Switch Red）",
         "amethyst": "アメジストパープル",
         "amber": "アンバーゴールド",
-        "light": "ライト",
+        "light": "ライト（デフォルト）",
         "graphite": "グラファイト"
     }
 }

@@ -1050,12 +1050,12 @@
         "show_bottom_dashboard_desc": "Untere Infoleiste mit Details und Statistiken im Hauptmenü anzeigen"
     },
     "theme": {
-        "emerald": "Smaragdgrün (Standard)",
+        "emerald": "Smaragdgrün",
         "cyberpunk": "Neon-Cyan (Cyberpunk)",
         "ruby": "Rubinrot (Switch Rot)",
         "amethyst": "Amethystviolett",
         "amber": "Bernsteingold",
-        "light": "Hell",
+        "light": "Hell (Standard)",
         "graphite": "Graphit"
     }
 }

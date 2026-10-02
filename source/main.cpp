@@ -414,7 +414,7 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     brls::Application::createWindow("TorrentShopNX");
-    brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::DARK);
+    brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::LIGHT);
     brls::Application::setGlobalQuit(false);
     ui::ThemeManager::instance().init();
     brls::Application::setGlobalWallpaper(ui::ThemeManager::instance().getEffectiveWallpaperPath());

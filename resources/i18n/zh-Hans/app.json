@@ -1050,12 +1050,12 @@
         "show_bottom_dashboard_desc": "在主菜单底部显示包含详情和统计信息的信息面板"
     },
     "theme": {
-        "emerald": "翡翠绿 (默认)",
+        "emerald": "翡翠绿",
         "cyberpunk": "霓虹青 (赛博朋克)",
         "ruby": "红宝石 (Switch红)",
         "amethyst": "紫水晶",
         "amber": "琥珀金",
-        "light": "明亮浅色",
+        "light": "明亮浅色 (默认)",
         "graphite": "石墨黑"
     }
 }

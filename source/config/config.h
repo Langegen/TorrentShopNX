@@ -109,7 +109,7 @@ public:
     std::string getEffectiveRetroRomsDir(const std::string& console_default_subfolder = "") const;
 
     // Appearance / Theme settings
-    const std::string& getTheme() const; // "emerald" (default), "cyberpunk", "ruby", "amethyst", "amber"
+    const std::string& getTheme() const; // "light" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "graphite"
     void setTheme(const std::string& theme);
 
     const std::string& getBackgroundMode() const; // "auto" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "custom"
