@@ -272,6 +272,10 @@ static std::string formatProgressBytes(unsigned long long written, unsigned long
 }
 
 static void showPeerInspector(const download::DownloadItem& item) {
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+    NVGcolor primaryText = ThemeManager::instance().getTextPrimaryColor();
+    NVGcolor secondaryText = ThemeManager::instance().getTextSecondaryColor();
+
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setWidth(680.0f);
@@ -281,14 +285,14 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* headerTitle = new brls::Label();
     headerTitle->setText("app/downloads/peers_title"_i18n);
     headerTitle->setFontSize(22.0f);
-    headerTitle->setTextColor(nvgRGB(255, 255, 255));
+    headerTitle->setTextColor(primaryText);
     headerTitle->setMarginBottom(4.0f);
     content->addView(headerTitle);
 
     auto* subTitle = new brls::Label();
     subTitle->setText(cleanTitle(item.title));
     subTitle->setFontSize(14.0f);
-    subTitle->setTextColor(nvgRGB(180, 180, 180));
+    subTitle->setTextColor(secondaryText);
     subTitle->setSingleLine(true);
     subTitle->setMarginBottom(16.0f);
     content->addView(subTitle);
@@ -307,12 +311,16 @@ static void showPeerInspector(const download::DownloadItem& item) {
     // Diagnostics stats box
     auto* statsBox = new brls::Box();
     statsBox->setAxis(brls::Axis::COLUMN);
-    statsBox->setBackgroundColor(nvgRGBA(36, 39, 46, 180));
+    statsBox->setBackgroundColor(isLight ? nvgRGBA(242, 245, 248, 255) : nvgRGBA(36, 39, 46, 180));
     statsBox->setCornerRadius(8.0f);
     statsBox->setPadding(12.0f);
     statsBox->setMarginBottom(16.0f);
+    if (isLight) {
+        statsBox->setBorderThickness(1.0f);
+        statsBox->setBorderColor(nvgRGBA(215, 222, 232, 255));
+    }
 
-    auto addStatRow = [statsBox](const std::string& label, const std::string& val) {
+    auto addStatRow = [statsBox, primaryText, secondaryText](const std::string& label, const std::string& val) {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -321,12 +329,12 @@ static void showPeerInspector(const download::DownloadItem& item) {
         auto* l = new brls::Label();
         l->setText(label);
         l->setFontSize(14.0f);
-        l->setTextColor(nvgRGB(180, 180, 180));
+        l->setTextColor(secondaryText);
 
         auto* v = new brls::Label();
         v->setText(val);
         v->setFontSize(14.0f);
-        v->setTextColor(nvgRGB(255, 255, 255));
+        v->setTextColor(primaryText);
 
         row->addView(l);
         row->addView(v);
@@ -367,7 +375,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* peerListHeader = new brls::Label();
     peerListHeader->setText("Active Peer Sessions");
     peerListHeader->setFontSize(15.0f);
-    peerListHeader->setTextColor(nvgRGB(200, 200, 200));
+    peerListHeader->setTextColor(primaryText);
     peerListHeader->setMarginBottom(8.0f);
     content->addView(peerListHeader);
 
@@ -375,9 +383,13 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* peerListBox = new brls::Box();
     peerListBox->setAxis(brls::Axis::COLUMN);
     peerListBox->setHeight(180.0f);
-    peerListBox->setBackgroundColor(nvgRGBA(24, 26, 32, 200));
+    peerListBox->setBackgroundColor(isLight ? nvgRGBA(242, 245, 248, 255) : nvgRGBA(24, 26, 32, 200));
     peerListBox->setCornerRadius(8.0f);
     peerListBox->setPadding(8.0f);
+    if (isLight) {
+        peerListBox->setBorderThickness(1.0f);
+        peerListBox->setBorderColor(nvgRGBA(215, 222, 232, 255));
+    }
 
     tsnx_peer_info peers[32];
     int peerCount = 0;
@@ -402,24 +414,24 @@ static void showPeerInspector(const download::DownloadItem& item) {
             auto* ipLabel = new brls::Label();
             ipLabel->setText(ipBuf);
             ipLabel->setFontSize(13.0f);
-            ipLabel->setTextColor(nvgRGB(220, 220, 220));
+            ipLabel->setTextColor(primaryText);
 
             std::string statusStr;
-            NVGcolor statusCol = nvgRGB(180, 180, 180);
+            NVGcolor statusCol = secondaryText;
             if (p.connecting) {
                 statusStr = "Connecting...";
-                statusCol = nvgRGB(255, 193, 7);
+                statusCol = isLight ? nvgRGB(180, 110, 0) : nvgRGB(255, 193, 7);
             } else if (p.claim_piece >= 0) {
                 char speedBuf[32];
                 std::snprintf(speedBuf, sizeof(speedBuf), "%.1f KB/s", p.rate_bps / 1024.0);
                 statusStr = "Piece #" + std::to_string(p.claim_piece) + " (" + speedBuf + ")";
-                statusCol = nvgRGB(76, 175, 80);
+                statusCol = isLight ? nvgRGB(34, 139, 34) : nvgRGB(76, 175, 80);
             } else if (p.choked) {
                 statusStr = "Choked";
-                statusCol = nvgRGB(244, 67, 54);
+                statusCol = isLight ? nvgRGB(210, 40, 40) : nvgRGB(244, 67, 54);
             } else {
                 statusStr = "Idle (Unchoked)";
-                statusCol = nvgRGB(33, 150, 243);
+                statusCol = isLight ? nvgRGB(20, 100, 200) : nvgRGB(33, 150, 243);
             }
 
             if (p.rtt_ms >= 0) {
@@ -439,7 +451,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
         auto* emptyLabel = new brls::Label();
         emptyLabel->setText("app/downloads/peers_no_active"_i18n);
         emptyLabel->setFontSize(14.0f);
-        emptyLabel->setTextColor(nvgRGB(140, 140, 140));
+        emptyLabel->setTextColor(secondaryText);
         emptyLabel->setMarginTop(16.0f);
         peerListBox->addView(emptyLabel);
     }
@@ -448,6 +460,14 @@ static void showPeerInspector(const download::DownloadItem& item) {
     auto* dialog = new brls::Dialog(content);
     dialog->setCancelable(true);
     dialog->addButton("app/common/ok"_i18n, []() {});
+
+    auto* applet = dialog->getAppletFrame();
+    if (applet) {
+        applet->setWidth(720.0f);
+        applet->setCornerRadius(14.0f);
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
+    }
+
     dialog->open();
 }
 

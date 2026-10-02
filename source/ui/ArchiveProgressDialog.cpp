@@ -20,6 +20,8 @@ void ArchiveProgressDialog::threadEntry(void* arg) {
 #endif
 
 void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std::string& subText) {
+    bool isLight = ui::ThemeManager::instance().isCurrentThemeLight();
+
     cancelToken_ = std::make_shared<std::atomic<bool>>(false);
     aliveToken_ = std::make_shared<std::atomic<bool>>(true);
     lastUiUpdate_ = std::chrono::steady_clock::now();
@@ -32,14 +34,14 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
     titleLabel_ = new brls::Label();
     titleLabel_->setText(titleText);
     titleLabel_->setFontSize(20);
-    titleLabel_->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel_->setTextColor(ui::ThemeManager::instance().getTextPrimaryColor());
     titleLabel_->setMarginBottom(10.0f);
     contentBox_->addView(titleLabel_);
 
     currentFileLabel_ = new brls::Label();
     currentFileLabel_->setText(subText);
     currentFileLabel_->setFontSize(14);
-    currentFileLabel_->setTextColor(nvgRGB(180, 180, 190));
+    currentFileLabel_->setTextColor(ui::ThemeManager::instance().getTextSecondaryColor());
     currentFileLabel_->setMarginBottom(14.0f);
     contentBox_->addView(currentFileLabel_);
 
@@ -48,7 +50,7 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
     progressBg_->setWidth(480.0f);
     progressBg_->setHeight(10.0f);
     progressBg_->setCornerRadius(5.0f);
-    progressBg_->setBackgroundColor(nvgRGBA(42, 45, 52, 255));
+    progressBg_->setBackgroundColor(isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(42, 45, 52, 255));
     progressBg_->setMarginBottom(8.0f);
 
     progressFill_ = new brls::Box();
@@ -62,7 +64,7 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
     statsLabel_ = new brls::Label();
     statsLabel_->setText("0.0% · 0 B");
     statsLabel_->setFontSize(13);
-    statsLabel_->setTextColor(nvgRGB(150, 150, 160));
+    statsLabel_->setTextColor(ui::ThemeManager::instance().getTextSecondaryColor());
     statsLabel_->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
     contentBox_->addView(statsLabel_);
 
@@ -95,7 +97,7 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
     }
 }
 

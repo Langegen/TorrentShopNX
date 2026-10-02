@@ -144,6 +144,23 @@ void RetroEmulatorsView::refreshManifestOnline() {
 
 void RetroEmulatorsView::rebuildList() {
     if (!listBox) return;
+
+    bool hadFocusInside = false;
+    brls::View* currFocus = brls::Application::getCurrentFocus();
+    if (currFocus) {
+        brls::View* p = currFocus;
+        brls::View* content = this->getContentView();
+        while (p) {
+            if (p == listBox || p == content) {
+                hadFocusInside = true;
+                break;
+            }
+            p = p->getParent();
+        }
+    } else {
+        hadFocusInside = true;
+    }
+
     listBox->clearViews();
 
     auto& emuMgr = catalog::RetroEmulatorManager::instance();
@@ -177,6 +194,9 @@ void RetroEmulatorsView::rebuildList() {
         {"bios",      "app/retro/sec_emu_bios"_i18n,      isLight ? nvgRGB(190, 24, 93) : nvgRGBA(233, 30, 99, 255)}
     };
 
+    brls::View* targetFocusView = nullptr;
+    brls::View* firstFocusableRow = nullptr;
+
     for (const auto& sec : sections) {
         std::vector<const catalog::EmulatorPackage*> secPkgs;
         for (const auto& p : packages) {
@@ -207,6 +227,20 @@ void RetroEmulatorsView::rebuildList() {
             } else {
                 row->setBackgroundColor(nvgRGBA(32, 35, 42, 255));
             }
+
+            if (!firstFocusableRow) {
+                firstFocusableRow = row;
+            }
+            if (!lastFocusedPkgId_.empty() && pkg.id == lastFocusedPkgId_) {
+                targetFocusView = row;
+            }
+
+            std::string emuId = pkg.id;
+            row->getFocusEvent()->subscribe([this, emuId](brls::View* v) {
+                if (v && v->isFocused()) {
+                    lastFocusedPkgId_ = emuId;
+                }
+            });
 
             // --- Left info column ---
             auto* leftBox = new brls::Box();
@@ -359,7 +393,6 @@ void RetroEmulatorsView::rebuildList() {
             row->addView(rightBox);
 
             // Click listener
-            std::string emuId = pkg.id;
             catalog::EmulatorPackage curPkg = pkg;
 
             row->registerClickAction([this, curPkg, status](brls::View*) {
@@ -439,6 +472,17 @@ void RetroEmulatorsView::rebuildList() {
             }
 
             listBox->addView(row);
+        }
+    }
+
+    if (hadFocusInside) {
+        brls::View* viewToFocus = targetFocusView ? targetFocusView : firstFocusableRow;
+        if (viewToFocus) {
+            brls::sync([viewToFocus]() {
+                if (viewToFocus) {
+                    brls::Application::giveFocus(viewToFocus);
+                }
+            });
         }
     }
 }

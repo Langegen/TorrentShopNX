@@ -21,6 +21,7 @@ public:
 
 private:
     std::shared_ptr<std::atomic<bool>> alive_flag_;
+    std::string lastFocusedPkgId_;
 
     BRLS_BIND(brls::Label, titleLabel, "titleLabel");
     BRLS_BIND(brls::Label, statsHint, "statsHint");

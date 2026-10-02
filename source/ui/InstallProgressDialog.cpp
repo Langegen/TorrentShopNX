@@ -86,7 +86,9 @@ InstallProgressDialog::InstallProgressDialog(
     startTime_ = std::chrono::steady_clock::now();
     lastUiUpdate_ = startTime_;
 
-    // Modal Box styling (Emerald / Turquoise theme with dark slate background)
+    bool isLight = ui::ThemeManager::instance().isCurrentThemeLight();
+
+    // Modal Box styling
     contentBox_->setAxis(brls::Axis::COLUMN);
     contentBox_->setWidth(520.0f);
     contentBox_->setPadding(20.0f, 22.0f, 18.0f, 22.0f);
@@ -95,7 +97,7 @@ InstallProgressDialog::InstallProgressDialog(
     std::filesystem::path ap(packagePath_);
     std::string fileName = ap.filename().generic_string();
 
-    // ── 1. Header with Emerald Accent ──────────────────────────────────────
+    // ── 1. Header with Accent ──────────────────────────────────────────────
     auto* headerBox = new brls::Box();
     headerBox->setAxis(brls::Axis::ROW);
     headerBox->setAlignItems(brls::AlignItems::CENTER);
@@ -128,7 +130,7 @@ InstallProgressDialog::InstallProgressDialog(
     titleLabel_ = new brls::Label();
     titleLabel_->setText(fileName);
     titleLabel_->setFontSize(18.0f);
-    titleLabel_->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel_->setTextColor(ui::ThemeManager::instance().getTextPrimaryColor());
     titleLabel_->setSingleLine(true);
     headerTextCol->addView(titleLabel_);
 
@@ -149,16 +151,16 @@ InstallProgressDialog::InstallProgressDialog(
     statusLabel_ = new brls::Label();
     statusLabel_->setText("app/installer/init_install"_i18n);
     statusLabel_->setFontSize(14.0f);
-    statusLabel_->setTextColor(nvgRGB(190, 195, 205));
+    statusLabel_->setTextColor(ui::ThemeManager::instance().getTextSecondaryColor());
     statusLabel_->setMarginBottom(12.0f);
     contentBox_->addView(statusLabel_);
 
-    // ── 3. Progress Bar (Theme fill on dark rail) ────────────────────────
+    // ── 3. Progress Bar (Theme fill on rail) ──────────────────────────────
     progressBg_ = new brls::Box();
     progressBg_->setWidthPercentage(100.0f);
     progressBg_->setHeight(10.0f);
     progressBg_->setCornerRadius(5.0f);
-    progressBg_->setBackgroundColor(nvgRGBA(42, 45, 52, 255));
+    progressBg_->setBackgroundColor(isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(42, 45, 52, 255));
     progressBg_->setMarginBottom(10.0f);
 
     progressFill_ = new brls::Box();
@@ -173,7 +175,7 @@ InstallProgressDialog::InstallProgressDialog(
     statsLabel_ = new brls::Label();
     statsLabel_->setText("0.0% · 0 B");
     statsLabel_->setFontSize(13.0f);
-    statsLabel_->setTextColor(nvgRGB(150, 155, 165));
+    statsLabel_->setTextColor(ui::ThemeManager::instance().getTextSecondaryColor());
     statsLabel_->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
     contentBox_->addView(statsLabel_);
 
@@ -199,7 +201,7 @@ InstallProgressDialog::InstallProgressDialog(
     if (applet) {
         applet->setWidth(540.0f);
         applet->setCornerRadius(14.0f);
-        applet->setBackgroundColor(nvgRGBA(24, 26, 32, 252));
+        applet->setBackgroundColor(isLight ? nvgRGBA(255, 255, 255, 252) : nvgRGBA(24, 26, 32, 252));
     }
     util::logLine("InstallProgressDialog: constructor completed");
 }
