@@ -61,12 +61,12 @@ static constexpr size_t NSP_HEADER_READ_SIZE = 128 * 1024; // 128KB для за�
 static constexpr size_t NSP_HEADER_PROBE_SIZE = 4 * 1024;  // 4KB для быстрого определения реального размера header
 static constexpr size_t NSP_HEADER_MAX_SIZE  = 4 * 1024 * 1024; // защитный лимит для неадекватных header
 static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 4 * 1024 * 1024; // Increased from 128KB to 4MB to prevent starvation
-static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 48 * 1024 * 1024; // 48MB for responsive streaming start
+static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 24 * 1024 * 1024; // 24MB for fast responsive streaming start
 // If the full prebuffer target never fills (slow/dead swarm), start installing
 // with whatever has arrived after this long -- provided at least one byte is
-// there. Without the timeout a 3-peer wifi swarm that trickles below the
+// there. Without the timeout a slow wifi swarm that trickles below the
 // target keeps the install stuck in the buffering phase forever.
-static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 15000;
+static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 5000;
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
 static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (smooth streaming buffer)

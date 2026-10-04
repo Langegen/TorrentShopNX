@@ -101,8 +101,8 @@ extern "C" {
             cfg.sb_efficiency = 4;
             cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
             cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x40000;  // 256 KB max
-            cfg.tcp_rx_buf_max_size = 0x40000;  // 256 KB max
+            cfg.tcp_tx_buf_max_size = 0x60000;  // 384 KB max
+            cfg.tcp_rx_buf_max_size = 0x60000;  // 384 KB max
             cfg.udp_rx_buf_size = 0x8000;       // 32 KB
             cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }

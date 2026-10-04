@@ -87,19 +87,19 @@
    link a few dozen 500-800 KB/s peers are what saturates it, so the cap sits
    above the typical 20-25 reachable peers with headroom for churn. */
 #define MAX_SESS         96
-#define MAX_CONNECTING   48     // slots allowed to sit in a pending connect
+#define MAX_CONNECTING   32     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
 #define DIAL_STOP_LIVE   80     // enough live sessions: stop dialing new peers
 #else
 #define MAX_SESS         96
-#define MAX_CONNECTING   48
+#define MAX_CONNECTING   32
 #define DIAL_STOP_LIVE   80
 #endif
-#define CONNECT_SECS     2      // outbound SYN patience
-#define CONNECT_STARVED_SECS 3  // slow-but-alive seeders (home NAT, high RTT) need 3s floor
-#define CONNECT_RETRY_SECS  5
+#define CONNECT_SECS     8      // outbound SYN patience (realistic for Switch Wi-Fi and NAT)
+#define CONNECT_STARVED_SECS 10 // slow-but-alive seeders need 10s floor
+#define CONNECT_RETRY_SECS  12
 // Dial budgets: bootstrap burst connects rapidly, upkeep maintains
 #define DIAL_BUDGET_PER_TICK 4
-#define DIAL_BUDGET_BOOTSTRAP 12
+#define DIAL_BUDGET_BOOTSTRAP 6
 #define PREHS_SECS       10     // connected but no handshake yet
 #define IDLE_SECS        130    // handshaked, nothing received (see header)
 #define KEEPALIVE_SECS   60
@@ -144,7 +144,7 @@
 // are dropped; a read that lands on a dropped piece re-downloads it (the read
 // moves the playhead there, so the streaming window covers it). Sized to leave
 // the forward window plenty of seek-back slack; needs a full-RAM launch.
-#define RAM_STREAM_BUDGET (256LL << 20)
+#define RAM_STREAM_BUDGET (512LL << 20)
 
 #define TFS_MAX_PEERS    512
 #define BACKOFF_CONN_SECS 5
@@ -164,20 +164,14 @@ enum { PEER_SRC_TRACKER = 0, PEER_SRC_PEX = 1, PEER_SRC_DHT = 2 };
 enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
        PEER_FAIL_CHOKE_ROTATE = 3 };
 
-// Discovery re-runs every 15 min, or 90 s after the last round when starved.
-// The 90 s floor matters: trackers (t-ru.org observed) throttle announces to
-// a single peer address when a client re-announces every few dozen seconds,
-// so starving must not turn into an announce spam that gets us cut off.
+// Discovery re-runs every 15 min, or 60 s after the last round when starved.
+// Trackers throttle announces to a single peer address when a client
+// re-announces too often, so starving must not turn into an announce spam.
 #define DISC_INTERVAL_SECS (15 * 60)
-#define DISC_STARVED_SECS  15
-// Below this many live sessions the engine runs starvation mode (fast
-// re-announces, DHT hungry, no uTP dials, backoff churn). It used to be 30,
-// which a healthy 20-30 peer swarm NEVER exceeded on real downloads -- the
-// engine permanently self-identified as starved, spammed trackers every 15 s
-// and got throttled (measured: t-ru.org started refusing connections within
-// a minute, killing the largest peer source). A handful of good peers is
-// enough to saturate a 100 Mbit link; treat anything above that as healthy.
-#define STARVED_LIVE       14
+#define DISC_STARVED_SECS  60
+// Below this many live sessions the engine runs starvation mode.
+// 8 good peers is enough to saturate a 100 Mbit link.
+#define STARVED_LIVE       8
 
 // PEX (BEP 11): exchange peer addresses with live sessions. Peers discovered
 // this way are by definition reachable (they come from someone who is talking
@@ -197,10 +191,9 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 
 // A handshaked peer that keeps us choked for this long while never having
 // delivered a block is dead weight: drop it and dial a fresh candidate.
-// 20 s: a slot squatted by a silent choker for a minute is a slot a
-// productive seed could be using (measured: with a 45-180 s rotation the
-// live set plateaued far below the swarm's reachable seed count).
-#define CHOKED_ROTATE_SECS 20
+// 45 s: gives BitTorrent peers (whose optimistic unchoke cycle is 30 s)
+// time to unchoke before we prematurely disconnect them.
+#define CHOKED_ROTATE_SECS 45
 // Bootstrap: fewer than this many pieces ever completed -- we have nothing to
 // reciprocate with yet, so full seeds are precious and never rotated out.
 #define BOOTSTRAP_THRESH 5
@@ -813,7 +806,8 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
     mutexLock(&t->lock);
     t->peer_busy[pidx] = 0;
     if (failed || !t->peer_ok[pidx]) {
-        if (t->peer_fails[pidx] < 0xFE) t->peer_fails[pidx]++;
+        if (fail_kind != PEER_FAIL_CHOKE_ROTATE && t->peer_fails[pidx] < 0xFE)
+            t->peer_fails[pidx]++;
         t->peer_fail_kind[pidx] = (uint8_t)fail_kind;
         int f = t->peer_fails[pidx];
         int secs;
@@ -867,6 +861,27 @@ static bool peer_is_seed(torrentfs *t, sess *s) {
     }
     return true;
 }
+
+// Does this peer have pieces we currently need (the read-blocked piece or
+// pieces in the active streaming window)? Such peers must not be prematurely
+// dropped on choke-rotation when the swarm is scarce.
+static bool peer_has_needed(torrentfs *t, sess *s) {
+    if (!s->nb.bitfield) return false;
+    if (t->read_blocked_piece >= 0 &&
+        bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, t->read_blocked_piece))
+        return true;
+    int64_t ph = t->playhead_piece;
+    if (ph < t->file_first_piece) ph = t->file_first_piece;
+    int64_t window_end = ph + 32;
+    if (window_end > t->file_last_piece) window_end = t->file_last_piece;
+    for (int64_t p = ph; p <= window_end; p++) {
+        if (t->status[p] != PIECE_DONE &&
+            bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p))
+            return true;
+    }
+    return false;
+}
+
 
 // Take a peer flagged for the one-shot uTP hole-punch retry (TCP dial failed).
 static int take_utp_retry_peer(torrentfs *t, peer_addr *out) {
@@ -1079,9 +1094,9 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
             utp_nb_close((utp_nb_sess *)s->nb.utp);
             s->nb.utp = NULL;
         }
-        t->st_connecting--;
+        if (t->st_connecting > 0) t->st_connecting--;
     } else {
-        if (s->nb.handshaked) t->st_live--;
+        if (s->nb.handshaked && t->st_live > 0) t->st_live--;
         peer_nb_free(&s->nb);
     }
     int kind = s->fail_kind ? s->fail_kind
@@ -1149,7 +1164,8 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
         t->st_sock_fail++;
         t->st_conn_fail++;
         set_err(t, "socket(): errno %lld", (long long)errno);
-        release_peer(t, pidx, true, false, PEER_FAIL_OTHER);
+        // Local descriptor/buffer exhaustion; do not penalize the remote peer.
+        release_peer(t, pidx, false, false, PEER_FAIL_NONE);
         return false;
     }
     int fl = fcntl(sock, F_GETFL, 0);
@@ -1168,7 +1184,8 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
         t->st_conn_fail++;
         engine_log(ENGINE_LOG_DEBUG, "[sess %d] tcp connect failed errno=%d", sid, errno);
         close(sock);
-        release_peer(t, pidx, true, false, PEER_FAIL_OTHER);
+        bool is_local = (errno == ENOBUFS || errno == ENOMEM || errno == EMFILE || errno == ENFILE);
+        release_peer(t, pidx, !is_local, false, is_local ? PEER_FAIL_NONE : PEER_FAIL_OTHER);
         return true;   // slot still free; try another peer next tick
     }
 
@@ -1220,7 +1237,9 @@ static bool sess_dial_utp_at(torrentfs *t, u64 now, int pidx, peer_addr pa) {
 
     if (peer_nb_init_utp(&s->nb, us, t->meta.piece_count) != 0) {
         utp_nb_close(us);
-        release_peer(t, pidx, true, false, PEER_FAIL_OTHER);
+        s->active = false;
+        s->connecting = false;
+        release_peer(t, pidx, false, false, PEER_FAIL_NONE);
         return true;
     }
     mutexLock(&t->lock);
@@ -1261,7 +1280,7 @@ static void sess_connected(torrentfs *t, sess *s, u64 now) {
         return;
     }
     s->connecting = false;
-    t->st_connecting--;
+    if (t->st_connecting > 0) t->st_connecting--;
     t->st_conn_ok++;
     s->last_rx = s->last_ka = now;
     mutexLock(&t->lock);
@@ -2288,10 +2307,19 @@ static void netloop_main(void *arg) {
                 // the connection just re-dials the same seed over and over,
                 // which is exactly the reconnect loop we observed in the
                 // field (one live seed, handshake every ~30 s, zero blocks).
+                bool is_seed = peer_is_seed(t, s);
+                bool has_needed = peer_has_needed(t, s);
+                if ((is_seed || has_needed || t->st_live < 8) && (few_peers || t->st_live < 24)) {
+                    // Never rotate out full seeds, peers holding needed pieces, or any peer
+                    // when swarm is small / starved. Seeds and peers run optimistic unchoke
+                    // on 30s+ cycles and are often the only source for missing pieces.
+                    continue;
+                }
+                int eff_connecting = t->st_connecting > 0 ? t->st_connecting : 0;
                 if (!s->connecting && s->nb.handshaked && s->nb.choked &&
                     s->rx_total == 0 &&
-                    t->peer_count > t->st_live + t->st_connecting &&
-                    !(t->pieces_ever < BOOTSTRAP_THRESH && peer_is_seed(t, s))) {
+                    t->peer_count > t->st_live + eff_connecting &&
+                    !is_seed && !has_needed) {
                     int rotate_secs = CHOKED_ROTATE_SECS;
                     if (now - s->started > (u64)rotate_secs * t->freq) {
                         engine_log(ENGINE_LOG_DEBUG,
@@ -2381,11 +2409,12 @@ static void netloop_main(void *arg) {
             dht_bg_set_hungry(t->st_live < STARVED_LIVE ? 1 : 0);
             drain_incoming(t, now); // sockets the shared listener accepted
 
-            int connecting = 0, bf_empty = 0;
+            int live = 0, connecting = 0, bf_empty = 0;
             for (int i = 0; i < MAX_SESS; i++) {
                 sess *s = &t->S[i];
                 if (!s->active) continue;
                 if (s->connecting) { connecting++; continue; }
+                if (s->nb.handshaked) live++;
                 if (s->nb.handshaked && s->nb.bitfield) {
                     bool any = false;
                     for (size_t b = 0; b < s->nb.bitfield_len && !any; b++)
@@ -2394,6 +2423,9 @@ static void netloop_main(void *arg) {
                 }
             }
             t->st_bf_empty = bf_empty;
+            t->st_connecting = connecting;
+            t->st_live = live;
+            if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
             // Starvation recovery: if we have almost no live peers, stop wasting
             // connection slots on ВµTP and retry peers that failed earlier. DHT
             // swarms are often full of dead/NAT'd addresses; without this the pool
@@ -2603,7 +2635,7 @@ static void netloop_main(void *arg) {
                 int st = utp_nb_state((utp_nb_sess *)s->nb.utp);
                 if (st == 1) {
                     s->connecting = false;
-                    t->st_connecting--;
+                    if (t->st_connecting > 0) t->st_connecting--;
                     t->st_conn_ok++;
                     s->last_rx = s->last_ka = now;
                 } else if (st < 0) {
@@ -3117,9 +3149,9 @@ int torrentfs_get_peers(const torrentfs *tfs, torrentfs_peer_info *out, int max)
 
 void torrentfs_live_peers(const torrentfs *tfs, int *live, int *peak,
                           int *connecting) {
-    if (live) *live = tfs->st_live;
+    if (live) *live = tfs->st_live >= 0 ? tfs->st_live : 0;
     if (peak) *peak = tfs->st_peak_live;
-    if (connecting) *connecting = tfs->st_connecting;
+    if (connecting) *connecting = tfs->st_connecting >= 0 ? tfs->st_connecting : 0;
 }
 
 void torrentfs_claim_stats(const torrentfs *tfs, int *claiming, int *idle) {

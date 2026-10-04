@@ -40,7 +40,7 @@ public:
     static constexpr const char* kSwitchStatsUrl =
         "https://raw.githubusercontent.com/Langegen/switch-games/main/switch_games_stats.json";
     static constexpr const char* kConsoleStatsUrl =
-        "https://raw.githubusercontent.com/Langegen/console-games/main/console_games_stats.json";
+        "https://raw.githubusercontent.com/Langegen/console-games/main/data/console_games_stats.json";
 
 private:
     GameStatsManager();
