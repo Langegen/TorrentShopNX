@@ -33,6 +33,8 @@ private:
     BRLS_BIND(brls::Label, metaYear, "metaYear");
     BRLS_BIND(brls::Label, metaFormat, "metaFormat");
     BRLS_BIND(brls::Label, metaVoice, "metaVoice");
+    BRLS_BIND(brls::Label, metaStats, "metaStats");
+    BRLS_BIND(brls::Label, metaDate, "metaDate");
     BRLS_BIND(brls::Box, metaBox, "metaBox");
     BRLS_BIND(brls::Label, description, "description");
     BRLS_BIND(brls::Box, screenshotsContainer, "screenshotsContainer");

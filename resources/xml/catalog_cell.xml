@@ -11,6 +11,7 @@
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover0" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="lang0" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+            <brls:Label id="stats0" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
         <brls:Label id="title0" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size0" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
@@ -21,6 +22,7 @@
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover1" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="lang1" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+            <brls:Label id="stats1" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
         <brls:Label id="title1" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size1" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
@@ -31,6 +33,7 @@
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover2" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="lang2" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+            <brls:Label id="stats2" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
         <brls:Label id="title2" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size2" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
@@ -41,6 +44,7 @@
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover3" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="lang3" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+            <brls:Label id="stats3" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
         <brls:Label id="title3" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size3" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
@@ -51,6 +55,7 @@
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover4" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="lang4" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+            <brls:Label id="stats4" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
         <brls:Label id="title4" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size4" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />
@@ -61,6 +66,7 @@
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover5" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="lang5" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="11" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
+            <brls:Label id="stats5" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
         <brls:Label id="title5" width="150px" maxWidth="150px" height="20px" fontSize="14" marginTop="5" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Label id="size5" width="150px" height="15px" fontSize="11" marginTop="2" textColor="#888888" />

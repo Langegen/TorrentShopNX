@@ -224,7 +224,9 @@
         "qr_no_url": "Kein Link verfügbar",
         "compilation_badge": "SAMMLUNG / ROMSET",
         "select_files_btn": "Dateien auswählen",
-        "download_romset_btn": "ROMset herunterladen"
+        "download_romset_btn": "ROMset herunterladen",
+        "stats_info": "Torrent: {0} Seeds / {1} Peers ({2} DL)",
+        "stats_date": "Hinzugefügt: {0}"
     },
     "fileselect": {
         "title": "Torrent-Dateien",
@@ -426,7 +428,13 @@
         "hint_select_one": "Einzeln wählen",
         "hint_multiselect": "Mehrfachauswahl",
         "hint_apply": "Anwenden",
-        "apply_done": "Fertig"
+        "apply_done": "Fertig",
+        "sort_seeds_desc": "Nach Seeds (absteigend)",
+        "sort_seeds_asc": "Nach Seeds (aufsteigend)",
+        "sort_downloads_desc": "Nach Downloads (absteigend)",
+        "sort_downloads_asc": "Nach Downloads (aufsteigend)",
+        "sort_date_desc": "Nach Datum (neueste)",
+        "sort_date_asc": "Nach Datum (älteste)"
     },
     "settings": {
         "title": "Werkzeuge",

@@ -340,17 +340,18 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
         brls::Image* cover;
         brls::Label* meta;
         brls::Label* lang;
+        brls::Label* stats;
         brls::Label* title;
         brls::Label* size;
     } cards[6];
 
     try {
-        cards[0] = { rowCell->card0, rowCell->cover0, rowCell->meta0, rowCell->lang0, rowCell->title0, rowCell->size0 };
-        cards[1] = { rowCell->card1, rowCell->cover1, rowCell->meta1, rowCell->lang1, rowCell->title1, rowCell->size1 };
-        cards[2] = { rowCell->card2, rowCell->cover2, rowCell->meta2, rowCell->lang2, rowCell->title2, rowCell->size2 };
-        cards[3] = { rowCell->card3, rowCell->cover3, rowCell->meta3, rowCell->lang3, rowCell->title3, rowCell->size3 };
-        cards[4] = { rowCell->card4, rowCell->cover4, rowCell->meta4, rowCell->lang4, rowCell->title4, rowCell->size4 };
-        cards[5] = { rowCell->card5, rowCell->cover5, rowCell->meta5, rowCell->lang5, rowCell->title5, rowCell->size5 };
+        cards[0] = { rowCell->card0, rowCell->cover0, rowCell->meta0, rowCell->lang0, rowCell->stats0, rowCell->title0, rowCell->size0 };
+        cards[1] = { rowCell->card1, rowCell->cover1, rowCell->meta1, rowCell->lang1, rowCell->stats1, rowCell->title1, rowCell->size1 };
+        cards[2] = { rowCell->card2, rowCell->cover2, rowCell->meta2, rowCell->lang2, rowCell->stats2, rowCell->title2, rowCell->size2 };
+        cards[3] = { rowCell->card3, rowCell->cover3, rowCell->meta3, rowCell->lang3, rowCell->stats3, rowCell->title3, rowCell->size3 };
+        cards[4] = { rowCell->card4, rowCell->cover4, rowCell->meta4, rowCell->lang4, rowCell->stats4, rowCell->title4, rowCell->size4 };
+        cards[5] = { rowCell->card5, rowCell->cover5, rowCell->meta5, rowCell->lang5, rowCell->stats5, rowCell->title5, rowCell->size5 };
     } catch (const std::exception& e) {
         brls::Logger::error("CollectionGamesDataSource: EXCEPTION resolving BRLS_BIND variables: {}", e.what());
         return rowCell;
@@ -441,6 +442,21 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                         }
                     } else {
                         langLabel->setVisibility(brls::Visibility::GONE);
+                    }
+                }
+
+                brls::Label* statsLabel = cards[i].stats;
+                if (statsLabel) {
+                    if (hasMatch) {
+                        const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(parent_->matchedGames_[idx].topic_id);
+                        if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
+                            statsLabel->setVisibility(brls::Visibility::VISIBLE);
+                            statsLabel->setText(" " + std::to_string(statsData->seeds) + " / " + std::to_string(statsData->leeches) + " ");
+                        } else {
+                            statsLabel->setVisibility(brls::Visibility::GONE);
+                        }
+                    } else {
+                        statsLabel->setVisibility(brls::Visibility::GONE);
                     }
                 }
 

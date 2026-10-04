@@ -9,6 +9,7 @@
 #include <borealis.hpp>
 #include "../GameData.hpp"
 #include "genre_taxonomy.hpp"
+#include "game_stats_manager.h"
 
 namespace catalog {
 
@@ -20,6 +21,12 @@ enum class SortOption {
     SIZE_DESC = 4,
     YEAR_DESC = 5,
     YEAR_ASC = 6,
+    SEEDS_DESC = 7,
+    SEEDS_ASC = 8,
+    DOWNLOADS_DESC = 9,
+    DOWNLOADS_ASC = 10,
+    DATE_DESC = 11,
+    DATE_ASC = 12,
 };
 
 inline std::vector<std::string> getSortOptionNames() {
@@ -30,7 +37,13 @@ inline std::vector<std::string> getSortOptionNames() {
         "app/filter/sort_size_asc"_i18n,
         "app/filter/sort_size_desc"_i18n,
         "app/filter/sort_year_desc"_i18n,
-        "app/filter/sort_year_asc"_i18n
+        "app/filter/sort_year_asc"_i18n,
+        "app/filter/sort_seeds_desc"_i18n,
+        "app/filter/sort_seeds_asc"_i18n,
+        "app/filter/sort_downloads_desc"_i18n,
+        "app/filter/sort_downloads_asc"_i18n,
+        "app/filter/sort_date_desc"_i18n,
+        "app/filter/sort_date_asc"_i18n
     };
 }
 
@@ -472,6 +485,54 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             if (yA == 0) yA = 9999;
             if (yB == 0) yB = 9999;
             if (yA != yB) return yA < yB;
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+        }
+        case SortOption::SEEDS_DESC: {
+            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            int32_t valA = sA ? sA->seeds : -1;
+            int32_t valB = sB ? sB->seeds : -1;
+            if (valA != valB) return valA > valB;
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+        }
+        case SortOption::SEEDS_ASC: {
+            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            int32_t valA = (sA && sA->seeds > 0) ? sA->seeds : INT32_MAX;
+            int32_t valB = (sB && sB->seeds > 0) ? sB->seeds : INT32_MAX;
+            if (valA != valB) return valA < valB;
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+        }
+        case SortOption::DOWNLOADS_DESC: {
+            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            int64_t valA = sA ? sA->downloads : -1;
+            int64_t valB = sB ? sB->downloads : -1;
+            if (valA != valB) return valA > valB;
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+        }
+        case SortOption::DOWNLOADS_ASC: {
+            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            int64_t valA = (sA && sA->downloads > 0) ? sA->downloads : INT64_MAX;
+            int64_t valB = (sB && sB->downloads > 0) ? sB->downloads : INT64_MAX;
+            if (valA != valB) return valA < valB;
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+        }
+        case SortOption::DATE_DESC: {
+            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            int64_t valA = sA ? sA->latest_timestamp : -1;
+            int64_t valB = sB ? sB->latest_timestamp : -1;
+            if (valA != valB) return valA > valB;
+            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+        }
+        case SortOption::DATE_ASC: {
+            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            int64_t valA = (sA && sA->latest_timestamp > 0) ? sA->latest_timestamp : INT64_MAX;
+            int64_t valB = (sB && sB->latest_timestamp > 0) ? sB->latest_timestamp : INT64_MAX;
+            if (valA != valB) return valA < valB;
             return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::DEFAULT:

@@ -164,7 +164,7 @@ void SwitchInputManager::clearVibration(int controller)
 {
     Logger::debug("Vibration clear #{}", controller);
     hidInitializeVibrationDevices(m_vibration_device_handles[controller], 2, (HidNpadIdType)controller, HidNpadStyleTag_NpadJoyDual);
-    sendRumbleInternal(m_vibration_device_handles[controller], m_vibration_values[controller], 160.0f, 320.0f, 0.0f, 0.0f);
+    sendRumbleInternal(m_vibration_device_handles[controller], m_vibration_values[controller], 0, 0, 0, 0);
 }
 
 void SwitchInputManager::updateUnifiedControllerState(ControllerState* state)

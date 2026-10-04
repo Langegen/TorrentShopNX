@@ -224,7 +224,9 @@
         "qr_no_url": "无可用链接",
         "compilation_badge": "合集 / ROM 集",
         "select_files_btn": "选择文件",
-        "download_romset_btn": "下载 ROM 集"
+        "download_romset_btn": "下载 ROM 集",
+        "stats_info": "种子统计: {0} 做种 / {1} 下载中 ({2} 次下载)",
+        "stats_date": "添加时间: {0}"
     },
     "fileselect": {
         "title": "种子包含文件",
@@ -426,7 +428,13 @@
         "hint_select_one": "单选",
         "hint_multiselect": "多选切换",
         "hint_apply": "应用",
-        "apply_done": "完成"
+        "apply_done": "完成",
+        "sort_seeds_desc": "按做种数 (从多到少)",
+        "sort_seeds_asc": "按做种数 (从少到多)",
+        "sort_downloads_desc": "按下载量 (从多到少)",
+        "sort_downloads_asc": "按下载量 (从少到多)",
+        "sort_date_desc": "按添加日期 (从新到旧)",
+        "sort_date_asc": "按添加日期 (从旧到新)"
     },
     "settings": {
         "title": "设置工具",

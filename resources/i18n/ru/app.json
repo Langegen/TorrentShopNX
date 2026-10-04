@@ -224,7 +224,9 @@
         "topic": "Открыть тему",
         "unknown_genre": "Неизвестный жанр",
         "unknown_publisher": "Неизвестный издатель",
-        "update_available": "Доступно обновление"
+        "update_available": "Доступно обновление",
+        "stats_info": "Раздача: {0} сид. / {1} пир. ({2} загр.)",
+        "stats_date": "Добавлено: {0}"
     },
     "fileselect": {
         "title": "Выбор файлов",
@@ -425,7 +427,13 @@
         "hint_select_one": "Выбрать один",
         "hint_multiselect": "Мультивыбор",
         "hint_apply": "Применить",
-        "apply_done": "Готово"
+        "apply_done": "Готово",
+        "sort_seeds_desc": "По сидерам (сначала больше)",
+        "sort_seeds_asc": "По сидерам (сначала меньше)",
+        "sort_downloads_desc": "По загрузкам (сначала больше)",
+        "sort_downloads_asc": "По загрузкам (сначала меньше)",
+        "sort_date_desc": "По дате (сначала новые)",
+        "sort_date_asc": "По дате (сначала старые)"
     },
     "genres": {
         "action": "Экшен",

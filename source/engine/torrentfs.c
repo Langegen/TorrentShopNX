@@ -144,7 +144,7 @@
 // are dropped; a read that lands on a dropped piece re-downloads it (the read
 // moves the playhead there, so the streaming window covers it). Sized to leave
 // the forward window plenty of seek-back slack; needs a full-RAM launch.
-#define RAM_STREAM_BUDGET (512LL << 20)
+#define RAM_STREAM_BUDGET (256LL << 20)
 
 #define TFS_MAX_PEERS    512
 #define BACKOFF_CONN_SECS 5
@@ -2853,6 +2853,10 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->read_blocked_piece = -1;
 
     // 2. Lock to safely reconfigure stream range and request queues
+    // Lock order: cache_lock -> lock (to match ram_evict convention)
+    if (tfs->ram_mode) {
+        mutexLock(&tfs->cache_lock);
+    }
     mutexLock(&tfs->lock);
 
     tfs->stream_offset    = new_offset;
@@ -2860,7 +2864,25 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->file_first_piece = new_offset / tfs->meta.piece_len;
     tfs->file_last_piece  = (new_offset + new_size - 1) / tfs->meta.piece_len;
     tfs->playhead_piece   = tfs->file_first_piece;
-    if (tfs->ram_mode) {
+
+    // Free any resident pieces that belong to the previous file
+    if (tfs->ram_mode && tfs->ram_piece) {
+        for (int64_t p = 0; p < tfs->meta.piece_count; p++) {
+            if (p < tfs->file_first_piece || p > tfs->file_last_piece) {
+                if (tfs->ram_piece[p]) {
+                    free(tfs->ram_piece[p]);
+                    tfs->ram_piece[p] = NULL;
+                }
+                if (tfs->status && tfs->status[p] == PIECE_DONE) {
+                    tfs->status[p] = PIECE_NEEDED;
+                }
+            }
+        }
+        int64_t res = 0;
+        for (int64_t p = tfs->file_first_piece; p <= tfs->file_last_piece; p++) {
+            if (tfs->ram_piece[p]) res += tfs->meta.piece_len;
+        }
+        tfs->ram_resident = res;
         tfs->ram_lo       = tfs->file_first_piece;
     }
 
@@ -2903,6 +2925,9 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->cancel_reader = false;
 
     mutexUnlock(&tfs->lock);
+    if (tfs->ram_mode) {
+        mutexUnlock(&tfs->cache_lock);
+    }
 
     engine_log(ENGINE_LOG_INFO,
                "[torrentfs] select_file: now streaming pieces %lld..%lld (peers: %d)",

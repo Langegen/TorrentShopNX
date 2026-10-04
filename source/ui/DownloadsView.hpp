@@ -22,6 +22,7 @@ public:
 
     BRLS_BIND(brls::Image, cover, "cover");
     BRLS_BIND(brls::Label, title, "title");
+    BRLS_BIND(brls::Label, fileName, "fileName");
     BRLS_BIND(brls::Box, progressBar, "progressBar");
     BRLS_BIND(brls::Box, progressBarBg, "progressBarBg");
     BRLS_BIND(brls::Label, progressText, "progressText");

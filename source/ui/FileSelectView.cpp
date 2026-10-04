@@ -852,12 +852,8 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
         for (size_t idx : packages) {
             std::vector<int> singleSelected = { files_[idx].index };
-            std::string itemTitle = cleanTitle(game_.title);
-            if (totalTasks > 1) {
-                itemTitle += " (" + files_[idx].name + ")";
-            }
             Game singleGame = game_;
-            singleGame.title = itemTitle;
+            singleGame.title = cleanTitle(game_.title);
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
             ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_);
         }

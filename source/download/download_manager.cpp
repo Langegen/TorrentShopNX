@@ -2324,9 +2324,15 @@ bool DownloadManager::pauseDownload(size_t index) {
         item.state == DownloadState::StreamPreparing ||
         item.state == DownloadState::StreamInstalling) {
 
-        if (item.cancel_flag) {
-            item.cancel_flag->store(true);
+        if (item.state == DownloadState::Downloading) {
+            if (item.file_dl_cancel) {
+                item.file_dl_cancel->store(true);
+            }
         }
+        // Note: For streaming installations we do not set cancel_flag=true, as that
+        // completely cancels the installer and destroys NCM placeholders.
+        // Instead, pausing the torrent engine stops incoming data, causing the installer
+        // to safely wait on the buffer until resumed.
         if (!item.torrent_hash.empty()) {
             tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
         }

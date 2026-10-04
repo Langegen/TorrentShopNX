@@ -1,6 +1,7 @@
 #include "catalog_updater.h"
 #include "catalog_manager.h"
 #include "collections_manager.h"
+#include "game_stats_manager.h"
 #include "config/config.h"
 #include "utils/log.h"
 #include "utils/app_paths.h"
@@ -123,6 +124,9 @@ void CatalogUpdater::startUpdate(CatalogUpdateMode mode,
 
         // Also refresh new_release.json collection if due (every 4 hours)
         updateNewReleasesCollectionInBackground();
+
+        // Refresh game stats (seeds, leeches, downloads, timestamps)
+        GameStatsManager::instance().updateStatsInBackground();
 
         // Update notification UI
         if (notifToken && *notifToken && notif) {

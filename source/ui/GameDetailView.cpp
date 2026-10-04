@@ -100,6 +100,30 @@ void GameDetailView::onContentAvailable() {
     metaFormat->setText(brls::getStr("app/detail/image_format", game_.image_format.empty() ? unknownStr : game_.image_format));
     metaVoice->setText(brls::getStr("app/detail/voice_lang", game_.voice_lang.empty() ? unknownStr : game_.voice_lang));
     
+    const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game_.topic_id);
+    if (statsData && (statsData->seeds >= 0 || statsData->downloads >= 0)) {
+        if (metaStats) {
+            metaStats->setVisibility(brls::Visibility::VISIBLE);
+            std::string statsStr = brls::getStr("app/detail/stats_info",
+                                                std::to_string(std::max(0, statsData->seeds)),
+                                                std::to_string(std::max(0, statsData->leeches)),
+                                                std::to_string(std::max<int64_t>(0, statsData->downloads)));
+            metaStats->setText(statsStr);
+        }
+        if (metaDate) {
+            std::string dateStr = !statsData->registered_at.empty() ? statsData->registered_at : statsData->updated_at;
+            if (!dateStr.empty()) {
+                metaDate->setVisibility(brls::Visibility::VISIBLE);
+                metaDate->setText(brls::getStr("app/detail/stats_date", dateStr));
+            } else {
+                metaDate->setVisibility(brls::Visibility::GONE);
+            }
+        }
+    } else {
+        if (metaStats) metaStats->setVisibility(brls::Visibility::GONE);
+        if (metaDate) metaDate->setVisibility(brls::Visibility::GONE);
+    }
+    
     if (metaBox) {
         metaBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
         metaBox->setBorderThickness(1.0f);

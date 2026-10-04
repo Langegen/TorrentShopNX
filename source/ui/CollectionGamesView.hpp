@@ -25,6 +25,7 @@ public:
     BRLS_BIND(brls::Image, cover0, "cover0");
     BRLS_BIND(brls::Label, meta0, "meta0");
     BRLS_BIND(brls::Label, lang0, "lang0");
+    BRLS_BIND(brls::Label, stats0, "stats0");
     BRLS_BIND(brls::Label, title0, "title0");
     BRLS_BIND(brls::Label, size0, "size0");
 
@@ -32,6 +33,7 @@ public:
     BRLS_BIND(brls::Image, cover1, "cover1");
     BRLS_BIND(brls::Label, meta1, "meta1");
     BRLS_BIND(brls::Label, lang1, "lang1");
+    BRLS_BIND(brls::Label, stats1, "stats1");
     BRLS_BIND(brls::Label, title1, "title1");
     BRLS_BIND(brls::Label, size1, "size1");
 
@@ -39,6 +41,7 @@ public:
     BRLS_BIND(brls::Image, cover2, "cover2");
     BRLS_BIND(brls::Label, meta2, "meta2");
     BRLS_BIND(brls::Label, lang2, "lang2");
+    BRLS_BIND(brls::Label, stats2, "stats2");
     BRLS_BIND(brls::Label, title2, "title2");
     BRLS_BIND(brls::Label, size2, "size2");
 
@@ -46,6 +49,7 @@ public:
     BRLS_BIND(brls::Image, cover3, "cover3");
     BRLS_BIND(brls::Label, meta3, "meta3");
     BRLS_BIND(brls::Label, lang3, "lang3");
+    BRLS_BIND(brls::Label, stats3, "stats3");
     BRLS_BIND(brls::Label, title3, "title3");
     BRLS_BIND(brls::Label, size3, "size3");
 
@@ -53,6 +57,7 @@ public:
     BRLS_BIND(brls::Image, cover4, "cover4");
     BRLS_BIND(brls::Label, meta4, "meta4");
     BRLS_BIND(brls::Label, lang4, "lang4");
+    BRLS_BIND(brls::Label, stats4, "stats4");
     BRLS_BIND(brls::Label, title4, "title4");
     BRLS_BIND(brls::Label, size4, "size4");
 
@@ -60,6 +65,7 @@ public:
     BRLS_BIND(brls::Image, cover5, "cover5");
     BRLS_BIND(brls::Label, meta5, "meta5");
     BRLS_BIND(brls::Label, lang5, "lang5");
+    BRLS_BIND(brls::Label, stats5, "stats5");
     BRLS_BIND(brls::Label, title5, "title5");
     BRLS_BIND(brls::Label, size5, "size5");
 };
