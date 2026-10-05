@@ -343,15 +343,18 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
         brls::Label* stats;
         brls::Label* title;
         brls::Label* size;
+        brls::Box* statsBox;
+        brls::Label* seeds;
+        brls::Label* leeches;
     } cards[6];
 
     try {
-        cards[0] = { rowCell->card0, rowCell->cover0, rowCell->meta0, rowCell->lang0, rowCell->stats0, rowCell->title0, rowCell->size0 };
-        cards[1] = { rowCell->card1, rowCell->cover1, rowCell->meta1, rowCell->lang1, rowCell->stats1, rowCell->title1, rowCell->size1 };
-        cards[2] = { rowCell->card2, rowCell->cover2, rowCell->meta2, rowCell->lang2, rowCell->stats2, rowCell->title2, rowCell->size2 };
-        cards[3] = { rowCell->card3, rowCell->cover3, rowCell->meta3, rowCell->lang3, rowCell->stats3, rowCell->title3, rowCell->size3 };
-        cards[4] = { rowCell->card4, rowCell->cover4, rowCell->meta4, rowCell->lang4, rowCell->stats4, rowCell->title4, rowCell->size4 };
-        cards[5] = { rowCell->card5, rowCell->cover5, rowCell->meta5, rowCell->lang5, rowCell->stats5, rowCell->title5, rowCell->size5 };
+        cards[0] = { rowCell->card0, rowCell->cover0, rowCell->meta0, rowCell->lang0, rowCell->stats0, rowCell->title0, rowCell->size0, rowCell->statsBox0, rowCell->seeds0, rowCell->leeches0 };
+        cards[1] = { rowCell->card1, rowCell->cover1, rowCell->meta1, rowCell->lang1, rowCell->stats1, rowCell->title1, rowCell->size1, rowCell->statsBox1, rowCell->seeds1, rowCell->leeches1 };
+        cards[2] = { rowCell->card2, rowCell->cover2, rowCell->meta2, rowCell->lang2, rowCell->stats2, rowCell->title2, rowCell->size2, rowCell->statsBox2, rowCell->seeds2, rowCell->leeches2 };
+        cards[3] = { rowCell->card3, rowCell->cover3, rowCell->meta3, rowCell->lang3, rowCell->stats3, rowCell->title3, rowCell->size3, rowCell->statsBox3, rowCell->seeds3, rowCell->leeches3 };
+        cards[4] = { rowCell->card4, rowCell->cover4, rowCell->meta4, rowCell->lang4, rowCell->stats4, rowCell->title4, rowCell->size4, rowCell->statsBox4, rowCell->seeds4, rowCell->leeches4 };
+        cards[5] = { rowCell->card5, rowCell->cover5, rowCell->meta5, rowCell->lang5, rowCell->stats5, rowCell->title5, rowCell->size5, rowCell->statsBox5, rowCell->seeds5, rowCell->leeches5 };
     } catch (const std::exception& e) {
         brls::Logger::error("CollectionGamesDataSource: EXCEPTION resolving BRLS_BIND variables: {}", e.what());
         return rowCell;
@@ -425,38 +428,45 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                 bool hasMatch = parent_->matchedComputed_[idx] &&
                                 !parent_->matchedGames_[idx].title.empty();
 
+                brls::Label* statsLabel = cards[i].stats;
+                if (statsLabel) {
+                    statsLabel->setVisibility(brls::Visibility::GONE);
+                }
+
                 brls::Label* sizeLabel = cards[i].size;
                 if (sizeLabel) {
                     sizeLabel->setText(hasMatch ? parent_->matchedGames_[idx].size : "");
                 }
 
+                brls::Box* statsBox = cards[i].statsBox;
+                if (statsBox) {
+                    if (hasMatch) {
+                        const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(parent_->matchedGames_[idx].topic_id);
+                        if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
+                            statsBox->setVisibility(brls::Visibility::VISIBLE);
+                            if (cards[i].seeds) cards[i].seeds->setText(std::to_string(statsData->seeds));
+                            if (cards[i].leeches) cards[i].leeches->setText(std::to_string(statsData->leeches));
+                        } else {
+                            statsBox->setVisibility(brls::Visibility::GONE);
+                        }
+                    } else {
+                        statsBox->setVisibility(brls::Visibility::GONE);
+                    }
+                }
+
                 brls::Label* langLabel = cards[i].lang;
                 if (langLabel) {
                     if (hasMatch) {
-                        std::string lang = extractLangBadge(parent_->matchedGames_[idx].interface_lang);
-                        if (!lang.empty()) {
+                        GameLangBadge badge = getGameLangBadge(parent_->matchedGames_[idx].interface_lang, brls::Application::getLocale());
+                        if (!badge.text.empty()) {
                             langLabel->setVisibility(brls::Visibility::VISIBLE);
-                            langLabel->setText(" " + lang + " ");
+                            langLabel->setText("  " + badge.text + "  ");
+                            langLabel->setBackgroundColor(badge.color);
                         } else {
                             langLabel->setVisibility(brls::Visibility::GONE);
                         }
                     } else {
                         langLabel->setVisibility(brls::Visibility::GONE);
-                    }
-                }
-
-                brls::Label* statsLabel = cards[i].stats;
-                if (statsLabel) {
-                    if (hasMatch) {
-                        const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(parent_->matchedGames_[idx].topic_id);
-                        if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
-                            statsLabel->setVisibility(brls::Visibility::VISIBLE);
-                            statsLabel->setText(" " + std::to_string(statsData->seeds) + " / " + std::to_string(statsData->leeches) + " ");
-                        } else {
-                            statsLabel->setVisibility(brls::Visibility::GONE);
-                        }
-                    } else {
-                        statsLabel->setVisibility(brls::Visibility::GONE);
                     }
                 }
 

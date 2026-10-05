@@ -52,10 +52,10 @@ CollectionCard::CollectionCard(const std::string& icon_type,
 
     desc_label_ = new brls::Label();
     desc_label_->setText(desc);
-    desc_label_->setFontSize(10.5f);
-    desc_label_->setLineHeight(1.20f);
+    desc_label_->setFontSize(11.5f);
+    desc_label_->setLineHeight(1.22f);
     desc_label_->setTextColor(ThemeManager::instance().getCardSubColor());
-    desc_label_->setMarginTop(3.5f);
+    desc_label_->setMarginTop(3.0f);
     desc_label_->setSingleLine(false);
     topBox->addView(desc_label_);
     infoCol->addView(topBox);
@@ -66,15 +66,15 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     badgeRow->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Box* pill = new brls::Box();
-    pill->setPadding(2.0f, 8.0f, 2.0f, 8.0f);
-    pill->setCornerRadius(4.0f);
+    pill->setPadding(2.0f, 7.0f, 2.0f, 7.0f);
+    pill->setCornerRadius(6.0f);
     pill->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
     pill->setAlignItems(brls::AlignItems::CENTER);
     pill->setJustifyContent(brls::JustifyContent::CENTER);
 
     count_label_ = new brls::Label();
     count_label_->setText(count_text);
-    count_label_->setFontSize(10.5f);
+    count_label_->setFontSize(11.5f);
     count_label_->setTextColor(ThemeManager::instance().getAccentColor());
     count_label_->setSingleLine(true);
     pill->addView(count_label_);

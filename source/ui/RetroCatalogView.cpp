@@ -587,10 +587,11 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                               (game.genre.empty() ? parent_->consoleInfo_.name : game.genre);
         cell->meta->setText(metaStr);
 
-        std::string lang = extractLangBadge(game.interface_lang);
-        if (!lang.empty()) {
+        GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
+        if (!badge.text.empty()) {
             cell->lang->setVisibility(brls::Visibility::VISIBLE);
-            cell->lang->setText(" " + lang + " ");
+            cell->lang->setText(badge.text);
+            cell->lang->setBackgroundColor(badge.color);
         } else {
             cell->lang->setVisibility(brls::Visibility::GONE);
         }
@@ -732,21 +733,19 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                 titleLabel->setText(shortTitle);
             });
 
-            std::string lang = extractLangBadge(game.interface_lang);
-            if (!lang.empty()) {
+            GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
+            if (!badge.text.empty()) {
                 cards[i].lang->setVisibility(brls::Visibility::VISIBLE);
-                cards[i].lang->setText(" " + lang + " ");
+                cards[i].lang->setText("  " + badge.text + "  ");
+                cards[i].lang->setBackgroundColor(badge.color);
             } else {
                 cards[i].lang->setVisibility(brls::Visibility::GONE);
             }
 
-            const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
-            if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
-                cards[i].stats->setVisibility(brls::Visibility::VISIBLE);
-                cards[i].stats->setText(" " + std::to_string(statsData->seeds) + " / " + std::to_string(statsData->leeches) + " ");
-            } else {
-                cards[i].stats->setVisibility(brls::Visibility::GONE);
-            }
+            cards[i].stats->setVisibility(brls::Visibility::GONE);
+
+            cards[i].size->setText(game.size);
+            cards[i].size->setTextColor(nvgRGB(140, 140, 140));
 
             cards[i].cover->setClipsToBounds(false);
             cards[i].cover->setScalingType(brls::ImageScalingType::FIT);

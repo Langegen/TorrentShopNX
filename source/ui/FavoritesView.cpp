@@ -139,13 +139,16 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
         brls::Label* stats;
         brls::Label* title;
         brls::Label* size;
+        brls::Box* statsBox;
+        brls::Label* seeds;
+        brls::Label* leeches;
     } cards[6] = {
-        { rowCell->card0, rowCell->cover0, rowCell->lang0, rowCell->stats0, rowCell->title0, rowCell->size0 },
-        { rowCell->card1, rowCell->cover1, rowCell->lang1, rowCell->stats1, rowCell->title1, rowCell->size1 },
-        { rowCell->card2, rowCell->cover2, rowCell->lang2, rowCell->stats2, rowCell->title2, rowCell->size2 },
-        { rowCell->card3, rowCell->cover3, rowCell->lang3, rowCell->stats3, rowCell->title3, rowCell->size3 },
-        { rowCell->card4, rowCell->cover4, rowCell->lang4, rowCell->stats4, rowCell->title4, rowCell->size4 },
-        { rowCell->card5, rowCell->cover5, rowCell->lang5, rowCell->stats5, rowCell->title5, rowCell->size5 }
+        { rowCell->card0, rowCell->cover0, rowCell->lang0, rowCell->stats0, rowCell->title0, rowCell->size0, rowCell->statsBox0, rowCell->seeds0, rowCell->leeches0 },
+        { rowCell->card1, rowCell->cover1, rowCell->lang1, rowCell->stats1, rowCell->title1, rowCell->size1, rowCell->statsBox1, rowCell->seeds1, rowCell->leeches1 },
+        { rowCell->card2, rowCell->cover2, rowCell->lang2, rowCell->stats2, rowCell->title2, rowCell->size2, rowCell->statsBox2, rowCell->seeds2, rowCell->leeches2 },
+        { rowCell->card3, rowCell->cover3, rowCell->lang3, rowCell->stats3, rowCell->title3, rowCell->size3, rowCell->statsBox3, rowCell->seeds3, rowCell->leeches3 },
+        { rowCell->card4, rowCell->cover4, rowCell->lang4, rowCell->stats4, rowCell->title4, rowCell->size4, rowCell->statsBox4, rowCell->seeds4, rowCell->leeches4 },
+        { rowCell->card5, rowCell->cover5, rowCell->lang5, rowCell->stats5, rowCell->title5, rowCell->size5, rowCell->statsBox5, rowCell->seeds5, rowCell->leeches5 }
     };
 
     for (int i = 0; i < 6; ++i) {
@@ -180,20 +183,27 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
                 titleLabel->setText(shortTitle);
             });
             
-            std::string lang = extractLangBadge(game.interface_lang);
-            if (!lang.empty()) {
+            GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
+            if (!badge.text.empty()) {
                 cards[i].lang->setVisibility(brls::Visibility::VISIBLE);
-                cards[i].lang->setText(" " + lang + " ");
+                cards[i].lang->setText("  " + badge.text + "  ");
+                cards[i].lang->setBackgroundColor(badge.color);
             } else {
                 cards[i].lang->setVisibility(brls::Visibility::GONE);
             }
 
+            cards[i].stats->setVisibility(brls::Visibility::GONE);
+
+            cards[i].size->setText(game.size);
             const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
-            if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
-                cards[i].stats->setVisibility(brls::Visibility::VISIBLE);
-                cards[i].stats->setText(" " + std::to_string(statsData->seeds) + " / " + std::to_string(statsData->leeches) + " ");
-            } else {
-                cards[i].stats->setVisibility(brls::Visibility::GONE);
+            if (cards[i].statsBox) {
+                if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
+                    cards[i].statsBox->setVisibility(brls::Visibility::VISIBLE);
+                    if (cards[i].seeds) cards[i].seeds->setText(std::to_string(statsData->seeds));
+                    if (cards[i].leeches) cards[i].leeches->setText(std::to_string(statsData->leeches));
+                } else {
+                    cards[i].statsBox->setVisibility(brls::Visibility::GONE);
+                }
             }
             
             setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
