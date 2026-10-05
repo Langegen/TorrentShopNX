@@ -285,6 +285,7 @@ typedef struct {
     double  up_rate;        // smoothed upload rate to this peer, bytes/s
     bool peer_interested;  // peer wants our pieces (we may unchoke)
     uint8_t timeout_strikes; // strikes before closing on stall
+    u64 choked_at;         // tick when peer last choked us (0 = unchoked)
 } sess;
 
 static void sess_drop_requests(torrentfs *t, sess *s);
@@ -339,6 +340,8 @@ struct torrentfs {
 
     aq_entry aq[AQ_MAX];
     int n_aq;
+    uint8_t *aq_buf_pool[AQ_MAX];
+    int aq_buf_pool_cnt;
 
     wjob wq[AQ_MAX + 2];
     int wq_head, wq_n;
@@ -631,12 +634,26 @@ static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
         while (t->ram_lo < ph && !t->ram_piece[t->ram_lo]) t->ram_lo++;
         if (t->ram_lo >= ph) break;     // nothing strictly behind left to drop
         int64_t v = t->ram_lo;
-        free(t->ram_piece[v]);
+        uint8_t *freed_buf = t->ram_piece[v];
         t->ram_piece[v] = NULL;
         t->ram_resident -= t->meta.piece_len;
         mutexLock(&t->lock);
         if (t->status[v] == PIECE_DONE) { t->status[v] = PIECE_NEEDED; t->pieces_done--; }
+        // Recycle buffer into an empty aq slot or into the free pool to avoid heap fragmentation
+        bool recycled = false;
+        for (int i = 0; i < t->n_aq; i++) {
+            if (t->aq[i].idx < 0 && !t->aq[i].buf) {
+                t->aq[i].buf = freed_buf;
+                recycled = true;
+                break;
+            }
+        }
+        if (!recycled && t->aq_buf_pool_cnt < AQ_MAX) {
+            t->aq_buf_pool[t->aq_buf_pool_cnt++] = freed_buf;
+            recycled = true;
+        }
         mutexUnlock(&t->lock);
+        if (!recycled) free(freed_buf);
     }
 }
 
@@ -644,8 +661,24 @@ static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
 static void ram_store(torrentfs *t, int64_t idx, uint8_t *buf) {
     mutexLock(&t->cache_lock);
     if (t->ram_piece[idx]) {            // a re-download of a still-resident piece
-        free(t->ram_piece[idx]);
+        uint8_t *old_buf = t->ram_piece[idx];
+        t->ram_piece[idx] = NULL;
         t->ram_resident -= t->meta.piece_len;
+        mutexLock(&t->lock);
+        bool recycled = false;
+        for (int i = 0; i < t->n_aq; i++) {
+            if (t->aq[i].idx < 0 && !t->aq[i].buf) {
+                t->aq[i].buf = old_buf;
+                recycled = true;
+                break;
+            }
+        }
+        if (!recycled && t->aq_buf_pool_cnt < AQ_MAX) {
+            t->aq_buf_pool[t->aq_buf_pool_cnt++] = old_buf;
+            recycled = true;
+        }
+        mutexUnlock(&t->lock);
+        if (!recycled) free(old_buf);
     }
     t->ram_piece[idx] = buf;
     t->ram_resident += t->meta.piece_len;
@@ -678,7 +711,13 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
     for (int i = 0; i < t->n_aq; i++) {
         aq_entry *c = &t->aq[i];
         if (c->idx >= 0) continue;
-        if (!c->buf) c->buf = malloc((size_t)t->meta.piece_len);
+        if (!c->buf) {
+            if (t->aq_buf_pool_cnt > 0) {
+                c->buf = t->aq_buf_pool[--t->aq_buf_pool_cnt];
+            } else {
+                c->buf = malloc((size_t)t->meta.piece_len);
+            }
+        }
         if (!c->buf) continue;
         c->idx = idx;
         c->have_cnt = 0;
@@ -873,7 +912,8 @@ static bool peer_has_needed(torrentfs *t, sess *s) {
     int64_t ph = t->playhead_piece;
     if (ph < t->file_first_piece) ph = t->file_first_piece;
     int64_t window_end = ph + 32;
-    if (window_end > t->file_last_piece) window_end = t->file_last_piece;
+    if (window_end > t->file_last_piece || t->file_last_piece - ph <= 64)
+        window_end = t->file_last_piece;
     for (int64_t p = ph; p <= window_end; p++) {
         if (t->status[p] != PIECE_DONE &&
             bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p))
@@ -1062,11 +1102,15 @@ static void writer_main(void *arg) {
         t->st_blocks_have -= nb;
         t->writing_idx = -1;
         t->writing_buf = NULL;
-        // Return the buffer to a bufferless slot for reuse.
+        // Return the buffer to a bufferless slot for reuse, or pool it.
         for (int i = 0; i < t->n_aq; i++)
             if (t->aq[i].idx < 0 && !t->aq[i].buf) { t->aq[i].buf = j.buf; j.buf = NULL; break; }
+        if (j.buf && t->aq_buf_pool_cnt < AQ_MAX) {
+            t->aq_buf_pool[t->aq_buf_pool_cnt++] = j.buf;
+            j.buf = NULL;
+        }
         mutexUnlock(&t->lock);
-        free(j.buf);   // no slot took it (shouldn't happen); don't leak
+        if (j.buf) free(j.buf);   // pool full: don't leak
     }
 }
 
@@ -1197,6 +1241,7 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
     s->addr        = pa;
     s->pidx        = pidx;
     s->started     = now;
+    s->choked_at   = now;
     s->conn_budget = now + (u64)secs * t->freq;
     t->st_connecting++;
     return true;
@@ -1231,6 +1276,7 @@ static bool sess_dial_utp_at(torrentfs *t, u64 now, int pidx, peer_addr pa) {
     s->addr        = pa;
     s->pidx        = pidx;
     s->started     = now;
+    s->choked_at   = now;
     s->last_rx     = now;
     s->last_ka     = now;
     s->conn_budget = now + (u64)10 * t->freq;  // uTP SYN exchange patience
@@ -1412,13 +1458,20 @@ static int nominal_depth(torrentfs *t, sess *s) {
 // with fewer than MAX_DUP copies in flight (anacrolix's duplicate timer).
 // Returns -1 when the piece has nothing requestable right now.
 static int next_block_in(torrentfs *t, aq_entry *a, u64 now) {
+    int max_dup = MAX_DUP;
+    bool is_endgame = (t->read_blocked_piece == a->idx) ||
+                      (t->file_last_piece - t->playhead_piece <= 4) ||
+                      (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
+    if (is_endgame) {
+        max_dup = 8;
+    }
     for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
         a->next_req = (b + 1) % a->nblocks;
         if (a->have[b]) continue;
         uint8_t r = a->req[b];
         if (r == 0) return b;
-        if (r < MAX_DUP && now - a->req_ts[b] > (u64)DUP_REQ_SECS * t->freq)
+        if (r < max_dup && now - a->req_ts[b] > (u64)DUP_REQ_SECS * t->freq)
             return b;
     }
     return -1;
@@ -1685,6 +1738,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
     switch (id) {
         case MSG_CHOKE:
             s->nb.choked = true;
+            s->choked_at = now;
             t->st_choked++;
             engine_log(ENGINE_LOG_DEBUG, "[sess] choke");
             // Outstanding requests are void now. Drop them WITHOUT cancels
@@ -1695,6 +1749,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             break;
         case MSG_UNCHOKE:
             s->nb.choked = false;
+            s->choked_at = 0;
             t->st_unchoke_ok++;
             engine_log(ENGINE_LOG_DEBUG, "[sess %d] unchoke from %u.%u.%u.%u:%d",
                        (int)(s - t->S), s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
@@ -2193,6 +2248,7 @@ static void drain_incoming(torrentfs *t, u64 now) {
         s->active     = true;
         s->pidx       = -1;   // not a pool peer: no backoff bookkeeping
         s->started    = now;
+        s->choked_at  = now;
         s->last_rx    = now;
         s->last_block = now;
         s->last_ka    = now;
@@ -2316,22 +2372,26 @@ static void netloop_main(void *arg) {
                     continue;
                 }
                 int eff_connecting = t->st_connecting > 0 ? t->st_connecting : 0;
+                bool can_rotate = false;
                 if (!s->connecting && s->nb.handshaked && s->nb.choked &&
-                    s->rx_total == 0 &&
                     t->peer_count > t->st_live + eff_connecting &&
                     !is_seed && !has_needed) {
-                    int rotate_secs = CHOKED_ROTATE_SECS;
-                    if (now - s->started > (u64)rotate_secs * t->freq) {
-                        engine_log(ENGINE_LOG_DEBUG,
-                                   "[sess %d] rotate: peer choked us %ds without delivering",
-                                   i, rotate_secs);
-                        // A rotate-out is a normal choke cycle, not a dead
-                        // address: minimal backoff, so we catch the next
-                        // optimistic-unchoke window.
-                        s->fail_kind = PEER_FAIL_CHOKE_ROTATE;
-                        sess_close(t, s, true);
-                        continue;
+                    if (s->rx_total == 0) {
+                        can_rotate = (now - s->started > (u64)CHOKED_ROTATE_SECS * t->freq);
+                    } else if (s->choked_at != 0) {
+                        can_rotate = (now - s->choked_at > (u64)CHOKED_ROTATE_SECS * t->freq);
                     }
+                }
+                if (can_rotate) {
+                    engine_log(ENGINE_LOG_DEBUG,
+                               "[sess %d] rotate: peer choked us (rx_total=%lld) without needed pieces",
+                               i, (long long)s->rx_total);
+                    // A rotate-out is a normal choke cycle, not a dead
+                    // address: minimal backoff, so we catch the next
+                    // optimistic-unchoke window.
+                    s->fail_kind = PEER_FAIL_CHOKE_ROTATE;
+                    sess_close(t, s, true);
+                    continue;
                 }
                 if (!s->connecting && age > (u64)IDLE_SECS * t->freq) {
                     engine_log(ENGINE_LOG_DEBUG, "[sess %d] close idle timeout", i);
@@ -2351,11 +2411,19 @@ static void netloop_main(void *arg) {
                 // single block delivered.
                 if (s->req_n > 0 &&
                     now - s->last_block > (u64)STALL_SECS * t->freq) {
+                    bool urgent_or_endgame = (t->read_blocked_piece >= 0) ||
+                                            (t->file_last_piece - t->playhead_piece <= 4) ||
+                                            (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
                     if (s->rx_total > 0 && s->timeout_strikes < 3) {
                         s->timeout_strikes++;
                         s->last_block = now;
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] stall strike %d/3",
                                    i, s->timeout_strikes);
+                        // In endgame or when reader is blocked, or on 2nd strike:
+                        // drop outstanding requests so other peers can fetch missing blocks immediately.
+                        if (urgent_or_endgame || s->timeout_strikes >= 2) {
+                            sess_drop_requests(t, s);
+                        }
                     } else if (s->rx_total > 0) {
                         t->st_fetch_fail++;
                         set_err(t, "stall", 0);
@@ -2850,7 +2918,13 @@ void torrentfs_close(torrentfs *tfs) {
         free(tfs->aq[i].buf);
         free(tfs->aq[i].have);
         free(tfs->aq[i].req);
+        free(tfs->aq[i].req_ts);
     }
+    for (int i = 0; i < tfs->aq_buf_pool_cnt; i++) {
+        free(tfs->aq_buf_pool[i]);
+        tfs->aq_buf_pool[i] = NULL;
+    }
+    tfs->aq_buf_pool_cnt = 0;
     if (tfs->ram_piece) {   // free before torrent_unload: needs meta.piece_count
         for (int64_t i = 0; i < tfs->meta.piece_count; i++) free(tfs->ram_piece[i]);
         free(tfs->ram_piece);

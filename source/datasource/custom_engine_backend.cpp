@@ -147,23 +147,27 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
 
     if (!is_package || !request.use_scheduler) {
         // High-throughput profile for non-installation downloads (ROMs, archives):
-        // Widen window to 60 pieces, keep slow-peer boosting active, and strictly verify SHA-1.
-        scheduler_.setConfig(CustomEngineScheduler::highThroughputFileConfig());
+        // Scale window based on piece_size (capped at ~320MB RAM), keep slow-peer boosting active, and strictly verify SHA-1.
+        auto cfg = CustomEngineScheduler::highThroughputFileConfig(piece_size_);
+        scheduler_.setConfig(cfg);
         tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 1);
         scheduler_enabled_ = true;
         scheduler_.init(engine_, info_hash_str_, piece_size_, file_offset_in_torrent_,
                         file_first_piece_, file_last_piece_);
         last_scheduler_tick_ = std::chrono::steady_clock::now();
-        util::logLine("custom_engine: high-throughput scheduler enabled (window=60, strict_verify=1) for " + info_hash_str_);
+        int total_win = cfg.critical_pieces + cfg.urgent_pieces + cfg.prefetch_pieces + cfg.speculative_pieces + cfg.normal_pieces;
+        util::logLine("custom_engine: high-throughput scheduler enabled (window=" + std::to_string(total_win) + ", strict_verify=1) for " + info_hash_str_);
     } else {
         // Low-latency streaming profile for on-the-fly game package installer (NSP/NSZ/XCI):
-        scheduler_.setConfig(CustomEngineScheduler::defaultInstallerConfig());
+        auto cfg = CustomEngineScheduler::defaultInstallerConfig(piece_size_);
+        scheduler_.setConfig(cfg);
         tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 0);
         scheduler_enabled_ = true;
         scheduler_.init(engine_, info_hash_str_, piece_size_, file_offset_in_torrent_,
                         file_first_piece_, file_last_piece_);
         last_scheduler_tick_ = std::chrono::steady_clock::now();
-        util::logLine("custom_engine: streaming installer scheduler enabled (strict_verify=0) for " + info_hash_str_);
+        int total_win = cfg.critical_pieces + cfg.urgent_pieces + cfg.prefetch_pieces + cfg.speculative_pieces + cfg.normal_pieces;
+        util::logLine("custom_engine: streaming installer scheduler enabled (window=" + std::to_string(total_win) + ", strict_verify=0) for " + info_hash_str_);
     }
     health_.init(engine_, info_hash_str_, nullptr);
 

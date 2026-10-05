@@ -50,6 +50,22 @@ void CustomEngineScheduler::init(tsnx_engine* engine,
     peer_ewma_.clear();
     boosted_pieces_.clear();
     last_snapshot_ = {};
+
+    // Memory budget safety clamp: prevent total lookahead from exceeding ~320 MB
+    if (piece_size_ > 0) {
+        int64_t total_pieces = cfg_.critical_pieces + cfg_.urgent_pieces +
+                               cfg_.prefetch_pieces + cfg_.speculative_pieces + cfg_.normal_pieces;
+        if (total_pieces * piece_size_ > 320LL * 1024 * 1024) {
+            int max_lookahead = static_cast<int>((320LL * 1024 * 1024) / piece_size_);
+            if (max_lookahead < 12) max_lookahead = 12;
+            if (total_pieces > max_lookahead) {
+                float factor = static_cast<float>(max_lookahead) / total_pieces;
+                cfg_.prefetch_pieces    = std::max(2, static_cast<int>(cfg_.prefetch_pieces * factor));
+                cfg_.speculative_pieces = std::max(1, static_cast<int>(cfg_.speculative_pieces * factor));
+                cfg_.normal_pieces      = std::max(2, static_cast<int>(cfg_.normal_pieces * factor));
+            }
+        }
+    }
 }
 
 int CustomEngineScheduler::offset_to_piece(std::int64_t offset) const {
