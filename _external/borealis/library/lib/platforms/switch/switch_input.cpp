@@ -116,6 +116,9 @@ SwitchInputManager::SwitchInputManager()
     hidInitializeVibrationDevices(m_vibration_device_handheld, 2, HidNpadIdType_Handheld, HidNpadStyleTag_NpadHandheld);
     padUpdate(&this->padStateHandheld);
 
+    memset(this->m_vibration_values_handheld, 0, sizeof(this->m_vibration_values_handheld));
+    memset(this->m_vibration_values, 0, sizeof(this->m_vibration_values));
+
     for (int i = 0; i < GAMEPADS_MAX; i++)
     {
         padInitialize(&this->padsState[i], (HidNpadIdType)i);
@@ -164,7 +167,6 @@ void SwitchInputManager::clearVibration(int controller)
 {
     Logger::debug("Vibration clear #{}", controller);
     hidInitializeVibrationDevices(m_vibration_device_handles[controller], 2, (HidNpadIdType)controller, HidNpadStyleTag_NpadJoyDual);
-    sendRumbleInternal(m_vibration_device_handles[controller], m_vibration_values[controller], 0, 0, 0, 0);
 }
 
 void SwitchInputManager::updateUnifiedControllerState(ControllerState* state)

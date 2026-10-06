@@ -10,8 +10,8 @@ ScreenshotViewer::ScreenshotViewer(const std::vector<std::string>& urls, size_t 
 
 brls::View* ScreenshotViewer::createContentView() {
     brls::Box* root = new brls::Box();
-    root->setWidth(brls::Application::windowWidth);
-    root->setHeight(brls::Application::windowHeight);
+    root->setWidthPercentage(100.0f);
+    root->setHeightPercentage(100.0f);
     root->setBackgroundColor(nvgRGB(0, 0, 0));
     root->setAlignItems(brls::AlignItems::CENTER);
     root->setJustifyContent(brls::JustifyContent::CENTER);
@@ -21,8 +21,8 @@ brls::View* ScreenshotViewer::createContentView() {
 
     image_ = new brls::Image();
     image_->setScalingType(brls::ImageScalingType::FIT);
-    image_->setWidth(brls::Application::windowWidth);
-    image_->setHeight(brls::Application::windowHeight);
+    image_->setWidthPercentage(100.0f);
+    image_->setHeightPercentage(100.0f);
     root->addView(image_);
 
     // ── Floating Top Bar Overlay ─────────────────────────────────────────
@@ -70,7 +70,7 @@ brls::View* ScreenshotViewer::createContentView() {
     prevBtn_ = new brls::Box();
     prevBtn_->setPositionType(brls::PositionType::ABSOLUTE);
     prevBtn_->setPositionLeft(20.0f);
-    prevBtn_->setPositionTop(brls::Application::windowHeight * 0.45f);
+    prevBtn_->setPositionTopPercentage(45.0f);
     prevBtn_->setWidth(46.0f);
     prevBtn_->setHeight(64.0f);
     prevBtn_->setCornerRadius(10.0f);
@@ -95,7 +95,7 @@ brls::View* ScreenshotViewer::createContentView() {
     nextBtn_ = new brls::Box();
     nextBtn_->setPositionType(brls::PositionType::ABSOLUTE);
     nextBtn_->setPositionRight(20.0f);
-    nextBtn_->setPositionTop(brls::Application::windowHeight * 0.45f);
+    nextBtn_->setPositionTopPercentage(45.0f);
     nextBtn_->setWidth(46.0f);
     nextBtn_->setHeight(64.0f);
     nextBtn_->setCornerRadius(10.0f);
