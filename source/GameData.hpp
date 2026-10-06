@@ -19,6 +19,7 @@
 #include "config/config.h"
 #include "utils/log.h"
 #include "utils/app_paths.h"
+#include "utils/string_utils.h"
 #include <borealis/extern/nlohmann/json.hpp>
 
 struct Game;
@@ -70,11 +71,8 @@ inline bool isRomsetGame(const Game& g) {
     if (g.is_romset) return true;
     if (g.content_type == "romset") return true;
 
-    // Fast keyword check in lowercase title
-    std::string lower = g.title;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
+    // Fast keyword check in lowercase title using UTF-8 case folding
+    std::string lower = util::toLowerUtf8(g.title);
 
     if (lower.find("сборник") != std::string::npos ||
         lower.find("ромсет") != std::string::npos ||

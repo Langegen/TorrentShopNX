@@ -12,7 +12,7 @@ extern "C" {
 #include "bencode.h"
 
 #define MAX_TRACKERS 64
-#define MAX_FILES 256
+#define MAX_TORRENT_FILES 65536
 
 // One file within the torrent, with its byte offset in the concatenated piece
 // layout (offset 0 for single-file torrents).
@@ -33,8 +33,9 @@ typedef struct {
     const uint8_t *piece_hashes;  // piece_count * 20 bytes, points into buf
     char *trackers[MAX_TRACKERS];
     int tracker_count;
-    torrent_file files[MAX_FILES];
+    torrent_file *files;
     int file_count;
+    int file_capacity;
     int announce_seq;   // announce rounds so far: seq 0 sends event=started
 } torrent_meta;
 

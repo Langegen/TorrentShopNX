@@ -114,11 +114,11 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
 
     file_size_ = 0;
     std::string streamed_file_path;
-    if (file_index_ >= 0 && file_index_ < TSNX_MAX_FILES) {
-        // Heap-backed: tsnx_file_info is ~536 bytes; a stack array would
-        // overflow the small (64 KB default) libnx pthread stacks.
-        std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
-        int count = tsnx_engine_get_files(engine_, info_hash_str_.c_str(), files.data(), TSNX_MAX_FILES);
+    int total_files = tsnx_engine_get_file_count(engine_, info_hash_str_.c_str());
+    if (file_index_ >= 0 && (total_files <= 0 || file_index_ < total_files)) {
+        int cap = total_files > 0 ? total_files : 256;
+        std::vector<tsnx_file_info> files(cap);
+        int count = tsnx_engine_get_files(engine_, info_hash_str_.c_str(), files.data(), cap);
         if (file_index_ < count) {
             file_size_ = files[file_index_].size;
             file_offset_in_torrent_ = files[file_index_].offset;

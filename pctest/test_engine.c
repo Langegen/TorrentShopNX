@@ -38,8 +38,8 @@ static void test_add_torrent_file(void) {
     CHECK(ok, "add torrent file");
     CHECK(strlen(hash) == 40, "hash length 40");
 
-    tsnx_file_info files[TSNX_MAX_FILES];
-    int n = tsnx_engine_get_files(eng, hash, files, TSNX_MAX_FILES);
+    tsnx_file_info files[256];
+    int n = tsnx_engine_get_files(eng, hash, files, 256);
     CHECK(n == 1, "one file in torrent");
     CHECK(files[0].size == 1024, "file size 1024");
     CHECK(strcmp(files[0].path, "test") == 0, "file name 'test'");

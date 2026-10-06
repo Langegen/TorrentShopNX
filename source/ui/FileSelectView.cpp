@@ -46,7 +46,8 @@ static bool isRomFile(const std::string& filename) {
         ".nes", ".fds", ".unf", ".smc", ".sfc", ".fig", ".swc", ".z64", ".n64", ".v64",
         ".gba", ".gbc", ".gb", ".nds", ".dsi", ".3ds", ".3dsx", ".cia",
         ".gcm", ".gcz", ".wbfs", ".wad", ".rpx", ".wud", ".wux",
-        ".pbp", ".vpk", ".smd", ".gen", ".md", ".gg", ".sg", ".sms", ".cdi", ".gdi"
+        ".pbp", ".vpk", ".smd", ".gen", ".md", ".gg", ".sg", ".sms", ".cdi", ".gdi",
+        ".pce", ".sgx", ".ngp", ".ngc", ".ws", ".wsc", ".col", ".vec", ".a26", ".a52", ".a78", ".lnx"
     };
     for (const auto& ext : romExts) {
         if (lower.size() >= ext.size() && lower.rfind(ext) == lower.size() - ext.size()) {
@@ -54,6 +55,49 @@ static bool isRomFile(const std::string& filename) {
         }
     }
     return false;
+}
+
+static bool isMediaOrMetaPath(const std::string& fullpath) {
+    std::string lower = fullpath;
+    std::replace(lower.begin(), lower.end(), '\\', '/');
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    static const std::vector<std::string> mediaPatterns = {
+        "/images/", "/image/", "/covers/", "/cover/", "/screenshots/", "/screenshot/",
+        "/snaps/", "/titles/", "/boxart/", "/boxarts/", "/manuals/", "/manual/",
+        "/cheats/", "/cheat/", "/saves/", "/save/", "/wheel/", "/wheels/",
+        "images/", "image/", "covers/", "cover/", "screenshots/", "screenshot/",
+        "snaps/", "titles/", "boxart/", "boxarts/", "manuals/", "manual/",
+        "cheats/", "cheat/", "saves/", "save/", "wheel/", "wheels/"
+    };
+    for (const auto& pat : mediaPatterns) {
+        if (pat.front() == '/') {
+            if (lower.find(pat) != std::string::npos) return true;
+        } else {
+            if (lower.rfind(pat, 0) == 0) return true;
+        }
+    }
+    return false;
+}
+
+static std::string computeBaseFolder(const std::vector<torrent::TorrentFileInfo>& files) {
+    if (files.empty()) return "";
+    std::string first = files[0].name;
+    std::replace(first.begin(), first.end(), '\\', '/');
+    size_t slash = first.find('/');
+    if (slash == std::string::npos) return "";
+    std::string root = first.substr(0, slash);
+    if (root.empty()) return "";
+
+    for (size_t i = 1; i < files.size(); ++i) {
+        std::string p = files[i].name;
+        std::replace(p.begin(), p.end(), '\\', '/');
+        if (p.rfind(root + "/", 0) != 0) {
+            return "";
+        }
+    }
+    return root;
 }
 
 static bool isSwitchGameFile(const std::string& filename) {
@@ -280,6 +324,24 @@ void FileSelectView::onContentAvailable() {
     this->registerAction("app/actions/start_download"_i18n, brls::ControllerButton::BUTTON_START,
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
 
+    this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+            navigateUp();
+            return true;
+        }
+        brls::Application::popActivity();
+        return true;
+    });
+
+    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_BACKSPACE), [this](brls::View*) {
+        if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+            navigateUp();
+            return true;
+        }
+        brls::Application::popActivity();
+        return true;
+    });
+
     auto alive = alive_flag_;
     auto status_running = std::make_shared<std::atomic<bool>>(true);
     brls::async([this, status_running, alive]() {
@@ -329,16 +391,27 @@ void FileSelectView::onContentAvailable() {
                 files_    = probedFiles;
                 selected_.assign(files_.size(), false);
                 if (!retro_console_id_.empty()) {
+                    baseFolder_ = computeBaseFolder(files_);
+                    currentFolder_ = baseFolder_;
                     bool anyRom = false;
                     for (size_t i = 0; i < files_.size(); ++i) {
-                        if (isRomFile(files_[i].name)) {
+                        if (isRomFile(files_[i].name) && !isMediaOrMetaPath(files_[i].name)) {
                             selected_[i] = true;
                             anyRom = true;
                         }
                     }
                     if (!anyRom) {
+                        for (size_t i = 0; i < files_.size(); ++i) {
+                            if (!isMediaOrMetaPath(files_[i].name)) {
+                                selected_[i] = true;
+                                anyRom = true;
+                            }
+                        }
+                    }
+                    if (!anyRom) {
                         selected_.assign(files_.size(), true);
                     }
+                    updateRetroSubtitle();
                 } else {
                     SwitchServiceGuard guard;
                     for (size_t i = 0; i < files_.size(); ++i) {
@@ -349,8 +422,8 @@ void FileSelectView::onContentAvailable() {
                             selected_[i] = true;
                         }
                     }
+                    subtitle->setText("app/fileselect/select_prompt"_i18n);
                 }
-                subtitle->setText("app/fileselect/select_prompt"_i18n);
                 calculateUncompressedSizes();
                 updateTotalSize();
                 rebuildFileList();
@@ -393,6 +466,359 @@ brls::View* FileSelectView::create() { return nullptr; }
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::rebuildFileList() {
+    if (!retro_console_id_.empty()) {
+        rebuildRetroFolderList();
+    } else {
+        rebuildSwitchFileList();
+    }
+}
+
+void FileSelectView::navigateToFolder(const std::string& folder) {
+    currentFolder_ = folder;
+    rebuildRetroFolderList();
+    if (fileListBox) {
+        for (auto* child : fileListBox->getChildren()) {
+            if (child->isFocusable()) {
+                brls::Application::giveFocus(child);
+                break;
+            }
+        }
+    }
+}
+
+void FileSelectView::navigateUp() {
+    if (currentFolder_.empty() || currentFolder_ == baseFolder_) {
+        return;
+    }
+    size_t lastSlash = currentFolder_.rfind('/');
+    if (lastSlash == std::string::npos) {
+        currentFolder_ = "";
+    } else {
+        currentFolder_ = currentFolder_.substr(0, lastSlash);
+    }
+    rebuildRetroFolderList();
+    if (fileListBox) {
+        for (auto* child : fileListBox->getChildren()) {
+            if (child->isFocusable()) {
+                brls::Application::giveFocus(child);
+                break;
+            }
+        }
+    }
+}
+
+void FileSelectView::updateRetroSubtitle() {
+    if (!subtitle) return;
+    std::string displayPath;
+    if (currentFolder_.empty() || currentFolder_ == baseFolder_) {
+        displayPath = "/";
+    } else if (!baseFolder_.empty() && currentFolder_.rfind(baseFolder_ + "/", 0) == 0) {
+        displayPath = "/" + currentFolder_.substr(baseFolder_.length() + 1);
+    } else {
+        displayPath = "/" + currentFolder_;
+    }
+
+    size_t selCount = 0;
+    uint64_t selBytes = 0;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        if (i < selected_.size() && selected_[i]) {
+            selCount++;
+            selBytes += files_[i].size;
+        }
+    }
+
+    std::string pathText = "app/fileselect/folder_prefix"_i18n + displayPath;
+    std::string selText = brls::getStr("app/fileselect/files_selected", std::to_string(selCount)) + " (" + formatBytes(selBytes) + ")";
+    subtitle->setText(pathText + "  |  " + selText);
+}
+
+void FileSelectView::rebuildRetroFolderList() {
+    fileListBox->clearViews();
+    checkboxLabels_.assign(files_.size(), nullptr);
+
+    updateRetroSubtitle();
+
+    struct SubfolderInfo {
+        std::string name;
+        std::string fullPath;
+        std::vector<size_t> fileIndices;
+        uint64_t totalSize = 0;
+        size_t selectedCount = 0;
+    };
+
+    struct FileEntryInfo {
+        std::string name;
+        size_t fileIndex = 0;
+    };
+
+    std::map<std::string, SubfolderInfo> subfoldersMap;
+    std::vector<FileEntryInfo> directFiles;
+
+    std::string prefix = currentFolder_.empty() ? "" : (currentFolder_ + "/");
+
+    for (size_t i = 0; i < files_.size(); ++i) {
+        std::string normPath = files_[i].name;
+        std::replace(normPath.begin(), normPath.end(), '\\', '/');
+
+        if (!prefix.empty()) {
+            if (normPath.rfind(prefix, 0) != 0) {
+                continue;
+            }
+        }
+
+        std::string relPath = normPath.substr(prefix.size());
+        if (relPath.empty()) continue;
+
+        size_t slashPos = relPath.find('/');
+        if (slashPos != std::string::npos) {
+            std::string subName = relPath.substr(0, slashPos);
+            std::string subFullPath = prefix + subName;
+
+            auto& sInfo = subfoldersMap[subName];
+            if (sInfo.name.empty()) {
+                sInfo.name = subName;
+                sInfo.fullPath = subFullPath;
+            }
+            sInfo.fileIndices.push_back(i);
+            sInfo.totalSize += files_[i].size;
+            if (i < selected_.size() && selected_[i]) {
+                sInfo.selectedCount++;
+            }
+        } else {
+            directFiles.push_back({relPath, i});
+        }
+    }
+
+    std::sort(directFiles.begin(), directFiles.end(), [](const FileEntryInfo& a, const FileEntryInfo& b) {
+        return a.name < b.name;
+    });
+
+    brls::View* firstFocusable = nullptr;
+    brls::View* lastFocusable = nullptr;
+
+    // 1. Parent folder row ".." if not at baseFolder_
+    if (!currentFolder_.empty() && currentFolder_ != baseFolder_) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10);
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        auto* icon = new brls::Label();
+        icon->setFontSize(22);
+        icon->setText("\uE5D8"); // Arrow up
+        icon->setTextColor(ThemeManager::instance().getAccentColor());
+        icon->setWidth(40);
+        row->addView(icon);
+
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText("app/fileselect/parent_folder"_i18n);
+        nameLbl->setMarginLeft(10);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        row->registerClickAction([this](brls::View*) {
+            navigateUp();
+            return true;
+        });
+
+        fileListBox->addView(row);
+        if (!firstFocusable) firstFocusable = row;
+        lastFocusable = row;
+    }
+
+    // 2. Subfolders
+    for (auto& pair : subfoldersMap) {
+        auto& sInfo = pair.second;
+        bool allSel = (sInfo.selectedCount == sInfo.fileIndices.size());
+        bool partialSel = (sInfo.selectedCount > 0 && !allSel);
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10);
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        // Checkbox label
+        auto* chk = new brls::Label();
+        chk->setWidth(40);
+        chk->setHeight(brls::View::AUTO);
+        chk->setFontSize(20);
+        if (allSel) {
+            chk->setText("[V]");
+            chk->setTextColor(nvgRGB(76, 175, 80));
+        } else if (partialSel) {
+            chk->setText("[-]");
+            chk->setTextColor(nvgRGB(255, 183, 77));
+        } else {
+            chk->setText("[ ]");
+            chk->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        }
+        row->addView(chk);
+
+        // Folder Icon
+        auto* icon = new brls::Label();
+        icon->setFontSize(22);
+        icon->setText("\uE2C7"); // Material folder
+        icon->setTextColor(ThemeManager::instance().getAccentColor());
+        icon->setMarginRight(10);
+        row->addView(icon);
+
+        // Folder Name
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText(sInfo.name);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        // Folder Info (file count + total size)
+        auto* infoLbl = new brls::Label();
+        infoLbl->setWidth(160);
+        infoLbl->setHeight(brls::View::AUTO);
+        infoLbl->setFontSize(14);
+        infoLbl->setText(std::to_string(sInfo.fileIndices.size()) + " | " + formatBytes(sInfo.totalSize));
+        infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(infoLbl);
+
+        // Clicking row (Button A) opens the folder
+        row->registerClickAction([this, path = sInfo.fullPath](brls::View*) {
+            navigateToFolder(path);
+            return true;
+        });
+
+        // Toggle folder action (Button Y) toggles all files in folder
+        auto toggleFolder = [this, sInfoCopy = sInfo, chk](brls::View*) {
+            bool allSelected = true;
+            for (size_t idx : sInfoCopy.fileIndices) {
+                if (idx < selected_.size() && !selected_[idx]) {
+                    allSelected = false;
+                    break;
+                }
+            }
+            bool newState = !allSelected;
+            for (size_t idx : sInfoCopy.fileIndices) {
+                if (idx < selected_.size()) {
+                    selected_[idx] = newState;
+                }
+            }
+            if (newState) {
+                chk->setText("[V]");
+                chk->setTextColor(nvgRGB(76, 175, 80));
+            } else {
+                chk->setText("[ ]");
+                chk->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            }
+            updateTotalSize();
+            updateRetroSubtitle();
+            return true;
+        };
+
+        row->registerAction("app/fileselect/toggle_folder"_i18n, brls::ControllerButton::BUTTON_Y, toggleFolder);
+
+        fileListBox->addView(row);
+        if (!firstFocusable) firstFocusable = row;
+        lastFocusable = row;
+    }
+
+    // 3. Direct files
+    for (const auto& item : directFiles) {
+        size_t idx = item.fileIndex;
+        const auto& file = files_[idx];
+        bool isSel = (idx < selected_.size()) && selected_[idx];
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10);
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        // Checkbox label
+        auto* chk = new brls::Label();
+        chk->setWidth(40);
+        chk->setHeight(brls::View::AUTO);
+        chk->setFontSize(20);
+        chk->setText(isSel ? "[V]" : "[ ]");
+        chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
+        row->addView(chk);
+        checkboxLabels_[idx] = chk;
+
+        // File icon
+        auto* icon = new brls::Label();
+        icon->setFontSize(20);
+        icon->setText(isRomFile(file.name) ? "\uE0E0" : "\uE24D");
+        icon->setTextColor(isRomFile(file.name) ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
+        icon->setMarginRight(10);
+        row->addView(icon);
+
+        // File name label
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText(item.name);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        // File size label
+        auto* sizeLbl = new brls::Label();
+        sizeLbl->setWidth(140);
+        sizeLbl->setHeight(brls::View::AUTO);
+        sizeLbl->setFontSize(14);
+        sizeLbl->setText(formatBytes(file.size));
+        sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(sizeLbl);
+
+        // Click to toggle file (Button A)
+        auto toggleFile = [this, idx](brls::View*) {
+            if (idx < selected_.size()) {
+                selected_[idx] = !selected_[idx];
+                updateRowSelectionState(idx);
+                updateTotalSize();
+                updateRetroSubtitle();
+            }
+            return true;
+        };
+        row->registerClickAction(toggleFile);
+        row->registerAction("app/fileselect/toggle_folder"_i18n, brls::ControllerButton::BUTTON_Y, toggleFile);
+
+        fileListBox->addView(row);
+        if (!firstFocusable) firstFocusable = row;
+        lastFocusable = row;
+    }
+
+    if (subfoldersMap.empty() && directFiles.empty()) {
+        auto* row = new brls::Box();
+        row->setHeight(50);
+        row->setPaddingLeft(10);
+        auto* emptyLbl = new brls::Label();
+        emptyLbl->setFontSize(16);
+        emptyLbl->setText("app/fileselect/no_files"_i18n);
+        emptyLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(emptyLbl);
+        fileListBox->addView(row);
+    }
+
+    if (lastFocusable && installLocationBox) {
+        lastFocusable->setCustomNavigationRoute(brls::FocusDirection::DOWN, installLocationBox);
+        installLocationBox->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
+    }
+}
+
+void FileSelectView::rebuildSwitchFileList() {
     // Remove all existing child rows
     fileListBox->clearViews();
     checkboxLabels_.assign(files_.size(), nullptr);
@@ -406,32 +832,6 @@ void FileSelectView::rebuildFileList() {
     };
     std::vector<DisplayItem> displayItems;
 
-    if (!retro_console_id_.empty()) {
-        displayItems.push_back({0, true, "app/fileselect/group_roms"_i18n});
-        bool hasRoms = false;
-        for (size_t i = 0; i < files_.size(); ++i) {
-            if (isRomFile(files_[i].name)) {
-                displayItems.push_back({i, false, ""});
-                hasRoms = true;
-            }
-        }
-        if (!hasRoms) {
-            for (size_t i = 0; i < files_.size(); ++i) {
-                displayItems.push_back({i, false, ""});
-            }
-        } else {
-            bool hasOther = false;
-            for (size_t i = 0; i < files_.size(); ++i) {
-                if (!isRomFile(files_[i].name)) {
-                    if (!hasOther) {
-                        displayItems.push_back({0, true, "app/fileselect/group_other"_i18n});
-                        hasOther = true;
-                    }
-                    displayItems.push_back({i, false, ""});
-                }
-            }
-        }
-    } else {
     // 1. Group: NOT INSTALLED
     displayItems.push_back({0, true, "app/fileselect/group_uninstalled"_i18n});
     bool hasUninstalled = false;
@@ -473,7 +873,6 @@ void FileSelectView::rebuildFileList() {
         displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
     }
 
-    }
     // Now render them
     brls::View* lastFocusable = nullptr;
     for (const auto& item : displayItems) {
@@ -677,13 +1076,48 @@ void FileSelectView::updateTotalSize() {
 
 void FileSelectView::toggleAllSelection() {
     if (selected_.empty()) return;
-    bool anySelected = false;
-    for (bool s : selected_) { if (s) { anySelected = true; break; } }
-    for (size_t i = 0; i < selected_.size(); ++i) selected_[i] = !anySelected;
-    updateTotalSize();
-    for (size_t i = 0; i < files_.size(); ++i) {
-        updateRowSelectionState(i);
+
+    if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+        // Inside a subfolder: toggle selection for files inside currentFolder_
+        std::string prefix = currentFolder_ + "/";
+        std::vector<size_t> folderIndices;
+        bool anySelectedInFolder = false;
+
+        for (size_t i = 0; i < files_.size(); ++i) {
+            std::string normPath = files_[i].name;
+            std::replace(normPath.begin(), normPath.end(), '\\', '/');
+            if (normPath.rfind(prefix, 0) == 0) {
+                folderIndices.push_back(i);
+                if (i < selected_.size() && selected_[i]) {
+                    anySelectedInFolder = true;
+                }
+            }
+        }
+
+        bool newState = !anySelectedInFolder;
+        for (size_t idx : folderIndices) {
+            if (idx < selected_.size()) {
+                selected_[idx] = newState;
+            }
+        }
+        rebuildRetroFolderList();
+    } else {
+        bool anySelected = false;
+        for (bool s : selected_) {
+            if (s) { anySelected = true; break; }
+        }
+        for (size_t i = 0; i < selected_.size(); ++i) {
+            selected_[i] = !anySelected;
+        }
+        if (!retro_console_id_.empty()) {
+            rebuildRetroFolderList();
+        } else {
+            for (size_t i = 0; i < files_.size(); ++i) {
+                updateRowSelectionState(i);
+            }
+        }
     }
+    updateTotalSize();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -813,16 +1247,28 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
     }
 
     if (!retro_console_id_.empty()) {
-        for (size_t i : chosen) {
+        if (chosen.size() == 1) {
+            size_t i = chosen[0];
             std::vector<int> singleSelected = { files_[i].index };
-            std::string itemTitle = cleanTitle(game_.title);
-            if (selectedIndices.size() > 1) {
-                itemTitle += " (" + files_[i].name + ")";
-            }
+            std::string itemTitle = cleanTitle(game_.title) + " (" + std::filesystem::path(files_[i].name).filename().string() + ")";
             Game singleGame = game_;
             singleGame.title = itemTitle;
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
             ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
+        } else if (!chosen.empty()) {
+            std::vector<int> bundleSelected;
+            bundleSelected.reserve(chosen.size());
+            for (size_t i : chosen) {
+                bundleSelected.push_back(files_[i].index);
+            }
+            std::string countStr = std::to_string(chosen.size());
+            std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
+            Game bundleGame = game_;
+            bundleGame.title = bundleTitle;
+            bundleGame.topic_id = game_.topic_id + "_romset";
+            int firstIndex = files_[chosen[0]].index;
+            std::string firstName = files_[chosen[0]].name;
+            ui::DownloadManager::instance().addDownload(bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_);
         }
     } else {
         std::vector<size_t> packages;
@@ -846,8 +1292,6 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             }
             return files_[a].size > files_[b].size;
         });
-
-        size_t totalTasks = packages.size() + (!extraFiles.empty() ? 1 : 0);
 
         // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
         for (size_t idx : packages) {

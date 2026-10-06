@@ -395,6 +395,14 @@ brls::View* GameDetailView::create() {
 void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
+    if (!retro_console_id_.empty() && isRomsetGame(game_)) {
+        const auto& cfg = config::ConfigManager::instance();
+        if (cfg.getRetroRomsetMode() == "select") {
+            btnDownload->setText("app/detail/select_files_btn"_i18n);
+        } else {
+            btnDownload->setText("app/detail/download_romset_btn"_i18n);
+        }
+    }
     brls::Application::giveFocus(btnDownload);
 }
 
