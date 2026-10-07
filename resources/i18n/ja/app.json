@@ -224,7 +224,9 @@
         "qr_no_url": "リンクがありません",
         "compilation_badge": "コンピレーション / ROMセット",
         "select_files_btn": "ファイルを選択",
-        "download_romset_btn": "ROMセットをダウンロード"
+        "download_romset_btn": "ROMセットをダウンロード",
+        "stats_info": "トレント: {0} シード / {1} ピア ({2} DL)",
+        "stats_date": "追加日: {0}"
     },
     "fileselect": {
         "title": "トレント内ファイル",
@@ -426,7 +428,13 @@
         "hint_select_one": "1つ選択",
         "hint_multiselect": "複数選択",
         "hint_apply": "適用",
-        "apply_done": "完了"
+        "apply_done": "完了",
+        "sort_seeds_desc": "シード数降順 (多い順)",
+        "sort_seeds_asc": "シード数昇順 (少ない順)",
+        "sort_downloads_desc": "ダウンロード数降順 (多い順)",
+        "sort_downloads_asc": "ダウンロード数昇順 (少ない順)",
+        "sort_date_desc": "追加日降順 (新しい順)",
+        "sort_date_asc": "追加日昇順 (古い順)"
     },
     "settings": {
         "title": "設定・ツール",

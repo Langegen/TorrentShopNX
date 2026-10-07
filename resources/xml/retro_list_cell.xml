@@ -54,7 +54,30 @@
             id="size"
             fontSize="13"
             textColor="@theme/brls/header/subtitle"
-            marginRight="16" />
+            marginRight="14" />
+
+        <brls:Box
+            id="statsBox"
+            axis="row"
+            alignItems="center"
+            marginRight="16"
+            visibility="gone">
+            <brls:Label
+                id="seeds"
+                fontSize="13"
+                textColor="#34C759"
+                singleLine="true" />
+            <brls:Label
+                text=" / "
+                fontSize="11"
+                textColor="#666666"
+                singleLine="true" />
+            <brls:Label
+                id="leeches"
+                fontSize="13"
+                textColor="#FF453A"
+                singleLine="true" />
+        </brls:Box>
 
         <brls:Box
             id="actionBox"

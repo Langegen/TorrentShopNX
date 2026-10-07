@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -100,7 +101,9 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         freeaddrinfo(res);
-        set_err(err, errlen, "UDP socket failed");
+        char ebuf[64];
+        snprintf(ebuf, sizeof(ebuf), "UDP socket failed (errno=%d)", errno);
+        set_err(err, errlen, ebuf);
         return -1;
     }
     struct timeval tv = { .tv_sec = 3, .tv_usec = 0 };

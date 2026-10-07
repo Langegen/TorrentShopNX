@@ -1,4 +1,5 @@
 #include "retro_catalog_manager.h"
+#include "game_stats_manager.h"
 #include "../utils/app_paths.h"
 #include "../utils/log.h"
 #include "../net/http_client.h"
@@ -412,6 +413,10 @@ bool RetroCatalogManager::updateAllConsoleCatalogs(bool only_cached,
         if (refreshConsoleCatalog(c.id, dummy, nullptr)) {
             successCount++;
         }
+    }
+
+    if (successCount > 0) {
+        GameStatsManager::instance().updateStatsInBackground();
     }
 
     return successCount > 0;

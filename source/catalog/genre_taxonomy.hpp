@@ -21,39 +21,7 @@ struct GenreFilterItem {
 
 // UTF-8 lowercase helper handling both ASCII and Cyrillic (CP1251 / UTF-8)
 inline std::string toLowerUtf8(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); ) {
-        unsigned char c = static_cast<unsigned char>(s[i]);
-        if (c < 0x80) {
-            out.push_back(static_cast<char>(std::tolower(c)));
-            i += 1;
-        } else if (c == 0xD0 && i + 1 < s.size()) {
-            unsigned char c2 = static_cast<unsigned char>(s[i + 1]);
-            if (c2 == 0x81) { // Ё -> ё (0xD1 0x91)
-                out.push_back(static_cast<char>(0xD1));
-                out.push_back(static_cast<char>(0x91));
-            } else if (c2 >= 0x90 && c2 <= 0x9F) { // А..П -> а..п (0xD0 0xB0..0xBF)
-                out.push_back(static_cast<char>(0xD0));
-                out.push_back(static_cast<char>(c2 + 0x20));
-            } else if (c2 >= 0xA0 && c2 <= 0xAF) { // Р..Я -> р..я (0xD1 0x80..0x8F)
-                out.push_back(static_cast<char>(0xD1));
-                out.push_back(static_cast<char>(c2 - 0x20));
-            } else {
-                out.push_back(s[i]);
-                out.push_back(s[i + 1]);
-            }
-            i += 2;
-        } else if (c == 0xD1 && i + 1 < s.size()) {
-            out.push_back(s[i]);
-            out.push_back(s[i + 1]);
-            i += 2;
-        } else {
-            out.push_back(s[i]);
-            i += 1;
-        }
-    }
-    return out;
+    return util::toLowerUtf8(s);
 }
 
 // Helper to trim string

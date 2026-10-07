@@ -943,7 +943,7 @@ brls::View* SettingsTab::buildRetroTab() {
     int initialRomsetIdx = (cfg.getRetroRomsetMode() == "select") ? 1 : 0;
 
     auto* romsetModeCell = new brls::SelectorCell();
-    romsetModeCell->init("app/settings/retro_romset_mode"_i18n, romsetOptions, initialRomsetIdx, [](int selected) {}, [&cfg](int selected) {
+    romsetModeCell->init("app/settings/retro_romset_mode"_i18n, romsetOptions, initialRomsetIdx, [&cfg](int selected) {
         if (selected == 1) {
             cfg.setRetroRomsetMode("select");
         } else {

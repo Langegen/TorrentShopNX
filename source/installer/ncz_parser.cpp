@@ -255,6 +255,8 @@ bool NczDecompressor::init() {
     if (!zstd_dctx_) {
         return false;
     }
+    // Limit max window size to 128MB (2^27) to avoid uncontrolled contiguous allocations on Switch
+    ZSTD_DCtx_setParameter(zstd_dctx_, ZSTD_d_windowLogMax, 27);
 
     current_output_offset_ = 0;
     current_block_id_ = 0;

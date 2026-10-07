@@ -224,7 +224,9 @@
         "topic": "Open Topic",
         "unknown_genre": "Unknown Genre",
         "unknown_publisher": "Unknown Publisher",
-        "update_available": "Update Available"
+        "update_available": "Update Available",
+        "stats_info": "Torrent: {0} seeds / {1} peers ({2} dl)",
+        "stats_date": "Added: {0}"
     },
     "fileselect": {
         "title": "File Selection",
@@ -267,6 +269,10 @@
         "direct_install_desc": "Install directly to storage without saving NSP",
         "empty": "No files selected",
         "files_selected": "Files selected: {0}",
+        "toggle_folder": "Select folder",
+        "parent_folder": ".. (Parent directory)",
+        "folder_prefix": "Folder: ",
+        "bundle_files": "{0} files",
         "install_target": "Install Target",
         "keep_installer": "Keep NSP file",
         "keep_installer_desc": "Keep source NSP file after installation",
@@ -425,7 +431,13 @@
         "hint_select_one": "Select Single",
         "hint_multiselect": "Toggle",
         "hint_apply": "Apply",
-        "apply_done": "Done"
+        "apply_done": "Done",
+        "sort_seeds_desc": "By seeds (highest first)",
+        "sort_seeds_asc": "By seeds (lowest first)",
+        "sort_downloads_desc": "By downloads (highest first)",
+        "sort_downloads_asc": "By downloads (lowest first)",
+        "sort_date_desc": "By date (newest first)",
+        "sort_date_asc": "By date (oldest first)"
     },
     "genres": {
         "action": "Action",

@@ -187,7 +187,7 @@ void MainMenu::setupLayout() {
     rootBox_->addView(tilesBox_);
     rootBox_->setDefaultFocusedIndex(1);
 
-    // 3. Bottom 1/3 Summary Drawer (Compact 175px, lifted with margin)
+    // 3. Bottom 1/3 Summary Drawer (Compact 178px, lifted with margin)
     summaryView_ = new ui::DashboardSummaryView();
     summaryView_->setMarginBottom(18.0f);
     summaryView_->setOnOpenSectionCallback([this](int idx) {

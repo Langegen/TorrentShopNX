@@ -31,6 +31,7 @@
 #include "ui/ThemeManager.hpp"
 #include "ui/FavoritesManager.hpp"
 #include "catalog/IgnoredUpdatesManager.hpp"
+#include "catalog/game_stats_manager.h"
 #include "ui/DownloadUiManager.hpp"
 #include "ui/AppletWarningView.hpp"
 #include "ui/QrCodeView.hpp"
@@ -97,7 +98,7 @@ extern "C" {
             // Switch BSD buffer pool is fixed; keep per-socket initial cost low
             // so the engine can open many peer sockets without ENOBUFS.
             cfg.num_bsd_sessions = 12;
-            cfg.sb_efficiency = 8;
+            cfg.sb_efficiency = 4;
             cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
             cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
             cfg.tcp_tx_buf_max_size = 0x60000;  // 384 KB max
@@ -442,6 +443,7 @@ int main(int argc, char** argv) {
         // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
         catalog::IgnoredUpdatesManager::instance().init(TSNX_IGNORED_UPDATES_PATH);
+        catalog::GameStatsManager::instance().loadFromDisk();
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.

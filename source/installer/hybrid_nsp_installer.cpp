@@ -61,15 +61,15 @@ static constexpr size_t NSP_HEADER_READ_SIZE = 128 * 1024; // 128KB для за�
 static constexpr size_t NSP_HEADER_PROBE_SIZE = 4 * 1024;  // 4KB для быстрого определения реального размера header
 static constexpr size_t NSP_HEADER_MAX_SIZE  = 4 * 1024 * 1024; // защитный лимит для неадекватных header
 static constexpr size_t LOCAL_STREAM_CHUNK_SIZE = 4 * 1024 * 1024; // Increased from 128KB to 4MB to prevent starvation
-static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 96 * 1024 * 1024; // Increased to 96MB for smoother play buffer
+static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 24 * 1024 * 1024; // 24MB for fast responsive streaming start
 // If the full prebuffer target never fills (slow/dead swarm), start installing
 // with whatever has arrived after this long -- provided at least one byte is
-// there. Without the timeout a 3-peer wifi swarm that trickles below the
+// there. Without the timeout a slow wifi swarm that trickles below the
 // target keeps the install stuck in the buffering phase forever.
-static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 60000;
+static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 5000;
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
-static constexpr size_t MIN_BUFFER_SIZE = 32 * 1024 * 1024; // 32MB (smooth streaming buffer)
+static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (smooth streaming buffer)
 static constexpr size_t DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;  // 4MB chunk
 #ifdef __SWITCH__
 static constexpr size_t COLLECTOR_THREAD_STACK_SIZE = 0x20000; // 128KB
@@ -1076,6 +1076,11 @@ void HybridNspInstaller::installerThreadFunc() {
 
                             // Report progress using decompressed bytes written to NCM.
                             bytes_installed_ = progress_base + out_written;
+                        }
+
+                        if (cancel_requested_) {
+                            ring_buffer_.setEof();
+                            goto cleanup_sha;
                         }
 
                         if (!ok) {

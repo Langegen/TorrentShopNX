@@ -19,6 +19,7 @@
 #include "config/config.h"
 #include "utils/log.h"
 #include "utils/app_paths.h"
+#include "utils/string_utils.h"
 #include <borealis/extern/nlohmann/json.hpp>
 
 struct Game;
@@ -70,11 +71,8 @@ inline bool isRomsetGame(const Game& g) {
     if (g.is_romset) return true;
     if (g.content_type == "romset") return true;
 
-    // Fast keyword check in lowercase title
-    std::string lower = g.title;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
+    // Fast keyword check in lowercase title using UTF-8 case folding
+    std::string lower = util::toLowerUtf8(g.title);
 
     if (lower.find("сборник") != std::string::npos ||
         lower.find("ромсет") != std::string::npos ||
@@ -267,13 +265,120 @@ inline std::string truncateCatalogTitle(const std::string& s, size_t maxCodepoin
     return s.substr(0, i) + "\u2026";    // U+2026 HORIZONTAL ELLIPSIS
 }
 
+struct GameLangBadge {
+    std::string text;
+    NVGcolor color;
+};
+
+inline GameLangBadge getGameLangBadge(const std::string& interface_lang, const std::string& appLocale = "") {
+    if (interface_lang.empty()) return {"", nvgRGBA(0, 0, 0, 0)};
+
+    // Extract inside brackets if present
+    std::string raw = interface_lang;
+    size_t start = raw.find('[');
+    if (start != std::string::npos) {
+        size_t end = raw.find(']', start);
+        if (end != std::string::npos) {
+            raw = raw.substr(start + 1, end - start - 1);
+        } else {
+            raw = raw.substr(start + 1);
+        }
+    }
+
+    // Trim whitespace
+    while (!raw.empty() && std::isspace(static_cast<unsigned char>(raw.front()))) raw.erase(raw.begin());
+    while (!raw.empty() && std::isspace(static_cast<unsigned char>(raw.back()))) raw.pop_back();
+    if (raw.empty()) return {"", nvgRGBA(0, 0, 0, 0)};
+
+    // Split raw into tokens by '/' or ',' or ';'
+    std::vector<std::string> tokens;
+    std::string token;
+    for (char ch : raw) {
+        if (ch == '/' || ch == ',' || ch == ';') {
+            while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front()))) token.erase(token.begin());
+            while (!token.empty() && std::isspace(static_cast<unsigned char>(token.back()))) token.pop_back();
+            if (!token.empty()) tokens.push_back(token);
+            token.clear();
+        } else {
+            token += ch;
+        }
+    }
+    while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front()))) token.erase(token.begin());
+    while (!token.empty() && std::isspace(static_cast<unsigned char>(token.back()))) token.pop_back();
+    if (!token.empty()) tokens.push_back(token);
+
+    if (tokens.empty()) return {"", nvgRGBA(0, 0, 0, 0)};
+
+    // Determine user preference from appLocale
+    std::string preferredLang = "RUS";
+    if (!appLocale.empty()) {
+        std::string loc = appLocale;
+        std::transform(loc.begin(), loc.end(), loc.begin(), [](unsigned char c){ return std::tolower(c); });
+        if (loc.rfind("ru", 0) == 0) preferredLang = "RUS";
+        else if (loc.rfind("en", 0) == 0) preferredLang = "ENG";
+        else if (loc.rfind("es", 0) == 0) preferredLang = "SPA";
+        else if (loc.rfind("fr", 0) == 0) preferredLang = "FRA";
+        else if (loc.rfind("de", 0) == 0) preferredLang = "GER";
+        else if (loc.rfind("it", 0) == 0) preferredLang = "ITA";
+        else if (loc.rfind("ja", 0) == 0) preferredLang = "JAP";
+        else if (loc.rfind("zh", 0) == 0) preferredLang = "CHI";
+    }
+
+    bool hasRus = false;
+    bool hasEng = false;
+    bool hasMulti = false;
+
+    for (const auto& t : tokens) {
+        std::string upper = t;
+        std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c){ return std::toupper(c); });
+        if (upper.find("RUS") != std::string::npos || upper.find("РУС") != std::string::npos) {
+            hasRus = true;
+        }
+        if (upper.find("ENG") != std::string::npos || upper.find("АНГ") != std::string::npos) {
+            hasEng = true;
+        }
+        if (upper.find("MULTI") != std::string::npos || upper.find("МУЛЬТИ") != std::string::npos) {
+            hasMulti = true;
+        }
+    }
+
+    // Soft semi-transparent badge colors
+    NVGcolor colorRus = nvgRGBA(229, 57, 53, 225);     // Soft Ruby
+    NVGcolor colorEng = nvgRGBA(30, 136, 229, 225);    // Soft Slate Blue
+    NVGcolor colorMulti = nvgRGBA(123, 31, 162, 225);  // Soft Violet
+    NVGcolor colorDefault = nvgRGBA(55, 71, 79, 225);  // Dark Glass
+
+    // 1. If Russian is present:
+    if (hasRus) {
+        if (hasMulti || tokens.size() > 2) {
+            return { "RUS • MULTI", colorRus };
+        } else if (hasEng) {
+            return { "RUS • ENG", colorRus };
+        } else {
+            return { "RUS", colorRus };
+        }
+    }
+
+    // 2. If English is present:
+    if (hasEng) {
+        if (hasMulti || tokens.size() > 2) {
+            return { "ENG • MULTI", colorEng };
+        } else {
+            return { "ENG", colorEng };
+        }
+    }
+
+    // 3. Multi or other:
+    if (hasMulti || tokens.size() > 1) {
+        return { "MULTI", colorMulti };
+    }
+
+    return { "MULTI", colorDefault };
+}
+
 // Extract language badge: gets the portion inside the brackets of interface_lang (e.g. "[RUS / ENG]" -> "RUS / ENG")
 inline std::string extractLangBadge(const std::string& interface_lang) {
-    size_t start = interface_lang.find('[');
-    if (start == std::string::npos) return "";
-    size_t end = interface_lang.find(']', start);
-    if (end == std::string::npos) return interface_lang.substr(start + 1);
-    return interface_lang.substr(start + 1, end - start - 1);
+    return getGameLangBadge(interface_lang).text;
 }
 
 // Fast file reading into a preallocated std::string buffer

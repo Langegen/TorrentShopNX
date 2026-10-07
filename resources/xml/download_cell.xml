@@ -24,8 +24,17 @@
         <!-- Title -->
         <brls:Label
             id="title"
-            fontSize="18"
-            marginBottom="5" />
+            fontSize="17"
+            marginBottom="2"
+            singleLine="true" />
+
+        <!-- File Name (for NSP / NSZ / XCI) -->
+        <brls:Label
+            id="fileName"
+            fontSize="12"
+            textColor="#AAAAAA"
+            marginBottom="4"
+            singleLine="true" />
 
         <!-- Download Progress Bar -->
         <brls:Box width="auto" height="15px" axis="row" alignItems="center" marginBottom="5">

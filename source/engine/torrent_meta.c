@@ -238,12 +238,25 @@ static int parse_info_fields(torrent_meta *t, be_node *info, char *err, size_t e
     t->piece_count = pieces->str.len / 20;
     t->piece_hashes = (const uint8_t *)pieces->str.ptr;
 
+    if (t->files) {
+        free(t->files);
+        t->files = NULL;
+        t->file_count = 0;
+        t->file_capacity = 0;
+    }
+
     be_node *length = be_dict_get(info, "length");
     if (length && length->type == BE_INT) {
         // Single-file torrent: synthesize one file entry so callers can treat
         // single- and multi-file torrents uniformly.
         t->total_len = length->i;
         t->file_count = 1;
+        t->file_capacity = 1;
+        t->files = (torrent_file *)calloc(1, sizeof(torrent_file));
+        if (!t->files) {
+            set_err(err, errlen, "out of memory");
+            return -1;
+        }
         t->files[0].length = length->i;
         t->files[0].offset = 0;
         snprintf(t->files[0].path, sizeof(t->files[0].path), "%s", t->name);
@@ -253,10 +266,30 @@ static int parse_info_fields(torrent_meta *t, be_node *info, char *err, size_t e
             set_err(err, errlen, "ni 'length' ni 'files'");
             return -1;
         }
+        size_t initial_cap = files->list.count > 0 ? files->list.count : 16;
+        if (initial_cap > MAX_TORRENT_FILES) initial_cap = MAX_TORRENT_FILES;
+        t->files = (torrent_file *)calloc(initial_cap, sizeof(torrent_file));
+        if (!t->files) {
+            set_err(err, errlen, "out of memory");
+            return -1;
+        }
+        t->file_capacity = (int)initial_cap;
+        t->file_count = 0;
+
         int64_t off = 0;
-        for (size_t i = 0; i < files->list.count && t->file_count < MAX_FILES; i++) {
+        for (size_t i = 0; i < files->list.count && t->file_count < MAX_TORRENT_FILES; i++) {
             be_node *flen = be_dict_get(files->list.items[i], "length");
             if (!flen || flen->type != BE_INT) continue;
+
+            if (t->file_count >= t->file_capacity) {
+                int new_cap = t->file_capacity * 2;
+                if (new_cap > MAX_TORRENT_FILES) new_cap = MAX_TORRENT_FILES;
+                if (new_cap <= t->file_capacity) break;
+                torrent_file *new_files = (torrent_file *)realloc(t->files, (size_t)new_cap * sizeof(torrent_file));
+                if (!new_files) break;
+                t->files = new_files;
+                t->file_capacity = new_cap;
+            }
 
             torrent_file *tf = &t->files[t->file_count++];
             tf->length = flen->i;
@@ -772,6 +805,7 @@ void torrent_unload(torrent_meta *t) {
         free(t->trackers[i]);
     be_free(t->root);
     free(t->buf);
+    if (t->files) free(t->files);
     memset(t, 0, sizeof(*t));
 }
 

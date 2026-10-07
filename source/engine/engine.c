@@ -29,7 +29,8 @@ struct tsnx_torrent {
     int             file_index;
     bool            used;
     bool            paused;
-    bool            wanted_files[TSNX_MAX_FILES];
+    bool           *wanted_files;
+    int             wanted_files_count;
     const volatile bool *cancel; /* polled by (re)opens of this torrent */
     uint64_t        bytes_recv_at_start;
     uint64_t        last_bytes_recv;
@@ -246,8 +247,12 @@ bool tsnx_engine_add_torrent_file(tsnx_engine *eng, const char *path,
     }
     slot->used = true;
     slot->file_index = -1;
-    slot->cancel = NULL;
-    for (int i = 0; i < TSNX_MAX_FILES; i++) slot->wanted_files[i] = true;
+    slot->wanted_files_count = slot->meta.file_count;
+    if (slot->wanted_files) free(slot->wanted_files);
+    slot->wanted_files = (bool *)malloc(slot->wanted_files_count > 0 ? (size_t)slot->wanted_files_count * sizeof(bool) : sizeof(bool));
+    if (slot->wanted_files) {
+        for (int i = 0; i < slot->wanted_files_count; i++) slot->wanted_files[i] = true;
+    }
     slot->bytes_recv_at_start = 0;
     slot->last_bytes_recv = 0;
     slot->last_speed_time_ms = 0;
@@ -305,7 +310,12 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
         }
     }
     slot->used = true;
-    for (int i = 0; i < TSNX_MAX_FILES; i++) slot->wanted_files[i] = true;
+    slot->wanted_files_count = slot->meta.file_count;
+    if (slot->wanted_files) free(slot->wanted_files);
+    slot->wanted_files = (bool *)malloc(slot->wanted_files_count > 0 ? (size_t)slot->wanted_files_count * sizeof(bool) : sizeof(bool));
+    if (slot->wanted_files) {
+        for (int i = 0; i < slot->wanted_files_count; i++) slot->wanted_files[i] = true;
+    }
     slot->bytes_recv_at_start = 0;
     slot->last_bytes_recv = 0;
     slot->last_speed_time_ms = 0;
@@ -336,6 +346,7 @@ bool tsnx_engine_remove_torrent(tsnx_engine *eng, const char *hash) {
     torrentfs_close(t->fs);
     torrent_unload(&t->meta);
     free(t->source);
+    if (t->wanted_files) free(t->wanted_files);
     memset(t, 0, sizeof(*t));
     return true;
 }
@@ -468,6 +479,15 @@ int tsnx_engine_get_files(tsnx_engine *eng, const char *hash,
     return count;
 }
 
+int tsnx_engine_get_file_count(tsnx_engine *eng, const char *hash) {
+    tsnx_torrent *t;
+    eng = active_engine(eng);
+    if (!eng || !hash) return 0;
+    t = find_by_hash(eng, hash);
+    if (!t) return 0;
+    return t->meta.file_count;
+}
+
 bool tsnx_engine_set_file_wanted(tsnx_engine *eng, const char *hash,
                                  int file_index, bool wanted) {
     tsnx_torrent *t;
@@ -475,7 +495,7 @@ bool tsnx_engine_set_file_wanted(tsnx_engine *eng, const char *hash,
     if (!eng || !hash) return false;
     t = find_by_hash(eng, hash);
     if (!t) return false;
-    if (file_index < 0 || file_index >= TSNX_MAX_FILES) return false;
+    if (file_index < 0 || file_index >= t->wanted_files_count || !t->wanted_files) return false;
     t->wanted_files[file_index] = wanted;
     return true;
 }

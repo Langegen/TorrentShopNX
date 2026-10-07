@@ -6,6 +6,7 @@
 #include "EmulatorInstallDialog.hpp"
 #include "RetroEmulatorsView.hpp"
 #include "../catalog/retro_emulator_manager.h"
+#include "../catalog/game_stats_manager.h"
 #include "../utils/log.h"
 #include <algorithm>
 
@@ -587,10 +588,11 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                               (game.genre.empty() ? parent_->consoleInfo_.name : game.genre);
         cell->meta->setText(metaStr);
 
-        std::string lang = extractLangBadge(game.interface_lang);
-        if (!lang.empty()) {
+        GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
+        if (!badge.text.empty()) {
             cell->lang->setVisibility(brls::Visibility::VISIBLE);
-            cell->lang->setText(" " + lang + " ");
+            cell->lang->setText(badge.text);
+            cell->lang->setBackgroundColor(badge.color);
         } else {
             cell->lang->setVisibility(brls::Visibility::GONE);
         }
@@ -610,6 +612,17 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cell->actionBox->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
             cell->actionLabel->setTextColor(ThemeManager::instance().getAccentColor());
             cell->actionLabel->setText("app/retro/btn_download_rom"_i18n);
+        }
+
+        const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+        if (cell->statsBox) {
+            if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
+                cell->statsBox->setVisibility(brls::Visibility::VISIBLE);
+                if (cell->seeds) cell->seeds->setText(std::to_string(statsData->seeds));
+                if (cell->leeches) cell->leeches->setText(std::to_string(statsData->leeches));
+            } else {
+                cell->statsBox->setVisibility(brls::Visibility::GONE);
+            }
         }
 
         cell->cover->setClipsToBounds(false);
@@ -660,23 +673,25 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         brls::Box* card;
         brls::Image* cover;
         brls::Label* lang;
+        brls::Label* stats;
         brls::Label* title;
         brls::Label* size;
         brls::Label* romBadge;
+        brls::Box* statsBox;
+        brls::Label* seeds;
+        brls::Label* leeches;
     } cards[6] = {
-        { rowCell->card0, rowCell->cover0, rowCell->lang0, rowCell->title0, rowCell->size0, rowCell->romBadge0 },
-        { rowCell->card1, rowCell->cover1, rowCell->lang1, rowCell->title1, rowCell->size1, rowCell->romBadge1 },
-        { rowCell->card2, rowCell->cover2, rowCell->lang2, rowCell->title2, rowCell->size2, rowCell->romBadge2 },
-        { rowCell->card3, rowCell->cover3, rowCell->lang3, rowCell->title3, rowCell->size3, rowCell->romBadge3 },
-        { rowCell->card4, rowCell->cover4, rowCell->lang4, rowCell->title4, rowCell->size4, rowCell->romBadge4 },
-        { rowCell->card5, rowCell->cover5, rowCell->lang5, rowCell->title5, rowCell->size5, rowCell->romBadge5 }
+        { rowCell->card0, rowCell->cover0, rowCell->lang0, rowCell->stats0, rowCell->title0, rowCell->size0, rowCell->romBadge0, rowCell->statsBox0, rowCell->seeds0, rowCell->leeches0 },
+        { rowCell->card1, rowCell->cover1, rowCell->lang1, rowCell->stats1, rowCell->title1, rowCell->size1, rowCell->romBadge1, rowCell->statsBox1, rowCell->seeds1, rowCell->leeches1 },
+        { rowCell->card2, rowCell->cover2, rowCell->lang2, rowCell->stats2, rowCell->title2, rowCell->size2, rowCell->romBadge2, rowCell->statsBox2, rowCell->seeds2, rowCell->leeches2 },
+        { rowCell->card3, rowCell->cover3, rowCell->lang3, rowCell->stats3, rowCell->title3, rowCell->size3, rowCell->romBadge3, rowCell->statsBox3, rowCell->seeds3, rowCell->leeches3 },
+        { rowCell->card4, rowCell->cover4, rowCell->lang4, rowCell->stats4, rowCell->title4, rowCell->size4, rowCell->romBadge4, rowCell->statsBox4, rowCell->seeds4, rowCell->leeches4 },
+        { rowCell->card5, rowCell->cover5, rowCell->lang5, rowCell->stats5, rowCell->title5, rowCell->size5, rowCell->romBadge5, rowCell->statsBox5, rowCell->seeds5, rowCell->leeches5 }
     };
 
     int effectiveRow = (index.section == 1 && parent_->sections_.size() > 1 && parent_->sections_[0].games)
         ? static_cast<int>((parent_->sections_[0].games->size() + 5) / 6) + row
         : row;
-
-    bool isLightCatalog = ThemeManager::instance().isCurrentThemeLight();
 
     for (int i = 0; i < 6; ++i) {
         size_t gameIdx = static_cast<size_t>(row * 6 + i);
@@ -696,18 +711,29 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             cards[i].size->setText(game.size);
 
-            // Badge styling: ROMSET vs ROM
+            // Badge styling on cover: ROMSET vs ROM
             bool isRom = isRomsetGame(game);
-            if (isRom) {
-                cards[i].romBadge->setText("app/retro/badge_romset"_i18n);
-                if (isLightCatalog) {
-                    cards[i].romBadge->setTextColor(nvgRGB(194, 65, 12));
+            if (cards[i].romBadge) {
+                cards[i].romBadge->setVisibility(brls::Visibility::VISIBLE);
+                if (isRom) {
+                    cards[i].romBadge->setText("  " + "app/retro/badge_romset"_i18n + "  ");
+                    cards[i].romBadge->setBackgroundColor(nvgRGBA(234, 88, 12, 225));
                 } else {
-                    cards[i].romBadge->setTextColor(nvgRGBA(255, 170, 0, 255));
+                    cards[i].romBadge->setText("  ROM  ");
+                    cards[i].romBadge->setBackgroundColor(nvgRGBA(30, 136, 229, 225));
                 }
-            } else {
-                cards[i].romBadge->setText("ROM");
-                cards[i].romBadge->setTextColor(ThemeManager::instance().getAccentColor());
+                cards[i].romBadge->setTextColor(nvgRGB(255, 255, 255));
+            }
+
+            const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+            if (cards[i].statsBox) {
+                if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
+                    cards[i].statsBox->setVisibility(brls::Visibility::VISIBLE);
+                    if (cards[i].seeds) cards[i].seeds->setText(std::to_string(statsData->seeds));
+                    if (cards[i].leeches) cards[i].leeches->setText(std::to_string(statsData->leeches));
+                } else {
+                    cards[i].statsBox->setVisibility(brls::Visibility::GONE);
+                }
             }
 
             cardBox->getFocusEvent()->clear();
@@ -731,13 +757,19 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                 titleLabel->setText(shortTitle);
             });
 
-            std::string lang = extractLangBadge(game.interface_lang);
-            if (!lang.empty()) {
+            GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
+            if (!badge.text.empty()) {
                 cards[i].lang->setVisibility(brls::Visibility::VISIBLE);
-                cards[i].lang->setText(" " + lang + " ");
+                cards[i].lang->setText("  " + badge.text + "  ");
+                cards[i].lang->setBackgroundColor(badge.color);
             } else {
                 cards[i].lang->setVisibility(brls::Visibility::GONE);
             }
+
+            cards[i].stats->setVisibility(brls::Visibility::GONE);
+
+            cards[i].size->setText(game.size);
+            cards[i].size->setTextColor(nvgRGB(140, 140, 140));
 
             cards[i].cover->setClipsToBounds(false);
             cards[i].cover->setScalingType(brls::ImageScalingType::FIT);

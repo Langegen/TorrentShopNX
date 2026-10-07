@@ -32,6 +32,17 @@ bool isFileDownloadItem(const download::DownloadItem& item) {
     return false;
 }
 
+std::string getDownloadFileName(const download::DownloadItem& item) {
+    std::string name = item.forced_stream_name;
+    if (name.empty()) name = item.preload_stream_name;
+    if (name.empty()) name = item.stream_name;
+    size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) {
+        name = name.substr(slash + 1);
+    }
+    return name;
+}
+
 void openDownloadsFolderForItem(const download::DownloadItem& item) {
     std::string targetDir = TSNX_DOWNLOADS_DIR;
     std::string focusChild;
@@ -478,7 +489,22 @@ int DownloadsView::DownloadsDataSource::numberOfRows(brls::RecyclerFrame* recycl
 }
 
 void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem& item) {
-    cell->title->setText(cleanTitle(item.title));
+    std::string displayTitle = cleanTitle(item.title);
+    if (!displayTitle.empty() && displayTitle.back() == '(') {
+        displayTitle.pop_back();
+        while (!displayTitle.empty() && std::isspace(static_cast<unsigned char>(displayTitle.back()))) {
+            displayTitle.pop_back();
+        }
+    }
+    cell->title->setText(displayTitle);
+
+    std::string fileName = getDownloadFileName(item);
+    if (util::isGamePackage(fileName)) {
+        cell->fileName->setVisibility(brls::Visibility::VISIBLE);
+        cell->fileName->setText(fileName);
+    } else {
+        cell->fileName->setVisibility(brls::Visibility::GONE);
+    }
     
     std::string coverUrl = findCoverForDownload(item);
     if (!coverUrl.empty()) {

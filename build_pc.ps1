@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Building TorrentShopNX..." -ForegroundColor Cyan
-cmake --build $buildDir -j8
+cmake --build $buildDir -j4
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed!" -ForegroundColor Red

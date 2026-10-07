@@ -2,6 +2,7 @@
 
 #include <borealis.hpp>
 #include "../GameData.hpp"
+#include "../catalog/filter_manager.hpp"
 
 namespace ui {
 
@@ -15,19 +16,14 @@ public:
     void willDisappear(bool resetState = false) override;
 
     void filterFavorites();
+    void resetFilters();
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
 
 private:
-    std::vector<Game> favoritedGames_;
-
-    class FavoriteRowCell : public brls::RecyclerCell {
-    public:
-        FavoriteRowCell();
-        ~FavoriteRowCell();
-        std::shared_ptr<bool> imageToken;
-        static FavoriteRowCell* create();
-    };
+    catalog::FilterSortState filterState_;
+    std::vector<Game> allFavorites_;
+    std::vector<Game> filteredFavorites_;
 
     class FavoritesDataSource : public brls::RecyclerDataSource {
     public:

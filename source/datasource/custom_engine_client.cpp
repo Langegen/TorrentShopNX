@@ -126,10 +126,10 @@ bool CustomEngineClient::probeFiles(const std::string& info_hash,
     }
 
     std::string h(hash);
-    // Heap-backed: tsnx_file_info is ~536 bytes, so the stack array would
-    // overflow the small (64 KB default) libnx pthread stacks of worker threads.
-    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
-    int n = tsnx_engine_get_files(eng, h.c_str(), files.data(), TSNX_MAX_FILES);
+    int total_files = tsnx_engine_get_file_count(eng, h.c_str());
+    if (total_files <= 0) total_files = 256;
+    std::vector<tsnx_file_info> files(total_files);
+    int n = tsnx_engine_get_files(eng, h.c_str(), files.data(), total_files);
     for (int i = 0; i < n; i++) {
         CustomEngineFileInfo fi;
         fi.index  = files[i].index;

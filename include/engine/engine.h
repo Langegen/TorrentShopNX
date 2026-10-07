@@ -21,7 +21,7 @@ extern "C" {
 #define TSNX_MAX_HASH_LEN   40
 #define TSNX_MAX_NAME_LEN   256
 #define TSNX_MAX_PATH_LEN   512
-#define TSNX_MAX_FILES      256
+#define TSNX_MAX_FILES      65536
 
 typedef struct tsnx_engine tsnx_engine;
 typedef struct tsnx_torrent tsnx_torrent;
@@ -89,6 +89,9 @@ bool tsnx_engine_resume_torrent(tsnx_engine *eng, const char *hash);
 /* List all torrents. Returns number of items written (<= max_items). */
 int  tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
                               int max_items);
+
+/* Get the number of files in a torrent. */
+int  tsnx_engine_get_file_count(tsnx_engine *eng, const char *hash);
 
 /* List files inside a torrent. Returns number of files written (<= max_files). */
 int  tsnx_engine_get_files(tsnx_engine *eng, const char *hash,

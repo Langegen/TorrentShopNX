@@ -224,7 +224,9 @@
         "qr_no_url": "Enlace no disponible",
         "compilation_badge": "COLECCIÓN / ROMSET",
         "select_files_btn": "Seleccionar archivos",
-        "download_romset_btn": "Descargar set de ROMs"
+        "download_romset_btn": "Descargar set de ROMs",
+        "stats_info": "Torrent: {0} seeds / {1} peers ({2} descargas)",
+        "stats_date": "Añadido: {0}"
     },
     "fileselect": {
         "title": "Archivos torrent",
@@ -426,7 +428,13 @@
         "hint_select_one": "Elegir uno",
         "hint_multiselect": "Multiselección",
         "hint_apply": "Aplicar",
-        "apply_done": "Listo"
+        "apply_done": "Listo",
+        "sort_seeds_desc": "Por semillas (más primero)",
+        "sort_seeds_asc": "Por semillas (menos primero)",
+        "sort_downloads_desc": "Por descargas (más primero)",
+        "sort_downloads_asc": "Por descargas (menos primero)",
+        "sort_date_desc": "Por fecha (más recientes)",
+        "sort_date_asc": "Por fecha (más antiguos)"
     },
     "settings": {
         "title": "Herramientas",

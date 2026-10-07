@@ -41,8 +41,8 @@ static void sleep_ms(int ms) {
 }
 
 static int choose_largest_file(tsnx_engine *eng, const char *hash) {
-    tsnx_file_info files[TSNX_MAX_FILES];
-    int n = tsnx_engine_get_files(eng, hash, files, TSNX_MAX_FILES);
+    tsnx_file_info files[1024];
+    int n = tsnx_engine_get_files(eng, hash, files, 1024);
     if (n <= 0) return -1;
     int best = 0;
     for (int i = 1; i < n; i++) {
@@ -105,8 +105,8 @@ int main(int argc, char **argv) {
         printf("StreamTest: selected largest file index=%d\n", file_index);
     }
 
-    tsnx_file_info files[TSNX_MAX_FILES];
-    int nfiles = tsnx_engine_get_files(eng, hash, files, TSNX_MAX_FILES);
+    tsnx_file_info files[1024];
+    int nfiles = tsnx_engine_get_files(eng, hash, files, 1024);
     int64_t file_size = 0;
     if (file_index >= 0 && file_index < nfiles) {
         file_size = files[file_index].size;

@@ -49,8 +49,16 @@ private:
     };
     std::vector<FileProbeInfo> probe_info_;
 
+    std::string currentFolder_;
+    std::string baseFolder_;
+
     // Rebuild the visible list from files_ / selected_
     void rebuildFileList();
+    void rebuildRetroFolderList();
+    void rebuildSwitchFileList();
+    void navigateToFolder(const std::string& folder);
+    void navigateUp();
+    void updateRetroSubtitle();
     void updateRowSelectionState(size_t idx);
     void calculateUncompressedSizes();
 };

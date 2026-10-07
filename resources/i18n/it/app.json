@@ -224,7 +224,9 @@
         "qr_no_url": "Nessun link disponibile",
         "compilation_badge": "RACCOLTA / ROMSET",
         "select_files_btn": "Seleziona file",
-        "download_romset_btn": "Scarica ROMset"
+        "download_romset_btn": "Scarica ROMset",
+        "stats_info": "Torrent: {0} seed / {1} peer ({2} dl)",
+        "stats_date": "Aggiunto: {0}"
     },
     "fileselect": {
         "title": "File torrent",
@@ -426,7 +428,13 @@
         "hint_select_one": "Seleziona singolo",
         "hint_multiselect": "Multiselezione",
         "hint_apply": "Applica",
-        "apply_done": "Fatto"
+        "apply_done": "Fatto",
+        "sort_seeds_desc": "Per seed (più alti)",
+        "sort_seeds_asc": "Per seed (più bassi)",
+        "sort_downloads_desc": "Per download (più alti)",
+        "sort_downloads_asc": "Per download (più bassi)",
+        "sort_date_desc": "Per data (più recenti)",
+        "sort_date_asc": "Per data (meno recenti)"
     },
     "settings": {
         "title": "Strumenti",

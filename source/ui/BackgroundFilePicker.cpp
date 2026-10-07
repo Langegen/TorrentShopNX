@@ -100,7 +100,7 @@ brls::View* BackgroundFilePicker::createContentView() {
     applet->setFooterVisibility(brls::Visibility::VISIBLE);
 
     // Register B button action to navigate up or exit
-    registerAction("app/common/back"_i18n, brls::BUTTON_B, [this](brls::View* view) {
+    registerAction("hints/back"_i18n, brls::BUTTON_B, [this](brls::View* view) {
         std::filesystem::path p(currentDir_);
         std::filesystem::path parent = p.parent_path();
         if (!parent.empty() && parent != p && parent.generic_string() != currentDir_) {

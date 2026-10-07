@@ -27,10 +27,10 @@ namespace {
 
 bool customEngineGetFiles(const std::string& hash, std::vector<torrent::TorrentFileInfo>& out) {
     if (hash.empty()) return false;
-    // Heap-backed: tsnx_file_info is ~536 bytes; a stack array would overflow
-    // the small (64 KB default) libnx pthread stack of the progress thread.
-    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
-    int n = tsnx_engine_get_files(nullptr, hash.c_str(), files.data(), TSNX_MAX_FILES);
+    int total_files = tsnx_engine_get_file_count(nullptr, hash.c_str());
+    if (total_files <= 0) total_files = 256;
+    std::vector<tsnx_file_info> files(total_files);
+    int n = tsnx_engine_get_files(nullptr, hash.c_str(), files.data(), total_files);
     if (n <= 0) {
         // Torrent may not be added yet; try a one-shot probe.
         std::vector<datasource::CustomEngineFileInfo> probed;
@@ -365,8 +365,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
         }
     }
 
-    std::vector<tsnx_file_info> files(TSNX_MAX_FILES);
-    int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), TSNX_MAX_FILES);
+    int total_files = tsnx_engine_get_file_count(eng, hash.c_str());
+    if (total_files <= 0) total_files = 256;
+    std::vector<tsnx_file_info> files(total_files);
+    int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), total_files);
     if (n <= 0) {
         st->failed = true;
         st->error = "cannot resolve torrent file info";
@@ -2324,9 +2326,15 @@ bool DownloadManager::pauseDownload(size_t index) {
         item.state == DownloadState::StreamPreparing ||
         item.state == DownloadState::StreamInstalling) {
 
-        if (item.cancel_flag) {
-            item.cancel_flag->store(true);
+        if (item.state == DownloadState::Downloading) {
+            if (item.file_dl_cancel) {
+                item.file_dl_cancel->store(true);
+            }
         }
+        // Note: For streaming installations we do not set cancel_flag=true, as that
+        // completely cancels the installer and destroys NCM placeholders.
+        // Instead, pausing the torrent engine stops incoming data, causing the installer
+        // to safely wait on the buffer until resumed.
         if (!item.torrent_hash.empty()) {
             tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
         }

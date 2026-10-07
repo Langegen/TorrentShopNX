@@ -588,7 +588,7 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     curl_easy_reset(curl);
 
     struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.13)");
+    headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Nintendo Switch; TorrentShopNX/2.14)");
     for (const auto& h : extra_headers) {
         headers = curl_slist_append(headers, h.c_str());
     }

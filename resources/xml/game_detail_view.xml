@@ -32,7 +32,9 @@
                     <brls:Label id="metaPublisher" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
                     <brls:Label id="metaYear" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
                     <brls:Label id="metaFormat" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
-                    <brls:Label id="metaVoice" fontSize="15" textColor="@theme/brls/header/subtitle" />
+                    <brls:Label id="metaVoice" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
+                    <brls:Label id="metaStats" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" visibility="gone" />
+                    <brls:Label id="metaDate" fontSize="15" textColor="@theme/brls/header/subtitle" visibility="gone" />
                 </brls:Box>
 
                 <!-- Screenshots Section (directly above Description) -->

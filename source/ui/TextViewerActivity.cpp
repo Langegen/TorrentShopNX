@@ -66,8 +66,8 @@ brls::View* TextViewerActivity::createContentView() {
     // Root container (Dark console theme)
     auto* root = new brls::Box();
     root->setAxis(brls::Axis::COLUMN);
-    root->setWidth(brls::Application::windowWidth);
-    root->setHeight(brls::Application::windowHeight);
+    root->setWidthPercentage(100.0f);
+    root->setHeightPercentage(100.0f);
     root->setBackgroundColor(nvgRGBA(18, 20, 24, 255));
     root->setPadding(18.0f, 24.0f, 16.0f, 24.0f);
 
