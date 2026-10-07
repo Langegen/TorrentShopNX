@@ -447,6 +447,19 @@ inline std::string normalizeTitleForSort(const std::string& title) {
     return i > 0 ? s.substr(i) : s;
 }
 
+inline uint64_t parseTopicId(const std::string& tid) {
+    if (tid.empty()) return 0;
+    uint64_t id = 0;
+    for (char c : tid) {
+        if (c >= '0' && c <= '9') {
+            id = id * 10 + (c - '0');
+        } else if (c != ' ' && c != '\t') {
+            return 0;
+        }
+    }
+    return id;
+}
+
 // Comparator for Game sorting
 inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
     switch (sort) {
@@ -522,9 +535,12 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
         case SortOption::DATE_DESC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
             const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
-            int64_t valA = sA ? sA->latest_timestamp : -1;
-            int64_t valB = sB ? sB->latest_timestamp : -1;
+            int64_t valA = (sA && sA->latest_timestamp > 0) ? sA->latest_timestamp : -1;
+            int64_t valB = (sB && sB->latest_timestamp > 0) ? sB->latest_timestamp : -1;
             if (valA != valB) return valA > valB;
+            uint64_t idA = parseTopicId(a.topic_id);
+            uint64_t idB = parseTopicId(b.topic_id);
+            if (idA != idB) return idA > idB;
             return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::DATE_ASC: {
@@ -533,6 +549,11 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             int64_t valA = (sA && sA->latest_timestamp > 0) ? sA->latest_timestamp : INT64_MAX;
             int64_t valB = (sB && sB->latest_timestamp > 0) ? sB->latest_timestamp : INT64_MAX;
             if (valA != valB) return valA < valB;
+            uint64_t idA = parseTopicId(a.topic_id);
+            uint64_t idB = parseTopicId(b.topic_id);
+            if (idA == 0) idA = UINT64_MAX;
+            if (idB == 0) idB = UINT64_MAX;
+            if (idA != idB) return idA < idB;
             return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
         }
         case SortOption::DEFAULT:

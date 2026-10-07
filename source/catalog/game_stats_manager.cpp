@@ -77,9 +77,10 @@ bool GameStatsManager::parseStatsJson(const std::string& json_str, std::unordere
                 s.updated_at = val["updated_at"].get<std::string>();
             }
 
-            int64_t regTs = parseTimestamp(s.registered_at);
-            int64_t upTs = parseTimestamp(s.updated_at);
-            s.latest_timestamp = std::max(regTs, upTs);
+            // On Rutracker, registered_at corresponds to when the release was registered
+            // or re-registered with an update/DLC/repack.
+            // updated_at is the scraper crawler batch execution time and must NOT be used for game sorting.
+            s.latest_timestamp = parseTimestamp(s.registered_at);
 
             out_map[key] = std::move(s);
         }
