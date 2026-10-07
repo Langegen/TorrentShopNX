@@ -111,7 +111,7 @@ void GameDetailView::onContentAvailable() {
             metaStats->setText(statsStr);
         }
         if (metaDate) {
-            std::string dateStr = !statsData->registered_at.empty() ? statsData->registered_at : statsData->updated_at;
+            std::string dateStr = statsData->registered_at;
             if (!dateStr.empty()) {
                 metaDate->setVisibility(brls::Visibility::VISIBLE);
                 metaDate->setText(brls::getStr("app/detail/stats_date", dateStr));
