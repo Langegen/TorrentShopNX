@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="resources/icon/icon.png" alt="TorrentShopNX Logo" width="120"/>
+<img src="resources/icon/icon.png" alt="TorrentShopNX Logo" width="200"/>
 
 # TorrentShopNX
 
