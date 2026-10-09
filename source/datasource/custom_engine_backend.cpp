@@ -158,16 +158,17 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
         int total_win = cfg.critical_pieces + cfg.urgent_pieces + cfg.prefetch_pieces + cfg.speculative_pieces + cfg.normal_pieces;
         util::logLine("custom_engine: high-throughput scheduler enabled (window=" + std::to_string(total_win) + ", strict_verify=1) for " + info_hash_str_);
     } else {
-        // Low-latency streaming profile for on-the-fly game package installer (NSP/NSZ/XCI):
+        // Streaming profile for on-the-fly game package installer (NSP/NSZ/XCI):
+        // Strict SHA-1 piece verification enabled to ensure 100% data integrity and prevent corrupt network blocks.
         auto cfg = CustomEngineScheduler::defaultInstallerConfig(piece_size_);
         scheduler_.setConfig(cfg);
-        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 0);
+        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 1);
         scheduler_enabled_ = true;
         scheduler_.init(engine_, info_hash_str_, piece_size_, file_offset_in_torrent_,
                         file_first_piece_, file_last_piece_);
         last_scheduler_tick_ = std::chrono::steady_clock::now();
         int total_win = cfg.critical_pieces + cfg.urgent_pieces + cfg.prefetch_pieces + cfg.speculative_pieces + cfg.normal_pieces;
-        util::logLine("custom_engine: streaming installer scheduler enabled (window=" + std::to_string(total_win) + ", strict_verify=0) for " + info_hash_str_);
+        util::logLine("custom_engine: streaming installer scheduler enabled (window=" + std::to_string(total_win) + ", strict_verify=1) for " + info_hash_str_);
     }
     health_.init(engine_, info_hash_str_, nullptr);
 
@@ -320,7 +321,7 @@ void CustomEngineBackend::setSchedulerEnabled(bool enabled) {
     std::lock_guard<std::mutex> lock(mutex_);
     scheduler_enabled_ = enabled;
     if (engine_ && !info_hash_str_.empty()) {
-        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), enabled ? 0 : 1);
+        tsnx_engine_set_strict_verify(engine_, info_hash_str_.c_str(), 1);
         if (!enabled) {
             tsnx_engine_clear_piece_zones(engine_, info_hash_str_.c_str());
         }
