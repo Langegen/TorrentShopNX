@@ -193,6 +193,7 @@ static const char *BOOTSTRAP[] = {
     "dht.libtorrent.org",
     "dht.aelitis.com",
     "dht2.opentracker.is",
+    "router.bitcomet.com",
 };
 #define BOOTSTRAP_PORT "6881"
 
@@ -642,10 +643,10 @@ static void dht_bg_main(void *arg) {
             }
             last_log = now;
 
-            // Periodically persist known good nodes every 3 minutes so a crash/shutdown
+            // Periodically persist known good nodes every 60s so a crash/shutdown
             // does not lose warm DHT routing table.
             static u64 last_cache_save = 0;
-            if (good >= 30 && (last_cache_save == 0 || now - last_cache_save > (u64)180 * freq)) {
+            if (good >= 10 && (last_cache_save == 0 || now - last_cache_save > (u64)60 * freq)) {
                 last_cache_save = now;
                 struct sockaddr_in sins_p[DHT_CACHE_MAX_NODES];
                 int num_p = DHT_CACHE_MAX_NODES, num6_p = 0;

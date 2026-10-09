@@ -111,6 +111,7 @@
 #define MAX_REQ_PER_CONN 250
 #define REQ_MIN          2
 #define REQ_INITIAL      16     // Fast start: new unchoked peers immediately get 16 blocks (256 KB)
+#define LOOKAHEAD_PIECES 16     // Multi-file lookahead: allow prefetching pieces into upcoming files
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
 #define RAM_BUDGET       (512LL << 20)
@@ -1416,6 +1417,12 @@ static void send_cancel_one(torrentfs *t, sess *s, int ep, int eb) {
     v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
     memcpy(pl + 8, &v, 4);
     peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
+    // Flush immediately to drop duplicate transfers on the wire right away
+    if (peer_nb_tx_pending(&s->nb)) {
+        if (peer_nb_flush(&s->nb) != 0) {
+            sess_close(t, s, true);
+        }
+    }
 }
 
 // Drop a session's outstanding requests without cancelling them on the wire:
@@ -1435,14 +1442,15 @@ static void sess_drop_requests(torrentfs *t, sess *s) {
     s->req_n = 0;
 }
 
-// The effective request priority of a piece, cloned from torrserver's
-// setLoadPriority gradient: Now (the reader's piece) > Next > Readahead
-// (4 pieces) > High (5) > Normal (up to the 25-connection budget). Pieces
-// with no priority are not requested at all. The external scheduler assigns
-// the same gradient through piece zones; where it has not (startup, before
-// the first read), the playhead-relative fallback below takes over.
+// The effective request priority of a piece:
+// Zone 1: Read-blocked / current playhead piece
+// Zone 2: Next piece
+// Zone 3: Readahead (up to 5 pieces)
+// Zone 4: Speculative (up to 15 pieces)
+// Zone 5: Normal pieces of current file, and lookahead pieces into next files.
 static int piece_priority(torrentfs *t, int64_t idx) {
-    if (idx < t->file_first_piece || idx > t->file_last_piece) return 0;
+    if (idx < t->file_first_piece) return 0;
+    if (idx > t->file_last_piece + LOOKAHEAD_PIECES || idx >= t->meta.piece_count) return 0;
     if (idx == t->read_blocked_piece) return 1;
     int z = t->piece_zone[idx];
     if (z != 0) return z;
@@ -1453,7 +1461,10 @@ static int piece_priority(torrentfs *t, int64_t idx) {
     if (ph > t->file_last_piece) ph = t->file_last_piece;
     int64_t d = idx - ph;
     int max_d = t->n_aq > 2 ? t->n_aq - 2 : 24;
-    if (d < 0 || d > max_d) return 0;
+    if (d < 0 || d > max_d) {
+        if (idx > t->file_last_piece && idx <= t->file_last_piece + LOOKAHEAD_PIECES) return 5;
+        return 0;
+    }
     if (d == 0) return 1;
     if (d == 1) return 2;
     if (d <= 5) return 3;
@@ -1461,19 +1472,26 @@ static int piece_priority(torrentfs *t, int64_t idx) {
     return 5;
 }
 
-// Per-session in-flight request budget (anacrolix nominalMaxRequests,
-// requestStrategy 3): ~0.5 s of this session's measured useful delivery,
-// clamped 2..250. A fresh unchoked session starts with 16 (256 KB) immediately,
-// giving fast swarms immediate high speed, while slow peers settle down to REQ_MIN.
+// Per-session in-flight request budget: dynamic window scaled by rate EMA and
+// connection RTT (~1.5s of useful throughput). Active unchoked peers are never
+// choked below 16 blocks (256 KB) so round-trip latency never limits throughput.
 static int nominal_depth(torrentfs *t, sess *s) {
+    if (s->nb.choked) return REQ_MIN;
     if (s->expect_ticks <= t->freq) return REQ_INITIAL;   // initial aggressive pipeline
-    double blocks_per_sec =
-        (double)s->useful * (double)t->freq / (double)s->expect_ticks;
-    int d = (int)(blocks_per_sec * DUP_REQ_SECS / 2.0);
-    if (d < REQ_MIN) d = REQ_MIN;
+
+    double rate_bps = (s->rate > 0) ? (s->rate / (double)BLOCK_LEN) : 0.0;
+    double life_bps = (s->expect_ticks > 0)
+        ? ((double)s->useful * (double)t->freq / (double)s->expect_ticks)
+        : 0.0;
+    double blocks_per_sec = (rate_bps > life_bps) ? rate_bps : life_bps;
+
+    int d = (int)(blocks_per_sec * 1.5);
+    int floor_d = (t->st_live <= 2) ? 20 : REQ_INITIAL; // scarce swarms get extra buffering
+    if (d < floor_d) d = floor_d;
     if (d > MAX_REQ_PER_CONN) d = MAX_REQ_PER_CONN;
     return d;
 }
+
 
 // Find the next block of piece idx this session may request: not received
 // yet, and either unrequested or last requested more than DUP_REQ_SECS ago
@@ -1506,7 +1524,8 @@ static int next_block_in(torrentfs *t, aq_entry *a, u64 now) {
 // before the next one gets any.
 static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                             int64_t *out_piece, int *out_block) {
-    int64_t fhi = t->file_last_piece;
+    int64_t fhi = t->file_last_piece + LOOKAHEAD_PIECES;
+    if (fhi >= t->meta.piece_count) fhi = t->meta.piece_count - 1;
     int64_t flo = t->file_first_piece;
     for (int zone = 1; zone <= 5; zone++) {
         for (int64_t i = flo; i <= fhi; i++) {
@@ -3012,10 +3031,10 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->file_last_piece  = (new_offset + new_size - 1) / tfs->meta.piece_len;
     tfs->playhead_piece   = tfs->file_first_piece;
 
-    // Free any resident pieces that belong to the previous file
+    // Free any resident pieces that belong to the previous file and are outside lookahead
     if (tfs->ram_mode && tfs->ram_piece) {
         for (int64_t p = 0; p < tfs->meta.piece_count; p++) {
-            if (p < tfs->file_first_piece || p > tfs->file_last_piece) {
+            if (p < tfs->file_first_piece || p > tfs->file_last_piece + LOOKAHEAD_PIECES) {
                 if (tfs->ram_piece[p]) {
                     free(tfs->ram_piece[p]);
                     tfs->ram_piece[p] = NULL;
@@ -3053,10 +3072,10 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     }
     tfs->pieces_done = done;
 
-    // Reset active assembly queue (aq) only for pieces outside the new file range
+    // Reset active assembly queue (aq) only for pieces outside the new file range and lookahead
     for (int i = 0; i < tfs->n_aq; i++) {
         if (tfs->aq[i].idx >= 0 &&
-            (tfs->aq[i].idx < tfs->file_first_piece || tfs->aq[i].idx > tfs->file_last_piece)) {
+            (tfs->aq[i].idx < tfs->file_first_piece || tfs->aq[i].idx > tfs->file_last_piece + LOOKAHEAD_PIECES)) {
             tfs->aq[i].idx = -1;
             if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);
             if (tfs->aq[i].req) memset(tfs->aq[i].req, 0, (size_t)tfs->blocks_per_piece);
@@ -3064,16 +3083,37 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
         }
     }
 
-    // Drop in-flight requests on connected sessions so they can immediately request
-    // blocks of the new file's pieces, and reset stall strikes to avoid false timeouts
+    // Drop only in-flight requests that are outside the new file range and lookahead window.
+    // Retaining valid in-flight requests prevents peer stall during multi-file transitions.
     u64 now_sel = armGetSystemTick();
     for (int i = 0; i < MAX_SESS; i++) {
         if (tfs->S[i].nb.handshaked) {
-            sess_drop_requests(tfs, &tfs->S[i]);
-            tfs->S[i].last_block = now_sel;
-            tfs->S[i].timeout_strikes = 0;
+            sess *s = &tfs->S[i];
+            int kept = 0;
+            for (int k = 0; k < s->req_n; k++) {
+                int ep = s->req_piece[k];
+                int eb = s->req_block[k];
+                if (ep >= tfs->file_first_piece && ep <= tfs->file_last_piece + LOOKAHEAD_PIECES) {
+                    if (kept != k) {
+                        s->req_piece[kept] = s->req_piece[k];
+                        s->req_block[kept] = s->req_block[k];
+                        s->req_time[kept]  = s->req_time[k];
+                    }
+                    kept++;
+                } else {
+                    aq_entry *ea = aq_find(tfs, ep);
+                    if (ea && eb >= 0 && eb < ea->nblocks &&
+                        ea->req[eb] > 0 && ea->req[eb] < 255) {
+                        ea->req[eb]--;
+                    }
+                }
+            }
+            s->req_n = kept;
+            s->last_block = now_sel;
+            s->timeout_strikes = 0;
         }
     }
+
 
     tfs->cancel_reader = false;
 

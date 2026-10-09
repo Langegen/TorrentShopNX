@@ -469,7 +469,11 @@ static void fileCopyWorker(datasource::IDataSource* source,
             break;
         }
 
-        static constexpr size_t kChunk = 1024 * 1024;
+        // Horizon OS micro-SD cluster alignment: 2 MB write chunks with dedicated stream buffer
+        static constexpr size_t kChunk = 2 * 1024 * 1024;
+        std::vector<unsigned char> fbuf(kChunk);
+        std::setvbuf(f, reinterpret_cast<char*>(fbuf.data()), _IOFBF, kChunk);
+
         std::vector<unsigned char> buf(kChunk);
         uint64_t offset = 0;
         bool file_ok = true;
