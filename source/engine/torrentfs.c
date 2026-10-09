@@ -384,6 +384,7 @@ struct torrentfs {
     int backlog_ms;            // written by the app thread, read racily
     int calm_now;
     volatile bool announce_now;
+    u64 last_starve_announce;
     volatile int paused;       // pause: stop dialing + claiming (sessions stay)
 
     // Transport alternation: 0 = try TCP next, 1 = try ВµTP next.
@@ -630,9 +631,17 @@ static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
     int64_t pin_limit = t->file_first_piece +
         ((PIN_HEAD_BYTES + t->meta.piece_len - 1) / t->meta.piece_len);
     if (t->ram_lo < pin_limit) t->ram_lo = pin_limit;
-    while (t->ram_resident > t->ram_budget) {
-        while (t->ram_lo < ph && !t->ram_piece[t->ram_lo]) t->ram_lo++;
-        if (t->ram_lo >= ph) break;     // nothing strictly behind left to drop
+
+    // Keep at most ~32 MB (or at least 4 pieces) behind playhead for slight seek resilience.
+    int64_t keep_behind = (32LL * 1024 * 1024) / t->meta.piece_len;
+    if (keep_behind < 4) keep_behind = 4;
+    int64_t safe_ph = (ph > keep_behind) ? ph - keep_behind : 0;
+    if (safe_ph < pin_limit) safe_ph = pin_limit;
+
+    while (t->ram_resident > t->ram_budget || (t->ram_lo < safe_ph && t->ram_resident > (64LL << 20))) {
+        int64_t target_ph = (t->ram_resident > t->ram_budget) ? ph : safe_ph;
+        while (t->ram_lo < target_ph && !t->ram_piece[t->ram_lo]) t->ram_lo++;
+        if (t->ram_lo >= target_ph) break;     // nothing strictly behind left to drop
         int64_t v = t->ram_lo;
         uint8_t *freed_buf = t->ram_piece[v];
         t->ram_piece[v] = NULL;
@@ -754,6 +763,11 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
                 if ((uint8_t)src < t->peer_src[j]) {
                     t->peer_src[j] = (uint8_t)src;
                     t->peers[j].port = peers[i].port;
+                }
+                // If we are starved and tracker/PEX reports this peer again, give it a fresh chance
+                if (t->st_live < STARVED_LIVE && t->peer_fails[j] > 0 && !t->peer_busy[j]) {
+                    t->peer_fails[j] = 0;
+                    t->peer_next_try[j] = 0;
                 }
                 dup = true;
                 break;
@@ -878,6 +892,7 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             if (shift > 5) shift = 5;
             secs = BACKOFF_CONN_SECS * (1 << shift);
             if (had_conn && f == 1) secs = BACKOFF_DROP_SECS;
+            if (t->peer_ok[pidx] && (t->peer_count <= 4 || t->st_live <= 2)) secs = BACKOFF_DROP_SECS;
         }
         if (secs > BACKOFF_MAX_SECS) secs = BACKOFF_MAX_SECS;
         t->peer_next_try[pidx] = armGetSystemTick() + (u64)secs * t->freq;
@@ -951,7 +966,13 @@ static int take_utp_retry_peer(torrentfs *t, peer_addr *out) {
 
 static bool file_done(torrentfs *t) {
     mutexLock(&t->lock);
-    bool d = t->pieces_done >= t->file_last_piece - t->file_first_piece + 1;
+    bool d = true;
+    for (int64_t p = t->file_first_piece; p <= t->file_last_piece; p++) {
+        if (!(t->ever[p >> 3] & (1u << (p & 7)))) {
+            d = false;
+            break;
+        }
+    }
     mutexUnlock(&t->lock);
     return d;
 }
@@ -966,6 +987,7 @@ static bool discovery_wait(torrentfs *t) {
         }
         u64 secs = (armGetSystemTick() - start) / t->freq;
         if (secs >= DISC_INTERVAL_SECS) return true;
+        if (secs >= 30 && t->st_live == 0) return true;
         if (secs >= DISC_STARVED_SECS && t->st_live < STARVED_LIVE) return true;
     }
     return false;
@@ -1198,8 +1220,8 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
 
     int secs = conn_secs;
     mutexLock(&t->lock);
-    if (t->peer_fail_kind[pidx] == PEER_FAIL_TIMEOUT &&
-        t->peer_fails[pidx] <= 3)
+    if ((t->peer_fail_kind[pidx] == PEER_FAIL_TIMEOUT && t->peer_fails[pidx] <= 3) ||
+        t->peer_ok[pidx] || t->peer_count <= 4)
         secs = CONNECT_RETRY_SECS;
     mutexUnlock(&t->lock);
 
@@ -2393,10 +2415,19 @@ static void netloop_main(void *arg) {
                     sess_close(t, s, true);
                     continue;
                 }
+                bool scarce_swarm = (t->st_live <= 2 || t->peer_count <= 2 || is_seed);
                 if (!s->connecting && age > (u64)IDLE_SECS * t->freq) {
-                    engine_log(ENGINE_LOG_DEBUG, "[sess %d] close idle timeout", i);
-                    sess_close(t, s, true);
-                    continue;
+                    if (scarce_swarm) {
+                        // Do not close unique seeds or peers on starved swarms on idle
+                        s->last_rx = now;
+                        sess_drop_requests(t, s);
+                        peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
+                        engine_log(ENGINE_LOG_DEBUG, "[sess %d] idle on scarce swarm / seed: renew interested", i);
+                    } else {
+                        engine_log(ENGINE_LOG_DEBUG, "[sess %d] close idle timeout", i);
+                        sess_close(t, s, true);
+                        continue;
+                    }
                 }
                 // Requested blocks and nothing came. Proven peers get
                 // strikes before disconnecting. A peer that NEVER delivered
@@ -2414,7 +2445,18 @@ static void netloop_main(void *arg) {
                     bool urgent_or_endgame = (t->read_blocked_piece >= 0) ||
                                             (t->file_last_piece - t->playhead_piece <= 4) ||
                                             (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
-                    if (s->rx_total > 0 && s->timeout_strikes < 3) {
+                    if (scarce_swarm) {
+                        // On a scarce swarm or with a full seed, NEVER drop the connection!
+                        // A remote seed might be choked or congested on its end.
+                        // Dropping the connection sends us to the back of the peer's queue
+                        // and triggers reconnect penalty loops.
+                        s->timeout_strikes = 0;
+                        s->last_block = now;
+                        sess_drop_requests(t, s);
+                        peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
+                        engine_log(ENGINE_LOG_INFO,
+                                   "[sess %d] scarce swarm / seed stall: keep connection alive, refresh requests", i);
+                    } else if (s->rx_total > 0 && s->timeout_strikes < 3) {
                         s->timeout_strikes++;
                         s->last_block = now;
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] stall strike %d/3",
@@ -2548,11 +2590,10 @@ static void netloop_main(void *arg) {
                                t->st_peer_evicted, t->st_live);
 
                     // Re-announce to trackers only after actual peer evacuation
-                    // and at most once per 60s (no announce storm).
-                    static u64 last_starve_announce;
-                    if ((condemned > 0 || t->starve_round >= 2) &&
-                        now - last_starve_announce > (u64)60 * t->freq) {
-                        last_starve_announce = now;
+                    // and at most once per 30s when live == 0 or starving.
+                    if ((condemned > 0 || t->starve_round >= 2 || t->st_live == 0) &&
+                        now - t->last_starve_announce > (u64)30 * t->freq) {
+                        t->last_starve_announce = now;
                         t->announce_now = true;
                     }
                 }
@@ -3012,19 +3053,25 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     }
     tfs->pieces_done = done;
 
-    // Reset active assembly queue (aq)
+    // Reset active assembly queue (aq) only for pieces outside the new file range
     for (int i = 0; i < tfs->n_aq; i++) {
-        tfs->aq[i].idx = -1;
-        if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);
-        if (tfs->aq[i].req) memset(tfs->aq[i].req, 0, (size_t)tfs->blocks_per_piece);
-        if (tfs->aq[i].req_ts) memset(tfs->aq[i].req_ts, 0, (size_t)tfs->blocks_per_piece * sizeof(uint64_t));
+        if (tfs->aq[i].idx >= 0 &&
+            (tfs->aq[i].idx < tfs->file_first_piece || tfs->aq[i].idx > tfs->file_last_piece)) {
+            tfs->aq[i].idx = -1;
+            if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);
+            if (tfs->aq[i].req) memset(tfs->aq[i].req, 0, (size_t)tfs->blocks_per_piece);
+            if (tfs->aq[i].req_ts) memset(tfs->aq[i].req_ts, 0, (size_t)tfs->blocks_per_piece * sizeof(uint64_t));
+        }
     }
 
     // Drop in-flight requests on connected sessions so they can immediately request
-    // blocks of the new file's pieces
+    // blocks of the new file's pieces, and reset stall strikes to avoid false timeouts
+    u64 now_sel = armGetSystemTick();
     for (int i = 0; i < MAX_SESS; i++) {
         if (tfs->S[i].nb.handshaked) {
             sess_drop_requests(tfs, &tfs->S[i]);
+            tfs->S[i].last_block = now_sel;
+            tfs->S[i].timeout_strikes = 0;
         }
     }
 
@@ -3055,8 +3102,14 @@ int64_t torrentfs_size(const torrentfs *tfs) {
 }
 
 void torrentfs_set_playhead(torrentfs *tfs, int64_t offset) {
+    if (!tfs) return;
     int64_t abs = tfs->stream_offset + offset;
     ((torrentfs *)tfs)->playhead_piece = abs / tfs->meta.piece_len;
+    if (tfs->ram_mode) {
+        mutexLock(&((torrentfs *)tfs)->cache_lock);
+        ram_evict((torrentfs *)tfs);
+        mutexUnlock(&((torrentfs *)tfs)->cache_lock);
+    }
 }
 
 // Pause/resume downloading. Paused: no new dials, no new piece claims;
@@ -3109,8 +3162,19 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
     // which piece gates us so free sessions that have it can join the claim.
     tfs->read_blocked_piece = first;
     u64 wait_start = armGetSystemTick();
-    while (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0))
+    u64 last_wd = wait_start;
+    while (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0)) {
         svcSleepThread(20000000ULL);  // 20 ms
+        u64 now = armGetSystemTick();
+        if (now - last_wd > tfs->freq) {
+            last_wd = now;
+            hb_beat(tfs, HB_READER);
+            tsnx_engine_wd_tick(6);
+            if ((now - wait_start) / tfs->freq >= 20 && tfs->st_live == 0) {
+                tfs->announce_now = true;
+            }
+        }
+    }
     tfs->read_blocked_piece = -1;
     if (tfs->stop || tfs->cancel_reader) return -1;
     double waited = (double)(armGetSystemTick() - wait_start) / tfs->freq;
