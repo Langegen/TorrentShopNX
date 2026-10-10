@@ -82,8 +82,8 @@
     <!-- Status / Action -->
     <brls:Box
         id="statusBox"
-        width="150px"
-        height="30px"
+        width="165px"
+        height="32px"
         justifyContent="center"
         alignItems="center"
         cornerRadius="8">
@@ -92,6 +92,7 @@
             id="statusBadge"
             fontSize="13"
             textColor="#FFFFFF"
+            singleLine="true"
             horizontalAlign="center" />
 
     </brls:Box>

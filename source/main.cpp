@@ -43,6 +43,7 @@
 #include "utils/screen_sleep_manager.h"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
+#include "datasource/custom_engine_client.h"
 #include <thread>
 #include <borealis/extern/nlohmann/json.hpp>
 
@@ -70,6 +71,7 @@ extern "C" {
     int g_applet_type_detected = -1;
 
     void userAppInit(void) {
+        appletLockExit();
         AppletType applet_type = appletGetAppletType();
         g_applet_type_detected = static_cast<int>(applet_type);
         bool is_applet = (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet);
@@ -153,6 +155,7 @@ extern "C" {
             g_romfs_mounted = false;
         }
         socketExit();
+        appletUnlockExit();
     }
 }
 
@@ -269,6 +272,10 @@ static bool replaceNroFile(const std::string& srcPath, const std::string& dstPat
     return false;
 }
 
+#ifdef __SWITCH__
+extern "C" u32 __nx_applet_exit_mode;
+#endif
+
 static bool checkAndApplyPendingUpdate() {
 #ifdef __SWITCH__
     // Ensure RomFS is not mounted while we manipulate NRO files
@@ -289,6 +296,7 @@ static bool checkAndApplyPendingUpdate() {
         if (envHasNextLoad()) {
             std::string quotedArg = "\"" + mainNroPath + "\"";
             envSetNextLoad(mainNroPath.c_str(), quotedArg.c_str());
+            __nx_applet_exit_mode = 0;
             util::logLine("main: relaunching main NRO via envSetNextLoad: " + mainNroPath);
             return true; // Signal main to exit so HBL chainloads mainNroPath
         }
@@ -326,6 +334,7 @@ static bool checkAndApplyPendingUpdate() {
                     if (envHasNextLoad()) {
                         std::string quotedArg = "\"" + g_nroPath + "\"";
                         envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
+                        __nx_applet_exit_mode = 0;
                         util::logLine("main: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
                     }
 #endif
@@ -414,6 +423,17 @@ int main(int argc, char** argv) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
     }
+    // Exit directly to Nintendo Switch Home Menu instead of Homebrew Menu (hbmenu)
+    brls::Application::getPlatform()->exitToHomeMode(true);
+
+    // Signal background tasks and probes to abort as soon as Borealis begins exiting
+    // (before Application::exit() clears activities and waits on ThreadPool::shutdownGlobal()).
+    brls::Application::getExitEvent()->subscribe([]() {
+        g_appExiting.store(true);
+        g_cleanupCancelled = true;
+        datasource::CustomEngineClient::instance().cancelProbe();
+    });
+
     brls::Application::createWindow("TorrentShopNX");
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::LIGHT);
     brls::Application::setGlobalQuit(false);
@@ -514,6 +534,7 @@ int main(int argc, char** argv) {
     // Signal background tasks and network transfers to cancel immediately
     g_appExiting.store(true);
     g_cleanupCancelled = true;
+    datasource::CustomEngineClient::instance().cancelProbe();
 
     // Wait for background tasks (cleanup and catalog update) to complete safely before deinitializing systems
     util::logLine("main: waiting for background threads to exit...");
@@ -528,6 +549,9 @@ int main(int argc, char** argv) {
     if (!checkAppletMode()) {
         util::logLine("main: calling DownloadManager::shutdown");
         ui::DownloadManager::instance().shutdown();
+
+        util::logLine("main: calling CustomEngineClient::shutdown");
+        datasource::CustomEngineClient::instance().shutdown();
 
         util::logLine("main: calling ImageDownloader::stop");
         net::ImageDownloader::instance().stop();
@@ -551,13 +575,11 @@ int main(int argc, char** argv) {
     // Use _exit(0) to exit cleanly:
     //   - Skips C++ atexit handlers / global destructors (prevents engine teardown crashes)
     //   - Calls __libnx_exit → __appExit → userAppExit (proper service teardown)
-    //   - Calls envGetExitFuncPtr() to return to Homebrew Menu (not svcExitProcess!)
-    //
-    // svcExitProcess() was killing the ENTIRE HBMenu process because NROs share
-    // HBMenu's address space. _exit() is the correct way to return to HBMenu.
+    //   - With exitToHomeMode(true), _appletCleanup() exits directly to the Switch Home Menu
+    //     (or chainloads via envSetNextLoad when __nx_applet_exit_mode == 0 for updates).
 #ifdef __SWITCH__
     fsdevCommitDevice("sdmc");
-    util::logLine("main: closing log and returning to HBMenu via _exit(0). Goodbye!");
+    util::logLine("main: closing log and exiting via _exit(0). Goodbye!");
     util::logClose();  // close log file before __appExit calls fsExit
     _exit(0);
 #else

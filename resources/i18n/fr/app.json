@@ -1056,7 +1056,12 @@
         "bg_dim_4": "Sombre (65%)",
         "bg_dim_applied": "Assombrissement du fond mis à jour",
         "show_bottom_dashboard": "Afficher le panneau d'informations",
-        "show_bottom_dashboard_desc": "Afficher le panneau inférieur avec détails et statistiques dans le menu principal"
+        "show_bottom_dashboard_desc": "Afficher le panneau inférieur avec détails et statistiques dans le menu principal",
+        "font_scale_title": "Taille de police",
+        "font_scale_0": "Standard (100%)",
+        "font_scale_1": "Moyenne (115%)",
+        "font_scale_2": "Grande (130%)",
+        "font_scale_applied": "Taille de police mise à jour"
     },
     "theme": {
         "emerald": "Émeraude",

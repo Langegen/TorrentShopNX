@@ -7,14 +7,14 @@
     paddingBottom="8">
 
     <!-- Card 0 -->
-    <brls:Box id="card0" width="160px" height="295px" axis="column" focusable="true" padding="5" cornerRadius="10">
+    <brls:Box id="card0" width="160px" height="302px" axis="column" focusable="true" padding="5" cornerRadius="10">
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover0" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta0" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="14" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="6" />
             <brls:Label id="lang0" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10.5" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
             <brls:Label id="stats0" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
-        <brls:Label id="title0" width="150px" maxWidth="150px" height="19px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Label id="title0" width="150px" maxWidth="150px" height="22px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Box width="150px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="2">
             <brls:Label id="size0" fontSize="11" textColor="#888888" singleLine="true" />
             <brls:Box id="statsBox0" axis="row" alignItems="center" visibility="gone">
@@ -26,14 +26,14 @@
     </brls:Box>
 
     <!-- Card 1 -->
-    <brls:Box id="card1" width="160px" height="295px" axis="column" focusable="true" padding="5" cornerRadius="10">
+    <brls:Box id="card1" width="160px" height="302px" axis="column" focusable="true" padding="5" cornerRadius="10">
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover1" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta1" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="14" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="6" />
             <brls:Label id="lang1" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10.5" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
             <brls:Label id="stats1" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
-        <brls:Label id="title1" width="150px" maxWidth="150px" height="19px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Label id="title1" width="150px" maxWidth="150px" height="22px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Box width="150px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="2">
             <brls:Label id="size1" fontSize="11" textColor="#888888" singleLine="true" />
             <brls:Box id="statsBox1" axis="row" alignItems="center" visibility="gone">
@@ -45,14 +45,14 @@
     </brls:Box>
 
     <!-- Card 2 -->
-    <brls:Box id="card2" width="160px" height="295px" axis="column" focusable="true" padding="5" cornerRadius="10">
+    <brls:Box id="card2" width="160px" height="302px" axis="column" focusable="true" padding="5" cornerRadius="10">
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover2" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta2" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="14" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="6" />
             <brls:Label id="lang2" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10.5" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
             <brls:Label id="stats2" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
-        <brls:Label id="title2" width="150px" maxWidth="150px" height="19px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Label id="title2" width="150px" maxWidth="150px" height="22px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Box width="150px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="2">
             <brls:Label id="size2" fontSize="11" textColor="#888888" singleLine="true" />
             <brls:Box id="statsBox2" axis="row" alignItems="center" visibility="gone">
@@ -64,14 +64,14 @@
     </brls:Box>
 
     <!-- Card 3 -->
-    <brls:Box id="card3" width="160px" height="295px" axis="column" focusable="true" padding="5" cornerRadius="10">
+    <brls:Box id="card3" width="160px" height="302px" axis="column" focusable="true" padding="5" cornerRadius="10">
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover3" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta3" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="14" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="6" />
             <brls:Label id="lang3" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10.5" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
             <brls:Label id="stats3" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
-        <brls:Label id="title3" width="150px" maxWidth="150px" height="19px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Label id="title3" width="150px" maxWidth="150px" height="22px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Box width="150px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="2">
             <brls:Label id="size3" fontSize="11" textColor="#888888" singleLine="true" />
             <brls:Box id="statsBox3" axis="row" alignItems="center" visibility="gone">
@@ -83,14 +83,14 @@
     </brls:Box>
 
     <!-- Card 4 -->
-    <brls:Box id="card4" width="160px" height="295px" axis="column" focusable="true" padding="5" cornerRadius="10">
+    <brls:Box id="card4" width="160px" height="302px" axis="column" focusable="true" padding="5" cornerRadius="10">
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover4" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta4" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="14" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="6" />
             <brls:Label id="lang4" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10.5" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
             <brls:Label id="stats4" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
-        <brls:Label id="title4" width="150px" maxWidth="150px" height="19px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Label id="title4" width="150px" maxWidth="150px" height="22px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Box width="150px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="2">
             <brls:Label id="size4" fontSize="11" textColor="#888888" singleLine="true" />
             <brls:Box id="statsBox4" axis="row" alignItems="center" visibility="gone">
@@ -102,14 +102,14 @@
     </brls:Box>
 
     <!-- Card 5 -->
-    <brls:Box id="card5" width="160px" height="295px" axis="column" focusable="true" padding="5" cornerRadius="10">
+    <brls:Box id="card5" width="160px" height="302px" axis="column" focusable="true" padding="5" cornerRadius="10">
         <brls:Box width="150px" height="245px" cornerRadius="8">
             <brls:Image id="cover5" width="150px" height="245px" cornerRadius="8" />
             <brls:Label id="meta5" positionType="absolute" positionRight="5px" positionTop="5px" fontSize="14" textColor="#FFFFFF" backgroundColor="#66CC33" cornerRadius="6" />
             <brls:Label id="lang5" positionType="absolute" positionLeft="5px" positionBottom="5px" fontSize="10.5" textColor="#FFFFFF" backgroundColor="#E91E63" cornerRadius="4" />
             <brls:Label id="stats5" positionType="absolute" positionRight="5px" positionBottom="5px" fontSize="10" textColor="#FFFFFF" backgroundColor="#000000B0" cornerRadius="4" visibility="gone" />
         </brls:Box>
-        <brls:Label id="title5" width="150px" maxWidth="150px" height="19px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
+        <brls:Label id="title5" width="150px" maxWidth="150px" height="22px" fontSize="13.5" marginTop="4" horizontalAlign="left" verticalAlign="center" singleLine="true" autoAnimate="false" />
         <brls:Box width="150px" axis="row" alignItems="center" justifyContent="spaceBetween" marginTop="2">
             <brls:Label id="size5" fontSize="11" textColor="#888888" singleLine="true" />
             <brls:Box id="statsBox5" axis="row" alignItems="center" visibility="gone">

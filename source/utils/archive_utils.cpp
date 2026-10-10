@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <unordered_set>
 
 namespace util {
@@ -661,26 +662,41 @@ bool createZipArchive(
     uint64_t totalBytes = 0;
     std::error_code ec;
 
-    std::filesystem::path base(baseDir);
+    std::string cleanBase = normalizeFsPath(baseDir);
+    while (cleanBase.size() > 1 && cleanBase.back() == '/' &&
+           !(cleanBase.size() >= 2 && cleanBase[cleanBase.size() - 2] == ':')) {
+        cleanBase.pop_back();
+    }
+    std::string cleanArchivePath = normalizeFsPath(archivePath);
+    std::string cleanTmpPath = normalizeFsPath(archivePath + ".tsnx_tmp");
 
     auto collectItem = [&](const std::filesystem::path& p) {
-        std::string rel;
-        try {
-            if (!baseDir.empty() && std::filesystem::exists(base, ec)) {
-                rel = std::filesystem::relative(p, base, ec).generic_string();
-            }
-        } catch (...) {
-            rel = "";
-        }
-        if (rel.empty() || rel == ".") {
-            rel = p.filename().generic_string();
+        std::string cleanP = normalizeFsPath(p.generic_string());
+        while (cleanP.size() > 1 && cleanP.back() == '/' &&
+               !(cleanP.size() >= 2 && cleanP[cleanP.size() - 2] == ':')) {
+            cleanP.pop_back();
         }
 
         // Avoid archiving the target archive itself or its temporary file
-        std::filesystem::path tmpTargetPath(archivePath + ".tsnx_tmp");
-        std::filesystem::path realTargetPath(archivePath);
-        if (std::filesystem::equivalent(p, tmpTargetPath, ec) || std::filesystem::equivalent(p, realTargetPath, ec)) {
+        // (do NOT use std::filesystem::equivalent on Switch sdmc:/ as st_ino is 0 for all files)
+        if (cleanP == cleanTmpPath || cleanP == cleanArchivePath) {
             return;
+        }
+
+        std::string rel;
+        if (!cleanBase.empty() && cleanP.size() > cleanBase.size() &&
+            cleanP.compare(0, cleanBase.size(), cleanBase) == 0) {
+            if (cleanBase.back() == '/') {
+                rel = cleanP.substr(cleanBase.size());
+            } else if (cleanP[cleanBase.size()] == '/') {
+                rel = cleanP.substr(cleanBase.size() + 1);
+            }
+        }
+        while (!rel.empty() && rel.front() == '/') {
+            rel.erase(rel.begin());
+        }
+        if (rel.empty() || rel == ".") {
+            rel = p.filename().generic_string();
         }
 
         bool isDir = std::filesystem::is_directory(p, ec);
@@ -701,25 +717,34 @@ bool createZipArchive(
         }
 
         ItemToArchive item;
-        item.fullPath = p.generic_string();
+        item.fullPath = cleanP;
         item.relPath = rel;
         item.isDir = isDir;
         item.size = sz;
         item.mtime = mt;
-        items.push_back(item);
+        items.push_back(std::move(item));
         if (!isDir) {
             totalBytes += sz;
         }
     };
 
     for (const auto& src : sourcePaths) {
-        std::filesystem::path srcP(src);
+        if (cancelToken && cancelToken->load()) {
+            outError = "Cancelled";
+            return false;
+        }
+        std::string cleanSrc = normalizeFsPath(src);
+        std::filesystem::path srcP(cleanSrc);
         if (!std::filesystem::exists(srcP, ec)) continue;
 
         if (std::filesystem::is_directory(srcP, ec)) {
             collectItem(srcP);
             try {
                 for (const auto& entry : std::filesystem::recursive_directory_iterator(srcP, std::filesystem::directory_options::skip_permission_denied, ec)) {
+                    if (cancelToken && cancelToken->load()) {
+                        outError = "Cancelled";
+                        return false;
+                    }
                     collectItem(entry.path());
                 }
             } catch (...) {}
@@ -734,14 +759,17 @@ bool createZipArchive(
         return false;
     }
 
+    util::logLine("archive_utils: createZipArchive collected " + std::to_string(items.size()) +
+                  " items, totalBytes=" + std::to_string(totalBytes));
+
     try {
-        std::filesystem::path outP(archivePath);
+        std::filesystem::path outP(cleanArchivePath);
         if (outP.has_parent_path()) {
             safeCreateDirectories(outP.parent_path().generic_string());
         }
     } catch (...) {}
 
-    std::string tmpArchivePath = archivePath + ".tsnx_tmp";
+    std::string tmpArchivePath = cleanTmpPath;
     std::filesystem::remove(tmpArchivePath, ec);
 
     struct archive* a = archive_write_new();
@@ -769,8 +797,12 @@ bool createZipArchive(
     progress.entriesProcessed = 0;
     progress.bytesExtracted = 0;
     progress.percentage = 0.0f;
+    progress.currentFileName = items.front().relPath;
+    if (progressCb) {
+        progressCb(progress);
+    }
 
-    std::vector<char> buffer(128 * 1024);
+    std::vector<char> buffer(256 * 1024);
     bool success = true;
 
     for (const auto& it : items) {
@@ -825,20 +857,19 @@ bool createZipArchive(
                 break;
             }
 
-            std::ifstream file(it.fullPath, std::ios::binary);
-            if (!file.is_open()) {
+            FILE* fp = std::fopen(it.fullPath.c_str(), "rb");
+            if (!fp) {
                 util::logLine("archive_utils: warning: could not open file " + it.fullPath);
             } else {
-                while (file) {
+                while (true) {
                     if (cancelToken && cancelToken->load()) {
                         outError = "Cancelled";
                         success = false;
                         break;
                     }
-                    file.read(buffer.data(), buffer.size());
-                    std::streamsize count = file.gcount();
+                    size_t count = std::fread(buffer.data(), 1, buffer.size(), fp);
                     if (count > 0) {
-                        la_ssize_t written = archive_write_data(a, buffer.data(), static_cast<size_t>(count));
+                        la_ssize_t written = archive_write_data(a, buffer.data(), count);
                         if (written < 0) {
                             const char* err = archive_error_string(a);
                             outError = err ? err : "Error writing archive data";
@@ -851,12 +882,23 @@ bool createZipArchive(
                             if (!std::isnan(pct) && !std::isinf(pct)) {
                                 progress.percentage = std::clamp(pct, 0.0f, 99.9f);
                             }
+                        } else if (progress.totalEntries > 0) {
+                            float pct = (static_cast<float>(progress.entriesProcessed) / static_cast<float>(progress.totalEntries)) * 100.0f;
+                            progress.percentage = std::clamp(pct, 0.0f, 99.9f);
                         }
                         if (progressCb) {
                             progressCb(progress);
                         }
                     }
+                    if (count < buffer.size()) {
+                        if (std::ferror(fp)) {
+                            outError = "Error reading source file: " + it.fullPath;
+                            success = false;
+                        }
+                        break;
+                    }
                 }
+                std::fclose(fp);
             }
 
             if (!success) {

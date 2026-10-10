@@ -84,6 +84,8 @@ void ArchiveProgressDialog::initDialogUi(const std::string& titleText, const std
         return true;
     });
     contentBox_->addView(cancelButton_);
+    this->setLastFocusedView(cancelButton_);
+    contentBox_->setLastFocusedView(cancelButton_);
 
     this->setCancelable(false);
 
@@ -276,6 +278,16 @@ void ArchiveProgressDialog::updateUi(const util::ArchiveProgress& progress) {
 void ArchiveProgressDialog::startExtraction() {
     util::logLine("ArchiveProgressDialog: startExtraction opening dialog for " + archivePath_);
     this->open();
+    if (cancelButton_) {
+        auto alive = aliveToken_;
+        auto* btn = cancelButton_;
+        brls::sync([this, alive, btn]() {
+            if (alive && alive->load() && !closed_.load() && btn) {
+                this->setLastFocusedView(btn);
+                brls::Application::giveFocus(btn);
+            }
+        });
+    }
     util::logLine("ArchiveProgressDialog: dialog opened, creating extraction thread");
 
 #if defined(__SWITCH__)
@@ -308,7 +320,8 @@ void ArchiveProgressDialog::runExtraction() {
     std::string archivePath = archivePath_;
     std::string destDir = destDir_;
 
-    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(
+        std::chrono::steady_clock::now() - std::chrono::seconds(1));
     std::string err;
     bool ok = false;
     try {
@@ -379,6 +392,16 @@ void ArchiveProgressDialog::startCreation() {
     mode_ = ArchiveOpMode::Create;
     util::logLine("ArchiveProgressDialog: startCreation opening dialog for " + archivePath_);
     this->open();
+    if (cancelButton_) {
+        auto alive = aliveToken_;
+        auto* btn = cancelButton_;
+        brls::sync([this, alive, btn]() {
+            if (alive && alive->load() && !closed_.load() && btn) {
+                this->setLastFocusedView(btn);
+                brls::Application::giveFocus(btn);
+            }
+        });
+    }
     util::logLine("ArchiveProgressDialog: dialog opened, creating creation thread");
 
 #if defined(__SWITCH__)
@@ -412,7 +435,8 @@ void ArchiveProgressDialog::runCreation() {
     std::vector<std::string> sourcePaths = sourcePaths_;
     std::string baseDir = baseDir_;
 
-    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+    auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(
+        std::chrono::steady_clock::now() - std::chrono::seconds(1));
     std::string err;
     bool ok = false;
     try {

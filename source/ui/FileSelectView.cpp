@@ -345,13 +345,16 @@ void FileSelectView::onContentAvailable() {
     auto alive = alive_flag_;
     auto status_running = std::make_shared<std::atomic<bool>>(true);
     brls::async([this, status_running, alive]() {
-        while (status_running->load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            if (!status_running->load()) break;
-            
+        while (status_running->load() && alive->load() && !g_appExiting.load()) {
+            for (int i = 0; i < 10; ++i) {
+                if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
+
             auto status = datasource::CustomEngineClient::instance().probeStatus();
             brls::sync([this, status, status_running, alive]() {
-                if (!alive->load() || !status_running->load()) return;
+                if (!alive->load() || !status_running->load() || g_appExiting.load()) return;
                 std::string text = "app/fileselect/probing"_i18n;
                 if (status.active && status.meta_peers_total > 0) {
                     text += brls::getStr("app/fileselect/meta_peers", std::to_string(status.meta_peers_tried), std::to_string(status.meta_peers_total));

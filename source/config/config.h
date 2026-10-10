@@ -127,6 +127,10 @@ public:
     bool getShowBottomDashboard() const; // default true
     void setShowBottomDashboard(bool enabled);
 
+    int getFontScale() const; // 0 (100% default), 1 (115%), 2 (130%)
+    void setFontScale(int level);
+    float getFontScaleMultiplier() const;
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -157,6 +161,7 @@ private:
     int background_blur_ = 0;
     int background_dim_ = 2;
     bool show_bottom_dashboard_ = true;
+    int font_scale_ = 0;
     std::string config_path_;
     std::string legacy_config_path_;
 };

@@ -22,11 +22,34 @@
 #include <borealis/core/i18n.hpp>
 #include <borealis/core/util.hpp>
 #include <borealis/views/label.hpp>
+#include <unordered_map>
+#include "../config/config.h"
 
 namespace brls
 {
 
 #define ELLIPSIS "\u2026"
+
+static std::unordered_map<const Label*, int> s_labelFontScale;
+
+static bool isPrivateUseIconText(const std::string& text)
+{
+    if (text.size() < 3)
+        return false;
+    // UTF-8 Private Use Area U+E000..U+F8FF (0xEE 0x80 0x80 .. 0xEF 0xA3 0xBF)
+    unsigned char b0 = static_cast<unsigned char>(text[0]);
+    unsigned char b1 = static_cast<unsigned char>(text[1]);
+    return (b0 == 0xEE) || (b0 == 0xEF && b1 <= 0xA3);
+}
+
+static float getEffectiveFontSize(float baseSize, const std::string& text)
+{
+    if (baseSize > 0.0f && baseSize <= 18.0f && !isPrivateUseIconText(text))
+    {
+        return baseSize * config::ConfigManager::instance().getFontScaleMultiplier();
+    }
+    return baseSize;
+}
 
 static size_t strLen(const std::string& str)
 {
@@ -77,6 +100,8 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
     auto* label          = (Label*)YGNodeGetContext(node);
     std::string fullText = label->getFullText();
 
+    s_labelFontScale[label] = config::ConfigManager::instance().getFontScale();
+
     YGSize size = {
         .width  = width,
         .height = height,
@@ -102,7 +127,8 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
     }
 
     // Setup nvg state for the measurements
-    nvgFontSize(vg, label->getFontSize());
+    float effectiveFontSize = getEffectiveFontSize(label->getFontSize(), fullText);
+    nvgFontSize(vg, effectiveFontSize);
     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
     nvgFontFaceId(vg, label->getFont());
     nvgTextLineHeight(vg, label->getLineHeight());
@@ -361,7 +387,8 @@ void Label::setText(const std::string& text)
     auto vg = Application::getNVGContext();
     if (vg)
     {
-        nvgFontSize(vg, this->fontSize);
+        float effectiveFontSize = getEffectiveFontSize(this->fontSize, this->fullText);
+        nvgFontSize(vg, effectiveFontSize);
         nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
         nvgFontFaceId(vg, this->font);
         nvgTextLineHeight(vg, this->lineHeight);
@@ -471,6 +498,14 @@ enum NVGalign Label::getNVGHorizontalAlign()
 
 void Label::draw(NVGcontext* vg, float x, float y, float width, float height, Style style, FrameContext* ctx)
 {
+    int curScale = config::ConfigManager::instance().getFontScale();
+    auto scaleIt = s_labelFontScale.find(this);
+    if (scaleIt == s_labelFontScale.end() || scaleIt->second != curScale)
+    {
+        s_labelFontScale[this] = curScale;
+        this->invalidate();
+    }
+
     if (width == 0)
         return;
 
@@ -478,7 +513,8 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
     enum NVGalign vertAlign  = this->getNVGVerticalAlign();
     int cursor_position = -1;
 
-    nvgFontSize(vg, this->fontSize);
+    float effectiveFontSize = getEffectiveFontSize(this->fontSize, this->fullText);
+    nvgFontSize(vg, effectiveFontSize);
     nvgTextAlign(vg, horizAlign | vertAlign);
     nvgFontFaceId(vg, this->font);
     nvgFontQuality(vg, this->fontQuality);
@@ -497,7 +533,7 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
     if (this->animating)
     {
         nvgSave(vg);
-        float scissorHeight = fontSize * lineHeight;
+        float scissorHeight = effectiveFontSize * lineHeight;
         nvgIntersectScissor(vg, x, y, width, scissorHeight < height ? height : scissorHeight);
 
         float baseX   = x - this->scrollingAnimation;
@@ -621,6 +657,8 @@ void Label::resetScrollingAnimation()
 
 void Label::onLayout()
 {
+    s_labelFontScale[this] = config::ConfigManager::instance().getFontScale();
+
     float width = this->getWidth();
 
     if (width == 0)
@@ -631,10 +669,12 @@ void Label::onLayout()
 
     brls::Logger::info("Label \"{}\" onLayout: width={}, requiredWidth={}, animated={}, animating={}", this->fullText, width, this->requiredWidth, this->animated, this->animating);
 
+    float effectiveFontSize = getEffectiveFontSize(this->fontSize, this->fullText);
+
     auto vg = Application::getNVGContext();
     if (vg)
     {
-        nvgFontSize(vg, this->fontSize);
+        nvgFontSize(vg, effectiveFontSize);
         nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
         nvgFontFaceId(vg, this->font);
         nvgTextLineHeight(vg, this->lineHeight);
@@ -654,7 +694,7 @@ void Label::onLayout()
         // Cannot do it in the measure function because the margins are not applied yet there
         if (vg)
         {
-            nvgFontSize(vg, this->fontSize);
+            nvgFontSize(vg, effectiveFontSize);
             nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
             nvgFontFaceId(vg, this->font);
             nvgTextLineHeight(vg, this->lineHeight);
@@ -729,6 +769,7 @@ void Label::setEllipsisWidth(float ellipsisWidth)
 
 Label::~Label()
 {
+    s_labelFontScale.erase(this);
     this->stopScrollingAnimation();
 }
 

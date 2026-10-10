@@ -1056,7 +1056,12 @@
         "bg_dim_4": "很暗 (65%)",
         "bg_dim_applied": "背景暗化已更新",
         "show_bottom_dashboard": "显示信息面板",
-        "show_bottom_dashboard_desc": "在主菜单底部显示包含详情和统计信息的信息面板"
+        "show_bottom_dashboard_desc": "在主菜单底部显示包含详情和统计信息的信息面板",
+        "font_scale_title": "字体大小",
+        "font_scale_0": "标准 (100%)",
+        "font_scale_1": "中号 (115%)",
+        "font_scale_2": "大号 (130%)",
+        "font_scale_applied": "字体大小已更新"
     },
     "theme": {
         "emerald": "翡翠绿",

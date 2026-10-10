@@ -134,6 +134,7 @@ public:
         titleLbl_ = new brls::Label();
         titleLbl_->setText(truncateStr(game.title, 18));
         titleLbl_->setFontSize(13.5f);
+        titleLbl_->setLineHeight(1.3f);
         titleLbl_->setTextColor(themeTextPrimary());
         titleLbl_->setSingleLine(true);
         topDetails->addView(titleLbl_);
@@ -145,8 +146,9 @@ public:
         brls::Label* gMeta = new brls::Label();
         gMeta->setText(metaText);
         gMeta->setFontSize(11.5f);
+        gMeta->setLineHeight(1.3f);
         gMeta->setTextColor(themeAccent(240));
-        gMeta->setMarginTop(3.0f);
+        gMeta->setMarginTop(2.0f);
         gMeta->setSingleLine(true);
         topDetails->addView(gMeta);
 
@@ -154,8 +156,9 @@ public:
             brls::Label* gGenre = new brls::Label();
             gGenre->setText(truncateStr(game.genre, 24));
             gGenre->setFontSize(11.5f);
+            gGenre->setLineHeight(1.3f);
             gGenre->setTextColor(themeTextSecondary());
-            gGenre->setMarginTop(3.0f);
+            gGenre->setMarginTop(2.0f);
             gGenre->setSingleLine(true);
             topDetails->addView(gGenre);
         }
@@ -164,7 +167,7 @@ public:
         // Bottom Action Pill
         actPill_ = new brls::Box();
         actPill_->setWidthPercentage(100.0f);
-        actPill_->setHeight(22.0f);
+        actPill_->setHeight(24.0f);
         actPill_->setCornerRadius(6.0f);
         actPill_->setBackgroundColor(themeDim());
         actPill_->setAlignItems(brls::AlignItems::CENTER);

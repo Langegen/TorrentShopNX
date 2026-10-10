@@ -11,8 +11,8 @@
 
             <!-- Secondary Actions: Favorite & QR -->
             <brls:Box width="280px" height="auto" axis="row" justifyContent="spaceBetween" marginTop="10">
-                <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="135px" height="42px" fontSize="13" />
-                <brls:Button id="btnQr" text="@i18n/app/detail/torrent_link_btn" width="135px" height="42px" fontSize="13" />
+                <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="135px" height="42px" paddingLeft="8" paddingRight="8" singleLine="true" fontSize="13" />
+                <brls:Button id="btnQr" text="@i18n/app/detail/torrent_link_btn" width="135px" height="42px" paddingLeft="8" paddingRight="8" singleLine="true" fontSize="13" />
             </brls:Box>
         </brls:Box>
         

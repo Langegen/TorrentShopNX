@@ -68,7 +68,7 @@ private:
         int numberOfRows(brls::RecyclerFrame* recycler, int section) override;
         brls::RecyclerCell* cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
         void didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
-        float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override { return 130; }
+        float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override { return 138; }
 
     private:
         DownloadsView* parent_;

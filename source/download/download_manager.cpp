@@ -224,7 +224,14 @@ static std::string transliterateCyrillicToAscii(const std::string& input) {
             }
         }
 
-        // Прочие non-ASCII символы заменяем на безопасный символ
+        // Прочие non-ASCII UTF-8 последовательности заменяем одним безопасным символом на кодовую точку
+        if ((c1 & 0xE0) == 0xC0 && i + 1 < input.size()) {
+            i += 1;
+        } else if ((c1 & 0xF0) == 0xE0 && i + 2 < input.size()) {
+            i += 2;
+        } else if ((c1 & 0xF8) == 0xF0 && i + 3 < input.size()) {
+            i += 3;
+        }
         out.push_back('_');
     }
     return out;
@@ -237,7 +244,7 @@ static std::string sanitizePathComponent(const std::string& raw) {
     out.reserve(converted.size());
     for (size_t i = 0; i < converted.size(); ++i) {
         unsigned char c = static_cast<unsigned char>(converted[i]);
-        if (c < 0x20) continue; // control characters
+        if (c < 0x20 || c == 0x7F) continue; // control characters
         if (c == ':' || c == '/') {
             out.push_back(' ');
             out.push_back('-');
@@ -278,13 +285,7 @@ static std::string sanitizePathComponent(const std::string& raw) {
 
 // Удаление квадратных скобок с метаданными вроде "[NRO][ENG]"
 static std::string stripSquareBrackets(const std::string& s) {
-    size_t pos = s.find('[');
-    if (pos == std::string::npos) return s;
-    std::string cleaned = s.substr(0, pos);
-    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
-        cleaned.pop_back();
-    }
-    return cleaned;
+    return cleanTitle(s);
 }
 
 // Извлечение безопасного имени папки раздачи из названия
@@ -302,7 +303,15 @@ static std::string extractReleaseFolderName(const std::string& title) {
             name = stripped;
         }
     }
-    return sanitizePathComponent(name);
+    std::string safe = sanitizePathComponent(name);
+    if (safe.size() > 100) {
+        safe.resize(100);
+        while (!safe.empty() && (safe.back() == ' ' || safe.back() == '.' || safe.back() == '-' || safe.back() == '_')) {
+            safe.pop_back();
+        }
+        if (safe.empty()) safe = "download";
+    }
+    return safe;
 }
 
 // Относительный путь файла из торрента -> безопасный относительный путь:
@@ -375,8 +384,9 @@ static void fileCopyWorker(datasource::IDataSource* source,
         return;
     }
 
-    // Папка конкретной раздачи (для ретро-игр - целевая папка РОМов)
+    // Папка конкретной раздачи (для ретро-игр - целевая папка РОМов; для PS Vita создаём подпапку с именем раздачи)
     std::filesystem::path release_base;
+    std::string release_folder;
     if (!retro_console_id.empty()) {
         std::string subfolder = retro_console_id;
         const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id);
@@ -385,8 +395,12 @@ static void fileCopyWorker(datasource::IDataSource* source,
         }
         std::string destDir = config::ConfigManager::instance().getEffectiveRetroRomsDir(subfolder);
         release_base = std::filesystem::path(destDir);
+        if (retro_console_id == "psvita") {
+            release_folder = extractReleaseFolderName(release_title);
+            release_base /= release_folder;
+        }
     } else {
-        std::string release_folder = extractReleaseFolderName(release_title);
+        release_folder = extractReleaseFolderName(release_title);
         release_base = downloadsBaseDir() / release_folder;
     }
 
@@ -410,6 +424,31 @@ static void fileCopyWorker(datasource::IDataSource* source,
         return;
     }
 
+    auto resolveDestRel = [&](const std::string& rel_path) -> std::filesystem::path {
+        if (!retro_console_id.empty() && retro_console_id != "psvita" && target_indices.size() == 1) {
+            return std::filesystem::path(sanitizePathComponent(std::filesystem::path(rel_path).filename().string()));
+        }
+        std::filesystem::path p = sanitizeTorrentPath(rel_path);
+        if (!release_folder.empty()) {
+            auto it = p.begin();
+            if (it != p.end() && std::next(it) != p.end()) {
+                std::string firstSeg = it->string();
+                if (firstSeg.size() == release_folder.size() &&
+                    std::equal(firstSeg.begin(), firstSeg.end(), release_folder.begin(),
+                               [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); })) {
+                    std::filesystem::path stripped;
+                    for (++it; it != p.end(); ++it) {
+                        stripped /= *it;
+                    }
+                    if (!stripped.empty()) {
+                        p = stripped;
+                    }
+                }
+            }
+        }
+        return p;
+    };
+
     uint64_t total_size = 0;
     for (int idx : target_indices) {
         if (idx >= 0 && idx < n) {
@@ -432,12 +471,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
 
         uint64_t file_size = static_cast<uint64_t>(files[idx].size);
         std::string rel_path = files[idx].path;
-        std::filesystem::path dest_rel;
-        if (!retro_console_id.empty() && target_indices.size() == 1) {
-            dest_rel = sanitizePathComponent(std::filesystem::path(rel_path).filename().string());
-        } else {
-            dest_rel = sanitizeTorrentPath(rel_path);
-        }
+        std::filesystem::path dest_rel = resolveDestRel(rel_path);
         std::string file_dest = (release_base / dest_rel).string();
         if (first_dest.empty()) first_dest = file_dest;
 
@@ -520,9 +554,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 if (cancel->load()) break;
                 if (idx < 0 || idx >= n) continue;
                 std::string rel_path = files[idx].path;
-                std::filesystem::path dest_rel = (target_indices.size() == 1) ?
-                    std::filesystem::path(sanitizePathComponent(std::filesystem::path(rel_path).filename().string())) :
-                    sanitizeTorrentPath(rel_path);
+                std::filesystem::path dest_rel = resolveDestRel(rel_path);
                 std::string file_dest = (release_base / dest_rel).string();
 
                 if (util::isArchiveFile(file_dest)) {
@@ -627,6 +659,7 @@ DownloadManager::~DownloadManager() {
 
 void DownloadManager::shutdown() {
     g_appExiting.store(true);
+    datasource::CustomEngineClient::instance().cancelProbe();
 
     if (progress_thread_running_.load()) {
         progress_thread_running_.store(false);
@@ -647,13 +680,6 @@ void DownloadManager::shutdown() {
         }
         if (item.hybrid_installer) {
             item.hybrid_installer->cancel();
-            item.hybrid_installer.reset();
-        }
-        if (item.open_future) {
-            item.open_future.reset();
-        }
-        if (item.start_future) {
-            item.start_future.reset();
         }
     }
 
@@ -670,12 +696,23 @@ void DownloadManager::shutdown() {
     // (torrentfs teardown); только после этого join'им их фьючерсы, чтобы
     // завершение не повисло.
     for (auto& item : queue_) {
+        if (item.open_future) {
+            item.open_future.reset();
+        }
+        if (item.start_future) {
+            item.start_future.reset();
+        }
+        if (item.hybrid_installer) {
+            item.hybrid_installer.reset();
+        }
         if (item.file_dl_worker) {
             item.file_dl_worker.reset();
         }
         item.file_dl_dispatched = false;
         item.file_dl_state.reset();
     }
+
+    datasource::CustomEngineClient::instance().shutdown();
 }
 
 size_t DownloadManager::addToQueue(const std::string& title,

@@ -1,5 +1,6 @@
 #include "SpeedSparklineView.hpp"
 #include "../ThemeManager.hpp"
+#include "../../config/config.h"
 #include <algorithm>
 #include <cstdio>
 #include <string>
@@ -75,8 +76,10 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     nvgStrokeWidth(vg, 1.0f);
     nvgStroke(vg);
 
+    float fontMult = config::ConfigManager::instance().getFontScaleMultiplier();
+
     if (samples_.empty()) {
-        nvgFontSize(vg, 11.0f);
+        nvgFontSize(vg, 11.0f * fontMult);
         nvgFontFace(vg, "default");
         nvgFillColor(vg, ThemeManager::instance().getTextSecondaryColor());
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
@@ -94,7 +97,7 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
 
     // Draw Peak Label in top-right
     std::string peakStr = "app/dashboard/sparkline_peak"_i18n + formatSpeedShort(peak);
-    nvgFontSize(vg, 10.0f);
+    nvgFontSize(vg, 10.0f * fontMult);
     NVGcolor accent = ThemeManager::instance().getAccentColor();
     nvgFillColor(vg, nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 220));
     nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);

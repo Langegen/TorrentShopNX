@@ -1056,7 +1056,12 @@
         "bg_dim_4": "Escuro (65%)",
         "bg_dim_applied": "Escurecimento de fundo atualizado",
         "show_bottom_dashboard": "Exibir painel de informações",
-        "show_bottom_dashboard_desc": "Exibir o painel inferior com detalhes e estatísticas no menu principal"
+        "show_bottom_dashboard_desc": "Exibir o painel inferior com detalhes e estatísticas no menu principal",
+        "font_scale_title": "Tamanho da fonte",
+        "font_scale_0": "Padrão (100%)",
+        "font_scale_1": "Médio (115%)",
+        "font_scale_2": "Grande (130%)",
+        "font_scale_applied": "Tamanho da fonte atualizado"
     },
     "theme": {
         "emerald": "Esmeralda",

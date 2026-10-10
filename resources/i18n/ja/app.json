@@ -1056,7 +1056,12 @@
         "bg_dim_4": "暗 (65%)",
         "bg_dim_applied": "背景の減光を変更しました",
         "show_bottom_dashboard": "情報パネルを表示",
-        "show_bottom_dashboard_desc": "メインメニューの下部に詳細と統計情報を表示する情報パネルを表示します"
+        "show_bottom_dashboard_desc": "メインメニューの下部に詳細と統計情報を表示する情報パネルを表示します",
+        "font_scale_title": "フォントサイズ",
+        "font_scale_0": "標準 (100%)",
+        "font_scale_1": "やや大 (115%)",
+        "font_scale_2": "大 (130%)",
+        "font_scale_applied": "フォントサイズを変更しました"
     },
     "theme": {
         "emerald": "エメラルド",

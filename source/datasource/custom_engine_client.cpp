@@ -38,9 +38,17 @@ tsnx_engine* CustomEngineClient::sharedEngine() {
 }
 
 void CustomEngineClient::shutdown() {
+    probe_cancel_.store(true);
+    std::lock_guard<std::mutex> probe_lock(probe_mtx_);
+    {
+        std::lock_guard<std::mutex> keep_lock(keep_mtx_);
+        kept_hash_.clear();
+        in_use_.clear();
+    }
     if (engine_) {
-        tsnx_engine_stop(engine_);
+        tsnx_engine* eng = engine_;
         engine_ = nullptr;
+        tsnx_engine_stop(eng);
     }
 }
 

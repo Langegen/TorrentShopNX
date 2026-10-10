@@ -555,7 +555,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForHeader(brls::Recyc
 }
 
 float RetroCatalogView::RetroDataSource::heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    return parent_->isListView_ ? 82.0f : 300.0f;
+    return parent_->isListView_ ? 84.0f : 308.0f;
 }
 
 brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {

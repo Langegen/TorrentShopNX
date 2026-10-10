@@ -481,7 +481,12 @@ void FileManagerView::refresh(int panelIdx, const std::string& focusChild) {
                 if (rec) {
                     rec->setDefaultCellFocus(brls::IndexPath(0, targetRow));
                     rec->selectRowAt(brls::IndexPath(0, targetRow), false);
-                    brls::Application::giveFocus(rec);
+                    auto stack = brls::Application::getActivitiesStack();
+                    bool topIsDialog = !stack.empty() && stack.back() &&
+                                       dynamic_cast<brls::Dialog*>(stack.back()->getContentView()) != nullptr;
+                    if (!topIsDialog) {
+                        brls::Application::giveFocus(rec);
+                    }
                 }
             });
         }
@@ -894,18 +899,19 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
                             util::logLine("FileManagerView: executing archive action");
                             action();
                         });
+                    } else {
+                        brls::sync([this, restoreRow]() {
+                            auto* rec = panels_[activePanel_].recycler;
+                            if (rec) {
+                                int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+                                int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
+                                panels_[activePanel_].currentFocusedRow = validRow;
+                                rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                                rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                                brls::Application::giveFocus(rec);
+                            }
+                        });
                     }
-                    brls::sync([this, restoreRow]() {
-                        auto* rec = panels_[activePanel_].recycler;
-                        if (rec) {
-                            int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
-                            int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
-                            panels_[activePanel_].currentFocusedRow = validRow;
-                            rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
-                            rec->selectRowAt(brls::IndexPath(0, validRow), false);
-                            brls::Application::giveFocus(rec);
-                        }
-                    });
                 });
             });
             return true;
@@ -970,7 +976,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
                 if (isSplitMode_) refresh(1 - activePanel_);
             }
         });
-        prog->open();
+        prog->startExtraction();
     };
 
     // Option 1: Extract Here
@@ -1054,6 +1060,7 @@ void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& ta
             confirmDialog->addButton("app/common/yes"_i18n, [this, actIdx, targetArchivePath, targets, fileName]() {
                 auto* dlg = new ArchiveProgressDialog(targetArchivePath, targets, panels_[actIdx].currentDir, [this, fileName, actIdx](bool ok, const std::string& msg) {
                     if (ok) {
+                        panels_[actIdx].selectedPaths.clear();
                         brls::Application::notify("app/file_manager/create_archive_success"_i18n);
                         refresh(actIdx, fileName);
                         if (isSplitMode_) refresh(1 - actIdx);
@@ -1063,7 +1070,7 @@ void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& ta
                         if (isSplitMode_) refresh(1 - actIdx);
                     }
                 });
-                dlg->open();
+                dlg->startCreation();
             });
             confirmDialog->addButton("app/common/cancel"_i18n, []() {});
             confirmDialog->open();
@@ -1072,6 +1079,7 @@ void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& ta
 
         auto* dlg = new ArchiveProgressDialog(targetArchivePath, targets, panels_[actIdx].currentDir, [this, fileName, actIdx](bool ok, const std::string& msg) {
             if (ok) {
+                panels_[actIdx].selectedPaths.clear();
                 brls::Application::notify("app/file_manager/create_archive_success"_i18n);
                 refresh(actIdx, fileName);
                 if (isSplitMode_) refresh(1 - actIdx);
@@ -1081,7 +1089,7 @@ void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& ta
                 if (isSplitMode_) refresh(1 - actIdx);
             }
         });
-        dlg->open();
+        dlg->startCreation();
     }, promptTitle, "", 64, defaultName);
 }
 
@@ -1215,18 +1223,19 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
                             util::logLine("FileManagerView: executing install action");
                             action();
                         });
+                    } else {
+                        brls::sync([this, restoreRow]() {
+                            auto* rec = panels_[activePanel_].recycler;
+                            if (rec) {
+                                int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+                                int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
+                                panels_[activePanel_].currentFocusedRow = validRow;
+                                rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                                rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                                brls::Application::giveFocus(rec);
+                            }
+                        });
                     }
-                    brls::sync([this, restoreRow]() {
-                        auto* rec = panels_[activePanel_].recycler;
-                        if (rec) {
-                            int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
-                            int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
-                            panels_[activePanel_].currentFocusedRow = validRow;
-                            rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
-                            rec->selectRowAt(brls::IndexPath(0, validRow), false);
-                            brls::Application::giveFocus(rec);
-                        }
-                    });
                 });
             });
             return true;
@@ -1240,15 +1249,16 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     std::string sdSpaceInfo = sdTotal > 0 ? ("app/file_manager/free_prefix"_i18n + util::formatFileSize(sdFree)) : "";
 
     addOption("\uE2C7", ThemeManager::instance().getAccentColor(), "app/file_manager/install_to_sd"_i18n, sdSpaceInfo, [this, item]() {
-        auto* prog = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& err) {
+        auto* prog = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& err) {
             if (ok) {
                 brls::Application::notify("app/file_manager/install_success"_i18n);
                 promptDeleteSourceFile(item.path, item.name);
             } else {
                 brls::Application::notify(err.empty() ? "app/file_manager/install_error"_i18n : err);
+                refresh(activePanel_);
             }
         });
-        prog->open();
+        prog->startInstallation();
     });
 
 #if defined(__SWITCH__)
@@ -1257,15 +1267,16 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
     std::string nandSpaceInfo = nandTotal > 0 ? ("app/file_manager/free_prefix"_i18n + util::formatFileSize(nandFree)) : "";
 
     addOption("\uE318", nvgRGB(255, 179, 0), "app/file_manager/install_to_nand"_i18n, nandSpaceInfo, [this, item]() {
-        auto* prog = new InstallProgressDialog(item.path, 1, [this, item](bool ok, const std::string& err) {
+        auto* prog = new InstallProgressDialog(item.path, 0, [this, item](bool ok, const std::string& err) {
             if (ok) {
                 brls::Application::notify("app/file_manager/install_success"_i18n);
                 promptDeleteSourceFile(item.path, item.name);
             } else {
                 brls::Application::notify(err.empty() ? "app/file_manager/install_error"_i18n : err);
+                refresh(activePanel_);
             }
         });
-        prog->open();
+        prog->startInstallation();
     });
 #endif
 
@@ -1397,18 +1408,19 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
                         brls::sync([action]() {
                             action();
                         });
+                    } else {
+                        brls::sync([this, restoreRow]() {
+                            auto* rec = panels_[activePanel_].recycler;
+                            if (rec) {
+                                int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
+                                int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
+                                panels_[activePanel_].currentFocusedRow = validRow;
+                                rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
+                                rec->selectRowAt(brls::IndexPath(0, validRow), false);
+                                brls::Application::giveFocus(rec);
+                            }
+                        });
                     }
-                    brls::sync([this, restoreRow]() {
-                        auto* rec = panels_[activePanel_].recycler;
-                        if (rec) {
-                            int maxRow = static_cast<int>(panels_[activePanel_].items.size()) + (panels_[activePanel_].hasParentDir ? 1 : 0) - 1;
-                            int validRow = std::clamp(restoreRow, 0, std::max(0, maxRow));
-                            panels_[activePanel_].currentFocusedRow = validRow;
-                            rec->setDefaultCellFocus(brls::IndexPath(0, validRow));
-                            rec->selectRowAt(brls::IndexPath(0, validRow), false);
-                            brls::Application::giveFocus(rec);
-                        }
-                    });
                 });
             });
             return true;
@@ -1430,7 +1442,19 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
 
     addOption("\uE5CD", nvgRGB(140, 150, 160), "app/file_manager/keep_file_btn"_i18n, nullptr);
 
+    if (firstOption) {
+        dialog->setLastFocusedView(firstOption);
+        content->setLastFocusedView(firstOption);
+    }
+
     dialog->open();
+
+    if (firstOption) {
+        brls::sync([dialog, firstOption]() {
+            dialog->setLastFocusedView(firstOption);
+            brls::Application::giveFocus(firstOption);
+        });
+    }
 }
 
 void FileManagerView::showDeleteConfirmDialog() {
