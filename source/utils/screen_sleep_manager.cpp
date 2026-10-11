@@ -142,7 +142,7 @@ bool ScreenSleepManager::handleInput(const brls::ControllerState& controller,
             int activeCount = ui::DownloadManager::instance().getActiveDownloadsCount();
             if (hadActiveDownloads_ && activeCount == 0) {
                 turnOnScreen();
-                return false;
+                return true;
             }
 
             // 2. Wake up on any user input (button, stick, or touch)

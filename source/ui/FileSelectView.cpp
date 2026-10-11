@@ -1287,13 +1287,18 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
 
         // Сортируем выбранные установочные пакеты по приоритету установки:
         // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
+        // Внутри одной известной категории (например, несколько DLC) сохраняем порядок файлов в торренте,
+        // чтобы чтение кусков шло строго последовательно и работала предвыборка LOOKAHEAD_PIECES.
         std::stable_sort(packages.begin(), packages.end(), [this](size_t a, size_t b) {
             int prio_a = download::installFilePriority(files_[a].name);
             int prio_b = download::installFilePriority(files_[b].name);
             if (prio_a != prio_b) {
                 return prio_a > prio_b;
             }
-            return files_[a].size > files_[b].size;
+            if (prio_a >= 150 && prio_a < 200) {
+                return files_[a].size > files_[b].size;
+            }
+            return files_[a].index < files_[b].index;
         });
 
         // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)

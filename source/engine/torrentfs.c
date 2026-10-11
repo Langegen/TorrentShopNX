@@ -114,8 +114,8 @@
 #define LOOKAHEAD_PIECES 16     // Multi-file lookahead: allow prefetching pieces into upcoming files
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
-#define RAM_BUDGET       (512LL << 20)
-#define AQ_MAX           64
+#define RAM_BUDGET       (256LL << 20)
+#define AQ_MAX           32
 #define AQ_MIN           4
 
 // Streaming window
@@ -145,7 +145,7 @@
 // are dropped; a read that lands on a dropped piece re-downloads it (the read
 // moves the playhead there, so the streaming window covers it). Sized to leave
 // the forward window plenty of seek-back slack; needs a full-RAM launch.
-#define RAM_STREAM_BUDGET (512LL << 20)
+#define RAM_STREAM_BUDGET (256LL << 20)
 
 #define TFS_MAX_PEERS    512
 #define BACKOFF_CONN_SECS 5
@@ -291,6 +291,7 @@ typedef struct {
 
 static void sess_drop_requests(torrentfs *t, sess *s);
 static aq_entry *aq_find(torrentfs *t, int64_t idx);
+static void torrentfs_apply_select_file(torrentfs *tfs, int file_index);
 
 typedef struct {
     int64_t idx;
@@ -338,6 +339,7 @@ struct torrentfs {
     int64_t read_blocked_piece;// piece the reader thread is waiting on, -1 = none
     volatile bool stop;
     volatile bool cancel_reader;
+    volatile int pending_select_file; // -1 = none, >= 0 = file index to switch to on netloop thread
 
     aq_entry aq[AQ_MAX];
     int n_aq;
@@ -649,7 +651,7 @@ static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
         t->ram_resident -= t->meta.piece_len;
         mutexLock(&t->lock);
         if (t->status[v] == PIECE_DONE) { t->status[v] = PIECE_NEEDED; t->pieces_done--; }
-        // Recycle buffer into an empty aq slot or into the free pool to avoid heap fragmentation
+        // Recycle buffer into an empty aq slot or into a small bounded free pool
         bool recycled = false;
         for (int i = 0; i < t->n_aq; i++) {
             if (t->aq[i].idx < 0 && !t->aq[i].buf) {
@@ -658,7 +660,8 @@ static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
                 break;
             }
         }
-        if (!recycled && t->aq_buf_pool_cnt < AQ_MAX) {
+        if (!recycled && t->aq_buf_pool_cnt < 4 &&
+            (int64_t)t->aq_buf_pool_cnt * t->meta.piece_len < (64LL << 20)) {
             t->aq_buf_pool[t->aq_buf_pool_cnt++] = freed_buf;
             recycled = true;
         }
@@ -683,7 +686,8 @@ static void ram_store(torrentfs *t, int64_t idx, uint8_t *buf) {
                 break;
             }
         }
-        if (!recycled && t->aq_buf_pool_cnt < AQ_MAX) {
+        if (!recycled && t->aq_buf_pool_cnt < 4 &&
+            (int64_t)t->aq_buf_pool_cnt * t->meta.piece_len < (64LL << 20)) {
             t->aq_buf_pool[t->aq_buf_pool_cnt++] = old_buf;
             recycled = true;
         }
@@ -877,7 +881,7 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             // addresses).
             secs = f > 1 ? BACKOFF_MAX_SECS : 60;
         } else if (!had_conn &&
-                   t->pieces_ever < BOOTSTRAP_THRESH &&
+                   t->st_piece_ok < BOOTSTRAP_THRESH &&
                    t->peer_src[pidx] == PEER_SRC_TRACKER) {
             // During bootstrap, tracker-reported addresses are live seeders:
             // keep the DIAL cadence flat so a missed optimistic slot is
@@ -980,11 +984,16 @@ static bool file_done(torrentfs *t) {
 
 static bool discovery_wait(torrentfs *t) {
     u64 start = armGetSystemTick();
-    while (!t->stop && !file_done(t)) {
+    while (!t->stop) {
         svcSleepThread(1000000000ULL);  // 1 s
+        tsnx_engine_wd_tick(1);
         if (t->announce_now) {
             t->announce_now = false;
             return true;
+        }
+        if (file_done(t)) {
+            start = armGetSystemTick();
+            continue;
         }
         u64 secs = (armGetSystemTick() - start) / t->freq;
         if (secs >= DISC_INTERVAL_SECS) return true;
@@ -1010,11 +1019,12 @@ static void discovery_main(void *arg) {
 // Writer: verify from RAM, one sequential (sliced) SD write, mark DONE.
 //-----------------------------------------------------------------------------
 
-// Count a piece the first time it ever completes, never again. pieces_done
+// Count a piece of the active file the first time it completes. pieces_done
 // tracks what is resident *now* (it falls when the RAM window evicts), so it is
-// the wrong number for a progress bar; this one only ever climbs. Caller holds
-// t->lock.
+// the wrong number for a progress bar; this one only climbs within the active file.
+// Caller holds t->lock.
 static void mark_ever_done(torrentfs *t, int64_t idx) {
+    if (idx < t->file_first_piece || idx > t->file_last_piece) return;
     uint8_t bit = 1u << (idx & 7);
     if (!(t->ever[idx >> 3] & bit)) {
         t->ever[idx >> 3] |= bit;
@@ -1125,10 +1135,11 @@ static void writer_main(void *arg) {
         t->st_blocks_have -= nb;
         t->writing_idx = -1;
         t->writing_buf = NULL;
-        // Return the buffer to a bufferless slot for reuse, or pool it.
+        // Return the buffer to a bufferless slot for reuse, or pool it (bounded).
         for (int i = 0; i < t->n_aq; i++)
             if (t->aq[i].idx < 0 && !t->aq[i].buf) { t->aq[i].buf = j.buf; j.buf = NULL; break; }
-        if (j.buf && t->aq_buf_pool_cnt < AQ_MAX) {
+        if (j.buf && t->aq_buf_pool_cnt < 4 &&
+            (int64_t)t->aq_buf_pool_cnt * t->meta.piece_len < (64LL << 20)) {
             t->aq_buf_pool[t->aq_buf_pool_cnt++] = j.buf;
             j.buf = NULL;
         }
@@ -1452,17 +1463,26 @@ static int piece_priority(torrentfs *t, int64_t idx) {
     if (idx < t->file_first_piece) return 0;
     if (idx > t->file_last_piece + LOOKAHEAD_PIECES || idx >= t->meta.piece_count) return 0;
     if (idx == t->read_blocked_piece) return 1;
+    int64_t ph = t->playhead_piece;
+    if (ph < t->file_first_piece) ph = t->file_first_piece;
+    if (ph > t->file_last_piece) ph = t->file_last_piece;
+    if (idx > t->file_last_piece) {
+        int64_t plen = t->meta.piece_len > 0 ? t->meta.piece_len : (1LL << 20);
+        int64_t lookahead = (64LL << 20) / plen;
+        if (lookahead < 1) lookahead = 1;
+        if (lookahead > LOOKAHEAD_PIECES) lookahead = LOOKAHEAD_PIECES;
+        if (idx <= t->file_last_piece + lookahead && (t->file_last_piece - ph) <= 4) {
+            return 5;
+        }
+        return 0;
+    }
     int z = t->piece_zone[idx];
     if (z != 0) return z;
     if (is_critical(t, idx))
         return idx < t->file_first_piece + t->crit_head ? 1 : 2;
-    int64_t ph = t->playhead_piece;
-    if (ph < t->file_first_piece) ph = t->file_first_piece;
-    if (ph > t->file_last_piece) ph = t->file_last_piece;
     int64_t d = idx - ph;
     int max_d = t->n_aq > 2 ? t->n_aq - 2 : 24;
     if (d < 0 || d > max_d) {
-        if (idx > t->file_last_piece && idx <= t->file_last_piece + LOOKAHEAD_PIECES) return 5;
         return 0;
     }
     if (d == 0) return 1;
@@ -1536,7 +1556,18 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
             aq_entry *a;
             if (st == PIECE_ACTIVE) {
                 a = aq_find(t, i);
-                if (!a) continue;
+                if (!a) {
+                    engine_log(ENGINE_LOG_WARN,
+                               "[claim] healing orphaned PIECE_ACTIVE for piece %lld",
+                               (long long)i);
+                    a = aq_alloc(t, i);
+                    if (!a) {
+                        mutexLock(&t->lock);
+                        if (t->status[i] == PIECE_ACTIVE) t->status[i] = PIECE_NEEDED;
+                        mutexUnlock(&t->lock);
+                        continue;
+                    }
+                }
             } else {
                 a = aq_alloc(t, i);
                 if (!a) {
@@ -2335,6 +2366,14 @@ static void netloop_main(void *arg) {
     while (!t->stop) {
         tsnx_engine_wd_tick(4);
         hb_beat(t, HB_NET);
+        int sel = __atomic_load_n(&t->pending_select_file, __ATOMIC_ACQUIRE);
+        if (sel >= 0) {
+            int claimed = __atomic_exchange_n(&t->pending_select_file, -1, __ATOMIC_ACQ_REL);
+            if (claimed >= 0) {
+                torrentfs_apply_select_file(t, claimed);
+                last_upkeep = 0; // force immediate request_scan for the newly selected file
+            }
+        }
         u64 now = armGetSystemTick();
 
         // Upkeep every ~125 ms: dial, reap, keep-alives, rate EWMA, calm.
@@ -2520,7 +2559,7 @@ static void netloop_main(void *arg) {
                 // sooner than a minute into the connection even after, and
                 // send_pex only fills the list with proven addresses.
                 if (!s->connecting && s->nb.handshaked && s->nb.pex_id &&
-                    t->pieces_ever > 0 &&
+                    (t->pieces_ever > 0 || t->st_piece_ok > 0) &&
                     now - s->started > (u64)PEX_INTERVAL_SECS * t->freq &&
                     now - s->last_pex > (u64)PEX_INTERVAL_SECS * t->freq) {
                     send_pex(t, s, now);
@@ -2802,6 +2841,7 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     if (!t) { snprintf(err, errlen, "out of memory"); return NULL; }
 
     for (int i = 0; i < AQ_MAX; i++) t->aq[i].idx = -1;
+    t->pending_select_file = -1;
     t->freq     = armGetSystemTickFreq();
     t->ram_mode = g_ram_stream != 0;   // latched for this torrent's lifetime
     t->last_progress_tick = armGetSystemTick();
@@ -2997,28 +3037,10 @@ void torrentfs_close(torrentfs *tfs) {
     free(tfs);
 }
 
-bool torrentfs_select_file(torrentfs *tfs, int file_index) {
-    if (!tfs) return false;
-    if (file_index < 0 || file_index >= tfs->meta.file_count) return false;
-
+static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
     int64_t new_offset = tfs->meta.files[file_index].offset;
-    int64_t new_size = tfs->meta.files[file_index].length;
+    int64_t new_size   = tfs->meta.files[file_index].length;
 
-    // If already on this file, nothing to change
-    if (tfs->stream_offset == new_offset && tfs->stream_size == new_size) {
-        tfs->cancel_reader = false;
-        return true;
-    }
-
-    engine_log(ENGINE_LOG_INFO,
-               "[torrentfs] select_file: switching to file %d (%lld bytes)",
-               file_index, (long long)new_size);
-
-    // 1. Unblock any current reader
-    tfs->cancel_reader = true;
-    tfs->read_blocked_piece = -1;
-
-    // 2. Lock to safely reconfigure stream range and request queues
     // Lock order: cache_lock -> lock (to match ram_evict convention)
     if (tfs->ram_mode) {
         mutexLock(&tfs->cache_lock);
@@ -3031,13 +3053,27 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->file_last_piece  = (new_offset + new_size - 1) / tfs->meta.piece_len;
     tfs->playhead_piece   = tfs->file_first_piece;
 
-    // Free any resident pieces that belong to the previous file and are outside lookahead
+    // Free any resident pieces that belong to the previous file or are outside the new file
+    int64_t plen = tfs->meta.piece_len > 0 ? tfs->meta.piece_len : (1LL << 20);
+    int64_t max_keep_hi = tfs->file_last_piece;
+    if ((tfs->file_last_piece - tfs->file_first_piece) <= 4) {
+        int64_t lookahead = (64LL << 20) / plen;
+        if (lookahead < 1) lookahead = 1;
+        if (lookahead > LOOKAHEAD_PIECES) lookahead = LOOKAHEAD_PIECES;
+        max_keep_hi = tfs->file_last_piece + lookahead;
+    }
     if (tfs->ram_mode && tfs->ram_piece) {
         for (int64_t p = 0; p < tfs->meta.piece_count; p++) {
-            if (p < tfs->file_first_piece || p > tfs->file_last_piece + LOOKAHEAD_PIECES) {
+            if (p < tfs->file_first_piece || p > max_keep_hi) {
                 if (tfs->ram_piece[p]) {
-                    free(tfs->ram_piece[p]);
+                    uint8_t *freed_buf = tfs->ram_piece[p];
                     tfs->ram_piece[p] = NULL;
+                    if (tfs->aq_buf_pool_cnt < 4 &&
+                        (int64_t)tfs->aq_buf_pool_cnt * plen < (64LL << 20)) {
+                        tfs->aq_buf_pool[tfs->aq_buf_pool_cnt++] = freed_buf;
+                    } else {
+                        free(freed_buf);
+                    }
                 }
                 if (tfs->status && tfs->status[p] == PIECE_DONE) {
                     tfs->status[p] = PIECE_NEEDED;
@@ -3045,14 +3081,13 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
             }
         }
         int64_t res = 0;
-        for (int64_t p = tfs->file_first_piece; p <= tfs->file_last_piece; p++) {
+        for (int64_t p = 0; p < tfs->meta.piece_count; p++) {
             if (tfs->ram_piece[p]) res += tfs->meta.piece_len;
         }
         tfs->ram_resident = res;
         tfs->ram_lo       = tfs->file_first_piece;
     }
 
-    int64_t plen = tfs->meta.piece_len;
     tfs->crit_head = (int)((CRIT_HEAD_BYTES + plen - 1) / plen);
     tfs->crit_tail = 0;
     if (tfs->crit_head < 1) tfs->crit_head = 1;
@@ -3063,37 +3098,17 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
         memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
     }
 
-    // Count pieces of the new file that are already DONE
-    int64_t done = 0;
-    if (tfs->status) {
-        for (int64_t p = tfs->file_first_piece; p <= tfs->file_last_piece; p++) {
-            if (tfs->status[p] == PIECE_DONE) done++;
-        }
-    }
-    tfs->pieces_done = done;
-
-    // Reset active assembly queue (aq) only for pieces outside the new file range and lookahead
-    for (int i = 0; i < tfs->n_aq; i++) {
-        if (tfs->aq[i].idx >= 0 &&
-            (tfs->aq[i].idx < tfs->file_first_piece || tfs->aq[i].idx > tfs->file_last_piece + LOOKAHEAD_PIECES)) {
-            tfs->aq[i].idx = -1;
-            if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);
-            if (tfs->aq[i].req) memset(tfs->aq[i].req, 0, (size_t)tfs->blocks_per_piece);
-            if (tfs->aq[i].req_ts) memset(tfs->aq[i].req_ts, 0, (size_t)tfs->blocks_per_piece * sizeof(uint64_t));
-        }
-    }
-
-    // Drop only in-flight requests that are outside the new file range and lookahead window.
+    // Drop only in-flight requests that are outside the new file range and allowed lookahead window.
     // Retaining valid in-flight requests prevents peer stall during multi-file transitions.
     u64 now_sel = armGetSystemTick();
     for (int i = 0; i < MAX_SESS; i++) {
-        if (tfs->S[i].nb.handshaked) {
+        if (tfs->S[i].active && tfs->S[i].nb.handshaked) {
             sess *s = &tfs->S[i];
             int kept = 0;
             for (int k = 0; k < s->req_n; k++) {
                 int ep = s->req_piece[k];
                 int eb = s->req_block[k];
-                if (ep >= tfs->file_first_piece && ep <= tfs->file_last_piece + LOOKAHEAD_PIECES) {
+                if (ep >= tfs->file_first_piece && ep <= max_keep_hi) {
                     if (kept != k) {
                         s->req_piece[kept] = s->req_piece[k];
                         s->req_block[kept] = s->req_block[k];
@@ -3114,13 +3129,101 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
         }
     }
 
+    // Reset active assembly queue (aq) only for pieces outside the new file range and allowed lookahead,
+    // and restore their status from PIECE_ACTIVE back to PIECE_NEEDED so they are never orphaned.
+    for (int i = 0; i < tfs->n_aq; i++) {
+        if (tfs->aq[i].idx >= 0 &&
+            (tfs->aq[i].idx < tfs->file_first_piece || tfs->aq[i].idx > max_keep_hi)) {
+            int64_t old_idx = tfs->aq[i].idx;
+            if (old_idx >= 0 && old_idx < tfs->meta.piece_count &&
+                tfs->status && tfs->status[old_idx] == PIECE_ACTIVE) {
+                tfs->status[old_idx] = PIECE_NEEDED;
+            }
+            tfs->aq[i].idx = -1;
+            tfs->aq[i].have_cnt = 0;
+            tfs->aq[i].next_req = 0;
+            if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);
+            if (tfs->aq[i].req) memset(tfs->aq[i].req, 0, (size_t)tfs->blocks_per_piece);
+            if (tfs->aq[i].req_ts) memset(tfs->aq[i].req_ts, 0, (size_t)tfs->blocks_per_piece * sizeof(uint64_t));
+        }
+        // Release idle aq slot buffers back to the OS heap during file transition
+        if (tfs->aq[i].idx < 0 && tfs->aq[i].buf) {
+            free(tfs->aq[i].buf);
+            tfs->aq[i].buf = NULL;
+        }
+    }
+    while (tfs->aq_buf_pool_cnt > 2) {
+        free(tfs->aq_buf_pool[--tfs->aq_buf_pool_cnt]);
+    }
 
-    tfs->cancel_reader = false;
+    // Heal any orphaned PIECE_ACTIVE status and recompute pieces_done / pieces_ever for the new file
+    int64_t done = 0;
+    if (tfs->ever) {
+        memset(tfs->ever, 0, (size_t)((tfs->meta.piece_count + 7) / 8));
+    }
+    if (tfs->status) {
+        for (int64_t p = 0; p < tfs->meta.piece_count; p++) {
+            if (tfs->status[p] == PIECE_ACTIVE && !aq_find(tfs, p)) {
+                tfs->status[p] = PIECE_NEEDED;
+            }
+            if (p >= tfs->file_first_piece && p <= tfs->file_last_piece &&
+                tfs->status[p] == PIECE_DONE) {
+                done++;
+                if (tfs->ever) {
+                    tfs->ever[p >> 3] |= (uint8_t)(1u << (p & 7));
+                }
+            }
+        }
+    }
+    tfs->pieces_done = done;
+    tfs->pieces_ever = done;
 
     mutexUnlock(&tfs->lock);
     if (tfs->ram_mode) {
         mutexUnlock(&tfs->cache_lock);
     }
+}
+
+bool torrentfs_select_file(torrentfs *tfs, int file_index) {
+    if (!tfs) return false;
+    if (file_index < 0 || file_index >= tfs->meta.file_count) return false;
+
+    int64_t new_offset = tfs->meta.files[file_index].offset;
+    int64_t new_size = tfs->meta.files[file_index].length;
+    if (new_size <= 0) return false;
+
+    // If already on this file, nothing to change
+    if (tfs->stream_offset == new_offset && tfs->stream_size == new_size) {
+        tfs->cancel_reader = false;
+        return true;
+    }
+
+    engine_log(ENGINE_LOG_INFO,
+               "[torrentfs] select_file: switching to file %d (%lld bytes)",
+               file_index, (long long)new_size);
+
+    // 1. Unblock any current reader
+    tfs->cancel_reader = true;
+    tfs->read_blocked_piece = -1;
+
+    // 2. Delegate aq[] / S[] reconfiguration to the netloop thread to avoid data races
+    if (tfs->netloop_started && !tfs->stop) {
+        __atomic_store_n(&tfs->pending_select_file, file_index, __ATOMIC_RELEASE);
+        for (int wait_i = 0; wait_i < 500 && !tfs->stop; wait_i++) {
+            if (__atomic_load_n(&tfs->pending_select_file, __ATOMIC_ACQUIRE) < 0) {
+                break;
+            }
+            svcSleepThread(2000000ULL); // 2 ms
+        }
+        int leftover = __atomic_exchange_n(&tfs->pending_select_file, -1, __ATOMIC_ACQ_REL);
+        if (leftover >= 0) {
+            torrentfs_apply_select_file(tfs, leftover);
+        }
+    } else {
+        torrentfs_apply_select_file(tfs, file_index);
+    }
+
+    tfs->cancel_reader = false;
 
     engine_log(ENGINE_LOG_INFO,
                "[torrentfs] select_file: now streaming pieces %lld..%lld (peers: %d)",
@@ -3203,15 +3306,40 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
     tfs->read_blocked_piece = first;
     u64 wait_start = armGetSystemTick();
     u64 last_wd = wait_start;
+    int64_t last_recv = tfs->st_bytes_recv;
+    u64 last_recv_tick = wait_start;
     while (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0)) {
         svcSleepThread(20000000ULL);  // 20 ms
         u64 now = armGetSystemTick();
+        if (tfs->st_bytes_recv != last_recv) {
+            last_recv = tfs->st_bytes_recv;
+            last_recv_tick = now;
+        }
         if (now - last_wd > tfs->freq) {
             last_wd = now;
             hb_beat(tfs, HB_READER);
             tsnx_engine_wd_tick(6);
-            if ((now - wait_start) / tfs->freq >= 20 && tfs->st_live == 0) {
+            u64 stall_secs = (now - last_recv_tick) / tfs->freq;
+            if (stall_secs >= 20 && tfs->st_live == 0) {
                 tfs->announce_now = true;
+            }
+            // Self-heal if the needed piece is stuck in PIECE_ACTIVE without an aq slot
+            mutexLock(&tfs->lock);
+            if (first >= 0 && first < tfs->meta.piece_count &&
+                tfs->status && tfs->status[first] == PIECE_ACTIVE && !aq_find(tfs, first)) {
+                engine_log(ENGINE_LOG_WARN,
+                           "[read] piece %lld orphaned in PIECE_ACTIVE, resetting to PIECE_NEEDED",
+                           (long long)first);
+                tfs->status[first] = PIECE_NEEDED;
+            }
+            mutexUnlock(&tfs->lock);
+            // Return 0 after 45s of complete stall (when not paused) so the caller's retry/timeout logic can run
+            if (!tfs->paused && stall_secs >= 45 && (now - wait_start) / tfs->freq >= 45) {
+                engine_log(ENGINE_LOG_WARN,
+                           "[read] stall timeout waiting for piece %lld block %d (stall=%llus, live=%d)",
+                           (long long)first, b0, (unsigned long long)stall_secs, tfs->st_live);
+                tfs->read_blocked_piece = -1;
+                return 0;
             }
         }
     }

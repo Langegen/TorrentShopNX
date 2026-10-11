@@ -68,7 +68,20 @@ void logInit() {
     ensureDirRecursive("sdmc:/switch/TorrentShopNX");
 #endif
     std::lock_guard<std::mutex> lock(g_log_mutex);
-    std::ofstream file(logPath(), std::ios::trunc);
+    const char* curPath = logPath();
+    struct stat st;
+    if (stat(curPath, &st) == 0 && st.st_size > 0) {
+        std::string prevPath = curPath;
+        size_t dot = prevPath.find_last_of('.');
+        if (dot != std::string::npos) {
+            prevPath = prevPath.substr(0, dot) + ".prev" + prevPath.substr(dot);
+        } else {
+            prevPath += ".prev";
+        }
+        std::remove(prevPath.c_str());
+        std::rename(curPath, prevPath.c_str());
+    }
+    std::ofstream file(curPath, std::ios::trunc);
     if (file.is_open()) {
         file << "TorrentShopNX log start\n";
         file.close();

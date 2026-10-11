@@ -128,7 +128,7 @@ void installerThreadEntry(void* arg) {
 // =============================================================================
 
 HybridNspInstaller::HybridNspInstaller()
-    : ring_buffer_(MIN_BUFFER_SIZE) {
+    : ring_buffer_(0) {
 }
 
 HybridNspInstaller::~HybridNspInstaller() {
@@ -195,6 +195,10 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     if (buf_size < 1024 * 1024) buf_size = 1024 * 1024;
 
     ring_buffer_.reinit(buf_size);
+    if (ring_buffer_.capacity() == 0) {
+        setError("Out of memory allocating streaming ring buffer");
+        return false;
+    }
 
     cancel_requested_ = false;
     bytes_downloaded_ = 0;
@@ -218,7 +222,7 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     ticket_data_.clear();
     cert_data_.clear();
 
-    util::logLine("hybrid: start install, buffer=" + std::to_string(buf_size / (1024*1024)) + "MB");
+    util::logLine("hybrid: start install, buffer=" + std::to_string(ring_buffer_.capacity() / (1024*1024)) + "MB");
 
     // Фаза 1: Парсинг заголовка
     if (!parseNspHeaderPhase()) return false;

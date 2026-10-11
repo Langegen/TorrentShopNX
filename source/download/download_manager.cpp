@@ -1645,6 +1645,8 @@ void DownloadManager::trackProgress() {
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
+                    } else if (!item.torrent_hash.empty()) {
+                        releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
                     }
                     util::logLine("download: hybrid install failed: " + item.error_message);
                 } else {
@@ -2139,19 +2141,42 @@ bool DownloadManager::startHybridInstall(size_t index) {
 
     if (item.state == DownloadState::StreamPreparing) {
         if (item.start_future) {
+            if (!item.start_future->valid()) {
+                item.start_future.reset();
+                item.hybrid_installer.reset();
+                item.state = DownloadState::Failed;
+                item.error_message = "Installer start task invalid state";
+                if (!item.torrent_hash.empty() && isLocalBackend()) {
+                    releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+                }
+                return false;
+            }
             if (item.start_future->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
                 return true; // Installer still preparing
             }
 
-            bool started = item.start_future->get();
+            auto fut = std::move(item.start_future);
             item.start_future.reset();
+            bool started = false;
+            std::string exc_msg;
+            try {
+                started = fut->get();
+            } catch (const std::exception& e) {
+                exc_msg = e.what();
+                util::logLine(std::string("download: exception in hybrid start_future: ") + exc_msg);
+                started = false;
+            }
 
             if (!started) {
-                item.error_message = item.hybrid_installer ? item.hybrid_installer->errorMessage()
-                                                           : "failed to start hybrid install";
+                item.error_message = (item.hybrid_installer && !item.hybrid_installer->errorMessage().empty())
+                                         ? item.hybrid_installer->errorMessage()
+                                         : (!exc_msg.empty() ? exc_msg : "failed to start hybrid install");
                 util::logLine("download: failed to start hybrid install: " + item.error_message);
                 item.hybrid_installer.reset();
                 item.state = DownloadState::Failed;
+                if (!item.torrent_hash.empty() && isLocalBackend()) {
+                    releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+                }
                 return false;
             }
 
@@ -2162,10 +2187,14 @@ bool DownloadManager::startHybridInstall(size_t index) {
             return true;
         }
 
-        if (!item.open_future) {
+        if (!item.open_future || !item.open_future->valid()) {
+            item.open_future.reset();
             has_open_pending_.store(false);
             item.state = DownloadState::Failed;
             item.error_message = "Stream open task lost.";
+            if (!item.torrent_hash.empty() && isLocalBackend()) {
+                releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+            }
             return false;
         }
 
@@ -2173,15 +2202,25 @@ bool DownloadManager::startHybridInstall(size_t index) {
             return true; // Still preparing
         }
 
-        bool success = item.open_future->get();
+        auto open_fut = std::move(item.open_future);
         item.open_future.reset();
         has_open_pending_.store(false);
+        bool success = false;
+        try {
+            success = open_fut->get();
+        } catch (const std::exception& e) {
+            util::logLine(std::string("download: exception in hybrid open_future: ") + e.what());
+            success = false;
+        }
 
         if (!success) {
             util::logLine("download: failed to open hybrid stream hash=" + item.torrent_hash +
                           " index=" + std::to_string(install_file_index));
             item.state = DownloadState::Failed;
             item.error_message = "Failed to open stream (metadata timeout or error).";
+            if (!item.torrent_hash.empty() && isLocalBackend()) {
+                releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+            }
             return false;
         }
 

@@ -500,10 +500,15 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
 {
     int curScale = config::ConfigManager::instance().getFontScale();
     auto scaleIt = s_labelFontScale.find(this);
-    if (scaleIt == s_labelFontScale.end() || scaleIt->second != curScale)
+    if (scaleIt == s_labelFontScale.end())
     {
         s_labelFontScale[this] = curScale;
-        this->invalidate();
+    }
+    else if (scaleIt->second != curScale)
+    {
+        scaleIt->second = curScale;
+        if (YGNodeHasMeasureFunc(this->ygNode))
+            YGNodeMarkDirty(this->ygNode);
     }
 
     if (width == 0)
