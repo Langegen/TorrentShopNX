@@ -1056,7 +1056,12 @@
         "bg_dim_4": "Scuro (65%)",
         "bg_dim_applied": "Oscuramento sfondo aggiornato",
         "show_bottom_dashboard": "Mostra pannello informazioni",
-        "show_bottom_dashboard_desc": "Visualizza il pannello inferiore con dettagli e statistiche nel menu principale"
+        "show_bottom_dashboard_desc": "Visualizza il pannello inferiore con dettagli e statistiche nel menu principale",
+        "font_scale_title": "Dimensione carattere",
+        "font_scale_0": "Standard (100%)",
+        "font_scale_1": "Media (115%)",
+        "font_scale_2": "Grande (130%)",
+        "font_scale_applied": "Dimensione carattere aggiornata"
     },
     "theme": {
         "emerald": "Smeraldo",

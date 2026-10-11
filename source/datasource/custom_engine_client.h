@@ -79,6 +79,9 @@ public:
     /* Cancels an in-flight read on the torrent stream. */
     void cancelRead(const std::string& hash);
 
+    /* Stops the shared engine and joins all background engine threads. */
+    void shutdown();
+
 private:
     CustomEngineClient() = default;
     ~CustomEngineClient();
@@ -86,7 +89,6 @@ private:
     CustomEngineClient& operator=(const CustomEngineClient&) = delete;
 
     bool ensureEngine();
-    void shutdown();
 
     tsnx_engine* engine_ = nullptr;
     std::string last_error_;

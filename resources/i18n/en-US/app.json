@@ -1059,7 +1059,12 @@
         "bg_dim_4": "Dark (65%)",
         "bg_dim_applied": "Background dimming updated",
         "show_bottom_dashboard": "Show Info Panel",
-        "show_bottom_dashboard_desc": "Display the bottom information panel with details and stats in the main menu"
+        "show_bottom_dashboard_desc": "Display the bottom information panel with details and stats in the main menu",
+        "font_scale_title": "Font Size",
+        "font_scale_0": "Standard (100%)",
+        "font_scale_1": "Medium (115%)",
+        "font_scale_2": "Large (130%)",
+        "font_scale_applied": "Font size updated"
     },
     "theme": {
         "emerald": "Emerald",

@@ -82,6 +82,7 @@ static void bin_to_hex(const uint8_t *bin, char *hex, size_t hex_len) {
 // Called from the shared listener thread; returns NULL when the torrent is not
 // open (the listener drops the socket).
 static torrentfs *engine_find_fs_by_hash(const uint8_t info_hash[20]) {
+    if (!g_engine || !g_engine->running) return NULL;
     char hex[41];
     bin_to_hex(info_hash, hex, 40);
     for (int i = 0; i < MAX_TORRENTS; i++) {
@@ -177,15 +178,23 @@ void tsnx_engine_stop(tsnx_engine *eng) {
     int i;
     eng = active_engine(eng);
     if (!eng) return;
+    eng->running = false;
+    // Stop listener first so incoming connections cannot race with torrentfs_close.
+    torrent_listener_stop();
     for (i = 0; i < MAX_TORRENTS; i++) {
         if (eng->torrents[i].used) {
-            torrentfs_cancel(eng->torrents[i].fs);
-            torrentfs_close(eng->torrents[i].fs);
+            torrentfs *fs = eng->torrents[i].fs;
+            eng->torrents[i].fs = NULL;
+            eng->torrents[i].used = false;
+            torrentfs_cancel(fs);
+            torrentfs_close(fs);
             torrent_unload(&eng->torrents[i].meta);
             free(eng->torrents[i].source);
+            eng->torrents[i].source = NULL;
+            free(eng->torrents[i].wanted_files);
+            eng->torrents[i].wanted_files = NULL;
         }
     }
-    eng->running = false;
     if (g_engine == eng) g_engine = NULL;
     engine_log(ENGINE_LOG_INFO, "engine stop");
 #ifndef __SWITCH__
@@ -194,7 +203,6 @@ void tsnx_engine_stop(tsnx_engine *eng) {
     threadClose(&g_wd_thread);
 #endif
     upnp_stop();               // no more mapping announcements
-    torrent_listener_stop();   // stop accepting (after the torrents are gone)
     dht_stop();  // persistent DHT: save the routing table for the next start
     utp_nb_exit();
     engine_log_close();
@@ -342,8 +350,11 @@ bool tsnx_engine_remove_torrent(tsnx_engine *eng, const char *hash) {
     if (!t) return false;
     eng = active_engine(eng);
     (void)eng;
-    torrentfs_cancel(t->fs);
-    torrentfs_close(t->fs);
+    torrentfs *fs = t->fs;
+    t->fs = NULL;
+    t->used = false;
+    torrentfs_cancel(fs);
+    torrentfs_close(fs);
     torrent_unload(&t->meta);
     free(t->source);
     if (t->wanted_files) free(t->wanted_files);
@@ -386,20 +397,21 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
         it = &out[count++];
         snprintf(it->hash, sizeof(it->hash), "%s", t->hash);
         // Metadata-only slots (probe result) have no torrentfs yet.
-        if (t->fs) {
-            snprintf(it->name, sizeof(it->name), "%s", torrentfs_name(t->fs));
-            torrentfs_stats(t->fs, &done, &total, &ph);
+        torrentfs *fs = t->fs;
+        if (fs) {
+            snprintf(it->name, sizeof(it->name), "%s", torrentfs_name(fs));
+            torrentfs_stats(fs, &done, &total, &ph);
             it->progress = total > 0 ? (float)done / (float)total : 0.0f;
             it->loaded_size = done;
             it->total_size = total;
 
             int live = 0, peak = 0, connecting = 0;
-            torrentfs_live_peers(t->fs, &live, &peak, &connecting);
-            it->seeds       = torrentfs_seed_count(t->fs); // peers holding the whole file
+            torrentfs_live_peers(fs, &live, &peak, &connecting);
+            it->seeds       = torrentfs_seed_count(fs); // peers holding the whole file
             it->peers       = live;                        // currently connected sessions
-            it->known_peers = torrentfs_peer_count(t->fs); // discovered pool
+            it->known_peers = torrentfs_peer_count(fs); // discovered pool
 
-            bytes_recv = (uint64_t)torrentfs_bytes_recv(t->fs);
+            bytes_recv = (uint64_t)torrentfs_bytes_recv(fs);
         } else {
             snprintf(it->name, sizeof(it->name), "%s",
                      t->meta.name[0] ? t->meta.name : "torrent");
@@ -425,7 +437,7 @@ int tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
         // rate is a few KB/s. Signed arithmetic + clamp keeps that benign.
         now = now_ms();
         int64_t useful_now = (int64_t)bytes_recv -
-                             (t->fs ? (int64_t)torrentfs_dup_bytes(t->fs) : 0);
+                             (fs ? (int64_t)torrentfs_dup_bytes(fs) : 0);
         if (useful_now < 0) useful_now = 0;
         if (t->last_speed_time_ms == 0) {
             t->last_speed_time_ms = now;
@@ -519,7 +531,12 @@ bool tsnx_engine_prepare_stream(tsnx_engine *eng, const char *hash,
     }
 
     /* Close previous stream and reopen the requested file. */
-    if (t->fs) torrentfs_close(t->fs);
+    if (t->fs) {
+        torrentfs *old_fs = t->fs;
+        t->fs = NULL;
+        torrentfs_cancel(old_fs);
+        torrentfs_close(old_fs);
+    }
     t->fs = torrentfs_open_file_cancel(t->source ? t->source : t->hash,
                                        TSNX_TORRENTFS_CACHE,
                                        file_index, t->cancel, err, sizeof(err));

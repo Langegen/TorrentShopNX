@@ -12,7 +12,7 @@ DashboardTile::DashboardTile(int index, const std::string& icon_res, const std::
     this->setFocusable(true);
     this->setHideHighlight(true); // Disable Borealis default highlight outline so only our custom glass border is visible!
     this->setWidth(208.0f);
-    this->setHeight(226.0f);
+    this->setHeight(230.0f);
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::CENTER);
@@ -56,7 +56,7 @@ DashboardTile::DashboardTile(int index, const std::string& icon_res, const std::
     title_label_->setFontSize(16.0f);
     title_label_->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     title_label_->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    title_label_->setHeight(22.0f);
+    title_label_->setHeight(26.0f);
     title_label_->setMarginTop(6.0f);
     this->addView(title_label_);
 

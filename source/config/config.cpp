@@ -67,7 +67,8 @@ bool parseConfigBody(const std::string& body,
                      std::string& custom_background_path,
                      int& background_blur,
                      int& background_dim,
-                     bool& show_bottom_dashboard) {
+                     bool& show_bottom_dashboard,
+                     int& font_scale) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
 
@@ -171,6 +172,9 @@ bool parseConfigBody(const std::string& body,
                 } else if (key == "show_bottom_dashboard") {
                     show_bottom_dashboard = parseBool(val, show_bottom_dashboard);
                     parsed_known_keys = true;
+                } else if (key == "font_scale") {
+                    try { font_scale = std::stoi(val); } catch (...) {}
+                    parsed_known_keys = true;
                 }
             } else if (legacy_single_value.empty()) {
                 // Legacy format: config.txt contained only TorrServer URL in one line.
@@ -259,6 +263,7 @@ ConfigManager::ConfigManager() {
     background_mode_ = "auto";
     custom_background_path_.clear();
     show_bottom_dashboard_ = true;
+    font_scale_ = 0;
     load();
 }
 
@@ -273,7 +278,7 @@ void ConfigManager::load() {
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_,
                         theme_, background_mode_, custom_background_path_,
                         background_blur_, background_dim_,
-                        show_bottom_dashboard_);
+                        show_bottom_dashboard_, font_scale_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -293,6 +298,7 @@ void ConfigManager::load() {
         }
         if (background_blur_ < 0 || background_blur_ > 3) background_blur_ = 0;
         if (background_dim_ < 0 || background_dim_ > 4) background_dim_ = 2;
+        if (font_scale_ < 0 || font_scale_ > 2) font_scale_ = 0;
         util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", theme: " + theme_ + ", background_mode: " + background_mode_);
         return;
     }
@@ -307,7 +313,7 @@ void ConfigManager::load() {
                         retro_roms_mode_, retro_custom_path_, retro_auto_extract_, retro_romset_mode_,
                         theme_, background_mode_, custom_background_path_,
                         background_blur_, background_dim_,
-                        show_bottom_dashboard_);
+                        show_bottom_dashboard_, font_scale_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -327,6 +333,7 @@ void ConfigManager::load() {
         }
         if (background_blur_ < 0 || background_blur_ > 3) background_blur_ = 0;
         if (background_dim_ < 0 || background_dim_ > 4) background_dim_ = 2;
+        if (font_scale_ < 0 || font_scale_ > 2) font_scale_ = 0;
         util::logLine("config: loaded legacy config.txt, migrating to config.ini");
         save();
         return;
@@ -379,6 +386,7 @@ void ConfigManager::save() {
     file << "background_blur=" << background_blur_ << "\n";
     file << "background_dim=" << background_dim_ << "\n";
     file << "show_bottom_dashboard=" << (show_bottom_dashboard_ ? "true" : "false") << "\n";
+    file << "font_scale=" << font_scale_ << "\n";
     file.flush();
     file.close();
 #ifdef __SWITCH__
@@ -814,6 +822,25 @@ bool ConfigManager::getShowBottomDashboard() const {
 void ConfigManager::setShowBottomDashboard(bool enabled) {
     show_bottom_dashboard_ = enabled;
     save();
+}
+
+int ConfigManager::getFontScale() const {
+    return font_scale_;
+}
+
+void ConfigManager::setFontScale(int level) {
+    if (level < 0) level = 0;
+    if (level > 2) level = 2;
+    font_scale_ = level;
+    save();
+}
+
+float ConfigManager::getFontScaleMultiplier() const {
+    switch (font_scale_) {
+        case 1: return 1.15f;
+        case 2: return 1.30f;
+        default: return 1.0f;
+    }
 }
 
 } // namespace config

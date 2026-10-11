@@ -180,6 +180,13 @@ static char *base_url(const char *xml) {
     return out;
 }
 
+// Aborts curl transfers immediately when upnp_stop() sets s_stop.
+static int upnp_curl_progress_cb(void *clientp, curl_off_t dltotal, curl_off_t dlnow,
+                                 curl_off_t ultotal, curl_off_t ulnow) {
+    (void)clientp; (void)dltotal; (void)dlnow; (void)ultotal; (void)ulnow;
+    return s_stop ? 1 : 0;
+}
+
 // GETs `url`, returns malloc'd body ("" on failure).
 static char *http_get(const char *url) {
     membuf m = {0};
@@ -189,6 +196,9 @@ static char *http_get(const char *url) {
     curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_write_cb);
     curl_easy_setopt(c, CURLOPT_WRITEDATA, &m);
     curl_easy_setopt(c, CURLOPT_TIMEOUT, (long)HTTP_TIMEOUT_SECS);
+    curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, upnp_curl_progress_cb);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
@@ -241,6 +251,9 @@ static int soap_add_mapping(const char *control_url, const char *svc_type,
     curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_write_cb);
     curl_easy_setopt(c, CURLOPT_WRITEDATA, &m);
     curl_easy_setopt(c, CURLOPT_TIMEOUT, (long)HTTP_TIMEOUT_SECS);
+    curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(c, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(c, CURLOPT_XFERINFOFUNCTION, upnp_curl_progress_cb);
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 0L);
 
@@ -316,7 +329,11 @@ static void upnp_main(void *arg) {
     int found = 0;
     for (int attempt = 0; attempt < 3 && !s_stop; attempt++) {
         if (ssdp_discover(location, sizeof(location)) == 0) { found = 1; break; }
-        if (attempt < 2) svcSleepThread(10000000000ULL);
+        if (attempt < 2) {
+            for (int w = 0; w < 100 && !s_stop; w++) {
+                svcSleepThread(100000000ULL); // 100 ms slices
+            }
+        }
     }
     if (!found) {
         engine_log(ENGINE_LOG_INFO, "[upnp] no IGD found via SSDP");

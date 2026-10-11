@@ -114,10 +114,11 @@ static void add_tracker_single(torrent_meta *t, const char *url, size_t len) {
 
 static void add_tracker(torrent_meta *t, const char *url, size_t len) {
     add_tracker_single(t, url, len);
-    if (len >= 13 && (strstr(url, "t-ru.org/ann") != NULL || strstr(url, "bt.t-ru.org") != NULL || strstr(url, "bt2.t-ru.org") != NULL)) {
+    if (len >= 13 && (strstr(url, "t-ru.org/ann") != NULL || strstr(url, "bt.t-ru.org") != NULL || strstr(url, "bt2.t-ru.org") != NULL || strstr(url, "bt3.t-ru.org") != NULL || strstr(url, "bt4.t-ru.org") != NULL)) {
         static const char *RU_MIRRORS[] = {
             "http://bt.t-ru.org/ann?magnet",
             "http://bt2.t-ru.org/ann?magnet",
+            "http://bt3.t-ru.org/ann?magnet",
             "http://bt4.t-ru.org/ann?magnet"
         };
         for (size_t m = 0; m < sizeof(RU_MIRRORS)/sizeof(RU_MIRRORS[0]); m++) {

@@ -122,9 +122,20 @@ void DownloadsView::onContentAvailable() {
         return true;
     });
 
-    // Register callback for auto-refreshing the view when progress updates
-    ui::DownloadManager::instance().setProgressCallback([this]() {
-        brls::sync([this]() {
+    registerProgressCallback();
+
+    // Force an immediate refresh so that cells show the current download state
+    // right away after the auto-redirect from FileSelectView (without waiting for
+    // the next progress-thread tick which can be up to 1 second away).
+    ui::DownloadManager::instance().triggerCallback();
+}
+
+void DownloadsView::registerProgressCallback() {
+    auto alive = alive_;
+    ui::DownloadManager::instance().setProgressCallback([this, alive]() {
+        if (!alive->load()) return;
+        brls::sync([this, alive]() {
+            if (!alive->load()) return;
             std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
             const auto& queue = ui::DownloadManager::instance().getImpl().queue();
             
@@ -179,14 +190,10 @@ void DownloadsView::onContentAvailable() {
             }
         });
     });
-
-    // Force an immediate refresh so that cells show the current download state
-    // right away after the auto-redirect from FileSelectView (without waiting for
-    // the next progress-thread tick which can be up to 1 second away).
-    ui::DownloadManager::instance().triggerCallback();
 }
 
 DownloadsView::~DownloadsView() {
+    alive_->store(false);
     // Unregister callback on destruction to avoid crashes
     ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
@@ -194,6 +201,7 @@ DownloadsView::~DownloadsView() {
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     util::ScreenSleepManager::instance().resetActivity();
+    registerProgressCallback();
     std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     if (!queue.empty()) {
@@ -776,11 +784,14 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
         parent_->updateCell(cell, queue[row]);
     }
 
-    cell->getFocusEvent()->subscribe([this, row](bool focused) {
-        if (focused) {
-            parent_->focusedRow_ = row;
-        }
-    });
+    if (!cell->focusSubscribed) {
+        cell->focusSubscribed = true;
+        cell->getFocusEvent()->subscribe([this, cell](bool focused) {
+            if (focused) {
+                parent_->focusedRow_ = cell->getIndexPath().row;
+            }
+        });
+    }
 
     return cell;
 }

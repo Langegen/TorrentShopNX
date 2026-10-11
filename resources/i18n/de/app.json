@@ -1056,7 +1056,12 @@
         "bg_dim_4": "Dunkel (65%)",
         "bg_dim_applied": "Hintergrundabdunklung geändert",
         "show_bottom_dashboard": "Infoleiste anzeigen",
-        "show_bottom_dashboard_desc": "Untere Infoleiste mit Details und Statistiken im Hauptmenü anzeigen"
+        "show_bottom_dashboard_desc": "Untere Infoleiste mit Details und Statistiken im Hauptmenü anzeigen",
+        "font_scale_title": "Schriftgröße",
+        "font_scale_0": "Standard (100%)",
+        "font_scale_1": "Mittel (115%)",
+        "font_scale_2": "Groß (130%)",
+        "font_scale_applied": "Schriftgröße geändert"
     },
     "theme": {
         "emerald": "Smaragdgrün",

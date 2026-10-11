@@ -108,51 +108,6 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     return (copied >= 100 * 1024);
 }
 
-static bool replaceNroFile(const std::string& srcPath, const std::string& dstPath) {
-    struct stat st;
-    if (stat(srcPath.c_str(), &st) != 0 || st.st_size < 100 * 1024) {
-        util::logLine("replaceNroFile: src invalid or too small (" + srcPath + ")");
-        return false;
-    }
-
-    std::string oldPath = dstPath + ".old";
-    std::remove(oldPath.c_str());
-    
-    int r1 = ::rename(dstPath.c_str(), oldPath.c_str());
-    util::logLine("replaceNroFile: rename dst -> old (" + dstPath + " -> " + oldPath + ") res=" + std::to_string(r1));
-    
-    int r2 = ::rename(srcPath.c_str(), dstPath.c_str());
-    util::logLine("replaceNroFile: rename src -> dst (" + srcPath + " -> " + dstPath + ") res=" + std::to_string(r2));
-    
-    if (r2 == 0) {
-        std::remove(oldPath.c_str());
-#ifdef __SWITCH__
-        fsdevCommitDevice("sdmc");
-#endif
-        util::logLine("replaceNroFile: successfully replaced NRO via rename");
-        return true;
-    }
-    
-    if (r1 == 0 && stat(dstPath.c_str(), &st) != 0) {
-        ::rename(oldPath.c_str(), dstPath.c_str());
-    }
-
-    util::logLine("replaceNroFile: rename failed, falling back to copyFileOverwrite");
-    std::remove(dstPath.c_str());
-    bool ok = copyFileOverwrite(srcPath, dstPath);
-    if (ok) {
-        std::remove(srcPath.c_str());
-        std::remove(oldPath.c_str());
-#ifdef __SWITCH__
-        fsdevCommitDevice("sdmc");
-#endif
-        util::logLine("replaceNroFile: successfully replaced NRO via copy");
-        return true;
-    }
-    util::logLine("replaceNroFile: copyFileOverwrite also failed!");
-    return false;
-}
-
 void downloadAndInstallAppUpdate(const std::string& url, const std::string& version) {
     brls::Box* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
@@ -277,25 +232,9 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                             fsdevCommitDevice("sdmc");
 #endif
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
-                            pendingDialog->addButton("app/settings/restart_btn"_i18n, [updatePath]() {
-#ifdef __SWITCH__
-                                util::unmountRomfs();
-
-                                bool ok = replaceNroFile(updatePath, g_nroPath);
-                                util::logLine("restart_btn: replaceNroFile to " + g_nroPath + " res=" + std::to_string(ok));
-
-                                if (envHasNextLoad()) {
-                                    std::string quotedArg = "\"" + g_nroPath + "\"";
-                                    envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
-                                    util::logLine("restart_btn: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
-                                }
-                                fsdevCommitDevice("sdmc");
-                                util::logLine("restart_btn: closing log and exiting to HBMenu via _exit(0)");
-                                util::logClose();
-                                _exit(0);
-#else
+                            pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
+                                brls::Application::getPlatform()->exitToHomeMode(false);
                                 brls::Application::quit();
-#endif
                             });
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
                             pendingDialog->open();
@@ -652,6 +591,26 @@ brls::View* SettingsTab::buildAppearanceTab() {
         cfg.setShowBottomDashboard(value);
     });
     box->addView(showDashboardCell);
+
+    // Размер шрифта (Font Scale)
+    std::vector<std::string> fontScaleOptions = {
+        "app/appearance/font_scale_0"_i18n,
+        "app/appearance/font_scale_1"_i18n,
+        "app/appearance/font_scale_2"_i18n
+    };
+    int initialFontScaleIdx = cfg.getFontScale();
+    if (initialFontScaleIdx < 0 || initialFontScaleIdx >= static_cast<int>(fontScaleOptions.size())) {
+        initialFontScaleIdx = 0;
+    }
+
+    auto* fontScaleCell = new brls::SelectorCell();
+    fontScaleCell->init("app/appearance/font_scale_title"_i18n, fontScaleOptions, initialFontScaleIdx, [](int selected) {}, [&cfg](int selected) {
+        if (selected != cfg.getFontScale()) {
+            cfg.setFontScale(selected);
+            brls::Application::notify("app/appearance/font_scale_applied"_i18n);
+        }
+    });
+    box->addView(fontScaleCell);
 
     // 3. Фоновое изображение (Wallpaper Preset)
     std::vector<std::string> bgOptions;

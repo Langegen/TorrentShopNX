@@ -770,6 +770,13 @@ void Application::navigate(FocusDirection direction, bool repeating)
     if (Application::setInputType(InputType::GAMEPAD))
         return;
 
+    if (!Application::currentFocus && !Application::activitiesStack.empty())
+    {
+        View* contentView = Application::activitiesStack.back()->getContentView();
+        if (contentView)
+            Application::giveFocus(contentView->getDefaultFocus());
+    }
+
     View* currentFocus = Application::currentFocus;
 
     // Do nothing if there is no current focus
@@ -804,7 +811,7 @@ void Application::navigate(FocusDirection direction, bool repeating)
         nextFocus = currentFocus->getNextFocus(direction, currentFocus);
     }
 
-    // No view to focus at the end of the traversal: wiggle and return
+    // No view to focus at the end of traversal: wiggle and return
     if (!nextFocus)
     {
         Application::getAudioPlayer()->play(SOUND_FOCUS_ERROR);
@@ -880,7 +887,14 @@ bool Application::setInputType(InputType type)
     if (type == InputType::GAMEPAD)
     {
         Application::setDrawCoursor(false);
-        Application::currentFocus->onFocusGained();
+        if (!Application::currentFocus && !Application::activitiesStack.empty())
+        {
+            View* contentView = Application::activitiesStack.back()->getContentView();
+            if (contentView)
+                Application::giveFocus(contentView->getDefaultFocus());
+        }
+        if (Application::currentFocus)
+            Application::currentFocus->onFocusGained();
     }
 
     return true;

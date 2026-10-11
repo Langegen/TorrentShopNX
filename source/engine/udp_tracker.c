@@ -64,17 +64,25 @@ static int request_reply(int sock, const uint8_t *req, size_t reqlen,
         if (cancel && *cancel) return -1;  // teardown: don't wait out the recv
         if (send(sock, req, reqlen, 0) < 0) return -1;
 
-        ssize_t n = recv(sock, resp, respcap, 0);
-        if (n < 16) continue;  // too short or timed out; retry
+        // Poll up to 6 * 500ms = 3s per attempt so cancel wakes within 500ms.
+        for (int wait_slice = 0; wait_slice < 6; wait_slice++) {
+            if (cancel && *cancel) return -1;
+            ssize_t n = recv(sock, resp, respcap, 0);
+            if (n < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
+                break;
+            }
+            if (n < 16) continue;  // too short; keep waiting in this attempt
 
-        uint32_t action = get32(resp);
-        uint32_t txid = get32(resp + 4);
-        if (txid != expect_txid) continue;
-        if (action == ACTION_ERROR) return -2;  // tracker rejected us
-        if (action != expect_action) continue;
+            uint32_t action = get32(resp);
+            uint32_t txid = get32(resp + 4);
+            if (txid != expect_txid) continue;
+            if (action == ACTION_ERROR) return -2;  // tracker rejected us
+            if (action != expect_action) continue;
 
-        *resplen = n;
-        return 0;
+            *resplen = n;
+            return 0;
+        }
     }
     return -1;
 }
@@ -84,6 +92,10 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
                  bool first, int port,
                  peer_addr *peers, int max_peers,
                  const volatile bool *cancel, char *err, size_t errlen) {
+    if (cancel && *cancel) {
+        set_err(err, errlen, "cancelled");
+        return -1;
+    }
     char host[256], portstr[16];
     if (parse_udp_url(url, host, sizeof(host), portstr, sizeof(portstr)) != 0) {
         set_err(err, errlen, "invalid udp URL");
@@ -97,6 +109,11 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
         set_err(err, errlen, "DNS resolution failed");
         return -1;
     }
+    if (cancel && *cancel) {
+        freeaddrinfo(res);
+        set_err(err, errlen, "cancelled");
+        return -1;
+    }
 
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -106,7 +123,7 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
         set_err(err, errlen, ebuf);
         return -1;
     }
-    struct timeval tv = { .tv_sec = 3, .tv_usec = 0 };
+    struct timeval tv = { .tv_sec = 0, .tv_usec = 500000 };
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {

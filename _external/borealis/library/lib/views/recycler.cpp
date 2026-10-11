@@ -252,6 +252,18 @@ void RecyclerFrame::reloadData()
     if (!layouted)
         return;
 
+    bool hadFocus = false;
+    View* curFocus = Application::getCurrentFocus();
+    while (curFocus)
+    {
+        if (curFocus == this || curFocus == this->contentBox)
+        {
+            hadFocus = true;
+            break;
+        }
+        curFocus = curFocus->getParent();
+    }
+
     auto children = this->contentBox->getChildren();
     for (auto const& child : children)
     {
@@ -283,6 +295,12 @@ void RecyclerFrame::reloadData()
         }
 
         selectRowAt(defaultCellFocus, false);
+        if (hadFocus && !Application::getCurrentFocus())
+        {
+            View* focusTarget = this->getDefaultFocus();
+            if (focusTarget)
+                Application::giveFocus(focusTarget);
+        }
     }
 }
 
@@ -561,6 +579,11 @@ void RecyclerFrame::removeCell(View* view)
             break;
         }
         check = check->getParent();
+    }
+
+    if (this->contentBox && this->contentBox->getLastFocusedView() == view)
+    {
+        this->contentBox->setLastFocusedView(nullptr);
     }
 
     // Find the index of the view

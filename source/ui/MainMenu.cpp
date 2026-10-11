@@ -46,6 +46,7 @@ static std::string formatBytesLocal(unsigned long long bytes) {
 MainMenu::MainMenu() {
     util::logLine("MainMenu: constructor start (Modern Dashboard)");
     current_locale_ = brls::Application::getLocale();
+    current_font_scale_ = config::ConfigManager::instance().getFontScale();
 
     refreshTimer_ = new brls::RepeatingTimer();
     refreshTimer_->setPeriod(1000);
@@ -332,6 +333,10 @@ void MainMenu::willAppear(bool resetState) {
     bool localeChanged = (newLocale != current_locale_);
     current_locale_ = newLocale;
 
+    int newFontScale = config::ConfigManager::instance().getFontScale();
+    bool fontScaleChanged = (newFontScale != current_font_scale_);
+    current_font_scale_ = newFontScale;
+
     // Update tile titles to reflect the currently active locale
     if (tiles_.size() >= 5) {
         tiles_[0]->setTitle("app/menu/catalog"_i18n);
@@ -341,7 +346,7 @@ void MainMenu::willAppear(bool resetState) {
         tiles_[4]->setTitle("app/menu/settings"_i18n);
     }
 
-    if (localeChanged && summaryView_) {
+    if ((localeChanged || fontScaleChanged) && summaryView_) {
         summaryView_->refreshLocale();
     }
 

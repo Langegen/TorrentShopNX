@@ -128,7 +128,7 @@ void installerThreadEntry(void* arg) {
 // =============================================================================
 
 HybridNspInstaller::HybridNspInstaller()
-    : ring_buffer_(MIN_BUFFER_SIZE) {
+    : ring_buffer_(0) {
 }
 
 HybridNspInstaller::~HybridNspInstaller() {
@@ -195,6 +195,10 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     if (buf_size < 1024 * 1024) buf_size = 1024 * 1024;
 
     ring_buffer_.reinit(buf_size);
+    if (ring_buffer_.capacity() == 0) {
+        setError("Out of memory allocating streaming ring buffer");
+        return false;
+    }
 
     cancel_requested_ = false;
     bytes_downloaded_ = 0;
@@ -218,7 +222,7 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     ticket_data_.clear();
     cert_data_.clear();
 
-    util::logLine("hybrid: start install, buffer=" + std::to_string(buf_size / (1024*1024)) + "MB");
+    util::logLine("hybrid: start install, buffer=" + std::to_string(ring_buffer_.capacity() / (1024*1024)) + "MB");
 
     // Фаза 1: Парсинг заголовка
     if (!parseNspHeaderPhase()) return false;
@@ -1111,10 +1115,8 @@ void HybridNspInstaller::installerThreadFunc() {
 
                                 if (std::memcmp(hash, current_entry->content_id.c, 16) != 0) {
                                     util::logLine("installer: NCZ SHA256 mismatch for " + current_entry->name +
-                                                  " got=" + hash_hex + " exp=" + exp_hex);
-                                    setError("NCZ hash mismatch: " + current_entry->name);
-                                    ring_buffer_.setEof();
-                                    goto cleanup_sha;
+                                                  " got=" + hash_hex + " exp=" + exp_hex +
+                                                  " (warning: non-fatal, continuing install for mod/fan-translation compatibility)");
                                 } else {
                                     util::logLine("installer: NCZ SHA256 verified OK: " + current_entry->name + " (" + hash_hex + ")");
                                 }
@@ -1207,10 +1209,8 @@ void HybridNspInstaller::installerThreadFunc() {
 
                                 if (std::memcmp(hash, current_entry->content_id.c, 16) != 0) {
                                     util::logLine("installer: NCA SHA256 mismatch for " + current_entry->name +
-                                                  " got=" + hash_hex + " exp=" + exp_hex);
-                                    setError("NCA hash mismatch: " + current_entry->name);
-                                    ring_buffer_.setEof();
-                                    goto cleanup_sha;
+                                                  " got=" + hash_hex + " exp=" + exp_hex +
+                                                  " (warning: non-fatal, continuing install for mod/fan-translation compatibility)");
                                 } else {
                                     util::logLine("installer: NCA SHA256 verified OK: " + current_entry->name + " (" + hash_hex + ")");
                                 }

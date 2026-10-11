@@ -345,13 +345,16 @@ void FileSelectView::onContentAvailable() {
     auto alive = alive_flag_;
     auto status_running = std::make_shared<std::atomic<bool>>(true);
     brls::async([this, status_running, alive]() {
-        while (status_running->load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            if (!status_running->load()) break;
-            
+        while (status_running->load() && alive->load() && !g_appExiting.load()) {
+            for (int i = 0; i < 10; ++i) {
+                if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
+
             auto status = datasource::CustomEngineClient::instance().probeStatus();
             brls::sync([this, status, status_running, alive]() {
-                if (!alive->load() || !status_running->load()) return;
+                if (!alive->load() || !status_running->load() || g_appExiting.load()) return;
                 std::string text = "app/fileselect/probing"_i18n;
                 if (status.active && status.meta_peers_total > 0) {
                     text += brls::getStr("app/fileselect/meta_peers", std::to_string(status.meta_peers_tried), std::to_string(status.meta_peers_total));
@@ -1284,13 +1287,18 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
 
         // Сортируем выбранные установочные пакеты по приоритету установки:
         // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
+        // Внутри одной известной категории (например, несколько DLC) сохраняем порядок файлов в торренте,
+        // чтобы чтение кусков шло строго последовательно и работала предвыборка LOOKAHEAD_PIECES.
         std::stable_sort(packages.begin(), packages.end(), [this](size_t a, size_t b) {
             int prio_a = download::installFilePriority(files_[a].name);
             int prio_b = download::installFilePriority(files_[b].name);
             if (prio_a != prio_b) {
                 return prio_a > prio_b;
             }
-            return files_[a].size > files_[b].size;
+            if (prio_a >= 150 && prio_a < 200) {
+                return files_[a].size > files_[b].size;
+            }
+            return files_[a].index < files_[b].index;
         });
 
         // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)

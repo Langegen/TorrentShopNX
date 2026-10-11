@@ -42,8 +42,24 @@ void engine_log_init(const char *path) {
             *slash = '\0';
             mkdir(dir, 0777);
         }
-        // Truncate on the very first open of the process so engine.log reflects
-        // only the current session; reopen after a stop appends.
+        // Rotate previous session's log on the very first open of the process so a
+        // post-crash restart does not wipe out the crash session's engine.log.
+        if (g_log_first_open) {
+            struct stat st;
+            if (stat(path, &st) == 0 && st.st_size > 0) {
+                char prev_path[256];
+                const char *dot = strrchr(path, '.');
+                if (dot) {
+                    size_t prefix_len = (size_t)(dot - path);
+                    if (prefix_len > sizeof(prev_path) - 16) prefix_len = sizeof(prev_path) - 16;
+                    snprintf(prev_path, sizeof(prev_path), "%.*s.prev%s", (int)prefix_len, path, dot);
+                } else {
+                    snprintf(prev_path, sizeof(prev_path), "%s.prev", path);
+                }
+                remove(prev_path);
+                rename(path, prev_path);
+            }
+        }
         g_log_f = fopen(path, g_log_first_open ? "w" : "a");
         g_log_first_open = 0;
         if (!g_log_f) g_log_f = stderr;

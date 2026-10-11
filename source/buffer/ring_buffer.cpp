@@ -2,8 +2,15 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
+#include <new>
 
 namespace buffer {
+
+namespace {
+std::mutex g_pool_mutex;
+std::vector<uint8_t> g_shared_buffer_pool;
+} // namespace
 
 // =============================================================================
 // Макросы для абстракции синхронизации (libnx vs std)
@@ -26,16 +33,20 @@ namespace buffer {
 #endif
 
 RingBuffer::RingBuffer(size_t capacity)
-    : capacity_(capacity) {
-    buffer_.resize(capacity_);
+    : capacity_(0) {
 #ifdef __SWITCH__
     mutexInit(&mutex_);
     condvarInit(&cond_not_empty_);
     condvarInit(&cond_not_full_);
 #endif
+    if (capacity > 0) {
+        reinit(capacity);
+    }
 }
 
-RingBuffer::~RingBuffer() = default;
+RingBuffer::~RingBuffer() {
+    clear();
+}
 
 size_t RingBuffer::write(const void* data, size_t size) {
     if (size == 0 || !data) return 0;
@@ -192,6 +203,12 @@ void RingBuffer::reset() {
 void RingBuffer::clear() {
     RB_LOCK();
     capacity_ = 0;
+    if (buffer_.size() >= 16 * 1024 * 1024) {
+        std::lock_guard<std::mutex> pool_lock(g_pool_mutex);
+        if (buffer_.size() > g_shared_buffer_pool.size()) {
+            g_shared_buffer_pool.swap(buffer_);
+        }
+    }
     buffer_.clear();
     buffer_.shrink_to_fit();
     read_pos_  = 0;
@@ -203,8 +220,49 @@ void RingBuffer::clear() {
 
 void RingBuffer::reinit(size_t capacity) {
     RB_LOCK();
-    capacity_ = capacity;
-    buffer_.resize(capacity_);
+    if (buffer_.size() != capacity) {
+        // Free current buffer first so old and new buffers never coexist
+        if (buffer_.size() >= 16 * 1024 * 1024) {
+            std::lock_guard<std::mutex> pool_lock(g_pool_mutex);
+            if (buffer_.size() > g_shared_buffer_pool.size()) {
+                g_shared_buffer_pool.swap(buffer_);
+            }
+        }
+        buffer_.clear();
+        buffer_.shrink_to_fit();
+
+        bool reused = false;
+        {
+            std::lock_guard<std::mutex> pool_lock(g_pool_mutex);
+            if (g_shared_buffer_pool.size() >= capacity && capacity > 0) {
+                buffer_.swap(g_shared_buffer_pool);
+                reused = true;
+            } else {
+                // Free the pool before attempting a fresh large allocation
+                g_shared_buffer_pool.clear();
+                g_shared_buffer_pool.shrink_to_fit();
+            }
+        }
+
+        if (!reused && capacity > 0) {
+            size_t try_cap = capacity;
+            const size_t min_cap = 8 * 1024 * 1024;
+            while (try_cap >= min_cap) {
+                try {
+                    buffer_.resize(try_cap);
+                    capacity = try_cap;
+                    break;
+                } catch (const std::bad_alloc&) {
+                    buffer_.clear();
+                    buffer_.shrink_to_fit();
+                    if (try_cap == min_cap) break;
+                    try_cap /= 2;
+                    if (try_cap < min_cap) try_cap = min_cap;
+                }
+            }
+        }
+    }
+    capacity_  = std::min(capacity, buffer_.size());
     read_pos_  = 0;
     write_pos_ = 0;
     stored_    = 0;

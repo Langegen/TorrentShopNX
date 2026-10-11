@@ -35,4 +35,5 @@ private:
     brls::RepeatingTimer* refreshTimer_ = nullptr;
     int current_focused_index_ = 0;
     std::string current_locale_;
+    int current_font_scale_ = 0;
 };

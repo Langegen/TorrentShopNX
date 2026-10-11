@@ -193,6 +193,7 @@ static const char *BOOTSTRAP[] = {
     "dht.libtorrent.org",
     "dht.aelitis.com",
     "dht2.opentracker.is",
+    "router.bitcomet.com",
 };
 #define BOOTSTRAP_PORT "6881"
 
@@ -262,14 +263,15 @@ int dht_bg_hungry(void) {
 }
 
 static int bg_bootstrap(int s) {
+    (void)s;
     int booted = 0;
-    for (size_t i = 0; i < sizeof(BOOTSTRAP) / sizeof(*BOOTSTRAP); i++) {
+    for (size_t i = 0; i < sizeof(BOOTSTRAP) / sizeof(*BOOTSTRAP) && !s_bg_stop; i++) {
         struct addrinfo hints = {0}, *res = NULL, *r;
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_DGRAM;
         if (getaddrinfo(BOOTSTRAP[i], BOOTSTRAP_PORT, &hints, &res) != 0 || !res)
             continue;
-        for (r = res; r; r = r->ai_next) {
+        for (r = res; r && !s_bg_stop; r = r->ai_next) {
             dht_ping_node(r->ai_addr, r->ai_addrlen);
             booted++;
         }
@@ -284,7 +286,7 @@ static int bg_ping_cache(void) {
     uint8_t nodes[DHT_CACHE_MAX_NODES][6];
     uint8_t id[20];
     int n = dht_cache_read(s_dht_cache_path, id, nodes, DHT_CACHE_MAX_NODES);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n && !s_bg_stop; i++) {
         struct sockaddr_in addr;
         memset(&addr, 0, sizeof(addr));
         addr.sin_family = AF_INET;
@@ -326,7 +328,7 @@ static int bg_restart(void) {
         }
     }
 
-    struct timeval rcvto = { 1, 0 };
+    struct timeval rcvto = { 0, 250000 };
     setsockopt(ns, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
 
     int old = s_bg_sock;
@@ -434,7 +436,7 @@ static void dht_bg_main(void *arg) {
 
     // Switch's select() does not report UDP readability, so we use a blocking
     // recvfrom with a receive timeout instead (the pattern that works here).
-    struct timeval rcvto = { 1, 0 };
+    struct timeval rcvto = { 0, 250000 };
     setsockopt(s_bg_sock, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
 
     uint8_t node_id[20];
@@ -642,10 +644,10 @@ static void dht_bg_main(void *arg) {
             }
             last_log = now;
 
-            // Periodically persist known good nodes every 3 minutes so a crash/shutdown
+            // Periodically persist known good nodes every 60s so a crash/shutdown
             // does not lose warm DHT routing table.
             static u64 last_cache_save = 0;
-            if (good >= 30 && (last_cache_save == 0 || now - last_cache_save > (u64)180 * freq)) {
+            if (good >= 10 && (last_cache_save == 0 || now - last_cache_save > (u64)60 * freq)) {
                 last_cache_save = now;
                 struct sockaddr_in sins_p[DHT_CACHE_MAX_NODES];
                 int num_p = DHT_CACHE_MAX_NODES, num6_p = 0;
