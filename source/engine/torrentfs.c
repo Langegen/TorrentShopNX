@@ -1497,27 +1497,59 @@ static int piece_priority(torrentfs *t, int64_t idx) {
 // choked below 16 blocks (256 KB) so round-trip latency never limits throughput.
 static int nominal_depth(torrentfs *t, sess *s) {
     if (s->nb.choked) return REQ_MIN;
+    if (s->timeout_strikes > 0) return REQ_MIN;
     if (s->expect_ticks <= t->freq) return REQ_INITIAL;   // initial aggressive pipeline
 
     double rate_bps = (s->rate > 0) ? (s->rate / (double)BLOCK_LEN) : 0.0;
     double life_bps = (s->expect_ticks > 0)
         ? ((double)s->useful * (double)t->freq / (double)s->expect_ticks)
         : 0.0;
-    double blocks_per_sec = (rate_bps > life_bps) ? rate_bps : life_bps;
+    u64 now = armGetSystemTick();
+    bool stalling = (s->req_n > 0 && s->last_block > 0 &&
+                     now - s->last_block > (u64)5 * t->freq);
+    double blocks_per_sec = (!stalling && life_bps > rate_bps) ? life_bps : rate_bps;
 
     int d = (int)(blocks_per_sec * 1.5);
-    int floor_d = (t->st_live <= 2) ? 20 : REQ_INITIAL; // scarce swarms get extra buffering
+    int floor_d = stalling ? REQ_MIN : ((t->st_live <= 2) ? 20 : REQ_INITIAL);
     if (d < floor_d) d = floor_d;
     if (d > MAX_REQ_PER_CONN) d = MAX_REQ_PER_CONN;
     return d;
 }
 
+static bool sess_has_req(const sess *s, int piece, int block) {
+    for (int i = 0; i < s->req_n; i++) {
+        if (s->req_piece[i] == piece && s->req_block[i] == block)
+            return true;
+    }
+    return false;
+}
+
+// Reconcile a->req[b] against actual active sessions and count how many
+// non-stalled sessions currently hold a request for (piece_idx, b).
+static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
+                               uint8_t *out_total) {
+    int total = 0;
+    int healthy = 0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        const sess *os = &t->S[i];
+        if (!os->active || os->connecting || !os->nb.handshaked) continue;
+        if (sess_has_req(os, (int)piece_idx, b)) {
+            total++;
+            if (os->timeout_strikes == 0 &&
+                (os->last_block == 0 || now - os->last_block <= (u64)8 * t->freq)) {
+                healthy++;
+            }
+        }
+    }
+    if (out_total) *out_total = (uint8_t)(total > 255 ? 255 : total);
+    return healthy;
+}
 
 // Find the next block of piece idx this session may request: not received
-// yet, and either unrequested or last requested more than DUP_REQ_SECS ago
-// with fewer than MAX_DUP copies in flight (anacrolix's duplicate timer).
+// yet, not already requested by THIS session, and either unrequested or last
+// requested more than DUP_REQ_SECS ago with fewer than max_dup copies in flight.
 // Returns -1 when the piece has nothing requestable right now.
-static int next_block_in(torrentfs *t, aq_entry *a, u64 now) {
+static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now) {
     int max_dup = MAX_DUP;
     bool is_endgame = (t->read_blocked_piece == a->idx) ||
                       (t->file_last_piece - t->playhead_piece <= 4) ||
@@ -1529,9 +1561,16 @@ static int next_block_in(torrentfs *t, aq_entry *a, u64 now) {
         int b = a->next_req;
         a->next_req = (b + 1) % a->nblocks;
         if (a->have[b]) continue;
+        if (sess_has_req(s, (int)a->idx, b)) continue;
         uint8_t r = a->req[b];
         if (r == 0) return b;
-        if (r < max_dup && now - a->req_ts[b] > (u64)DUP_REQ_SECS * t->freq)
+        if (now - a->req_ts[b] <= (u64)DUP_REQ_SECS * t->freq) continue;
+        if (r < max_dup) return b;
+        // Self-heal drifted req[b] or allow hedging when existing holders are stalled
+        uint8_t actual_r = 0;
+        int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
+        a->req[b] = actual_r;
+        if (actual_r < max_dup || healthy < 2)
             return b;
     }
     return -1;
@@ -1580,7 +1619,7 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                 t->status[i] = PIECE_ACTIVE;
                 mutexUnlock(&t->lock);
             }
-            int b = next_block_in(t, a, now);
+            int b = next_block_in(t, s, a, now);
             if (b < 0) continue;
             *out_piece = i;
             *out_block = b;
@@ -1597,6 +1636,29 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
 static void request_scan(torrentfs *t, sess *s, u64 now) {
     if (!s->nb.handshaked || s->connecting || s->nb.choked) return;
     if (t->paused) return;
+    // Prune any stale requests for pieces that already finished or blocks already held
+    int kept = 0;
+    for (int i = 0; i < s->req_n; i++) {
+        int ep = s->req_piece[i];
+        int eb = s->req_block[i];
+        bool stale = (ep < 0 || ep >= t->meta.piece_count ||
+                      t->status[ep] == PIECE_DONE || t->status[ep] == PIECE_WRITING);
+        if (!stale) {
+            aq_entry *ea = aq_find(t, ep);
+            if (!ea || eb < 0 || eb >= ea->nblocks || ea->have[eb])
+                stale = true;
+        }
+        if (!stale) {
+            if (kept != i) {
+                s->req_piece[kept] = ep;
+                s->req_block[kept] = eb;
+                s->req_time[kept]  = s->req_time[i];
+            }
+            kept++;
+        }
+    }
+    s->req_n = kept;
+
     int depth = nominal_depth(t, s);
     int was_empty = (s->req_n == 0);
     if (was_empty)
@@ -1650,12 +1712,25 @@ static void piece_full(torrentfs *t, aq_entry *a) {
     int64_t idx = a->idx;
     t->last_progress_tick = armGetSystemTick();
     // Announce the piece to every live peer so we look like a well-behaved
-    // client (and seeders learn what we hold for later piece exchange).
+    // client (and seeders learn what we hold for later piece exchange), and
+    // purge any lingering request entries for this completed piece.
     uint32_t hv = htonl((uint32_t)idx);
     for (int i = 0; i < MAX_SESS; i++) {
         sess *s = &t->S[i];
         if (!s->active || s->connecting || !s->nb.handshaked) continue;
         peer_nb_queue(&s->nb, MSG_HAVE, &hv, 4);
+        int kept = 0;
+        for (int k = 0; k < s->req_n; k++) {
+            if (s->req_piece[k] != (int)idx) {
+                if (kept != k) {
+                    s->req_piece[kept] = s->req_piece[k];
+                    s->req_block[kept] = s->req_block[k];
+                    s->req_time[kept]  = s->req_time[k];
+                }
+                kept++;
+            }
+        }
+        s->req_n = kept;
     }
     mutexLock(&t->lock);
     t->status[idx] = PIECE_WRITING;
@@ -1969,18 +2044,19 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             // Match against this session's outstanding requests. Even if the
             // request was duplicated by another peer and this copy arrives
             // second, we NEVER discard genuine, unreceived payload data.
-            int r = -1;
-            for (int i = 0; i < s->req_n; i++) {
+            int matched = 0;
+            for (int i = 0; i < s->req_n; ) {
                 if (s->req_piece[i] == (int)idx && s->req_block[i] == b) {
-                    r = i;
-                    break;
+                    s->req_piece[i] = s->req_piece[s->req_n - 1];
+                    s->req_block[i] = s->req_block[s->req_n - 1];
+                    s->req_time[i]  = s->req_time[s->req_n - 1];
+                    s->req_n--;
+                    matched++;
+                } else {
+                    i++;
                 }
             }
-            if (r >= 0) {
-                s->req_piece[r] = s->req_piece[s->req_n - 1];
-                s->req_block[r] = s->req_block[s->req_n - 1];
-                s->req_time[r]  = s->req_time[s->req_n - 1];
-                s->req_n--;
+            if (matched > 0) {
                 s->useful++;          // expected delivery: feeds nominal_depth
             } else {
                 t->st_dup_noring += dlen;
@@ -2014,14 +2090,21 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             for (int j = 0; j < MAX_SESS; j++) {
                 sess *other = &t->S[j];
                 if (other == s || !other->active || other->connecting) continue;
-                for (int k = 0; k < other->req_n; k++) {
+                bool sent_cancel = false;
+                for (int k = 0; k < other->req_n; ) {
                     if (other->req_piece[k] == (int)idx && other->req_block[k] == b) {
-                        send_cancel_one(t, other, (int)idx, b);
+                        if (!sent_cancel) {
+                            send_cancel_one(t, other, (int)idx, b);
+                            sent_cancel = true;
+                        }
+                        if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
                         other->req_piece[k] = other->req_piece[other->req_n - 1];
                         other->req_block[k] = other->req_block[other->req_n - 1];
                         other->req_time[k]  = other->req_time[other->req_n - 1];
                         other->req_n--;
-                        break;
+                        if (!other->active) break;
+                    } else {
+                        k++;
                     }
                 }
             }
@@ -2231,7 +2314,7 @@ static void choking_round(torrentfs *t, u64 now) {
     // Nothing verified yet: nothing to serve, so no unchokes (and no reason to
     // choke peers that are merely interested -- they may serve us).
     mutexLock(&t->lock);
-    bool have_offer = t->pieces_done > 0;
+    bool have_offer = t->pieces_done > 0 || t->st_piece_ok > 0;
     mutexUnlock(&t->lock);
     if (!have_offer) return;
 
@@ -2445,15 +2528,16 @@ static void netloop_main(void *arg) {
                 // field (one live seed, handshake every ~30 s, zero blocks).
                 bool is_seed = peer_is_seed(t, s);
                 bool has_needed = peer_has_needed(t, s);
-                if ((is_seed || has_needed || t->st_live < 8) && (few_peers || t->st_live < 24)) {
-                    // Never rotate out full seeds, peers holding needed pieces, or any peer
-                    // when swarm is small / starved. Seeds and peers run optimistic unchoke
-                    // on 30s+ cycles and are often the only source for missing pieces.
-                    continue;
-                }
+                // Never rotate out full seeds, peers holding needed pieces, or any peer
+                // when swarm is small / starved. Seeds and peers run optimistic unchoke
+                // on 30s+ cycles and are often the only source for missing pieces.
+                // Note: do NOT `continue` here -- idle/stall checks, keep-alives, and PEX
+                // below must still run for every session!
+                bool exempt_rotate = (is_seed || has_needed || t->st_live < 8) &&
+                                     (few_peers || t->st_live < 24);
                 int eff_connecting = t->st_connecting > 0 ? t->st_connecting : 0;
                 bool can_rotate = false;
-                if (!s->connecting && s->nb.handshaked && s->nb.choked &&
+                if (!exempt_rotate && !s->connecting && s->nb.handshaked && s->nb.choked &&
                     t->peer_count > t->st_live + eff_connecting &&
                     !is_seed && !has_needed) {
                     if (s->rx_total == 0) {
@@ -2473,11 +2557,12 @@ static void netloop_main(void *arg) {
                     sess_close(t, s, true);
                     continue;
                 }
-                bool scarce_swarm = (t->st_live <= 2 || t->peer_count <= 2 || is_seed);
+                bool scarce_swarm = (t->st_live <= 2 || t->peer_count <= 2);
                 if (!s->connecting && age > (u64)IDLE_SECS * t->freq) {
-                    if (scarce_swarm) {
+                    if (scarce_swarm || (is_seed && s->timeout_strikes < 4)) {
                         // Do not close unique seeds or peers on starved swarms on idle
                         s->last_rx = now;
+                        if (s->timeout_strikes < 255) s->timeout_strikes++;
                         sess_drop_requests(t, s);
                         peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] idle on scarce swarm / seed: renew interested", i);
@@ -2489,31 +2574,27 @@ static void netloop_main(void *arg) {
                 }
                 // Requested blocks and nothing came. Proven peers get
                 // strikes before disconnecting. A peer that NEVER delivered
-                // a single byte keeps its connection (anacrolix model: the
-                // duplicate timer in next_block_in() redistributes its
+                // a single byte keeps its connection up to 3 strikes (anacrolix model:
+                // the duplicate timer in next_block_in() redistributes its
                 // blocks to other sessions); its outstanding requests are
                 // dropped so the per-block duplicate caps cannot saturate,
-                // and the next scan re-requests them fresh. Closing the
-                // connection here was one half of the observed ~30 s
-                // reconnect loop: with a flat backoff the same silent seed
-                // got re-dialed every half minute for 10+ minutes without a
-                // single block delivered.
+                // and the next scan re-requests them fresh.
                 if (s->req_n > 0 &&
                     now - s->last_block > (u64)STALL_SECS * t->freq) {
                     bool urgent_or_endgame = (t->read_blocked_piece >= 0) ||
                                             (t->file_last_piece - t->playhead_piece <= 4) ||
                                             (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
-                    if (scarce_swarm) {
-                        // On a scarce swarm or with a full seed, NEVER drop the connection!
-                        // A remote seed might be choked or congested on its end.
-                        // Dropping the connection sends us to the back of the peer's queue
-                        // and triggers reconnect penalty loops.
-                        s->timeout_strikes = 0;
+                    if (scarce_swarm || (is_seed && s->timeout_strikes < 4)) {
+                        // On a scarce swarm or with a full seed (up to 4 strikes), keep connection alive,
+                        // record strike so nominal_depth throttles to REQ_MIN until a block lands,
+                        // and drop held requests so healthy peers can fetch the missing blocks.
+                        if (s->timeout_strikes < 255) s->timeout_strikes++;
                         s->last_block = now;
                         sess_drop_requests(t, s);
                         peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
                         engine_log(ENGINE_LOG_INFO,
-                                   "[sess %d] scarce swarm / seed stall: keep connection alive, refresh requests", i);
+                                   "[sess %d] scarce swarm / seed stall (strike %d): keep connection alive, refresh requests",
+                                   i, s->timeout_strikes);
                     } else if (s->rx_total > 0 && s->timeout_strikes < 3) {
                         s->timeout_strikes++;
                         s->last_block = now;
@@ -2524,7 +2605,7 @@ static void netloop_main(void *arg) {
                         if (urgent_or_endgame || s->timeout_strikes >= 2) {
                             sess_drop_requests(t, s);
                         }
-                    } else if (s->rx_total > 0) {
+                    } else if (s->rx_total > 0 || s->timeout_strikes >= 3) {
                         t->st_fetch_fail++;
                         set_err(t, "stall", 0);
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] close stall strikes=%d",
@@ -2533,9 +2614,11 @@ static void netloop_main(void *arg) {
                         sess_close(t, s, true);
                         continue;
                     } else {
+                        s->timeout_strikes++;
+                        s->last_block = now;
                         engine_log(ENGINE_LOG_DEBUG,
-                                   "[sess %d] stall (never delivered): drop requests, keep conn",
-                                   i);
+                                   "[sess %d] stall (never delivered, strike %d): drop requests, keep conn",
+                                   i, s->timeout_strikes);
                         sess_drop_requests(t, s);
                     }
                 }
