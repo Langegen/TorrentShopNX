@@ -144,4 +144,18 @@ void unmountRomfs();
 // or returns 1.30 as fallback.
 double parseNszCompressionRatio(const std::string& image_format, uint64_t total_torrent_bytes = 0);
 
+// Returns true if tid has valid format and magnitude of a Nintendo Switch title ID
+inline bool isSwitchTitleId(uint64_t tid) {
+    return tid >= 0x0001000000000000ULL;
+}
+
+// Robustly parses a 16-character hexadecimal Title ID from a file name or path.
+// Supports [...] and (...) delimiters, standalone names, and protects against false positives
+// such as "[Complete Edition]".
+uint64_t parseTitleIdFromFileName(const std::string& name);
+
+// Parses integer version from filename (e.g. "[v3276800]", "(v65536)", "[v0]"). Returns 0 if absent/v0.
+uint32_t parseVersionFromFileName(const std::string& name);
+
 } // namespace util
+

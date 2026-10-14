@@ -128,104 +128,149 @@ static bool isSwitchGameFile(const std::string& filename) {
 struct SwitchServiceGuard {
     bool ns_ok = false;
     bool ncm_ok = false;
-    NcmContentMetaDatabase db;
-    NcmStorageId db_storage = NcmStorageId_SdCard;
-    bool db_open = false;
+    NcmContentMetaDatabase db_sd = {};
+    bool db_sd_open = false;
+    NcmContentMetaDatabase db_nand = {};
+    bool db_nand_open = false;
+
+    NcmContentStorage cs_sd = {};
+    bool cs_sd_open = false;
+    NcmContentStorage cs_nand = {};
+    bool cs_nand_open = false;
 
     SwitchServiceGuard() {
         g_switch_service_mutex.lock();
         ns_ok = R_SUCCEEDED(nsInitialize());
         ncm_ok = R_SUCCEEDED(ncmInitialize());
         if (ncm_ok) {
-            Result rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
-            db_storage = NcmStorageId_SdCard;
-            if (R_FAILED(rc)) {
-                rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
-                db_storage = NcmStorageId_BuiltInUser;
-            }
-            db_open = R_SUCCEEDED(rc);
+            db_sd_open = R_SUCCEEDED(ncmOpenContentMetaDatabase(&db_sd, NcmStorageId_SdCard));
+            db_nand_open = R_SUCCEEDED(ncmOpenContentMetaDatabase(&db_nand, NcmStorageId_BuiltInUser));
+            cs_sd_open = R_SUCCEEDED(ncmOpenContentStorage(&cs_sd, NcmStorageId_SdCard));
+            cs_nand_open = R_SUCCEEDED(ncmOpenContentStorage(&cs_nand, NcmStorageId_BuiltInUser));
         }
+        util::logLine("FileSelectView: SwitchServiceGuard init: ns=" + std::to_string(ns_ok) +
+                      " ncm=" + std::to_string(ncm_ok) +
+                      " db_sd=" + std::to_string(db_sd_open) +
+                      " db_nand=" + std::to_string(db_nand_open) +
+                      " cs_sd=" + std::to_string(cs_sd_open) +
+                      " cs_nand=" + std::to_string(cs_nand_open));
     }
 
     ~SwitchServiceGuard() {
-        if (db_open) {
-            ncmContentMetaDatabaseClose(&db);
-        }
-        if (ncm_ok) {
-            ncmExit();
-        }
-        if (ns_ok) {
-            nsExit();
-        }
+        if (cs_sd_open) ncmContentStorageClose(&cs_sd);
+        if (cs_nand_open) ncmContentStorageClose(&cs_nand);
+        if (db_sd_open) ncmContentMetaDatabaseClose(&db_sd);
+        if (db_nand_open) ncmContentMetaDatabaseClose(&db_nand);
+        if (ncm_ok) ncmExit();
+        if (ns_ok) nsExit();
         g_switch_service_mutex.unlock();
+    }
+
+    bool hasContentId(const NcmContentId& cid) {
+        bool has = false;
+        if (cs_sd_open && R_SUCCEEDED(ncmContentStorageHas(&cs_sd, &has, &cid)) && has) return true;
+        if (cs_nand_open && R_SUCCEEDED(ncmContentStorageHas(&cs_nand, &has, &cid)) && has) return true;
+        return false;
+    }
+
+    bool verifyContentPresent(NcmContentMetaDatabase* db, const NcmContentMetaKey& key) {
+        if (!db) return false;
+        static const NcmContentType types[] = {
+            NcmContentType_Program,
+            NcmContentType_Data,
+            NcmContentType_Control,
+            NcmContentType_HtmlDocument,
+            NcmContentType_LegalInformation
+        };
+
+        bool foundAnyContent = false;
+        for (NcmContentType ct : types) {
+            NcmContentId cid;
+            if (R_SUCCEEDED(ncmContentMetaDatabaseGetContentIdByType(db, &cid, &key, ct))) {
+                foundAnyContent = true;
+                if (hasContentId(cid)) return true;
+            }
+        }
+
+        // AddOnContent / DLC can be metadata-only (license / unlock) with 0 content NCAs
+        if (!foundAnyContent && key.type == NcmContentMetaType_AddOnContent) {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool isInstalled(uint64_t tid, uint32_t file_version = 0) {
+        if (tid == 0) return false;
+
+        NcmContentMetaKey key = {};
+        // 1) Try SD card meta database
+        if (db_sd_open && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db_sd, &key, tid))) {
+            if (verifyContentPresent(&db_sd, key)) {
+                if ((tid & 0xFFFULL) == 0x800 && file_version > 0) {
+                    return key.version >= file_version;
+                }
+                return true;
+            }
+        }
+
+        // 2) Try NAND meta database
+        if (db_nand_open && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db_nand, &key, tid))) {
+            if (verifyContentPresent(&db_nand, key)) {
+                if ((tid & 0xFFFULL) == 0x800 && file_version > 0) {
+                    return key.version >= file_version;
+                }
+                return true;
+            }
+        }
+
+        return false;
     }
 };
 
-// Returns true if any of the real content (Program/Data) referenced by the
-// content meta is actually present in the ContentStorage. Deleting a game via
-// the Switch home menu can leave a stale content meta / record behind, so a
-// bare meta lookup (or application record) is NOT enough — we must verify the
-// content file still exists on disk.
-static bool contentPresentForMeta(NcmContentMetaDatabase& db, NcmContentStorage& cs, const NcmContentMetaKey& key) {
-    NcmContentType types[] = { NcmContentType_Program, NcmContentType_Data };
-    for (NcmContentType ct : types) {
-        NcmContentId cid;
-        if (R_FAILED(ncmContentMetaDatabaseGetContentIdByType(&db, &cid, &key, ct))) continue;
-        bool has = false;
-        if (R_SUCCEEDED(ncmContentStorageHas(&cs, &has, &cid)) && has) return true;
-    }
-    return false;
-}
-
-static bool titleHasContentOnStorage(NcmContentMetaDatabase& db, NcmStorageId storage, uint64_t tid) {
-    NcmContentMetaKey key;
-    if (R_FAILED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, tid))) return false;
-
-    NcmContentStorage cs;
-    if (R_FAILED(ncmOpenContentStorage(&cs, storage))) return false;
-    bool present = contentPresentForMeta(db, cs, key);
-    ncmContentStorageClose(&cs);
-    return present;
-}
-
-static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
-    if (tid == 0) return false;
-
-    // 1) The storage already opened by the guard (fast path)
-    if (guard.db_open && titleHasContentOnStorage(guard.db, guard.db_storage, tid)) return true;
-
-    // 2) The other storage (game may live on the other medium)
-    NcmStorageId other = (guard.db_storage == NcmStorageId_SdCard) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
-    NcmContentMetaDatabase db;
-    if (R_SUCCEEDED(ncmOpenContentMetaDatabase(&db, other))) {
-        bool found = titleHasContentOnStorage(db, other, tid);
-        ncmContentMetaDatabaseClose(&db);
-        if (found) return true;
-    }
-    return false;
+static inline bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard, uint32_t file_version = 0) {
+    return guard.isInstalled(tid, file_version);
 }
 #else
-struct SwitchServiceGuard {};
-static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
-    (void)guard;
-    if (tid == 0x01000BF0152FB131ULL) return true; // DLC Left 4 Dead Bundle (mock)
-    return false;
+struct SwitchServiceGuard {
+    bool isInstalled(uint64_t tid, uint32_t file_version = 0) {
+        (void)file_version;
+        if (tid == 0x01000BF0152FB131ULL) return true; // DLC Left 4 Dead Bundle (mock)
+        return false;
+    }
+};
+
+static inline bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard, uint32_t file_version = 0) {
+    return guard.isInstalled(tid, file_version);
 }
 #endif
 
-static uint64_t parseTitleIdFromFilename(const std::string& name) {
-    size_t start = name.find('[');
-    while (start != std::string::npos) {
-        size_t end = name.find(']', start);
-        if (end != std::string::npos && (end - start) == 17) {
-            std::string tid_str = name.substr(start + 1, 16);
+static uint64_t resolveFileTitleId(const std::string& filename, const std::string& game_title_id) {
+    uint64_t tid = util::parseTitleIdFromFileName(filename);
+    if (tid != 0) return tid;
+
+    // Fallback: if filename didn't contain a Title ID in brackets/name, but game_title_id is set
+    // and this file is a Switch base game (not marked as update or dlc), use game_title_id.
+    if (!game_title_id.empty() && isSwitchGameFile(filename)) {
+        std::string lower = filename;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        bool is_update = (lower.find("upd") != std::string::npos || lower.find("patch") != std::string::npos);
+        bool is_dlc = (lower.find("dlc") != std::string::npos || lower.find("addon") != std::string::npos);
+        if (!is_update && !is_dlc) {
             try {
-                return std::stoull(tid_str, nullptr, 16);
+                uint64_t g_tid = std::stoull(game_title_id, nullptr, 16);
+                if (util::isSwitchTitleId(g_tid)) {
+                    return g_tid;
+                }
             } catch (...) {}
         }
-        start = name.find('[', start + 1);
     }
     return 0;
+}
+
+static inline uint64_t parseTitleIdFromFilename(const std::string& name) {
+    return util::parseTitleIdFromFileName(name);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -442,9 +487,10 @@ void FileSelectView::onContentAvailable() {
                 } else {
                     SwitchServiceGuard guard;
                     for (size_t i = 0; i < files_.size(); ++i) {
-                        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
+                        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+                        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
                         bool isGame = isSwitchGameFile(files_[i].name);
-                        bool installed = isTitleIdInstalled(tid, guard);
+                        bool installed = isTitleIdInstalled(tid, guard, ver);
                         if (isGame && !installed) {
                             selected_[i] = true;
                         }
@@ -864,8 +910,9 @@ void FileSelectView::rebuildSwitchFileList() {
     displayItems.push_back({0, true, "app/fileselect/group_uninstalled"_i18n});
     bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard)) {
+        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard, ver)) {
             displayItems.push_back({i, false, ""});
             hasUninstalled = true;
         }
@@ -891,8 +938,9 @@ void FileSelectView::rebuildSwitchFileList() {
     displayItems.push_back({0, true, "app/fileselect/group_installed"_i18n});
     bool hasInstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard)) {
+        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard, ver)) {
             displayItems.push_back({i, false, ""});
             hasInstalled = true;
         }
@@ -957,8 +1005,9 @@ void FileSelectView::rebuildSwitchFileList() {
             nameLbl->setMarginLeft(10);
             nameLbl->setMarginRight(10);
             
-            uint64_t tid = parseTitleIdFromFilename(file.name);
-            if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard)) {
+            uint64_t tid = resolveFileTitleId(file.name, game_.title_id);
+            uint32_t ver = util::parseVersionFromFileName(file.name);
+            if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard, ver)) {
                 nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
             } else {
                 nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());

@@ -1227,18 +1227,7 @@ static bool equalsIgnoreCase(const std::string& a, const std::string& b) {
 }
 
 uint64_t parseTitleIdFromFileName(const std::string& name) {
-    size_t start = name.find('[');
-    while (start != std::string::npos) {
-        size_t end = name.find(']', start);
-        if (end != std::string::npos && (end - start) == 17) {
-            std::string tid_str = name.substr(start + 1, 16);
-            try {
-                return std::stoull(tid_str, nullptr, 16);
-            } catch (...) {}
-        }
-        start = name.find('[', start + 1);
-    }
-    return 0;
+    return util::parseTitleIdFromFileName(name);
 }
 
 int installFilePriority(const std::string& name) {
