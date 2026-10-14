@@ -9,6 +9,8 @@
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
+#include "../installer/PortInstallPlanner.hpp"
+#include "../utils/file_ops.h"
 #include <sstream>
 
 namespace ui {
@@ -295,11 +297,68 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     btnDownload->registerClickAction([this](brls::View* view) {
-        if (!retro_console_id_.empty() || isHomebrewGame(game_)) {
+        if (!retro_console_id_.empty() || isHomebrewGame(game_) || isHomebrewPort(game_)) {
             auto* dialog = new brls::Dialog(cleanTitle(game_.title));
             dialog->setCancelable(true);
 
-            // 1. Скачать полностью
+            // 1. Автоматическая установка (только для хоумбрю / портов)
+            if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
+                dialog->addButton("app/detail/auto_install_btn"_i18n, [this]() {
+                    auto* probeDialog = new brls::Dialog("app/detail/auto_install_probing"_i18n);
+                    probeDialog->setCancelable(true);
+                    probeDialog->open();
+
+                    brls::async([this, probeDialog]() {
+                        std::vector<torrent::TorrentFileInfo> files;
+                        std::string err;
+                        bool ok = ui::DownloadManager::instance().getImpl()
+                                      .probeTorrentFiles(game_.magnet, files, &err);
+
+                        brls::sync([this, probeDialog, ok, files, err]() {
+                            probeDialog->close();
+
+                            if (!ok || files.empty()) {
+                                brls::Application::notify("app/detail/auto_install_probe_failed"_i18n);
+                                return;
+                            }
+
+                            std::string userLang = config::ConfigManager::instance().getLanguage();
+                            auto plan = installer::PortInstallPlanner::instance().analyze(game_.title, files, userLang);
+
+                            if (!plan.is_port) {
+                                brls::Application::notify("app/detail/auto_install_not_port"_i18n);
+                                return;
+                            }
+
+                            if (plan.variants.size() > 1) {
+                                auto* vDialog = new brls::Dialog("app/detail/choose_version_title"_i18n);
+                                vDialog->setCancelable(true);
+                                for (size_t vi = 0; vi < plan.variants.size(); ++vi) {
+                                    std::string btnText = plan.variants[vi].title;
+                                    if (plan.variants[vi].total_size > 0) {
+                                        btnText += " (" + util::formatFileSize(plan.variants[vi].total_size) + ")";
+                                    }
+                                    vDialog->addButton(btnText, [this, plan, vi]() {
+                                        ui::DownloadManager::instance().addPortInstall(game_, std::make_shared<installer::PortInstallPlan>(plan), vi);
+                                        brls::sync([]() {
+                                            brls::Application::pushActivity(new ui::DownloadsView());
+                                        });
+                                    });
+                                }
+                                vDialog->addButton("app/common/cancel"_i18n, []() {});
+                                vDialog->open();
+                            } else {
+                                ui::DownloadManager::instance().addPortInstall(game_, std::make_shared<installer::PortInstallPlan>(plan), 0);
+                                brls::sync([]() {
+                                    brls::Application::pushActivity(new ui::DownloadsView());
+                                });
+                            }
+                        });
+                    });
+                });
+            }
+
+            // 2. Скачать полностью
             dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
                 if (!retro_console_id_.empty()) {
                     ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
@@ -311,12 +370,12 @@ void GameDetailView::onContentAvailable() {
                 });
             });
 
-            // 2. Выбрать файлы
+            // 3. Выбрать файлы
             dialog->addButton("app/detail/select_files_btn"_i18n, [this]() {
                 brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
             });
 
-            // 3. Отмена
+            // 4. Отмена
             dialog->addButton("app/common/cancel"_i18n, []() {});
 
             dialog->open();

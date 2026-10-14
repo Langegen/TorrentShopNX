@@ -507,7 +507,10 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     cell->title->setText(displayTitle);
 
     std::string fileName = getDownloadFileName(item);
-    if (util::isGamePackage(fileName)) {
+    if (item.is_port_auto_install && !item.install_current_file.empty()) {
+        cell->fileName->setVisibility(brls::Visibility::VISIBLE);
+        cell->fileName->setText(item.install_current_file);
+    } else if (util::isGamePackage(fileName)) {
         cell->fileName->setVisibility(brls::Visibility::VISIBLE);
         cell->fileName->setText(fileName);
     } else {
@@ -559,7 +562,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
     const bool showsInstall = (item.state == download::DownloadState::StreamPreparing || 
                                item.state == download::DownloadState::StreamInstalling || 
                                item.state == download::DownloadState::Installing ||
-                               item.state == download::DownloadState::Completed);
+                               item.state == download::DownloadState::Completed ||
+                               (item.is_port_auto_install && item.install_total > 0));
     
     if (showsInstall) {
         cell->installProgressRow->setVisibility(brls::Visibility::VISIBLE);
@@ -632,6 +636,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             statusStr = "app/downloads/state_paused"_i18n;
             statusColor = nvgRGB(255, 152, 0); // Orange
             break;
+    }
+
+    if (item.is_port_auto_install && !item.install_stage_label.empty() &&
+        item.state != download::DownloadState::Completed &&
+        item.state != download::DownloadState::Failed &&
+        item.state != download::DownloadState::Cancelled) {
+        statusStr = item.install_stage_label;
+        statusColor = nvgRGB(0, 188, 212); // Cyan
     }
     
     cell->statusText->setText(statusStr);

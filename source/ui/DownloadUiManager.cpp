@@ -56,6 +56,26 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
     saveDownloads();
 }
 
+void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index) {
+    size_t idx = 0;
+    {
+        std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
+        idx = impl_.addPortInstall(game.title, game.magnet, plan, variant_index);
+
+        auto& item = impl_.queueMutable()[idx];
+        item.topic_id = game.topic_id;
+        item.cover_url = game.cover;
+
+        // Start the download immediately if no transfers are active
+        if (!impl_.hasActiveTransfers()) {
+            impl_.startDownload(idx);
+        }
+
+        util::logLine("download_ui: added port auto install for " + game.title + " (topic_id=" + game.topic_id + ") variant=" + std::to_string(variant_index));
+    }
+    saveDownloads();
+}
+
 bool DownloadManager::pauseDownload(const std::string& topic_id) {
     std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
     const auto& queue = impl_.queue();

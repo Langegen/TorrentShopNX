@@ -1359,6 +1359,26 @@ inline bool isHomebrewGame(const Game& g) {
     return hasHomebrewGenre;
 }
 
+// Check if a game is a homebrew port (catalog topic 5799905, port tags, or homebrew)
+inline bool isHomebrewPort(const Game& g) {
+    if (isHomebrewGame(g)) return true;
+    std::string lowerTitle = util::toLowerUtf8(g.title);
+    if (lowerTitle.find("port") != std::string::npos ||
+        lowerTitle.find("порт") != std::string::npos ||
+        lowerTitle.find("homebrew") != std::string::npos ||
+        lowerTitle.find("хоумбрю") != std::string::npos ||
+        lowerTitle.find("хомбрю") != std::string::npos) {
+        return true;
+    }
+    std::string lowerGenre = util::toLowerUtf8(g.genre);
+    if (lowerGenre.find("port") != std::string::npos ||
+        lowerGenre.find("порт") != std::string::npos ||
+        lowerGenre.find("homebrew") != std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
 // Asynchronously download and cache images from URLs, showing placeholder during download
 inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/borealis_96.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0) {
 #ifndef __SWITCH__
