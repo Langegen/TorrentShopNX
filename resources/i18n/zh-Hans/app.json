@@ -224,6 +224,7 @@
         "qr_no_url": "无可用链接",
         "compilation_badge": "合集 / ROM 集",
         "select_files_btn": "选择文件",
+        "download_full_btn": "完整下载",
         "download_romset_btn": "下载 ROM 集",
         "stats_info": "种子统计: {0} 做种 / {1} 下载中 ({2} 次下载)",
         "stats_date": "添加时间: {0}"

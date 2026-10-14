@@ -224,6 +224,7 @@
         "qr_no_url": "Nessun link disponibile",
         "compilation_badge": "RACCOLTA / ROMSET",
         "select_files_btn": "Seleziona file",
+        "download_full_btn": "Scarica completo",
         "download_romset_btn": "Scarica ROMset",
         "stats_info": "Torrent: {0} seed / {1} peer ({2} dl)",
         "stats_date": "Aggiunto: {0}"

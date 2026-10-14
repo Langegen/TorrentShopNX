@@ -26,6 +26,7 @@ public:
 private:
     Game game_;
     std::string retro_console_id_;
+    bool isFolderHierarchyMode() const { return !retro_console_id_.empty() || isHomebrewGame(game_); }
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;
     std::vector<brls::Label*> checkboxLabels_;

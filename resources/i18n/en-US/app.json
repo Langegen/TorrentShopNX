@@ -210,6 +210,7 @@
         "download_rom": "Download ROM",
         "compilation_badge": "COMPILATION / ROMSET",
         "select_files_btn": "Select files",
+        "download_full_btn": "Download Full",
         "download_romset_btn": "Download ROMset",
         "download": "Download",
         "favorite": "Favorite",

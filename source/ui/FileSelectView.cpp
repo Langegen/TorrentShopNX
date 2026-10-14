@@ -11,6 +11,7 @@
 #include "../installer/nsp_header.h"
 #include "../installer/cnmt_parser.h"
 #include "../installer/ncz_parser.h"
+#include "../utils/app_paths.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
@@ -55,6 +56,17 @@ static bool isRomFile(const std::string& filename) {
         }
     }
     return false;
+}
+
+static bool isPlayableFile(const std::string& filename) {
+    if (isRomFile(filename)) return true;
+    std::string lower = filename;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.size() >= 4 &&
+           (lower.rfind(".nro") == lower.size() - 4 ||
+            lower.rfind(".ovl") == lower.size() - 4 ||
+            lower.rfind(".elf") == lower.size() - 4);
 }
 
 static bool isMediaOrMetaPath(const std::string& fullpath) {
@@ -279,6 +291,12 @@ void FileSelectView::onContentAvailable() {
             installLocationText->setText(cfg.getEffectiveRetroRomsDir(sub));
             installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
+    } else if (isHomebrewGame(game_)) {
+        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+        if (installLocationText) {
+            installLocationText->setText(TSNX_DOWNLOADS_DIR);
+            installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
+        }
     } else {
         auto updateInstallLocationDisplay = [this, &cfg]() {
             if (!installLocationText) return;
@@ -325,7 +343,7 @@ void FileSelectView::onContentAvailable() {
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
 
     this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+        if (isFolderHierarchyMode() && currentFolder_ != baseFolder_) {
             navigateUp();
             return true;
         }
@@ -334,7 +352,7 @@ void FileSelectView::onContentAvailable() {
     });
 
     this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_BACKSPACE), [this](brls::View*) {
-        if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+        if (isFolderHierarchyMode() && currentFolder_ != baseFolder_) {
             navigateUp();
             return true;
         }
@@ -393,25 +411,31 @@ void FileSelectView::onContentAvailable() {
             if (success && !probedFiles.empty()) {
                 files_    = probedFiles;
                 selected_.assign(files_.size(), false);
-                if (!retro_console_id_.empty()) {
+                if (isFolderHierarchyMode()) {
                     baseFolder_ = computeBaseFolder(files_);
                     currentFolder_ = baseFolder_;
-                    bool anyRom = false;
+                    bool anySelected = false;
                     for (size_t i = 0; i < files_.size(); ++i) {
-                        if (isRomFile(files_[i].name) && !isMediaOrMetaPath(files_[i].name)) {
+                        bool isPrimary = false;
+                        if (!retro_console_id_.empty()) {
+                            isPrimary = isRomFile(files_[i].name);
+                        } else {
+                            isPrimary = !isMediaOrMetaPath(files_[i].name);
+                        }
+                        if (isPrimary && !isMediaOrMetaPath(files_[i].name)) {
                             selected_[i] = true;
-                            anyRom = true;
+                            anySelected = true;
                         }
                     }
-                    if (!anyRom) {
+                    if (!anySelected) {
                         for (size_t i = 0; i < files_.size(); ++i) {
                             if (!isMediaOrMetaPath(files_[i].name)) {
                                 selected_[i] = true;
-                                anyRom = true;
+                                anySelected = true;
                             }
                         }
                     }
-                    if (!anyRom) {
+                    if (!anySelected) {
                         selected_.assign(files_.size(), true);
                     }
                     updateRetroSubtitle();
@@ -469,7 +493,7 @@ brls::View* FileSelectView::create() { return nullptr; }
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::rebuildFileList() {
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         rebuildRetroFolderList();
     } else {
         rebuildSwitchFileList();
@@ -762,8 +786,9 @@ void FileSelectView::rebuildRetroFolderList() {
         // File icon
         auto* icon = new brls::Label();
         icon->setFontSize(20);
-        icon->setText(isRomFile(file.name) ? "\uE0E0" : "\uE24D");
-        icon->setTextColor(isRomFile(file.name) ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
+        bool isPlayable = isPlayableFile(file.name);
+        icon->setText(isPlayable ? "\uE0E0" : "\uE24D");
+        icon->setTextColor(isPlayable ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
         icon->setMarginRight(10);
         row->addView(icon);
 
@@ -1042,7 +1067,7 @@ void FileSelectView::updateTotalSize() {
         totalSizeText->setText(sizeStr);
     }
 
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         int64_t sdFree = 0;
         if (freeSpaceSdText) {
             if (util::getStorageFreeSpace(1, sdFree)) {
@@ -1080,7 +1105,7 @@ void FileSelectView::updateTotalSize() {
 void FileSelectView::toggleAllSelection() {
     if (selected_.empty()) return;
 
-    if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+    if (isFolderHierarchyMode() && currentFolder_ != baseFolder_) {
         // Inside a subfolder: toggle selection for files inside currentFolder_
         std::string prefix = currentFolder_ + "/";
         std::vector<size_t> folderIndices;
@@ -1112,7 +1137,7 @@ void FileSelectView::toggleAllSelection() {
         for (size_t i = 0; i < selected_.size(); ++i) {
             selected_[i] = !anySelected;
         }
-        if (!retro_console_id_.empty()) {
+        if (isFolderHierarchyMode()) {
             rebuildRetroFolderList();
         } else {
             for (size_t i = 0; i < files_.size(); ++i) {
@@ -1167,7 +1192,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         int64_t freeSpace = 0;
         util::getStorageFreeSpace(1, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
@@ -1249,7 +1274,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         }
     }
 
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         if (chosen.size() == 1) {
             size_t i = chosen[0];
             std::vector<int> singleSelected = { files_[i].index };
@@ -1268,7 +1293,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
             Game bundleGame = game_;
             bundleGame.title = bundleTitle;
-            bundleGame.topic_id = game_.topic_id + "_romset";
+            bundleGame.topic_id = game_.topic_id + (retro_console_id_.empty() ? "_hb_bundle" : "_romset");
             int firstIndex = files_[chosen[0]].index;
             std::string firstName = files_[chosen[0]].name;
             ui::DownloadManager::instance().addDownload(bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_);

@@ -894,25 +894,7 @@ brls::View* SettingsTab::buildRetroTab() {
     });
     box->addView(autoExtractCell);
 
-    // 3. Romset download mode
-    std::vector<std::string> romsetOptions = {
-        "app/settings/retro_romset_full"_i18n,
-        "app/settings/retro_romset_select"_i18n
-    };
-    int initialRomsetIdx = (cfg.getRetroRomsetMode() == "select") ? 1 : 0;
-
-    auto* romsetModeCell = new brls::SelectorCell();
-    romsetModeCell->init("app/settings/retro_romset_mode"_i18n, romsetOptions, initialRomsetIdx, [&cfg](int selected) {
-        if (selected == 1) {
-            cfg.setRetroRomsetMode("select");
-        } else {
-            cfg.setRetroRomsetMode("full");
-        }
-        cfg.save();
-    });
-    box->addView(romsetModeCell);
-
-    // 4. Update retro game databases
+    // 3. Update retro game databases
     auto* updateCatalogsCell = new brls::DetailCell();
     updateCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
 
