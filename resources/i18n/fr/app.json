@@ -134,7 +134,8 @@
     },
     "downloads": {
         "title": "Téléchargements",
-        "empty": "Aucun téléchargement actif",
+        "empty": "Aucun téléchargements actif",
+        "already_in_queue": "Ce jeu est deja dans les telechargements",
         "status_prefix": "État : ",
         "speed": "Vitesse : {0}/s",
         "downloaded": "Téléchargé : {0} / {1} ({2}%)",

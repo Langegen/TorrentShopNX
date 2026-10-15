@@ -577,6 +577,16 @@ void HybridNspInstaller::collectorThreadFunc() {
             }
 
             // No data accumulated and read == 0 -> retry logic
+            if (is_paused_.load()) {
+                retry_count = 0;
+#ifdef __SWITCH__
+                svcSleepThread(100000000LL); // 100ms
+#else
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+#endif
+                continue;
+            }
+
             ++retry_count;
             if (retry_count >= max_retries) {
                 util::logLine("collector: retry limit reached at offset="

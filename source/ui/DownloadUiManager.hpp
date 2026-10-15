@@ -27,6 +27,9 @@ public:
     // Adds a homebrew port automatic installation to the queue
     void addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index);
     
+    // Checks if game/torrent is already active in downloads queue
+    bool hasActiveDownload(const std::string& topic_id, const std::string& magnet = "", int forced_file_index = -1) const;
+
     // Controls download states
     bool pauseDownload(const std::string& topic_id);
     bool resumeDownload(const std::string& topic_id);

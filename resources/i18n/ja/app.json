@@ -135,6 +135,7 @@
     "downloads": {
         "title": "ダウンロード",
         "empty": "進行中のダウンロードはありません",
+        "already_in_queue": "このゲームはすでにダウンロード一覧にあります",
         "status_prefix": "ステータス: ",
         "speed": "速度: {0}/s",
         "downloaded": "進行状況: {0} / {1} ({2}%)",

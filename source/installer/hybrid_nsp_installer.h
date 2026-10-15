@@ -79,6 +79,10 @@ public:
     /// Отменить установку
     void cancel();
 
+    /// Приостановить/возобновить установку (не сбрасывает лимит ретраев при паузе)
+    void setPaused(bool paused) { is_paused_.store(paused); }
+    bool isPaused() const { return is_paused_.load(); }
+
     /// Текущий прогресс (0.0 — 1.0)
     float progress() const;
 
@@ -239,6 +243,7 @@ private:
     std::thread installer_thread_;
     bool   threads_started_  = false;
 #endif
+    std::atomic<bool> is_paused_{false};
 };
 
 } // namespace installer

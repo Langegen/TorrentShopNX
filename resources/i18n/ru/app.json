@@ -135,6 +135,7 @@
     "downloads": {
         "title": "Загрузки",
         "empty": "Нет активных или завершенных загрузок.",
+        "already_in_queue": "Эта раздача уже добавлена в загрузки",
         "state_waiting": "Ожидание",
         "state_queued": "В очереди",
         "state_downloading": "Загрузка",

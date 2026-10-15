@@ -3346,6 +3346,9 @@ void torrentfs_pause(torrentfs *tfs, int on) {
     int v = on ? 1 : 0;
     if (tfs->paused == v) return;  // idempotent: polled from the UI
     tfs->paused = v;
+    if (!on) {
+        tfs->announce_now = true;
+    }
     engine_log(ENGINE_LOG_INFO, "[torrentfs] %s", on ? "paused" : "resumed");
 }
 
@@ -3393,6 +3396,12 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
     while (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0)) {
         svcSleepThread(20000000ULL);  // 20 ms
         u64 now = armGetSystemTick();
+        if (tfs->paused) {
+            wait_start = now;
+            last_recv_tick = now;
+            last_wd = now;
+            continue;
+        }
         if (tfs->st_bytes_recv != last_recv) {
             last_recv = tfs->st_bytes_recv;
             last_recv_tick = now;

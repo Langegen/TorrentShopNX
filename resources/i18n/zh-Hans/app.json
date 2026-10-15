@@ -135,6 +135,7 @@
     "downloads": {
         "title": "下载任务",
         "empty": "暂无活跃下载任务",
+        "already_in_queue": "此游戏已在下载列表中",
         "status_prefix": "状态: ",
         "speed": "速度: {0}/s",
         "downloaded": "已下载: {0} / {1} ({2}%)",

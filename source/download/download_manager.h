@@ -130,6 +130,7 @@ struct DownloadItem {
     bool file_dl_dispatched = false;
     std::shared_ptr<std::future<void>> file_dl_worker;
     std::shared_ptr<std::atomic<bool>> file_dl_cancel = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<bool>> file_dl_pause = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<FileDownloadState> file_dl_state;
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
     bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
@@ -144,6 +145,7 @@ struct DownloadItem {
     bool port_install_dispatched = false;
     std::shared_ptr<std::future<void>> port_install_worker;
     std::shared_ptr<std::atomic<bool>> port_install_cancel = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<bool>> port_install_pause = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<PortInstallProgressState> port_install_state;
 };
 

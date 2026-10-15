@@ -135,6 +135,7 @@
     "downloads": {
         "title": "Downloads",
         "empty": "No active or completed downloads.",
+        "already_in_queue": "This game is already in downloads",
         "state_waiting": "Waiting",
         "state_queued": "Queued",
         "state_downloading": "Downloading",

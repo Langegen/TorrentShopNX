@@ -1,9 +1,11 @@
 #include "DownloadUiManager.hpp"
 #include <fstream>
 #include <algorithm>
+#include <borealis.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 #include "../utils/log.h"
 #include "../utils/app_paths.h"
+#include "../utils/string_utils.h"
 #include "../config/config.h"
 
 #include <engine/engine.h>
@@ -37,7 +39,49 @@ void DownloadManager::shutdown() {
     impl_.shutdown();
 }
 
+bool DownloadManager::hasActiveDownload(const std::string& topic_id, const std::string& magnet, int forced_file_index) const {
+    std::lock_guard<std::recursive_mutex> lock(const_cast<download::DownloadManager&>(impl_).queueMutex());
+    std::string newHash;
+    if (!magnet.empty()) {
+        newHash = util::extractBtihHash(magnet);
+    }
+
+    for (const auto& item : impl_.queue()) {
+        if (item.state == download::DownloadState::Completed ||
+            item.state == download::DownloadState::Cancelled ||
+            item.state == download::DownloadState::Failed) {
+            continue;
+        }
+
+        // 1. Direct topic_id match (if non-empty)
+        if (!topic_id.empty() && !item.topic_id.empty() && item.topic_id == topic_id) {
+            return true;
+        }
+
+        // 2. Hash and file index match
+        if (!newHash.empty()) {
+            std::string itemHash = item.torrent_hash;
+            if (itemHash.empty() && !item.magnet.empty()) {
+                itemHash = util::extractBtihHash(item.magnet);
+            }
+            if (!itemHash.empty() && util::equalsIgnoreCase(newHash, itemHash)) {
+                // If either is full torrent (forced_file_index == -1), or both target same file
+                if (forced_file_index == -1 || item.forced_file_index == -1 || item.forced_file_index == forced_file_index) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id) {
+    if (hasActiveDownload(game.topic_id, game.magnet, forced_file_index)) {
+        util::logLine("download_ui: game " + game.title + " (topic_id=" + game.topic_id + ") is already in download queue, ignoring duplicate");
+        brls::Application::notify("app/downloads/already_in_queue"_i18n);
+        return;
+    }
+
     size_t idx = 0;
     {
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
@@ -62,6 +106,12 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
 }
 
 void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index) {
+    if (hasActiveDownload(game.topic_id, game.magnet, -1)) {
+        util::logLine("download_ui: port install already in download queue for " + game.title + " (topic_id=" + game.topic_id + "), ignoring duplicate");
+        brls::Application::notify("app/downloads/already_in_queue"_i18n);
+        return;
+    }
+
     size_t idx = 0;
     {
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());

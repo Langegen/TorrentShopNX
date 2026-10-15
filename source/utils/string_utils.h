@@ -13,6 +13,28 @@ namespace util {
         return value;
     }
 
+    inline bool equalsIgnoreCase(const std::string& a, const std::string& b) {
+        if (a.size() != b.size()) return false;
+        return std::equal(a.begin(), a.end(), b.begin(), [](unsigned char ca, unsigned char cb) {
+            return std::tolower(ca) == std::tolower(cb);
+        });
+    }
+
+    inline std::string extractBtihHash(std::string magnet) {
+        std::transform(magnet.begin(), magnet.end(), magnet.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+
+        const std::string marker = "xt=urn:btih:";
+        size_t pos = magnet.find(marker);
+        if (pos == std::string::npos) return {};
+        pos += marker.size();
+        size_t end = magnet.find('&', pos);
+        if (end == std::string::npos) end = magnet.size();
+        if (end <= pos) return {};
+        return magnet.substr(pos, end - pos);
+    }
+
     // UTF-8 lowercase helper handling both ASCII and Cyrillic (CP1251 / UTF-8)
     inline std::string toLowerUtf8(const std::string& s) {
         std::string out;

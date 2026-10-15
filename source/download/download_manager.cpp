@@ -341,6 +341,14 @@ static std::filesystem::path sanitizeTorrentPath(const std::string& raw) {
     return out;
 }
 
+static inline int fseek64(FILE* f, int64_t offset, int origin) {
+#if defined(_WIN32)
+    return _fseeki64(f, static_cast<__int64>(offset), origin);
+#else
+    return fseeko(f, static_cast<off_t>(offset), origin);
+#endif
+}
+
 // Фоновое копирование не-игровых файлов и Homebrew/портов: открывает стрим через источник данных,
 // последовательно читает и пишет в downloads/<имя_раздачи>/ с сохранением иерархии раздачи.
 static void fileCopyWorker(datasource::IDataSource* source,
@@ -352,6 +360,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                            bool is_homebrew,
                            const std::string& retro_console_id,
                            const std::shared_ptr<std::atomic<bool>>& cancel,
+                           const std::shared_ptr<std::atomic<bool>>& pause,
                            const std::shared_ptr<FileDownloadState>& st) {
     if (!source || hash.empty()) {
         st->failed = true;
@@ -470,7 +479,14 @@ static void fileCopyWorker(datasource::IDataSource* source,
     bool all_ok = true;
 
     for (int idx : target_indices) {
-        if (cancel->load()) {
+        if (cancel->load() || g_appExiting.load()) {
+            all_ok = false;
+            break;
+        }
+        while (pause && pause->load() && !cancel->load() && !g_appExiting.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (cancel->load() || g_appExiting.load()) {
             all_ok = false;
             break;
         }
@@ -503,7 +519,31 @@ static void fileCopyWorker(datasource::IDataSource* source,
         }
 
         tsnx_ensure_parent_dirs(file_dest.c_str());
-        FILE* f = std::fopen(file_dest.c_str(), "wb");
+
+        // Horizon OS micro-SD cluster alignment: 2 MB write chunks with dedicated stream buffer
+        static constexpr size_t kChunk = 2 * 1024 * 1024;
+        uint64_t offset = 0;
+        FILE* f = nullptr;
+
+        std::error_code ec_exist;
+        uint64_t existing_size = std::filesystem::exists(file_dest, ec_exist) ? std::filesystem::file_size(file_dest, ec_exist) : 0;
+        if (existing_size > 0 && existing_size < file_size) {
+            uint64_t resume_offset = (existing_size / kChunk) * kChunk;
+            f = std::fopen(file_dest.c_str(), "r+b");
+            if (f && fseek64(f, static_cast<int64_t>(resume_offset), SEEK_SET) == 0) {
+                offset = resume_offset;
+                cumulative_written += resume_offset;
+                st->written.store(cumulative_written);
+                util::logLine("download: resuming partial file at offset=" + std::to_string(offset) + " / " + std::to_string(file_size));
+            } else {
+                if (f) std::fclose(f);
+                f = nullptr;
+                offset = 0;
+            }
+        }
+        if (!f) {
+            f = std::fopen(file_dest.c_str(), "wb");
+        }
         if (!f) {
             st->failed = true;
             st->error = "cannot create destination file: " + file_dest +
@@ -514,20 +554,26 @@ static void fileCopyWorker(datasource::IDataSource* source,
             break;
         }
 
-        // Horizon OS micro-SD cluster alignment: 2 MB write chunks with dedicated stream buffer
-        static constexpr size_t kChunk = 2 * 1024 * 1024;
         std::vector<unsigned char> fbuf(kChunk);
         std::setvbuf(f, reinterpret_cast<char*>(fbuf.data()), _IOFBF, kChunk);
 
         std::vector<unsigned char> buf(kChunk);
-        uint64_t offset = 0;
         bool file_ok = true;
 
-        while (offset < file_size && !cancel->load()) {
+        while (offset < file_size && !cancel->load() && !g_appExiting.load()) {
+            if (pause && pause->load()) {
+                std::fflush(f);
+                while (pause->load() && !cancel->load() && !g_appExiting.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                if (cancel->load() || g_appExiting.load()) break;
+            }
+
             size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
             size_t got = source->read(offset, buf.data(), want);
             if (got == 0) {
-                if (cancel->load()) break;
+                if (cancel->load() || g_appExiting.load()) break;
+                if (pause && pause->load()) continue;
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 continue;
             }
@@ -550,10 +596,20 @@ static void fileCopyWorker(datasource::IDataSource* source,
             source->notifyStreamingComplete(true);
         } else {
             all_ok = false;
-            st->failed = true;
-            if (st->error.empty()) st->error = "download cancelled";
-            std::error_code e2;
-            std::filesystem::remove(file_dest, e2);
+            if (cancel->load() || g_appExiting.load()) {
+                st->failed = true;
+                st->error = "download cancelled";
+                std::error_code e2;
+                std::filesystem::remove(file_dest, e2);
+            } else if (!file_ok) {
+                st->failed = true;
+                if (st->error.empty()) st->error = "disk write failed";
+                std::error_code e2;
+                std::filesystem::remove(file_dest, e2);
+            } else {
+                st->failed = true;
+                if (st->error.empty()) st->error = "download failed";
+            }
             source->notifyStreamingComplete(false);
             break;
         }
@@ -626,6 +682,7 @@ static void portInstallWorker(datasource::IDataSource* source,
                               std::shared_ptr<installer::PortInstallPlan> plan,
                               int variant_index,
                               const std::shared_ptr<std::atomic<bool>>& cancel,
+                              const std::shared_ptr<std::atomic<bool>>& pause,
                               const std::shared_ptr<PortInstallProgressState>& st) {
     if (!source || hash.empty() || !plan) {
         st->failed = true;
@@ -725,25 +782,55 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
 
         ensureParentDirs(resolved_dest);
-        FILE* f = std::fopen(resolved_dest.c_str(), "wb");
+
+        static constexpr size_t kChunk = 2 * 1024 * 1024;
+        uint64_t offset = 0;
+        FILE* f = nullptr;
+
+        std::error_code ec_exist;
+        uint64_t existing_size = std::filesystem::exists(resolved_dest, ec_exist) ? std::filesystem::file_size(resolved_dest, ec_exist) : 0;
+        if (existing_size > 0 && existing_size < file_size) {
+            uint64_t resume_offset = (existing_size / kChunk) * kChunk;
+            f = std::fopen(resolved_dest.c_str(), "r+b");
+            if (f && fseek64(f, static_cast<int64_t>(resume_offset), SEEK_SET) == 0) {
+                offset = resume_offset;
+                cumulative_written += resume_offset;
+                st->written.store(cumulative_written);
+                util::logLine("download: resuming partial port file at offset=" + std::to_string(offset) + " / " + std::to_string(file_size));
+            } else {
+                if (f) std::fclose(f);
+                f = nullptr;
+                offset = 0;
+            }
+        }
+        if (!f) {
+            f = std::fopen(resolved_dest.c_str(), "wb");
+        }
         if (!f) {
             st->error = "Cannot create destination file: " + resolved_dest;
             source->notifyStreamingComplete(false);
             return false;
         }
 
-        static constexpr size_t kChunk = 2 * 1024 * 1024;
         std::vector<unsigned char> fbuf(kChunk);
         std::setvbuf(f, reinterpret_cast<char*>(fbuf.data()), _IOFBF, kChunk);
         std::vector<unsigned char> buf(kChunk);
-        uint64_t offset = 0;
         bool ok = true;
 
-        while (offset < file_size && !cancel->load()) {
+        while (offset < file_size && !cancel->load() && !g_appExiting.load()) {
+            if (pause && pause->load()) {
+                std::fflush(f);
+                while (pause->load() && !cancel->load() && !g_appExiting.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                if (cancel->load() || g_appExiting.load()) break;
+            }
+
             size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
             size_t got = source->read(offset, buf.data(), want);
             if (got == 0) {
-                if (cancel->load()) break;
+                if (cancel->load() || g_appExiting.load()) break;
+                if (pause && pause->load()) continue;
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 continue;
             }
@@ -766,9 +853,14 @@ static void portInstallWorker(datasource::IDataSource* source,
             return true;
         } else {
             source->notifyStreamingComplete(false);
-            std::error_code ec;
-            std::filesystem::remove(resolved_dest, ec);
-            if (st->error.empty()) st->error = "Download cancelled";
+            if (cancel->load() || g_appExiting.load()) {
+                std::error_code ec;
+                std::filesystem::remove(resolved_dest, ec);
+                if (st->error.empty()) st->error = "Download cancelled";
+            } else if (!ok) {
+                std::error_code ec;
+                std::filesystem::remove(resolved_dest, ec);
+            }
             return false;
         }
     };
@@ -1101,8 +1193,14 @@ void DownloadManager::shutdown() {
         if (item.file_dl_cancel) {
             item.file_dl_cancel->store(true);
         }
+        if (item.file_dl_pause) {
+            item.file_dl_pause->store(false);
+        }
         if (item.port_install_cancel) {
             item.port_install_cancel->store(true);
+        }
+        if (item.port_install_pause) {
+            item.port_install_pause->store(false);
         }
         if (item.hybrid_installer) {
             item.hybrid_installer->cancel();
@@ -1834,9 +1932,11 @@ void DownloadManager::handleFileDownload(size_t index,
         }
         if (item.cancel_flag) item.cancel_flag->store(false);
         if (item.file_dl_cancel) item.file_dl_cancel->store(false);
+        if (item.file_dl_pause) item.file_dl_pause->store(false);
 
         source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
         auto cancel = item.file_dl_cancel;
+        auto pause = item.file_dl_pause;
         auto st = item.file_dl_state = std::make_shared<FileDownloadState>();
         const std::string hash = item.torrent_hash;
         const std::string magnet = normalizeTorrentLink(item.magnet);
@@ -1847,8 +1947,8 @@ void DownloadManager::handleFileDownload(size_t index,
         const std::string retro_cid = item.retro_console_id;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, st]() {
-                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, st);
+            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
+                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +
@@ -1936,9 +2036,11 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         }
         if (item.cancel_flag) item.cancel_flag->store(false);
         if (item.port_install_cancel) item.port_install_cancel->store(false);
+        if (item.port_install_pause) item.port_install_pause->store(false);
 
         source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
         auto cancel = item.port_install_cancel;
+        auto pause = item.port_install_pause;
         auto st = item.port_install_state = std::make_shared<PortInstallProgressState>();
         const std::string hash = item.torrent_hash;
         const std::string magnet = normalizeTorrentLink(item.magnet);
@@ -1947,8 +2049,8 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         const int variant_idx = item.selected_variant_index;
 
         item.port_install_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, plan, variant_idx, cancel, st]() {
-                portInstallWorker(source, hash, magnet, title, plan, variant_idx, cancel, st);
+            std::async(std::launch::async, [source, hash, magnet, title, plan, variant_idx, cancel, pause, st]() {
+                portInstallWorker(source, hash, magnet, title, plan, variant_idx, cancel, pause, st);
             }));
         item.port_install_dispatched = true;
         util::logLine("download: port auto install started hash=" + hash +
@@ -2256,7 +2358,8 @@ void DownloadManager::trackProgress() {
 
         if (item.state == DownloadState::Downloading ||
             item.state == DownloadState::StreamInstalling ||
-            item.state == DownloadState::StreamPreparing) {
+            item.state == DownloadState::StreamPreparing ||
+            item.state == DownloadState::Paused) {
             if (!item.priorities_set && !item.selected_files.empty()) {
                 std::vector<torrent::TorrentFileInfo> files;
                 bool got_files = false;
@@ -2826,8 +2929,14 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.file_dl_cancel) {
         item.file_dl_cancel->store(true);
     }
+    if (item.file_dl_pause) {
+        item.file_dl_pause->store(false);
+    }
     if (item.port_install_cancel) {
         item.port_install_cancel->store(true);
+    }
+    if (item.port_install_pause) {
+        item.port_install_pause->store(false);
     }
 
     if (item.hybrid_installer) {
@@ -2901,6 +3010,15 @@ bool DownloadManager::retryDownload(size_t index) {
     if (item.file_dl_cancel) {
         item.file_dl_cancel->store(false);
     }
+    if (item.file_dl_pause) {
+        item.file_dl_pause->store(false);
+    }
+    if (item.port_install_cancel) {
+        item.port_install_cancel->store(false);
+    }
+    if (item.port_install_pause) {
+        item.port_install_pause->store(false);
+    }
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
@@ -2915,9 +3033,14 @@ bool DownloadManager::retryDownload(size_t index) {
     if (item.file_dl_worker) {
         item.file_dl_worker.reset();
     }
+    if (item.port_install_worker) {
+        item.port_install_worker.reset();
+    }
     item.file_dl_dispatched = false;
     item.file_dl_state.reset();
     item.file_dl_dest.clear();
+    item.port_install_dispatched = false;
+    item.port_install_state.reset();
     item.open_done.reset();
     item.open_success.reset();
 
@@ -2957,11 +3080,16 @@ bool DownloadManager::pauseDownload(size_t index) {
         item.state == DownloadState::StreamPreparing ||
         item.state == DownloadState::StreamInstalling) {
 
-        if (item.state == DownloadState::Downloading) {
-            if (item.file_dl_cancel) {
-                item.file_dl_cancel->store(true);
-            }
+        if (item.file_dl_pause) {
+            item.file_dl_pause->store(true);
         }
+        if (item.port_install_pause) {
+            item.port_install_pause->store(true);
+        }
+        if (item.hybrid_installer) {
+            item.hybrid_installer->setPaused(true);
+        }
+
         // Note: For streaming installations we do not set cancel_flag=true, as that
         // completely cancels the installer and destroys NCM placeholders.
         // Instead, pausing the torrent engine stops incoming data, causing the installer
@@ -2985,6 +3113,21 @@ bool DownloadManager::resumeDownload(size_t index) {
     if (item.state == DownloadState::Paused || item.state == DownloadState::Installing) {
         if (item.cancel_flag) {
             item.cancel_flag->store(false);
+        }
+        if (item.file_dl_cancel) {
+            item.file_dl_cancel->store(false);
+        }
+        if (item.file_dl_pause) {
+            item.file_dl_pause->store(false);
+        }
+        if (item.port_install_cancel) {
+            item.port_install_cancel->store(false);
+        }
+        if (item.port_install_pause) {
+            item.port_install_pause->store(false);
+        }
+        if (item.hybrid_installer) {
+            item.hybrid_installer->setPaused(false);
         }
         if (!item.torrent_hash.empty()) {
             tsnx_engine_resume_torrent(nullptr, item.torrent_hash.c_str());

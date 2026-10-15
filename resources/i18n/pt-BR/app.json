@@ -135,6 +135,7 @@
     "downloads": {
         "title": "Downloads",
         "empty": "Nenhum download ativo",
+        "already_in_queue": "Este jogo ja esta nos downloads",
         "status_prefix": "Status: ",
         "speed": "Velocidade: {0}/s",
         "downloaded": "Baixado: {0} / {1} ({2}%)",
