@@ -88,13 +88,6 @@ static utp_nb_sess *find_free_sess(void) {
     for (int i = 0; i < SESS_MAX; i++) {
         if (!g_sess[i].in_use && g_sess[i].refs == 0) return &g_sess[i];
     }
-    // Reclaim zombie sessions where in_use is false and socket is already closed
-    for (int i = 0; i < SESS_MAX; i++) {
-        if (!g_sess[i].in_use && g_sess[i].sock == NULL) {
-            free_sess(&g_sess[i]);
-            return &g_sess[i];
-        }
-    }
     return NULL;
 }
 
@@ -106,20 +99,20 @@ static utp_nb_sess *sess_from_userdata(void *u) {
 
 static void cb_on_read(void *u, const byte *bytes, size_t count) {
     utp_nb_sess *c = sess_from_userdata(u);
-    if (!c) return;
+    if (!c || !c->in_use || c->closing) return;
     size_t n = count < rb_free(c) ? count : rb_free(c);
     rb_push(c, bytes, n);
 }
 
 static void cb_on_write(void *u, byte *bytes, size_t count) {
     utp_nb_sess *c = sess_from_userdata(u);
-    if (!c) return;
+    if (!c || !c->in_use || c->closing) return;
     wb_pop(c, bytes, count);
 }
 
 static size_t cb_get_rb_size(void *u) {
     utp_nb_sess *c = sess_from_userdata(u);
-    return c ? c->rcount : 0;
+    return (c && c->in_use && !c->closing) ? c->rcount : 0;
 }
 
 static void cb_on_state(void *u, int state) {
@@ -130,7 +123,7 @@ static void cb_on_state(void *u, int state) {
         // Anything queued before the connect completed (our handshake) must
         // be handed to libutp now -- UTP_Write is a no-op on a connecting
         // socket, so the peer would otherwise wait on us forever.
-        if (c->sock && c->wcount > 0) UTP_Write(c->sock, c->wcount);
+        if (c->sock && c->wcount > 0 && c->in_use && !c->closing) UTP_Write(c->sock, c->wcount);
     } else if (state == UTP_STATE_EOF) {
         c->state = ST_EOF;
     } else if (state == UTP_STATE_DESTROYING) {
@@ -290,7 +283,6 @@ void utp_nb_close(utp_nb_sess *c) {
     c->closing = true;
     if (c->sock) {
         UTP_Close(c->sock);
-        c->sock = NULL;
     }
     decref(c);
 }

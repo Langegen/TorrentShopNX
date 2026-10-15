@@ -97,14 +97,17 @@ extern "C" {
             cfg.udp_rx_buf_size = 8192;
             cfg.udp_tx_buf_size = 8192;
         } else {
-            // Switch BSD buffer pool is fixed; keep per-socket initial cost low
-            // so the engine can open many peer sockets without ENOBUFS.
-            cfg.num_bsd_sessions = 12;
-            cfg.sb_efficiency = 4;
+            // Switch BSD buffer pool is fixed (32MB in Title mode).
+            // BitTorrent is downstream-heavy: large RX buffers (512KB) support 25+ MB/s
+            // speeds from fast seeders, while minimal TX buffers (32KB) prevent mbuf waste.
+            // sb_efficiency = 2 (standard Switch libnx factor) keeps (512+32)*2 ~ 1.08MB per socket,
+            // allowing 20-25 parallel peers with plenty of headroom for UDP/trackers without ENOBUFS.
+            cfg.num_bsd_sessions = 16;
+            cfg.sb_efficiency = 2;
             cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
             cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x60000;  // 384 KB max
-            cfg.tcp_rx_buf_max_size = 0x60000;  // 384 KB max
+            cfg.tcp_tx_buf_max_size = 0x8000;   // 32 KB max (only small 17-byte BT requests)
+            cfg.tcp_rx_buf_max_size = 0x80000;  // 512 KB max (high throughput receive window)
             cfg.udp_rx_buf_size = 0x8000;       // 32 KB
             cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }

@@ -991,12 +991,10 @@ static int announce_http(const char *tracker, const char *hash_enc,
 #define AJOB_PEERS 512
 
 /* At most this many tracker announces run in parallel: every one of them sits
-   in a blocking socket call, and the Switch OS allows 16 concurrent blocking
-   BSD sessions per process. The rest of the trackers are announced inline
-   after the parallel wave. 8 threads + the DHT recv stays under the budget;
-   more threads keep the announce round short now that the default tracker
-   list is larger. */
-#define ANNOUNCE_MAX_THREADS 8
+   in a blocking socket call. 4 threads keep the announce round short without
+   starving BSD sessions or causing thread contention during starvation recovery.
+   The rest of the trackers are announced inline after the parallel wave. */
+#define ANNOUNCE_MAX_THREADS 4
 
 /* Zero-initialised is a valid Mutex in libnx; the PC compat shim initialises
    lazily. Serialises metadata-fetch announces with torrentfs discovery
@@ -1165,6 +1163,9 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
             if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
                 j->has_thread = true;
                 threadStart(&j->thread);
+            } else {
+                j->count = -1;
+                snprintf(j->terr, sizeof(j->terr), "thread create failed");
             }
         }
     }
