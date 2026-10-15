@@ -58,7 +58,8 @@ enum class LanguageFilter {
     JAPANESE_ONLY = 7,
     CHINESE_ONLY = 8,
     PORTUGUESE_ONLY = 9,
-    MULTI_ONLY = 10,
+    ARABIC_ONLY = 10,
+    MULTI_ONLY = 11,
 };
 
 inline std::vector<std::string> getLanguageFilterNames() {
@@ -73,6 +74,7 @@ inline std::vector<std::string> getLanguageFilterNames() {
         "app/filter/lang_jpn"_i18n,
         "app/filter/lang_zho"_i18n,
         "app/filter/lang_por"_i18n,
+        "app/filter/lang_ara"_i18n,
         "app/filter/lang_multi"_i18n
     };
 }
@@ -265,6 +267,9 @@ inline bool checkLanguageMatch(const std::string& lowerLang, LanguageFilter lang
         case LanguageFilter::PORTUGUESE_ONLY:
             return (lowerLang.find("por") != std::string::npos || lowerLang.find("порт") != std::string::npos ||
                     lowerLang.find("portug") != std::string::npos);
+        case LanguageFilter::ARABIC_ONLY:
+            return (lowerLang.find("ara") != std::string::npos || lowerLang.find("arb") != std::string::npos ||
+                    lowerLang.find("араб") != std::string::npos || lowerLang.find("arabic") != std::string::npos);
         case LanguageFilter::MULTI_ONLY:
             return (lowerLang.find("multi") != std::string::npos || lowerLang.find("мульти") != std::string::npos);
         default:

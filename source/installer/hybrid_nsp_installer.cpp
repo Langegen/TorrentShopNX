@@ -674,43 +674,6 @@ static Result nsPushApplicationRecordCustom(u64 application_id, u8 record_type, 
     return rc;
 }
 
-static Result nsListApplicationRecordContentMetaCustom(u64 offset, u64 application_id, ContentStorageRecord* out_records, size_t out_buf_size, u32* out_entries_read) {
-    Service app_manager;
-    Result rc = nsGetApplicationManagerInterface(&app_manager);
-    if (R_FAILED(rc)) return rc;
-
-    struct {
-        u64 offset;
-        u64 application_id;
-    } in;
-    in.offset = offset;
-    in.application_id = application_id;
-
-    rc = serviceDispatchInOut(&app_manager, 17, in, *out_entries_read,
-        .buffer_attrs = { SfBufferAttr_Out | SfBufferAttr_HipcMapAlias },
-        .buffers = { { out_records, out_buf_size } }
-    );
-    serviceClose(&app_manager);
-    return rc;
-}
-
-static Result nsDeleteApplicationRecordCustom(u64 application_id) {
-    Service app_manager;
-    Result rc = nsGetApplicationManagerInterface(&app_manager);
-    if (R_FAILED(rc)) return rc;
-
-    struct {
-        u64 application_id;
-    } in;
-    in.application_id = application_id;
-
-    rc = serviceDispatchIn(&app_manager, 27, in);
-    serviceClose(&app_manager);
-    return rc;
-}
-
-
-
 static constexpr u8 NsApplicationRecordType_Installed = 0x3;
 #endif
 

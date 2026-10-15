@@ -175,7 +175,7 @@
         "elapsed": "已用时间: {0}",
         "saved_to": "保存至: {0}",
         "installed": "已安装至主机系统",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "发布的所有文件均已下载：{0}",
         "unknown_error": "未知错误",
         "action_delete": "删除任务",
         "action_open_folder": "打开所在文件夹",
@@ -191,7 +191,9 @@
         "peers_title": "节点与连接状态",
         "peers_no_active": "没有活动的节点连接",
         "action_peers_short": "节点",
-        "downloads_header_hints": "L - 节点  [-] 关闭屏幕"
+        "downloads_header_hints": "L - 节点  [-] 关闭屏幕",
+        "state_connecting_peers": "正在连接节点...",
+        "state_resolving_meta": "正在解析元数据..."
     },
     "detail": {
         "unknown_publisher": "未知发行商",
@@ -296,7 +298,11 @@
         "storage_nand": "内置存储",
         "storage_auto": "自动",
         "group_roms": "游戏ROM文件",
-        "extra_files_bundle": "附加文件 [{0}]"
+        "extra_files_bundle": "附加文件 [{0}]",
+        "bundle_files": "{0} 个文件",
+        "folder_prefix": "文件夹: ",
+        "parent_folder": ".. (上一级目录)",
+        "toggle_folder": "选择文件夹"
     },
     "remote": {
         "title": "添加种子",
@@ -381,7 +387,7 @@
         "titledb_failed": "TitleDB 数据库加载失败",
         "scanning_games": "正在分析主机已装内容...",
         "installed": "已安装",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "发布的所有文件均已下载：{0}",
         "available": "可更新",
         "uninstall_confirm": "确定卸载《{0}》？\n游戏本体及其所有更新和DLC都将被删除。",
         "uninstall_success": "《{0}》卸载完成",
@@ -441,7 +447,8 @@
         "sort_downloads_desc": "按下载量 (从多到少)",
         "sort_downloads_asc": "按下载量 (从少到多)",
         "sort_date_desc": "按添加日期 (从新到旧)",
-        "sort_date_asc": "按添加日期 (从旧到新)"
+        "sort_date_asc": "按添加日期 (从旧到新)",
+        "lang_ara": "包含阿拉伯语 (ARA)"
     },
     "settings": {
         "title": "设置工具",
@@ -668,7 +675,10 @@
         "update_catalog_applying_diff": "正在应用变更...",
         "update_catalog_diff_success": "目录已更新：新增 {0} 款，更新 {1} 款",
         "update_catalog_up_to_date": "目录已是最新",
-        "cat_appearance": "外观"
+        "cat_appearance": "外观",
+        "joycon_rumble": "Joy-Con 震动",
+        "sound_effects": "音效",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "当前运行在 Applet 模式",

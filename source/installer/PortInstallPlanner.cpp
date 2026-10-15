@@ -376,7 +376,7 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
 
     // Set default variant according to preferred language
     plan.default_variant_index = 0;
-    if (plan.variants.size() > 1 && (preferred_lang == "en" || preferred_lang == "en-US")) {
+    if (plan.variants.size() > 1 && (preferred_lang == "en" || preferred_lang == "en-US" || preferred_lang == "ar")) {
         for (size_t i = 0; i < plan.variants.size(); ++i) {
             if (plan.variants[i].id == "en" || plan.variants[i].id == "vanilla") {
                 plan.default_variant_index = static_cast<int>(i);

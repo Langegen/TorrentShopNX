@@ -400,7 +400,8 @@
         "uptodate": "Up to date",
         "version": "Version: {0}",
         "version_with_app": "Version: {0} ({1})",
-        "view_in_catalog": "View in Catalog"
+        "view_in_catalog": "View in Catalog",
+        "release_completed": "All files in release downloaded: {0}"
     },
     "filter": {
         "title": "Filters & Sorting",
@@ -446,7 +447,8 @@
         "sort_downloads_desc": "By downloads (highest first)",
         "sort_downloads_asc": "By downloads (lowest first)",
         "sort_date_desc": "By date (newest first)",
-        "sort_date_asc": "By date (oldest first)"
+        "sort_date_asc": "By date (oldest first)",
+        "lang_ara": "Arabic included (ARA)"
     },
     "genres": {
         "action": "Action",
@@ -700,7 +702,8 @@
         "update_success": "Update applied successfully",
         "version_str": "Version {0}",
         "retro_update_catalogs_cached": "Cache: {0} games (A - update)",
-        "retro_update_catalogs_empty": "Press A to update"
+        "retro_update_catalogs_empty": "Press A to update",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "Applet Mode Not Supported",

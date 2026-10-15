@@ -400,7 +400,8 @@
         "uptodate": "Актуально",
         "version": "Версия: {0}",
         "version_with_app": "Версия: {0} ({1})",
-        "view_in_catalog": "Открыть в каталоге"
+        "view_in_catalog": "Открыть в каталоге",
+        "release_completed": "Все файлы раздачи скачаны: {0}"
     },
     "filter": {
         "title": "Фильтры и сортировка",
@@ -446,7 +447,8 @@
         "sort_downloads_desc": "По загрузкам (сначала больше)",
         "sort_downloads_asc": "По загрузкам (сначала меньше)",
         "sort_date_desc": "По дате (сначала новые)",
-        "sort_date_asc": "По дате (сначала старые)"
+        "sort_date_asc": "По дате (сначала старые)",
+        "lang_ara": "С арабским языком (ARA)"
     },
     "genres": {
         "action": "Экшен",
@@ -700,7 +702,8 @@
         "update_success": "Обновление успешно применилось",
         "version_str": "Версия {0}",
         "retro_update_catalogs_cached": "Кэш: {0} игр (A - обновить)",
-        "retro_update_catalogs_empty": "Нажмите A для обновления"
+        "retro_update_catalogs_empty": "Нажмите A для обновления",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "Режим апплета не поддерживается",

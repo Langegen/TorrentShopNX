@@ -175,7 +175,7 @@
         "elapsed": "Vergangen: {0}",
         "saved_to": "Gespeichert in: {0}",
         "installed": "Auf Konsole installiert",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "Alle Dateien des Release heruntergeladen: {0}",
         "unknown_error": "Unbekannter Fehler",
         "action_delete": "Download löschen",
         "action_open_folder": "Ordner öffnen",
@@ -191,7 +191,9 @@
         "peers_title": "Schwarm- & Peer-Status",
         "peers_no_active": "Keine aktiven Peer-Verbindungen",
         "action_peers_short": "Peers",
-        "downloads_header_hints": "L - Peers  [-] Bildschirm aus"
+        "downloads_header_hints": "L - Peers  [-] Bildschirm aus",
+        "state_connecting_peers": "Verbindung zu Peers herstellen...",
+        "state_resolving_meta": "Metadaten auflösen..."
     },
     "detail": {
         "unknown_publisher": "Unbekannter Publisher",
@@ -296,7 +298,11 @@
         "storage_nand": "NAND",
         "storage_auto": "Auto",
         "group_roms": "Spiel-ROMs",
-        "extra_files_bundle": "Zusatzdateien [{0}]"
+        "extra_files_bundle": "Zusatzdateien [{0}]",
+        "bundle_files": "{0} Dateien",
+        "folder_prefix": "Ordner: ",
+        "parent_folder": ".. (Übergeordneter Ordner)",
+        "toggle_folder": "Ordner auswählen"
     },
     "remote": {
         "title": "Torrent hinzufügen",
@@ -381,7 +387,7 @@
         "titledb_failed": "Laden der TitleDB fehlgeschlagen",
         "scanning_games": "Konsolenspiele werden analysiert...",
         "installed": "Installiert",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "Alle Dateien des Release heruntergeladen: {0}",
         "available": "Verfügbar",
         "uninstall_confirm": "„{0}“ deinstallieren?\nDas Spiel, alle Updates und DLCs werden gelöscht.",
         "uninstall_success": "„{0}“ deinstalliert",
@@ -441,7 +447,8 @@
         "sort_downloads_desc": "Nach Downloads (absteigend)",
         "sort_downloads_asc": "Nach Downloads (aufsteigend)",
         "sort_date_desc": "Nach Datum (neueste)",
-        "sort_date_asc": "Nach Datum (älteste)"
+        "sort_date_asc": "Nach Datum (älteste)",
+        "lang_ara": "Arabisch enthalten (ARA)"
     },
     "settings": {
         "title": "Werkzeuge",
@@ -668,7 +675,10 @@
         "update_catalog_applying_diff": "Änderungen anwenden...",
         "update_catalog_diff_success": "Katalog aktualisiert: +{0} neu, {1} aktualisiert",
         "update_catalog_up_to_date": "Katalog ist bereits aktuell",
-        "cat_appearance": "Erscheinungsbild"
+        "cat_appearance": "Erscheinungsbild",
+        "joycon_rumble": "Joy-Con-Vibration",
+        "sound_effects": "Soundeffekte",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "Applet-Modus erkannt",

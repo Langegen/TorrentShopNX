@@ -42,6 +42,7 @@ const std::string LOCALE_PT      = "pt";
 const std::string LOCALE_PT_BR   = "pt-BR";
 const std::string LOCALE_RU      = "ru";
 const std::string LOCALE_ES_419  = "es-419";
+const std::string LOCALE_AR      = "ar";
 
 /// custom locale
 // Rename ja-RYU to RYU, as there may be a bug in PkgTool that not allow dirs with same prefix exist.

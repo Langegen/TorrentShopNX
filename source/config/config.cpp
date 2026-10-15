@@ -226,7 +226,8 @@ bool isValidLanguage(const std::string& lang) {
            lang == "it" ||
            lang == "pt-BR" || lang == "pt" ||
            lang == "zh-Hans" || lang == "zh-CN" || lang == "zh-Hant" || lang == "zh" ||
-           lang == "ja";
+           lang == "ja" ||
+           lang == "ar";
 }
 
 } // namespace
@@ -472,6 +473,8 @@ std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
         return DEFAULT_CATALOG_URL_PT_BR;
     } else if (lang == "zh-Hans" || lang.rfind("zh", 0) == 0) {
         return DEFAULT_CATALOG_URL_ZH_HANS;
+    } else if (lang == "ar" || lang.rfind("ar", 0) == 0) {
+        return DEFAULT_CATALOG_URL_EN;
     }
 
     return DEFAULT_CATALOG_URL_EN;
