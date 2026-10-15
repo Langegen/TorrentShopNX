@@ -130,6 +130,12 @@ struct ScopedCpuBoost {
     ScopedCpuBoost& operator=(const ScopedCpuBoost&) = delete;
 };
 
+// Joy-Con / controller haptic feedback.
+// style = 1: subtle navigation tick
+// style = 2: button press / click
+// style = 3: strong notification / favorite toggle
+void triggerHapticFeedback(int style = 1);
+
 // Screen backlight control (OLED/LCD display power saving & burn-in protection).
 // off = true: turn screen backlight off (black screen).
 // off = false: turn screen backlight back on.

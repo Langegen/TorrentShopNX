@@ -131,6 +131,12 @@ public:
     void setFontScale(int level);
     float getFontScaleMultiplier() const;
 
+    bool getSoundEffectsEnabled() const; // default true
+    void setSoundEffectsEnabled(bool enabled);
+
+    bool getRumbleEnabled() const; // default true
+    void setRumbleEnabled(bool enabled);
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -162,6 +168,8 @@ private:
     int background_dim_ = 2;
     bool show_bottom_dashboard_ = true;
     int font_scale_ = 0;
+    bool sound_effects_enabled_ = true;
+    bool rumble_enabled_ = true;
     std::string config_path_;
     std::string legacy_config_path_;
 };

@@ -40,6 +40,8 @@ struct FileDownloadState {
     std::atomic<unsigned long long> total{0};
     std::atomic<bool> done{false};
     std::atomic<bool> failed{false};
+    std::mutex msg_mutex;
+    std::string stage_label;
     std::string error;
     std::string dest;              // итоговый путь на диске
     unsigned long long size = 0;   // размер исходного файла

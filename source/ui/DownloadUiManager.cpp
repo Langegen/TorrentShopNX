@@ -7,6 +7,7 @@
 #include "../config/config.h"
 
 #include <engine/engine.h>
+#include "../net/image_downloader.h"
 
 namespace ui {
 
@@ -22,6 +23,10 @@ void DownloadManager::init() {
 
     impl_.setProgressCallback([this]() {
         triggerCallback();
+    });
+
+    net::ImageDownloader::instance().setActiveCheckFn([this]() {
+        return getActiveDownloadsCount() > 0;
     });
 
     // Load and restore previous downloads

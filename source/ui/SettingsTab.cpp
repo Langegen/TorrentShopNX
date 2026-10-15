@@ -458,6 +458,24 @@ brls::View* SettingsTab::buildGeneralTab() {
     });
     box->addView(cacheThumbnailsCell);
 
+    // Звуковые эффекты
+    auto* soundEffectsCell = new brls::BooleanCell();
+    soundEffectsCell->init("app/settings/sound_effects"_i18n, cfg.getSoundEffectsEnabled(), [&cfg](bool value) {
+        cfg.setSoundEffectsEnabled(value);
+        util::triggerHapticFeedback(1);
+    });
+    box->addView(soundEffectsCell);
+
+    // Вибрация Joy-Con / контроллеров
+    auto* rumbleCell = new brls::BooleanCell();
+    rumbleCell->init("app/settings/joycon_rumble"_i18n, cfg.getRumbleEnabled(), [&cfg](bool value) {
+        cfg.setRumbleEnabled(value);
+        if (value) {
+            util::triggerHapticFeedback(3);
+        }
+    });
+    box->addView(rumbleCell);
+
     // URL каталога JSON
     auto* catalogUrlCell = new brls::DetailCell();
     catalogUrlCell->setText("app/settings/catalog_url"_i18n);

@@ -1,5 +1,7 @@
 #include "switch_utils.h"
 #include "log.h"
+#include "../config/config.h"
+#include <borealis.hpp>
 #include <string>
 #include <chrono>
 #include <cctype>
@@ -128,6 +130,33 @@ bool isBacklightOff() {
     return g_mock_backlight_off;
 }
 #endif
+
+void triggerHapticFeedback(int style) {
+    if (!config::ConfigManager::instance().getRumbleEnabled()) return;
+#ifdef __SWITCH__
+    auto platform = brls::Application::getPlatform();
+    if (!platform) return;
+    auto input = platform->getInputManager();
+    if (!input) return;
+
+    unsigned short low = 0, high = 0;
+    long duration = 40;
+    if (style == 1) { // subtle tick (navigation)
+        low = 6000; high = 14000; duration = 30;
+    } else if (style == 2) { // click / select
+        low = 14000; high = 28000; duration = 45;
+    } else if (style == 3) { // success / favorite
+        low = 22000; high = 42000; duration = 70;
+    } else {
+        return;
+    }
+
+    input->sendRumble(0, low, high);
+    brls::delay(duration, [input]() {
+        input->sendRumble(0, 0, 0);
+    });
+#endif
+}
 
 bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space) {
 #ifdef __SWITCH__

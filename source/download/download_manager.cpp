@@ -367,6 +367,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
     }
 
     if (!tsnx_engine_has_torrent(eng, hash.c_str())) {
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = brls::getStr("app/downloads/state_resolving_meta");
+        }
         char out_hash[TSNX_MAX_HASH_LEN + 1] = {0};
         if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
                                        reinterpret_cast<const volatile bool*>(cancel.get()),
@@ -485,6 +489,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
             continue;
         }
 
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = brls::getStr("app/downloads/state_connecting_peers");
+        }
         source->setSchedulerEnabled(true);
         source->setCancelFlag(cancel.get());
         if (cancel->load() || !source->open(hash, idx)) {
@@ -522,6 +530,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 if (cancel->load()) break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 continue;
+            }
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                if (!st->stage_label.empty()) st->stage_label.clear();
             }
             if (std::fwrite(buf.data(), 1, got, f) != got) {
                 file_ok = false;
@@ -1008,6 +1020,15 @@ bool DownloadManager::isLocalBackend() const {
 }
 
 static void updateSleepPolicy(bool has_active_transfers) {
+    static bool last_boosted = false;
+    if (has_active_transfers != last_boosted) {
+        if (has_active_transfers) {
+            util::cpuBoostBegin();
+        } else {
+            util::cpuBoostEnd();
+        }
+        last_boosted = has_active_transfers;
+    }
 #ifdef __SWITCH__
     static bool initialized = false;
     static bool last_keep_awake = false;
@@ -1122,6 +1143,7 @@ void DownloadManager::shutdown() {
         item.port_install_state.reset();
     }
 
+    updateSleepPolicy(false);
     datasource::CustomEngineClient::instance().shutdown();
 }
 

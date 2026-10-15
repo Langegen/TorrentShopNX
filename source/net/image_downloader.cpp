@@ -305,46 +305,57 @@ void ImageDownloader::processTask(const ImageTask& task) {
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
             util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
-            brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(cachedBody), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-                util::logLine("ImageDownloader: sync lambda START url=" + url);
+            // Pre-decode RGBA in worker thread to prevent main UI thread frame drops
+            int dw = 0, dh = 0, dcomp = 0;
+            stbi_uc* rgba = stbi_load_from_memory(
+                reinterpret_cast<const stbi_uc*>(cachedBody.data()),
+                static_cast<int>(cachedBody.size()),
+                &dw, &dh, &dcomp, 4
+            );
+            brls::sync([img = task.img, cacheKey = task.cacheKey, rgba, dw, dh, token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
                 if (g_appExiting.load()) {
-                    util::logLine("ImageDownloader: sync lambda ABORT (app exiting) url=" + url);
+                    if (rgba) stbi_image_free(rgba);
                     return;
                 }
 
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
-                    util::logLine("ImageDownloader: sync lambda before nvgCreateImageMem for " + url);
-                    tex = nvgCreateImageMem(
-                        brls::Application::getNVGContext(),
-                        NVG_IMAGE_GENERATE_MIPMAPS,
-                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
-                        body.size()
-                    );
-                    util::logLine("ImageDownloader: sync lambda after nvgCreateImageMem tex=" + std::to_string(tex) + " for " + url);
+                    if (rgba) {
+                        tex = nvgCreateImageRGBA(
+                            brls::Application::getNVGContext(),
+                            dw, dh,
+                            NVG_IMAGE_GENERATE_MIPMAPS,
+                            rgba
+                        );
+                    }
                     if (tex > 0) {
                         brls::TextureCache::instance().addCache(cacheKey, tex);
                     } else {
-                        util::logLine("ImageDownloader: nvgCreateImageMem failed for disk cached " + url);
+                        util::logLine("ImageDownloader: nvgCreateImageRGBA failed for disk cached " + url);
                     }
                 }
+                if (rgba) {
+                    stbi_image_free(rgba);
+                }
                 if (token && !*token) {
-                    util::logLine("ImageDownloader: sync lambda token invalidated for " + url);
                     return;
                 }
-                if (tex > 0) {
-                    util::logLine("ImageDownloader: sync lambda before innerSetImage for " + url);
+                if (tex > 0 && img) {
                     img->innerSetImage(tex);
-                    util::logLine("ImageDownloader: sync lambda after innerSetImage for " + url);
                 }
-                util::logLine("ImageDownloader: sync lambda END url=" + url);
             });
             return;
         }
     }
 
+    bool dlActive = isDownloadActive();
+    int timeoutSec = dlActive ? 12 : 5;
+    if (dlActive) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    }
+
     net::HttpClient http;
-    http.setTimeout(5);
+    http.setTimeout(timeoutSec);
     auto res = http.httpGet(task.url);
 
     if (g_appExiting.load()) return;
@@ -421,51 +432,72 @@ void ImageDownloader::processTask(const ImageTask& task) {
             }
         }
 
-        brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(bodyToDisplay), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-            if (g_appExiting.load()) return;
+        // Pre-decode RGBA in worker thread before scheduling on main thread
+        int dw = 0, dh = 0, dcomp = 0;
+        stbi_uc* rgba = stbi_load_from_memory(
+            reinterpret_cast<const stbi_uc*>(bodyToDisplay.data()),
+            static_cast<int>(bodyToDisplay.size()),
+            &dw, &dh, &dcomp, 4
+        );
+
+        brls::sync([img = task.img, cacheKey = task.cacheKey, rgba, dw, dh, token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
+            if (g_appExiting.load()) {
+                if (rgba) stbi_image_free(rgba);
+                return;
+            }
 
             if (bypassCache) {
                 if (token && !*token) {
+                    if (rgba) stbi_image_free(rgba);
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
                     return;
                 }
-                int tex = nvgCreateImageMem(
-                    brls::Application::getNVGContext(),
-                    NVG_IMAGE_GENERATE_MIPMAPS,
-                    const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
-                    body.size()
-                );
+                int tex = 0;
+                if (rgba) {
+                    tex = nvgCreateImageRGBA(
+                        brls::Application::getNVGContext(),
+                        dw, dh,
+                        NVG_IMAGE_GENERATE_MIPMAPS,
+                        rgba
+                    );
+                    stbi_image_free(rgba);
+                }
                 if (tex > 0) {
                     if (token && !*token) {
                         nvgDeleteImage(brls::Application::getNVGContext(), tex);
                         return;
                     }
-                    img->innerSetImage(tex);
+                    if (img) img->innerSetImage(tex);
                 } else {
-                    util::logLine("ImageDownloader: nvgCreateImageMem failed for " + url + " (size=" + std::to_string(body.size()) + ")");
+                    util::logLine("ImageDownloader: nvgCreateImageRGBA failed for " + url);
                 }
             } else {
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
-                    tex = nvgCreateImageMem(
-                        brls::Application::getNVGContext(),
-                        NVG_IMAGE_GENERATE_MIPMAPS,
-                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
-                        body.size()
-                    );
+                    if (rgba) {
+                        tex = nvgCreateImageRGBA(
+                            brls::Application::getNVGContext(),
+                            dw, dh,
+                            NVG_IMAGE_GENERATE_MIPMAPS,
+                            rgba
+                        );
+                    }
                     if (tex > 0) {
                         brls::TextureCache::instance().addCache(cacheKey, tex);
                     } else {
-                        util::logLine("ImageDownloader: nvgCreateImageMem failed for " + url + " (size=" + std::to_string(body.size()) + ")");
+                        util::logLine("ImageDownloader: nvgCreateImageRGBA failed for " + url);
                     }
+                }
+                if (rgba) {
+                    stbi_image_free(rgba);
                 }
                 if (token && !*token) {
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
                     return;
                 }
-                if (tex > 0) {
+                if (tex > 0 && img) {
                     img->innerSetImage(tex);
                 }
             }

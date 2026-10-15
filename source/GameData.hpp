@@ -44,6 +44,104 @@ inline void setCatalogSnapshot(std::vector<Game> games) {
     g_catalogSnapshot = newSnapshot;
 }
 
+// Cleans retro game titles by preserving leading compilation tags like [2 in 1] or [3 in 1],
+// but stripping trailing release metadata like [SLUS-00123], [NTSC], [RUS], [ENG], etc.
+inline std::string cleanRetroTitle(const std::string& title) {
+    if (title.empty()) return "";
+    
+    std::string s = title;
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+        s.erase(s.begin());
+    }
+
+    // Strip leading corrupted / empty brackets like [?] or [ ]
+    if (s.size() >= 3 && s.front() == '[') {
+        size_t close = s.find(']');
+        if (close != std::string::npos && close <= 4) {
+            bool hasLetters = false;
+            for (size_t i = 1; i < close; ++i) {
+                unsigned char ch = static_cast<unsigned char>(s[i]);
+                if (std::isalnum(ch)) hasLetters = true;
+            }
+            if (!hasLetters) {
+                s = s.substr(close + 1);
+                while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+                    s.erase(s.begin());
+                }
+            }
+        }
+    }
+
+    // Strip trailing bracketed tags from right to left
+    while (!s.empty()) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+            s.pop_back();
+        }
+        if (s.empty()) break;
+
+        if (s.back() == ']') {
+            size_t open = s.rfind('[');
+            if (open == 0 || open == std::string::npos) break;
+            s = s.substr(0, open);
+        } else if (s.back() == ')') {
+            size_t open = s.rfind('(');
+            if (open == 0 || open == std::string::npos) break;
+            std::string inside = s.substr(open + 1, s.size() - open - 2);
+            if (inside.find("compilation") != std::string::npos ||
+                inside.find("ENG") != std::string::npos ||
+                inside.find("RUS") != std::string::npos) {
+                s = s.substr(0, open);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+        s.pop_back();
+    }
+
+    if (s.empty()) return title;
+    return s;
+}
+
+// Clean title: removes everything from the first '[' to the end of string, and trims trailing spaces
+inline std::string cleanTitle(const std::string& title) {
+    size_t pos = title.find('[');
+    if (pos == std::string::npos) return title;
+    if (pos == 0) return cleanRetroTitle(title);
+    std::string cleaned = title.substr(0, pos);
+    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
+        cleaned.pop_back();
+    }
+    return cleaned.empty() ? cleanRetroTitle(title) : cleaned;
+}
+
+// Normalize title for sorting by skipping leading punctuation and symbols
+inline std::string normalizeTitleForSort(const std::string& title) {
+    std::string s = cleanTitle(title);
+    size_t i = 0;
+    while (i < s.size()) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c <= 32 || c == '[' || c == '(' || c == '"' || c == '\'' ||
+            c == '-' || c == '.' || c == '_' || c == '#' || c == '!' ||
+            c == '?' || c == '~' || c == ':' || c == '/' || c == '\\' ||
+            c == '+' || c == '=' || c == '*' || c == '@' || c == '$' ||
+            c == '%' || c == '^' || c == '&') {
+            i++;
+        } else {
+            break;
+        }
+    }
+    return i > 0 ? s.substr(i) : s;
+}
+
+inline std::string computeSortKey(const std::string& title) {
+    return util::toLowerUtf8(normalizeTitleForSort(title));
+}
+
 struct Game {
     std::string title;
     std::string title_id;
@@ -64,6 +162,7 @@ struct Game {
     std::string multiplayer;
     bool is_romset = false;
     std::string content_type;
+    std::string sort_key;
 };
 
 // Heuristic and flag checker for romsets / multi-game collections
@@ -142,6 +241,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
     if (!g.is_romset && isRomsetGame(g)) {
         g.is_romset = true;
     }
+    g.sort_key = computeSortKey(g.title);
 }
 
 // nlohmann::json serialization
@@ -169,81 +269,6 @@ inline void to_json(nlohmann::json& j, const Game& g) {
     };
 }
 
-
-// Cleans retro game titles by preserving leading compilation tags like [2 in 1] or [3 in 1],
-// but stripping trailing release metadata like [SLUS-00123], [NTSC], [RUS], [ENG], etc.
-inline std::string cleanRetroTitle(const std::string& title) {
-    if (title.empty()) return "";
-    
-    std::string s = title;
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
-        s.erase(s.begin());
-    }
-
-    // Strip leading corrupted / empty brackets like [?] or [ ]
-    if (s.size() >= 3 && s.front() == '[') {
-        size_t close = s.find(']');
-        if (close != std::string::npos && close <= 4) {
-            bool hasLetters = false;
-            for (size_t i = 1; i < close; ++i) {
-                unsigned char ch = static_cast<unsigned char>(s[i]);
-                if (std::isalnum(ch)) hasLetters = true;
-            }
-            if (!hasLetters) {
-                s = s.substr(close + 1);
-                while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
-                    s.erase(s.begin());
-                }
-            }
-        }
-    }
-
-    // Strip trailing bracketed tags from right to left
-    while (!s.empty()) {
-        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
-            s.pop_back();
-        }
-        if (s.empty()) break;
-
-        if (s.back() == ']') {
-            size_t open = s.rfind('[');
-            if (open == 0 || open == std::string::npos) break;
-            s = s.substr(0, open);
-        } else if (s.back() == ')') {
-            size_t open = s.rfind('(');
-            if (open == 0 || open == std::string::npos) break;
-            std::string inside = s.substr(open + 1, s.size() - open - 2);
-            if (inside.find("compilation") != std::string::npos ||
-                inside.find("ENG") != std::string::npos ||
-                inside.find("RUS") != std::string::npos) {
-                s = s.substr(0, open);
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
-        s.pop_back();
-    }
-
-    if (s.empty()) return title;
-    return s;
-}
-
-// Clean title: removes everything from the first '[' to the end of string, and trims trailing spaces
-inline std::string cleanTitle(const std::string& title) {
-    size_t pos = title.find('[');
-    if (pos == std::string::npos) return title;
-    if (pos == 0) return cleanRetroTitle(title);
-    std::string cleaned = title.substr(0, pos);
-    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
-        cleaned.pop_back();
-    }
-    return cleaned.empty() ? cleanRetroTitle(title) : cleaned;
-}
 
 // Truncate a UTF-8 string to at most maxCodepoints Unicode codepoints,
 // appending an ellipsis if the string was longer.
@@ -485,6 +510,7 @@ public:
                 if (!currentGame.is_romset && isRomsetGame(currentGame)) {
                     currentGame.is_romset = true;
                 }
+                currentGame.sort_key = computeSortKey(currentGame.title);
                 games.push_back(std::move(currentGame));
             }
             inGameObject = false;
@@ -618,7 +644,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     out.write(magic, 8);
-    uint32_t version = 3;
+    uint32_t version = 4;
     out.write(reinterpret_cast<const char*>(&version), sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     out.write(reinterpret_cast<const char*>(&count), sizeof(count));
@@ -659,6 +685,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         uint8_t is_rom = g.is_romset ? 1 : 0;
         out.write(reinterpret_cast<const char*>(&is_rom), sizeof(is_rom));
         writeStr(g.content_type);
+        writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
     }
 
     out.flush();
@@ -691,7 +718,7 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version != 1 && version != 2 && version != 3) {
+    if (version != 1 && version != 2 && version != 3 && version != 4) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
@@ -761,6 +788,13 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
 
         if (!g.is_romset && isRomsetGame(g)) {
             g.is_romset = true;
+        }
+
+        if (version >= 4) {
+            if (!readStr(g.sort_key)) return false;
+        }
+        if (g.sort_key.empty()) {
+            g.sort_key = computeSortKey(g.title);
         }
 
         games.push_back(std::move(g));

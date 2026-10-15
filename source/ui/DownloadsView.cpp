@@ -602,10 +602,24 @@ void DownloadsView::updateCell(DownloadCell* cell, const download::DownloadItem&
             statusStr = "app/downloads/state_queued"_i18n;
             statusColor = nvgRGB(255, 193, 7); // Amber
             break;
-        case download::DownloadState::Downloading:
-            statusStr = "app/downloads/state_downloading"_i18n;
-            statusColor = nvgRGB(76, 175, 80); // Green
+        case download::DownloadState::Downloading: {
+            std::string stage;
+            if (item.file_dl_state) {
+                std::lock_guard<std::mutex> lk(item.file_dl_state->msg_mutex);
+                stage = item.file_dl_state->stage_label;
+            }
+            if (!stage.empty()) {
+                statusStr = stage;
+                statusColor = nvgRGB(0, 188, 212); // Cyan
+            } else if (item.peers <= 0 && item.download_speed_kbps <= 0.0) {
+                statusStr = "app/downloads/state_connecting_peers"_i18n;
+                statusColor = nvgRGB(255, 152, 0); // Orange
+            } else {
+                statusStr = "app/downloads/state_downloading"_i18n;
+                statusColor = nvgRGB(76, 175, 80); // Green
+            }
             break;
+        }
         case download::DownloadState::StreamPreparing:
             statusStr = "app/downloads/state_preparing"_i18n;
             statusColor = nvgRGB(0, 188, 212); // Cyan

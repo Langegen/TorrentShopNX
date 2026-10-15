@@ -117,14 +117,14 @@ CatalogView::CatalogView(const std::string& searchQuery) {
 void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: onContentAvailable start");
 
-    auto catalog = getCatalogSnapshot();
+    catalogSnapshot_ = getCatalogSnapshot();
 
     // Pre-populate filteredGames_ with non-homebrew games, sorted alphabetically by default
     filteredGames_.clear();
-    filteredGames_.reserve(catalog->size());
-    for (const auto& g : *catalog) {
+    filteredGames_.reserve(catalogSnapshot_->size());
+    for (const auto& g : *catalogSnapshot_) {
         if (!isHomebrewGame(g)) {
-            filteredGames_.push_back(g);
+            filteredGames_.push_back(&g);
         }
     }
 
@@ -132,7 +132,7 @@ void CatalogView::onContentAvailable() {
         ? catalog::SortOption::TITLE_ASC
         : filterState_.sort;
 
-    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game& a, const Game& b) {
+    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game* a, const Game* b) {
         return catalog::compareGames(a, b, sortOpt);
     });
 
@@ -255,14 +255,14 @@ void CatalogView::filterCatalog() {
     filteredGames_.clear();
     auto& fm = catalog::FavoritesManager::instance();
     size_t totalNonHomebrew = 0;
-    auto catalog = getCatalogSnapshot();
+    catalogSnapshot_ = getCatalogSnapshot();
 
-    for (const auto& game : *catalog) {
+    for (const auto& game : *catalogSnapshot_) {
         if (isHomebrewGame(game)) continue;
         ++totalNonHomebrew;
         bool isFav = filterState_.onlyFavorites ? fm.isFavorite(game) : false;
         if (catalog::matchesGameFilter(game, filterState_, isFav)) {
-            filteredGames_.push_back(game);
+            filteredGames_.push_back(&game);
         }
     }
 
@@ -270,7 +270,7 @@ void CatalogView::filterCatalog() {
         ? catalog::SortOption::TITLE_ASC
         : filterState_.sort;
 
-    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game& a, const Game& b) {
+    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game* a, const Game* b) {
         return catalog::compareGames(a, b, sortOpt);
     });
 
@@ -355,7 +355,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 brls::Box* cardBox = cards[i].card;
                 if (!cardBox) continue;
 
-                const auto& game = parent_->filteredGames_[gameIdx];
+                const auto& game = *parent_->filteredGames_[gameIdx];
                 
                 cardBox->setVisibility(brls::Visibility::VISIBLE);
                 cardBox->setFocusable(true);
@@ -379,6 +379,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                         parent_->focusedCol_ = i;
                         GameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
+                        util::triggerHapticFeedback(1);
                     }
                     titleLabel->setText(fullTitle);
                     titleLabel->setAnimated(true);
@@ -417,11 +418,13 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 
                 cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
                     bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
+                    util::triggerHapticFeedback(3);
                     brls::Application::notify(fav ? "app/favorites/added"_i18n : "app/favorites/removed"_i18n);
                     return true;
                 });
 
                 cardBox->registerClickAction([game](brls::View* view) {
+                    util::triggerHapticFeedback(2);
                     brls::Application::pushActivity(new GameDetailView(game));
                     return true;
                 });
@@ -503,12 +506,12 @@ void CatalogView::jumpToNextLetter(bool forward) {
     if (filteredGames_.empty()) return;
 
     int currentIdx = std::clamp(focusedRow_ * 6 + focusedCol_, 0, static_cast<int>(filteredGames_.size()) - 1);
-    std::string currentInitial = getGameInitial(filteredGames_[currentIdx].title);
+    std::string currentInitial = getGameInitial(filteredGames_[currentIdx]->title);
     int targetIdx = -1;
 
     if (forward) {
         for (size_t i = currentIdx + 1; i < filteredGames_.size(); ++i) {
-            std::string init = getGameInitial(filteredGames_[i].title);
+            std::string init = getGameInitial(filteredGames_[i]->title);
             if (init != currentInitial) {
                 targetIdx = static_cast<int>(i);
                 break;
@@ -519,22 +522,22 @@ void CatalogView::jumpToNextLetter(bool forward) {
         }
     } else {
         size_t firstOfCurrent = currentIdx;
-        while (firstOfCurrent > 0 && getGameInitial(filteredGames_[firstOfCurrent - 1].title) == currentInitial) {
+        while (firstOfCurrent > 0 && getGameInitial(filteredGames_[firstOfCurrent - 1]->title) == currentInitial) {
             firstOfCurrent--;
         }
         if (currentIdx > static_cast<int>(firstOfCurrent) + 5) {
             targetIdx = static_cast<int>(firstOfCurrent);
         } else if (firstOfCurrent > 0) {
-            std::string prevInitial = getGameInitial(filteredGames_[firstOfCurrent - 1].title);
+            std::string prevInitial = getGameInitial(filteredGames_[firstOfCurrent - 1]->title);
             size_t firstOfPrev = firstOfCurrent - 1;
-            while (firstOfPrev > 0 && getGameInitial(filteredGames_[firstOfPrev - 1].title) == prevInitial) {
+            while (firstOfPrev > 0 && getGameInitial(filteredGames_[firstOfPrev - 1]->title) == prevInitial) {
                 firstOfPrev--;
             }
             targetIdx = static_cast<int>(firstOfPrev);
         } else {
             targetIdx = static_cast<int>(filteredGames_.size() - 1);
-            std::string lastInitial = getGameInitial(filteredGames_[targetIdx].title);
-            while (targetIdx > 0 && getGameInitial(filteredGames_[targetIdx - 1].title) == lastInitial) {
+            std::string lastInitial = getGameInitial(filteredGames_[targetIdx]->title);
+            while (targetIdx > 0 && getGameInitial(filteredGames_[targetIdx - 1]->title) == lastInitial) {
                 targetIdx--;
             }
         }
@@ -553,8 +556,9 @@ void CatalogView::jumpToNextLetter(bool forward) {
             brls::Application::giveFocus(recycler);
         }
 
-        std::string targetInit = getGameInitial(filteredGames_[targetIdx].title);
+        std::string targetInit = getGameInitial(filteredGames_[targetIdx]->title);
         std::string toast = "[" + targetInit + "]";
+        util::triggerHapticFeedback(2);
         brls::Application::clearNotifications();
         brls::Application::notify(toast);
     }

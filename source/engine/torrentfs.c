@@ -3055,10 +3055,9 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
         torrentfs_close(t);
         return NULL;
     }
-    // Priority 0x2B, one notch above the app default: Horizon never preempts
-    // between equal priorities, and a CPU-bound mpv thread otherwise starves
-    // this loop's ~100 IPC yield points for seconds at a time (v2's finding).
-    if (threadCreate(&t->netloop, netloop_main, t, NULL, 0x40000, 0x2B, -2) == 0) {
+    // Priority 0x2E: lower than app UI thread (0x2C) and writer thread (0x2D)
+    // so active torrent packet polling never starves 60 FPS UI rendering.
+    if (threadCreate(&t->netloop, netloop_main, t, NULL, 0x40000, 0x2E, -2) == 0) {
         t->netloop_started = true;
         threadStart(&t->netloop);
     } else {

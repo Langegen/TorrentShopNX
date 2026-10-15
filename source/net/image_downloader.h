@@ -49,6 +49,10 @@ public:
     /// Обновить текущую позицию фокуса для приоритизации очереди обложек
     void setFocusedPosition(int row, int col);
 
+    using ActiveCheckFn = std::function<bool()>;
+    void setActiveCheckFn(ActiveCheckFn fn) { activeCheck_ = fn; }
+    bool isDownloadActive() const { return activeCheck_ ? activeCheck_() : false; }
+
     /// Добавить задачу на скачивание изображения в очередь
     void enqueue(brls::Image* img,
                  const std::string& url,
@@ -81,6 +85,7 @@ private:
     std::atomic<bool> paused_{false};
     int currentFocusedRow_ = -1;
     int currentFocusedCol_ = -1;
+    ActiveCheckFn activeCheck_;
 };
 
 } // namespace net
