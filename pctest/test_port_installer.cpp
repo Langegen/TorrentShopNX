@@ -69,22 +69,61 @@ inline bool isHomebrewGame(const Game& g) {
     return hasHomebrewGenre;
 }
 
+inline bool containsWordOrTag(const std::string& text, const std::string& word) {
+    if (text.empty() || word.empty()) return false;
+    size_t pos = 0;
+    while ((pos = text.find(word, pos)) != std::string::npos) {
+        bool beforeOk = (pos == 0) || !std::isalnum(static_cast<unsigned char>(text[pos - 1]));
+        size_t afterIdx = pos + word.size();
+        bool afterOk = (afterIdx >= text.size()) || !std::isalnum(static_cast<unsigned char>(text[afterIdx]));
+
+        if (beforeOk && afterOk) {
+            return true;
+        }
+        pos += word.size();
+    }
+    return false;
+}
+
 inline bool isHomebrewPort(const Game& g) {
     if (isHomebrewGame(g)) return true;
+
+    bool hasNroFormat = false;
+    if (!g.image_format.empty()) {
+        std::string lowerFormat = util::toLowerUtf8(g.image_format);
+        if (lowerFormat.find("nro") != std::string::npos) {
+            hasNroFormat = true;
+        }
+    }
+    if (!hasNroFormat && !g.title.empty()) {
+        std::string lowerTitle = util::toLowerUtf8(g.title);
+        if (lowerTitle.find("[nro]") != std::string::npos || lowerTitle.find("(nro)") != std::string::npos) {
+            hasNroFormat = true;
+        }
+    }
+
+    if (!hasNroFormat) {
+        return false;
+    }
+
     std::string lowerTitle = util::toLowerUtf8(g.title);
-    if (lowerTitle.find("port") != std::string::npos ||
-        lowerTitle.find("порт") != std::string::npos ||
-        lowerTitle.find("homebrew") != std::string::npos ||
-        lowerTitle.find("хоумбрю") != std::string::npos ||
-        lowerTitle.find("хомбрю") != std::string::npos) {
+    if (containsWordOrTag(lowerTitle, "port") ||
+        containsWordOrTag(lowerTitle, "порт") ||
+        containsWordOrTag(lowerTitle, "homebrew") ||
+        containsWordOrTag(lowerTitle, "хоумбрю") ||
+        containsWordOrTag(lowerTitle, "хомбрю")) {
         return true;
     }
+
     std::string lowerGenre = util::toLowerUtf8(g.genre);
-    if (lowerGenre.find("port") != std::string::npos ||
-        lowerGenre.find("порт") != std::string::npos ||
-        lowerGenre.find("homebrew") != std::string::npos) {
+    if (containsWordOrTag(lowerGenre, "homebrew") ||
+        containsWordOrTag(lowerGenre, "хоумбрю") ||
+        containsWordOrTag(lowerGenre, "хомбрю") ||
+        (containsWordOrTag(lowerGenre, "port") && lowerGenre.find("sport") == std::string::npos) ||
+        (containsWordOrTag(lowerGenre, "порт") && lowerGenre.find("спорт") == std::string::npos)) {
         return true;
     }
+
     return false;
 }
 
@@ -135,15 +174,41 @@ int main() {
 
         Game portGame3;
         portGame3.title = "Subway Surfers [01d2c0b236000000] (Homebrew Port)";
+        portGame3.image_format = "NSP, NRO";
         TEST_ASSERT(isHomebrewPort(portGame3), "Subway Surfers should be detected as port");
 
-        Game officialGame;
-        officialGame.title = "Super Mario Odyssey [0100000000010000]";
-        officialGame.image_format = "NSP";
-        officialGame.genre = "Action, Platformer";
-        TEST_ASSERT(!isHomebrewPort(officialGame), "Super Mario Odyssey must NOT be detected as port");
+        Game officialGame1;
+        officialGame1.title = "Super Mario Odyssey [0100000000010000]";
+        officialGame1.image_format = "NSP";
+        officialGame1.genre = "Action, Platformer";
+        TEST_ASSERT(!isHomebrewPort(officialGame1), "Super Mario Odyssey must NOT be detected as port");
 
-        std::cout << "  -> PASSED: All port and official game heuristics correct." << std::endl;
+        // Verify that games with substring "port" inside other words are NOT falsely detected as ports
+        Game sportsGame;
+        sportsGame.title = "EA Sports FC 24 [01006B70182C0000]";
+        sportsGame.image_format = "NSP";
+        sportsGame.genre = "Sports";
+        TEST_ASSERT(!isHomebrewPort(sportsGame), "EA Sports FC 24 must NOT be detected as port");
+
+        Game transportGame;
+        transportGame.title = "Transport Fever [0100774019888000]";
+        transportGame.image_format = "NSP";
+        transportGame.genre = "Simulation";
+        TEST_ASSERT(!isHomebrewPort(transportGame), "Transport Fever must NOT be detected as port");
+
+        Game switchSportsGame;
+        switchSportsGame.title = "Nintendo Switch Sports [0100D8701297F000]";
+        switchSportsGame.image_format = "NSP";
+        switchSportsGame.genre = "Sports";
+        TEST_ASSERT(!isHomebrewPort(switchSportsGame), "Nintendo Switch Sports must NOT be detected as port");
+
+        Game airportGame;
+        airportGame.title = "Airport Simulator Day & Night [0100E2C0157A8000]";
+        airportGame.image_format = "NSP";
+        airportGame.genre = "Simulation";
+        TEST_ASSERT(!isHomebrewPort(airportGame), "Airport Simulator must NOT be detected as port");
+
+        std::cout << "  -> PASSED: All port and official game heuristics correct (no false positives for sports/transport)." << std::endl;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

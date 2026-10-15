@@ -1359,23 +1359,72 @@ inline bool isHomebrewGame(const Game& g) {
     return hasHomebrewGenre;
 }
 
+// Helper: Checks if text contains word bounded by non-alphanumeric chars or brackets,
+// preventing false positives like "sport", "transport", "airport" when searching for "port".
+inline bool containsWordOrTag(const std::string& text, const std::string& word) {
+    if (text.empty() || word.empty()) return false;
+    size_t pos = 0;
+    while ((pos = text.find(word, pos)) != std::string::npos) {
+        bool beforeOk = (pos == 0) || !std::isalnum(static_cast<unsigned char>(text[pos - 1]));
+        size_t afterIdx = pos + word.size();
+        bool afterOk = (afterIdx >= text.size()) || !std::isalnum(static_cast<unsigned char>(text[afterIdx]));
+
+        if (beforeOk && afterOk) {
+            return true;
+        }
+        pos += word.size();
+    }
+    return false;
+}
+
 // Check if a game is a homebrew port (catalog topic 5799905, port tags, or homebrew)
 inline bool isHomebrewPort(const Game& g) {
     if (isHomebrewGame(g)) return true;
+
+    // Homebrew ports ALWAYS have NRO components (image_format contains "nro" or title contains "[nro]"/"(nro)")
+    // or come from the known Rutracker ports catalog topic (5799905).
+    // Official Switch games are strictly NSP/XCI/NSZ and do NOT have NRO.
+    bool hasNroFormat = false;
+    if (!g.image_format.empty()) {
+        std::string lowerFormat = util::toLowerUtf8(g.image_format);
+        if (lowerFormat.find("nro") != std::string::npos) {
+            hasNroFormat = true;
+        }
+    }
+    if (!hasNroFormat && !g.title.empty()) {
+        std::string lowerTitle = util::toLowerUtf8(g.title);
+        if (lowerTitle.find("[nro]") != std::string::npos || lowerTitle.find("(nro)") != std::string::npos) {
+            hasNroFormat = true;
+        }
+    }
+
+    if (!hasNroFormat && g.topic_id != "5799905") {
+        return false;
+    }
+
+    // Must have port or homebrew tags/words (bounded, not part of "sport", "transport", etc.)
     std::string lowerTitle = util::toLowerUtf8(g.title);
-    if (lowerTitle.find("port") != std::string::npos ||
-        lowerTitle.find("порт") != std::string::npos ||
-        lowerTitle.find("homebrew") != std::string::npos ||
-        lowerTitle.find("хоумбрю") != std::string::npos ||
-        lowerTitle.find("хомбрю") != std::string::npos) {
+    if (containsWordOrTag(lowerTitle, "port") ||
+        containsWordOrTag(lowerTitle, "порт") ||
+        containsWordOrTag(lowerTitle, "homebrew") ||
+        containsWordOrTag(lowerTitle, "хоумбрю") ||
+        containsWordOrTag(lowerTitle, "хомбрю")) {
         return true;
     }
+
     std::string lowerGenre = util::toLowerUtf8(g.genre);
-    if (lowerGenre.find("port") != std::string::npos ||
-        lowerGenre.find("порт") != std::string::npos ||
-        lowerGenre.find("homebrew") != std::string::npos) {
+    if (containsWordOrTag(lowerGenre, "homebrew") ||
+        containsWordOrTag(lowerGenre, "хоумбрю") ||
+        containsWordOrTag(lowerGenre, "хомбрю") ||
+        (containsWordOrTag(lowerGenre, "port") && lowerGenre.find("sport") == std::string::npos) ||
+        (containsWordOrTag(lowerGenre, "порт") && lowerGenre.find("спорт") == std::string::npos)) {
         return true;
     }
+
+    if (g.topic_id == "5799905") {
+        return true;
+    }
+
     return false;
 }
 

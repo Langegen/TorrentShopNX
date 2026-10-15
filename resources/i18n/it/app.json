@@ -223,7 +223,7 @@
         "qr_hint": "Scansiona per scaricare su PC",
         "qr_no_url": "Nessun link disponibile",
         "compilation_badge": "RACCOLTA / ROMSET",
-        "auto_install_btn": "🚀 Installazione automatica",
+        "auto_install_btn": "Installazione automatica",
         "auto_install_probing": "Analisi dei file del port...",
         "auto_install_probe_failed": "Impossibile ottenere l'elenco dei file",
         "auto_install_not_port": "Release non riconosciuta come port homebrew",

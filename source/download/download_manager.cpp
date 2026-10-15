@@ -922,6 +922,14 @@ static void portInstallWorker(datasource::IDataSource* source,
 
         std::string resolved_nsp = resolvePlatformPath(nsp_dest);
         datasource::FileDataSource nspSource(resolved_nsp);
+        nspSource.setCancelFlag(cancel.get());
+        if (!nspSource.open()) {
+            st->failed = true;
+            st->error = "Cannot open downloaded forwarder NSP: " + resolved_nsp;
+            util::logLine("port_installer: " + st->error);
+            return;
+        }
+
         installer::InstallConfig config;
         config.buffer_size = 16 * 1024 * 1024;
         config.chunk_size = 1 * 1024 * 1024;
@@ -952,6 +960,8 @@ static void portInstallWorker(datasource::IDataSource* source,
             st->error = "Failed to start NSP installer: " + nspInstaller.errorMessage();
             util::logLine("port_installer: " + st->error);
         }
+
+        nspSource.close();
 
         // Удаляем временный NSP файл после установки
         std::error_code ec;

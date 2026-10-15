@@ -223,7 +223,7 @@
         "qr_hint": "PCでダウンロードするためのQRコード",
         "qr_no_url": "リンクがありません",
         "compilation_badge": "コンピレーション / ROMセット",
-        "auto_install_btn": "🚀 自動インストール",
+        "auto_install_btn": "自動インストール",
         "auto_install_probing": "ポートファイルを解析中...",
         "auto_install_probe_failed": "ファイルリストの取得に失敗しました",
         "auto_install_not_port": "Homebrewポートとして認識されませんでした",
