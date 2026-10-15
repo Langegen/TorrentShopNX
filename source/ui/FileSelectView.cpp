@@ -122,6 +122,25 @@ static bool isSwitchGameFile(const std::string& filename) {
             lower.rfind(".xci") == lower.size() - 4 ||
             lower.rfind(".xcz") == lower.size() - 4);
 }
+
+static std::vector<std::string> splitPath(const std::string& path) {
+    std::vector<std::string> parts;
+    std::string part;
+    for (char c : path) {
+        if (c == '/' || c == '\\') {
+            if (!part.empty()) {
+                parts.push_back(part);
+                part.clear();
+            }
+        } else {
+            part += c;
+        }
+    }
+    if (!part.empty()) {
+        parts.push_back(part);
+    }
+    return parts;
+}
 #ifdef __SWITCH__
 #include <switch.h>
 
@@ -304,6 +323,23 @@ void FileSelectView::onContentAvailable() {
     title->setText(cleanTitle(game_.title));
     subtitle->setText("app/fileselect/subtitle"_i18n);
 
+    if (toggleAllBox) {
+        toggleAllBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+        toggleAllBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        toggleAllBox->setBorderThickness(1.0f);
+        toggleAllBox->registerClickAction([this](brls::View*) {
+            toggleAllSelection();
+            return true;
+        });
+    }
+    if (toggleAllBtnIcon) {
+        toggleAllBtnIcon->setText(brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_X));
+        toggleAllBtnIcon->setTextColor(ThemeManager::instance().getAccentColor());
+    }
+    if (toggleAllBtnText) {
+        toggleAllBtnText->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+    }
+
     if (bottomSummaryBox) {
         bottomSummaryBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
         bottomSummaryBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
@@ -381,8 +417,8 @@ void FileSelectView::onContentAvailable() {
     fileListScroll->setFocusable(true);
     brls::Application::giveFocus(fileListScroll);
 
-    this->registerAction("app/actions/toggle_all"_i18n, brls::ControllerButton::BUTTON_X,
-        [this](brls::View*) { toggleAllSelection(); return true; });
+    this->registerAction("", brls::ControllerButton::BUTTON_X,
+        [this](brls::View*) { toggleAllSelection(); return true; }, true);
 
     this->registerAction("app/actions/start_download"_i18n, brls::ControllerButton::BUTTON_START,
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
@@ -892,88 +928,233 @@ void FileSelectView::rebuildRetroFolderList() {
     }
 }
 
+void FileSelectView::renderOtherFilesTree(const OtherFileTreeNode& node, int depth, brls::View*& lastFocusable, std::map<std::string, brls::View*>& focusMap) {
+    // 1. Render Subfolders
+    for (const auto& pair : node.subfolders) {
+        const auto& sub = pair.second;
+        bool isExpanded = (expandedFolders_.count(sub.fullPath) > 0);
+        bool allSel = (sub.selectedFiles == sub.totalFiles && sub.totalFiles > 0);
+        bool partialSel = (sub.selectedFiles > 0 && !allSel);
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10 + depth * 24);
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        // Expand/Collapse arrow
+        auto* arrow = new brls::Label();
+        arrow->setWidth(24);
+        arrow->setHeight(brls::View::AUTO);
+        arrow->setFontSize(14);
+        arrow->setText(isExpanded ? "▼" : "▶");
+        arrow->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(arrow);
+
+        // Checkbox label
+        auto* chk = new brls::Label();
+        chk->setWidth(40);
+        chk->setHeight(brls::View::AUTO);
+        chk->setFontSize(20);
+        if (allSel) {
+            chk->setText("[V]");
+            chk->setTextColor(nvgRGB(76, 175, 80));
+        } else if (partialSel) {
+            chk->setText("[-]");
+            chk->setTextColor(nvgRGB(255, 183, 77));
+        } else {
+            chk->setText("[ ]");
+            chk->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        }
+        row->addView(chk);
+
+        // Folder Icon
+        auto* icon = new brls::Label();
+        icon->setFontSize(22);
+        icon->setText("\uE2C7"); // Material folder
+        icon->setTextColor(ThemeManager::instance().getAccentColor());
+        icon->setMarginRight(10);
+        row->addView(icon);
+
+        // Folder Name
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText(sub.name);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        // Folder Info (file count + total size)
+        auto* infoLbl = new brls::Label();
+        infoLbl->setWidth(160);
+        infoLbl->setHeight(brls::View::AUTO);
+        infoLbl->setFontSize(14);
+        infoLbl->setText(std::to_string(sub.totalFiles) + " | " + formatBytes(sub.size));
+        infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(infoLbl);
+
+        std::string rowKey = "folder:" + sub.fullPath;
+        focusMap[rowKey] = row;
+
+        // Button A: expand / collapse
+        row->registerClickAction([this, path = sub.fullPath](brls::View*) {
+            if (expandedFolders_.count(path)) {
+                expandedFolders_.erase(path);
+            } else {
+                expandedFolders_.insert(path);
+            }
+            focusedKey_ = "folder:" + path;
+            rebuildSwitchFileList();
+            return true;
+        });
+
+        // Button Y: toggle folder selection
+        auto toggleFolder = [this, indices = sub.allFileIndices, path = sub.fullPath, selCount = sub.selectedFiles, totCount = sub.totalFiles](brls::View*) {
+            bool newState = (selCount < totCount);
+            for (size_t idx : indices) {
+                if (idx < selected_.size()) {
+                    selected_[idx] = newState;
+                }
+            }
+            focusedKey_ = "folder:" + path;
+            updateTotalSize();
+            rebuildSwitchFileList();
+            return true;
+        };
+        row->registerAction("app/fileselect/toggle_folder"_i18n, brls::ControllerButton::BUTTON_Y, toggleFolder);
+
+        fileListBox->addView(row);
+        lastFocusable = row;
+
+        // If expanded, recursively render children
+        if (isExpanded) {
+            renderOtherFilesTree(sub, depth + 1, lastFocusable, focusMap);
+        }
+    }
+
+    // 2. Render Direct Files
+    auto directFilesSorted = node.directFiles;
+    std::sort(directFilesSorted.begin(), directFilesSorted.end(), [](const OtherFileTreeNode& a, const OtherFileTreeNode& b) {
+        return a.name < b.name;
+    });
+
+    for (const auto& item : directFilesSorted) {
+        size_t idx = item.fileIndex;
+        bool isSel = (idx < selected_.size()) && selected_[idx];
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10 + depth * 24 + 24); // indented past folder arrow
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        // Checkbox label
+        auto* chk = new brls::Label();
+        chk->setWidth(40);
+        chk->setHeight(brls::View::AUTO);
+        chk->setFontSize(20);
+        chk->setText(isSel ? "[V]" : "[ ]");
+        chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
+        row->addView(chk);
+        if (idx < checkboxLabels_.size()) {
+            checkboxLabels_[idx] = chk;
+        }
+
+        // File icon
+        auto* icon = new brls::Label();
+        icon->setFontSize(20);
+        icon->setText("\uE24D"); // File icon
+        icon->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        icon->setMarginRight(10);
+        row->addView(icon);
+
+        // File name label
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText(item.name);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        // File size label
+        auto* sizeLbl = new brls::Label();
+        sizeLbl->setWidth(140);
+        sizeLbl->setHeight(brls::View::AUTO);
+        sizeLbl->setFontSize(14);
+        sizeLbl->setText(formatBytes(item.size));
+        sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(sizeLbl);
+
+        std::string rowKey = "file:" + std::to_string(idx);
+        focusMap[rowKey] = row;
+
+        // Click to toggle file (Button A or Button Y)
+        auto toggleFile = [this, idx](brls::View*) {
+            if (idx < selected_.size()) {
+                selected_[idx] = !selected_[idx];
+                focusedKey_ = "file:" + std::to_string(idx);
+                updateTotalSize();
+                rebuildSwitchFileList();
+            }
+            return true;
+        };
+        row->registerClickAction(toggleFile);
+        row->registerAction("app/fileselect/toggle_folder"_i18n, brls::ControllerButton::BUTTON_Y, toggleFile);
+
+        fileListBox->addView(row);
+        lastFocusable = row;
+    }
+}
+
 void FileSelectView::rebuildSwitchFileList() {
-    // Remove all existing child rows
     fileListBox->clearViews();
     checkboxLabels_.assign(files_.size(), nullptr);
 
     SwitchServiceGuard guard;
+    std::map<std::string, brls::View*> focusMap;
+    brls::View* firstFocusable = nullptr;
+    brls::View* lastFocusable = nullptr;
 
-    struct DisplayItem {
-        size_t originalIndex;
-        bool isHeader;
-        std::string headerTitle;
+    auto addHeaderRow = [this](const std::string& titleText, bool isEmpty) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setHeight(50);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10);
+        row->setPaddingRight(10);
+        row->setAlignItems(brls::AlignItems::CENTER);
+
+        auto* label = new brls::Label();
+        label->setFontSize(16);
+        label->setText(titleText);
+        if (isEmpty) {
+            label->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        } else {
+            label->setTextColor(ThemeManager::instance().getAccentColor());
+        }
+        row->addView(label);
+        fileListBox->addView(row);
     };
-    std::vector<DisplayItem> displayItems;
 
+    // ─────────────────────────────────────────────────────────────────────────
     // 1. Group: NOT INSTALLED
-    displayItems.push_back({0, true, "app/fileselect/group_uninstalled"_i18n});
+    // ─────────────────────────────────────────────────────────────────────────
+    addHeaderRow("app/fileselect/group_uninstalled"_i18n, false);
     bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
         uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
         uint32_t ver = util::parseVersionFromFileName(files_[i].name);
         if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard, ver)) {
-            displayItems.push_back({i, false, ""});
             hasUninstalled = true;
-        }
-    }
-    if (!hasUninstalled) {
-        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
-    }
-
-    // 2. Group: OTHER FILES
-    displayItems.push_back({0, true, "app/fileselect/group_other"_i18n});
-    bool hasOther = false;
-    for (size_t i = 0; i < files_.size(); ++i) {
-        if (!isSwitchGameFile(files_[i].name)) {
-            displayItems.push_back({i, false, ""});
-            hasOther = true;
-        }
-    }
-    if (!hasOther) {
-        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
-    }
-
-    // 3. Group: INSTALLED
-    displayItems.push_back({0, true, "app/fileselect/group_installed"_i18n});
-    bool hasInstalled = false;
-    for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
-        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard, ver)) {
-            displayItems.push_back({i, false, ""});
-            hasInstalled = true;
-        }
-    }
-    if (!hasInstalled) {
-        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
-    }
-
-    // Now render them
-    brls::View* lastFocusable = nullptr;
-    for (const auto& item : displayItems) {
-        if (item.isHeader) {
-            auto* row = new brls::Box();
-            row->setAxis(brls::Axis::ROW);
-            row->setHeight(50);
-            row->setWidth(brls::View::AUTO);
-            row->setPaddingLeft(10);
-            row->setPaddingRight(10);
-            row->setAlignItems(brls::AlignItems::CENTER);
-            
-            auto* label = new brls::Label();
-            label->setFontSize(16);
-            label->setText(item.headerTitle);
-            
-            if (item.headerTitle == "app/fileselect/no_files"_i18n) {
-                label->setTextColor(ThemeManager::instance().getTextSecondaryColor());
-            } else {
-                label->setTextColor(ThemeManager::instance().getAccentColor());
-            }
-            row->addView(label);
-            fileListBox->addView(row);
-        } else {
-            size_t idx = item.originalIndex;
+            size_t idx = i;
             const auto& file = files_[idx];
             bool isSel = (idx < selected_.size()) && selected_[idx];
 
@@ -986,7 +1167,6 @@ void FileSelectView::rebuildSwitchFileList() {
             row->setPaddingRight(10);
             row->setFocusable(true);
 
-            // Checkbox label
             auto* chk = new brls::Label();
             chk->setWidth(40);
             chk->setHeight(brls::View::AUTO);
@@ -996,7 +1176,6 @@ void FileSelectView::rebuildSwitchFileList() {
             row->addView(chk);
             checkboxLabels_[idx] = chk;
 
-            // File name label
             auto* nameLbl = new brls::Label();
             nameLbl->setGrow(1.0f);
             nameLbl->setHeight(brls::View::AUTO);
@@ -1004,17 +1183,9 @@ void FileSelectView::rebuildSwitchFileList() {
             nameLbl->setText(file.name);
             nameLbl->setMarginLeft(10);
             nameLbl->setMarginRight(10);
-            
-            uint64_t tid = resolveFileTitleId(file.name, game_.title_id);
-            uint32_t ver = util::parseVersionFromFileName(file.name);
-            if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard, ver)) {
-                nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
-            } else {
-                nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
-            }
+            nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             row->addView(nameLbl);
 
-            // File size label
             auto* sizeLbl = new brls::Label();
             sizeLbl->setWidth(140);
             sizeLbl->setHeight(brls::View::AUTO);
@@ -1023,7 +1194,9 @@ void FileSelectView::rebuildSwitchFileList() {
             sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
-            // Click to toggle
+            std::string rowKey = "game:" + std::to_string(idx);
+            focusMap[rowKey] = row;
+
             row->registerClickAction([this, idx](brls::View*) {
                 if (idx < selected_.size()) {
                     selected_[idx] = !selected_[idx];
@@ -1034,15 +1207,178 @@ void FileSelectView::rebuildSwitchFileList() {
             });
 
             fileListBox->addView(row);
+            if (!firstFocusable) firstFocusable = row;
             lastFocusable = row;
-            util::logLine("FileSelectView: added row " + std::to_string(idx) +
-                          " name='" + file.name + "'");
         }
+    }
+    if (!hasUninstalled) {
+        addHeaderRow("app/fileselect/no_files"_i18n, true);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. Group: OTHER FILES (TREE VIEW)
+    // ─────────────────────────────────────────────────────────────────────────
+    addHeaderRow("app/fileselect/group_other"_i18n, false);
+    bool hasOther = false;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        if (!isSwitchGameFile(files_[i].name)) {
+            hasOther = true;
+            break;
+        }
+    }
+
+    if (hasOther) {
+        std::string basePrefix = computeBaseFolder(files_);
+        if (!basePrefix.empty()) {
+            basePrefix += "/";
+        }
+
+        OtherFileTreeNode rootNode;
+        for (size_t i = 0; i < files_.size(); ++i) {
+            if (isSwitchGameFile(files_[i].name)) continue;
+
+            std::string normPath = files_[i].name;
+            std::replace(normPath.begin(), normPath.end(), '\\', '/');
+
+            std::string relPath = normPath;
+            if (!basePrefix.empty() && relPath.rfind(basePrefix, 0) == 0) {
+                relPath = relPath.substr(basePrefix.size());
+            }
+
+            std::vector<std::string> parts = splitPath(relPath);
+            if (parts.empty()) continue;
+
+            OtherFileTreeNode* curr = &rootNode;
+            std::string currPath = "";
+            for (size_t p = 0; p + 1 < parts.size(); ++p) {
+                const std::string& seg = parts[p];
+                if (!currPath.empty()) currPath += "/";
+                currPath += seg;
+
+                auto& sub = curr->subfolders[seg];
+                if (sub.name.empty()) {
+                    sub.name = seg;
+                    sub.fullPath = currPath;
+                    sub.isFolder = true;
+                }
+                sub.allFileIndices.push_back(i);
+                sub.size += files_[i].size;
+                sub.totalFiles++;
+                if (i < selected_.size() && selected_[i]) {
+                    sub.selectedFiles++;
+                }
+                curr = &sub;
+            }
+
+            OtherFileTreeNode leaf;
+            leaf.name = parts.back();
+            leaf.fullPath = normPath;
+            leaf.isFolder = false;
+            leaf.fileIndex = i;
+            leaf.size = files_[i].size;
+            curr->directFiles.push_back(leaf);
+        }
+
+        renderOtherFilesTree(rootNode, 0, lastFocusable, focusMap);
+        if (!firstFocusable && lastFocusable) {
+            firstFocusable = lastFocusable;
+        }
+    } else {
+        addHeaderRow("app/fileselect/no_files"_i18n, true);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. Group: INSTALLED
+    // ─────────────────────────────────────────────────────────────────────────
+    addHeaderRow("app/fileselect/group_installed"_i18n, false);
+    bool hasInstalled = false;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard, ver)) {
+            hasInstalled = true;
+            size_t idx = i;
+            const auto& file = files_[idx];
+            bool isSel = (idx < selected_.size()) && selected_[idx];
+
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setHeight(60);
+            row->setWidth(brls::View::AUTO);
+            row->setPaddingLeft(10);
+            row->setPaddingRight(10);
+            row->setFocusable(true);
+
+            auto* chk = new brls::Label();
+            chk->setWidth(40);
+            chk->setHeight(brls::View::AUTO);
+            chk->setFontSize(20);
+            chk->setText(isSel ? "[V]" : "[ ]");
+            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
+            row->addView(chk);
+            checkboxLabels_[idx] = chk;
+
+            auto* nameLbl = new brls::Label();
+            nameLbl->setGrow(1.0f);
+            nameLbl->setHeight(brls::View::AUTO);
+            nameLbl->setFontSize(16);
+            nameLbl->setText(file.name);
+            nameLbl->setMarginLeft(10);
+            nameLbl->setMarginRight(10);
+            nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
+            row->addView(nameLbl);
+
+            auto* sizeLbl = new brls::Label();
+            sizeLbl->setWidth(140);
+            sizeLbl->setHeight(brls::View::AUTO);
+            sizeLbl->setFontSize(14);
+            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            row->addView(sizeLbl);
+
+            std::string rowKey = "game_inst:" + std::to_string(idx);
+            focusMap[rowKey] = row;
+
+            row->registerClickAction([this, idx](brls::View*) {
+                if (idx < selected_.size()) {
+                    selected_[idx] = !selected_[idx];
+                    updateRowSelectionState(idx);
+                    updateTotalSize();
+                }
+                return true;
+            });
+
+            fileListBox->addView(row);
+            if (!firstFocusable) firstFocusable = row;
+            lastFocusable = row;
+        }
+    }
+    if (!hasInstalled) {
+        addHeaderRow("app/fileselect/no_files"_i18n, true);
     }
 
     if (lastFocusable && installLocationBox) {
         lastFocusable->setCustomNavigationRoute(brls::FocusDirection::DOWN, installLocationBox);
         installLocationBox->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
+    }
+
+    // Focus restoration
+    if (!focusedKey_.empty()) {
+        if (focusMap.count(focusedKey_)) {
+            brls::Application::giveFocus(focusMap[focusedKey_]);
+        } else {
+            std::string prefix = focusedKey_;
+            while (true) {
+                size_t slash = prefix.rfind('/');
+                if (slash == std::string::npos) break;
+                prefix = prefix.substr(0, slash);
+                if (focusMap.count(prefix)) {
+                    brls::Application::giveFocus(focusMap[prefix]);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -1189,9 +1525,7 @@ void FileSelectView::toggleAllSelection() {
         if (isFolderHierarchyMode()) {
             rebuildRetroFolderList();
         } else {
-            for (size_t i = 0; i < files_.size(); ++i) {
-                updateRowSelectionState(i);
-            }
+            rebuildSwitchFileList();
         }
     }
     updateTotalSize();
