@@ -379,7 +379,6 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                         parent_->focusedCol_ = i;
                         GameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
-                        util::triggerHapticFeedback(1);
                     }
                     if (titleLabel->getFullText() != fullTitle) {
                         titleLabel->setText(fullTitle);

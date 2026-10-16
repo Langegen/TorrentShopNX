@@ -12,6 +12,7 @@
 #include <switch.h>
 #include <atomic>
 #include <mutex>
+#include <array>
 extern std::recursive_mutex g_switch_service_mutex;
 #endif
 
@@ -131,40 +132,109 @@ bool isBacklightOff() {
 }
 #endif
 
+#ifdef __SWITCH__
+namespace {
+static HidVibrationDeviceHandle s_vibe_handles[6] = {};
+static bool s_vibe_initialized = false;
+static std::mutex s_vibe_mutex;
+
+static void ensureVibrationInit() {
+    if (s_vibe_initialized) return;
+    std::lock_guard<std::mutex> lock(s_vibe_mutex);
+    if (s_vibe_initialized) return;
+
+    // 0, 1: Handheld Joy-Cons (attached)
+    hidInitializeVibrationDevices(&s_vibe_handles[0], 2, HidNpadIdType_Handheld, HidNpadStyleTag_NpadHandheld);
+    // 2, 3: Player 1 Joy-Con pair (detached wireless)
+    hidInitializeVibrationDevices(&s_vibe_handles[2], 2, HidNpadIdType_No1, HidNpadStyleTag_NpadJoyDual);
+    // 4, 5: Player 1 Pro Controller
+    hidInitializeVibrationDevices(&s_vibe_handles[4], 2, HidNpadIdType_No1, HidNpadStyleTag_NpadFullKey);
+
+    s_vibe_initialized = true;
+}
+
+static void sendNativeVibration(float amp_low, float freq_low, float amp_high, float freq_high, long duration_ms) {
+    ensureVibrationInit();
+
+    std::array<HidVibrationDeviceHandle, 4> active_handles{};
+    std::array<HidVibrationValue, 4> active_vals{};
+    int count = 0;
+
+    HidVibrationValue val;
+    val.amp_low   = amp_low;
+    val.freq_low  = freq_low;
+    val.amp_high  = amp_high;
+    val.freq_high = freq_high;
+
+    u32 handheld_style = hidGetNpadStyleSet(HidNpadIdType_Handheld);
+    if (handheld_style & HidNpadStyleTag_NpadHandheld) {
+        active_handles[count] = s_vibe_handles[0];
+        active_vals[count++]  = val;
+        active_handles[count] = s_vibe_handles[1];
+        active_vals[count++]  = val;
+    }
+
+    u32 p1_style = hidGetNpadStyleSet(HidNpadIdType_No1);
+    if (p1_style & HidNpadStyleTag_NpadJoyDual) {
+        if (count < 4) {
+            active_handles[count] = s_vibe_handles[2];
+            active_vals[count++]  = val;
+        }
+        if (count < 4) {
+            active_handles[count] = s_vibe_handles[3];
+            active_vals[count++]  = val;
+        }
+    } else if (p1_style & HidNpadStyleTag_NpadFullKey) {
+        if (count < 4) {
+            active_handles[count] = s_vibe_handles[4];
+            active_vals[count++]  = val;
+        }
+        if (count < 4) {
+            active_handles[count] = s_vibe_handles[5];
+            active_vals[count++]  = val;
+        }
+    }
+
+    if (count == 0) {
+        // Fallback: send to handheld handles
+        active_handles[0] = s_vibe_handles[0];
+        active_handles[1] = s_vibe_handles[1];
+        active_vals[0]    = val;
+        active_vals[1]    = val;
+        count = 2;
+    }
+
+    hidSendVibrationValues(active_handles.data(), active_vals.data(), count);
+
+    brls::delay(duration_ms, [active_handles, count]() {
+        HidVibrationValue zero_val = {0.0f, 160.0f, 0.0f, 320.0f};
+        std::array<HidVibrationValue, 4> zero_vals{zero_val, zero_val, zero_val, zero_val};
+        hidSendVibrationValues(active_handles.data(), zero_vals.data(), count);
+    });
+}
+} // namespace
+#endif
+
 void triggerHapticFeedback(int style) {
 #ifdef __SWITCH__
     if (!config::ConfigManager::instance().getRumbleEnabled()) return;
 
     static auto s_last_nav_haptic = std::chrono::steady_clock::time_point{};
-    if (style == 1) { // subtle tick (navigation)
+    if (style == 1) { // subtle tick (navigation focus change)
         auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - s_last_nav_haptic).count() < 60) {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - s_last_nav_haptic).count() < 40) {
             return;
         }
         s_last_nav_haptic = now;
-    }
-
-    auto platform = brls::Application::getPlatform();
-    if (!platform) return;
-    auto input = platform->getInputManager();
-    if (!input) return;
-
-    unsigned short low = 0, high = 0;
-    long duration = 40;
-    if (style == 1) { // subtle tick (navigation)
-        low = 6000; high = 14000; duration = 30;
-    } else if (style == 2) { // click / select
-        low = 14000; high = 28000; duration = 45;
+        // Subtle, gentle, high-frequency tick (3.5% amplitude, 320 Hz, 12 ms, zero low-motor rumble)
+        sendNativeVibration(0.0f, 160.0f, 0.035f, 320.0f, 12);
+    } else if (style == 2) { // click / select / open
+        // Crisp tactile click
+        sendNativeVibration(0.025f, 160.0f, 0.075f, 320.0f, 20);
     } else if (style == 3) { // success / favorite
-        low = 22000; high = 42000; duration = 70;
-    } else {
-        return;
+        // Pleasant confirmation pulse
+        sendNativeVibration(0.05f, 160.0f, 0.12f, 320.0f, 35);
     }
-
-    input->sendRumble(0, low, high);
-    brls::delay(duration, [input]() {
-        input->sendRumble(0, 0, 0);
-    });
 #endif
 }
 

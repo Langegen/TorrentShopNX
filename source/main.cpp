@@ -452,6 +452,13 @@ int main(int argc, char** argv) {
     });
     brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
 
+    // Global navigation haptic feedback: subtle, gentle Joy-Con tick on any focus change
+    brls::Application::getGlobalFocusChangeEvent()->subscribe([](brls::View* view) {
+        if (view && brls::Application::getInputType() == brls::InputType::GAMEPAD) {
+            util::triggerHapticFeedback(1);
+        }
+    });
+
     // Register focus change listener to handle console sleep / wake safely (Title Mode only)
     if (!checkAppletMode()) {
         brls::Application::getWindowFocusChangedEvent()->subscribe([](bool focused) {
