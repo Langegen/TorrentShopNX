@@ -2319,6 +2319,15 @@ void DownloadManager::handleFileDownload(size_t index,
         }
         item.install_written = item.file_dl_state->written.load();
         item.install_total = item.file_dl_state->total.load();
+        if (item.finish_time.time_since_epoch().count() == 0) {
+            item.finish_time = std::chrono::steady_clock::now();
+            if (item.start_time.time_since_epoch().count() > 0) {
+                auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                    item.finish_time - item.start_time).count();
+                if (sec > 0) item.elapsed_seconds += sec;
+            }
+            if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+        }
         releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
         util::logLine("download: file download failed: " + item.error_message);
         return;
@@ -2327,6 +2336,15 @@ void DownloadManager::handleFileDownload(size_t index,
     item.state = DownloadState::Completed;
     item.progress = 1.0f;
     item.install_progress = 1.0f;
+    if (item.finish_time.time_since_epoch().count() == 0) {
+        item.finish_time = std::chrono::steady_clock::now();
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                item.finish_time - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+    }
     if (item.file_dl_state) {
         item.install_total = item.file_dl_state->total.load();
         item.install_written = item.install_total;
@@ -2419,6 +2437,15 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         item.state = DownloadState::Failed;
         item.error_message = item.port_install_state->error.empty()
             ? "Port installation failed" : item.port_install_state->error;
+        if (item.finish_time.time_since_epoch().count() == 0) {
+            item.finish_time = std::chrono::steady_clock::now();
+            if (item.start_time.time_since_epoch().count() > 0) {
+                auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                    item.finish_time - item.start_time).count();
+                if (sec > 0) item.elapsed_seconds += sec;
+            }
+            if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+        }
         releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
         util::logLine("download: port install failed: " + item.error_message);
         return;
@@ -2428,6 +2455,15 @@ void DownloadManager::handlePortAutoInstall(size_t index,
     item.progress = 1.0f;
     item.install_progress = 1.0f;
     item.install_stage_label = "Установка завершена";
+    if (item.finish_time.time_since_epoch().count() == 0) {
+        item.finish_time = std::chrono::steady_clock::now();
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                item.finish_time - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+    }
     releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
     checkAndNotifyReleaseComplete(queue_, item);
 }
@@ -2490,6 +2526,8 @@ bool DownloadManager::startDownload(size_t index) {
     item.download_speed_kbps = 0.0f;
     item.speed_sample_at = std::chrono::steady_clock::time_point{};
     item.start_time = std::chrono::steady_clock::now();
+    item.finish_time = std::chrono::steady_clock::time_point{};
+    item.elapsed_seconds = 0;
     item.error_message.clear();
     item.torrent_hash.clear();
 
@@ -2614,6 +2652,15 @@ void DownloadManager::trackProgress() {
                     item.error_message = item.hybrid_installer->errorMessage();
                     item.download_speed_kbps = 0.0f;
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                    if (item.finish_time.time_since_epoch().count() == 0) {
+                        item.finish_time = std::chrono::steady_clock::now();
+                        if (item.start_time.time_since_epoch().count() > 0) {
+                            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                                item.finish_time - item.start_time).count();
+                            if (sec > 0) item.elapsed_seconds += sec;
+                        }
+                        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+                    }
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
                     }
@@ -2632,6 +2679,15 @@ void DownloadManager::trackProgress() {
                     copyDownloadedOtherFiles(item);
                     item.download_speed_kbps = 0.0f;
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                    if (item.finish_time.time_since_epoch().count() == 0) {
+                        item.finish_time = std::chrono::steady_clock::now();
+                        if (item.start_time.time_since_epoch().count() > 0) {
+                            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                                item.finish_time - item.start_time).count();
+                            if (sec > 0) item.elapsed_seconds += sec;
+                        }
+                        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+                    }
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
                     }
@@ -2925,6 +2981,15 @@ void DownloadManager::trackProgress() {
                 copyDownloadedOtherFiles(item);
                 item.download_speed_kbps = 0.0f;
                 item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                if (item.finish_time.time_since_epoch().count() == 0) {
+                    item.finish_time = std::chrono::steady_clock::now();
+                    if (item.start_time.time_since_epoch().count() > 0) {
+                        auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                            item.finish_time - item.start_time).count();
+                        if (sec > 0) item.elapsed_seconds += sec;
+                    }
+                    if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+                }
                 if (item.stream_consumer_started && item.torrent_id >= 0) {
                     stopStreamConsumer(item.torrent_id);
                     item.stream_consumer_started = false;
@@ -3329,6 +3394,14 @@ bool DownloadManager::cancelDownload(size_t index) {
     item.state = DownloadState::Cancelled;
     item.download_speed_kbps = 0.0f;
     item.speed_sample_at = std::chrono::steady_clock::time_point{};
+    if (item.finish_time.time_since_epoch().count() == 0) {
+        item.finish_time = std::chrono::steady_clock::now();
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                item.finish_time - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+    }
     return true;
 }
 
@@ -3387,6 +3460,8 @@ bool DownloadManager::retryDownload(size_t index) {
     item.install_written = 0;
     item.install_total = 0;
     item.start_time = std::chrono::steady_clock::now();
+    item.finish_time = std::chrono::steady_clock::time_point{};
+    item.elapsed_seconds = 0;
     item.auto_hybrid_started = false;
     item.stream_consumer_started = false;
     item.preload_started = false;
@@ -3434,6 +3509,13 @@ bool DownloadManager::pauseDownload(size_t index) {
             tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
         }
 
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+        item.start_time = std::chrono::steady_clock::time_point{};
+
         item.state = DownloadState::Paused;
         item.download_speed_kbps = 0.0f;
         util::logLine("download: paused index=" + std::to_string(index) + " title=" + item.title);
@@ -3468,6 +3550,7 @@ bool DownloadManager::resumeDownload(size_t index) {
         if (!item.torrent_hash.empty()) {
             tsnx_engine_resume_torrent(nullptr, item.torrent_hash.c_str());
         }
+        item.start_time = std::chrono::steady_clock::now();
         if (item.hybrid_installer && item.auto_hybrid_started) {
             item.state = DownloadState::StreamInstalling;
         } else {

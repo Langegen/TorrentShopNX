@@ -72,6 +72,8 @@ struct DownloadItem {
     float download_speed_kbps = 0.0f;
     std::chrono::steady_clock::time_point speed_sample_at{};
     std::chrono::steady_clock::time_point start_time{};
+    std::chrono::steady_clock::time_point finish_time{};
+    int64_t elapsed_seconds = 0;
     int seeds = 0;
     int peers = 0;
     int known_peers = 0;

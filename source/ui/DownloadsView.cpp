@@ -282,11 +282,8 @@ static std::string formatBytes(unsigned long long bytes) {
     }
 }
 
-static std::string formatElapsed(std::chrono::steady_clock::time_point start) {
-    if (start.time_since_epoch().count() == 0) return "--:--";
-    auto secs = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::steady_clock::now() - start).count();
-    if (secs < 0) secs = 0;
+static std::string formatElapsedSeconds(int64_t secs) {
+    if (secs <= 0) return "--:--";
     int h = (int)(secs / 3600);
     int m = (int)((secs % 3600) / 60);
     int s = (int)(secs % 60);
@@ -298,6 +295,35 @@ static std::string formatElapsed(std::chrono::steady_clock::time_point start) {
     }
     return std::string(buf);
 }
+
+static int64_t getItemElapsedSeconds(const download::DownloadItem& itm) {
+    if (itm.state == download::DownloadState::Completed ||
+        itm.state == download::DownloadState::Failed ||
+        itm.state == download::DownloadState::Cancelled) {
+        if (itm.elapsed_seconds > 0) return itm.elapsed_seconds;
+        if (itm.finish_time.time_since_epoch().count() > 0 && itm.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(itm.finish_time - itm.start_time).count();
+            return (sec > 0) ? sec : 1;
+        }
+        return 0;
+    }
+    if (itm.state == download::DownloadState::Paused) {
+        return itm.elapsed_seconds;
+    }
+    if (itm.state == download::DownloadState::Downloading ||
+        itm.state == download::DownloadState::StreamPreparing ||
+        itm.state == download::DownloadState::StreamInstalling ||
+        itm.state == download::DownloadState::Installing) {
+        if (itm.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - itm.start_time).count();
+            return itm.elapsed_seconds + ((sec > 0) ? sec : 0);
+        }
+        return itm.elapsed_seconds;
+    }
+    return 0;
+}
+
 
 static std::string formatProgressBytes(unsigned long long written, unsigned long long total) {
     return formatBytes(written) + " / " + formatBytes(total);
@@ -651,6 +677,10 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
         g.active_item_idx = -1;
         g.failed_name.clear();
         g.failed_error.clear();
+        g.start_time = std::chrono::steady_clock::time_point{};
+        g.finish_time = std::chrono::steady_clock::time_point{};
+        g.elapsed_seconds = 0;
+        int64_t group_total_elapsed = 0;
 
         bool has_active = false;
         bool has_paused = false;
@@ -661,9 +691,17 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
             if (g.cover_url.empty() && !itm.cover_url.empty()) {
                 g.cover_url = itm.cover_url;
             }
-            if (g.start_time.time_since_epoch().count() == 0 && itm.start_time.time_since_epoch().count() > 0) {
-                g.start_time = itm.start_time;
+            if (itm.start_time.time_since_epoch().count() > 0) {
+                if (g.start_time.time_since_epoch().count() == 0 || itm.start_time < g.start_time) {
+                    g.start_time = itm.start_time;
+                }
             }
+            if (itm.finish_time.time_since_epoch().count() > 0) {
+                if (g.finish_time.time_since_epoch().count() == 0 || itm.finish_time > g.finish_time) {
+                    g.finish_time = itm.finish_time;
+                }
+            }
+            group_total_elapsed += getItemElapsedSeconds(itm);
 
             // Download bytes
             unsigned long long item_dl_w = 0;
@@ -720,14 +758,25 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
         if (has_active) {
             const auto& act = queue[g.active_item_idx];
             g.state = act.state;
+            g.elapsed_seconds = group_total_elapsed;
         } else if (has_failed) {
             g.state = download::DownloadState::Failed;
+            g.elapsed_seconds = group_total_elapsed;
         } else if (has_paused) {
             g.state = download::DownloadState::Paused;
+            g.elapsed_seconds = group_total_elapsed;
         } else if (g.completed_count == g.total_count && g.total_count > 0) {
             g.state = download::DownloadState::Completed;
+            if (g.finish_time.time_since_epoch().count() > 0 && g.start_time.time_since_epoch().count() > 0) {
+                auto wallSec = std::chrono::duration_cast<std::chrono::seconds>(g.finish_time - g.start_time).count();
+                g.elapsed_seconds = (wallSec > 0) ? wallSec : group_total_elapsed;
+            } else {
+                g.elapsed_seconds = group_total_elapsed;
+            }
+            if (g.elapsed_seconds <= 0) g.elapsed_seconds = 1;
         } else {
             g.state = download::DownloadState::Queued;
+            g.elapsed_seconds = group_total_elapsed;
         }
 
         // Auto expansion logic:
@@ -860,9 +909,15 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         group.state == download::DownloadState::StreamPreparing ||
         group.state == download::DownloadState::StreamInstalling ||
         group.state == download::DownloadState::Installing ||
-        group.state == download::DownloadState::Completed;
-    if (showsElapsed) {
-        cell->elapsedText->setText(brls::getStr("app/downloads/elapsed", formatElapsed(group.start_time)));
+        group.state == download::DownloadState::Completed ||
+        (group.elapsed_seconds > 0);
+    if (showsElapsed && group.elapsed_seconds > 0) {
+        cell->elapsedText->setText(brls::getStr("app/downloads/elapsed", formatElapsedSeconds(group.elapsed_seconds)));
+        cell->elapsedText->setVisibility(brls::Visibility::VISIBLE);
+    } else if (showsElapsed && group.start_time.time_since_epoch().count() > 0) {
+        auto secs = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - group.start_time).count();
+        cell->elapsedText->setText(brls::getStr("app/downloads/elapsed", formatElapsedSeconds(secs)));
         cell->elapsedText->setVisibility(brls::Visibility::VISIBLE);
     } else {
         cell->elapsedText->setVisibility(brls::Visibility::GONE);
@@ -907,9 +962,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         }
         if (hasSdkMismatch) {
             cell->sdkWarningBox->setVisibility(brls::Visibility::VISIBLE);
+            cell->sdkWarningBox->setBackgroundColor(isLight ? nvgRGBA(255, 235, 238, 240) : nvgRGBA(244, 67, 54, 40));
+            cell->sdkWarningBox->setCornerRadius(6.0f);
+            cell->sdkWarningBox->setPadding(4.0f, 8.0f, 4.0f, 8.0f);
+            cell->sdkWarningBox->setBorderThickness(1.0f);
+            cell->sdkWarningBox->setBorderColor(isLight ? nvgRGBA(239, 83, 80, 200) : nvgRGBA(255, 112, 67, 180));
             if (cell->sdkConsoleLabel) {
-                cell->sdkConsoleLabel->setText("FW: " + cSdk.toString());
-                cell->sdkConsoleLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+                cell->sdkConsoleLabel->setText("FW: " + (cSdk.valid ? cSdk.toString() : "?"));
+                cell->sdkConsoleLabel->setTextColor(secondaryText);
             }
             if (cell->sdkGameLabel) {
                 cell->sdkGameLabel->setText("SDK: " + gSdk.toString());
@@ -927,117 +987,146 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         NVGcolor compBg = isLight ? nvgRGBA(242, 245, 248, 220) : nvgRGBA(32, 35, 42, 180);
         NVGcolor compBorder = isLight ? nvgRGBA(210, 218, 228, 200) : nvgRGBA(255, 255, 255, 25);
 
-        // Adjust child count to match components
-        while (cell->componentsBox->getChildren().size() > group.item_indices.size()) {
-            brls::View* last = cell->componentsBox->getChildren().back();
-            cell->componentsBox->removeView(last);
-            delete last;
+        // Rebuild rows if structure changed or count mismatch
+        bool needsRebuild = (cell->componentsBox->getChildren().size() != group.item_indices.size());
+        if (!needsRebuild) {
+            for (auto* ch : cell->componentsBox->getChildren()) {
+                auto* rb = dynamic_cast<brls::Box*>(ch);
+                if (!rb || rb->getChildren().size() != 6) {
+                    needsRebuild = true;
+                    break;
+                }
+            }
         }
 
-        while (cell->componentsBox->getChildren().size() < group.item_indices.size()) {
-            auto* rowBox = new brls::Box();
-            rowBox->setAxis(brls::Axis::ROW);
-            rowBox->setAlignItems(brls::AlignItems::CENTER);
-            rowBox->setHeight(46.0f);
-            rowBox->setCornerRadius(6.0f);
-            rowBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
-            rowBox->setMarginBottom(4.0f);
+        if (needsRebuild) {
+            cell->componentsBox->clearViews();
+            for (size_t k = 0; k < group.item_indices.size(); ++k) {
+                auto* rowBox = new brls::Box();
+                rowBox->setAxis(brls::Axis::ROW);
+                rowBox->setAlignItems(brls::AlignItems::CENTER);
+                rowBox->setHeight(46.0f);
+                rowBox->setCornerRadius(6.0f);
+                rowBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
+                rowBox->setMarginBottom(4.0f);
 
-            // 1. Badge Box
-            auto* bBox = new brls::Box();
-            bBox->setCornerRadius(4.0f);
-            bBox->setPadding(2.0f, 6.0f, 2.0f, 6.0f);
-            bBox->setMarginRight(8.0f);
-            auto* bLabel = new brls::Label();
-            bLabel->setFontSize(11.0f);
-            bLabel->setSingleLine(true);
-            bBox->addView(bLabel);
-            rowBox->addView(bBox);
+                // 0. Badge Box
+                auto* bBox = new brls::Box();
+                bBox->setCornerRadius(4.0f);
+                bBox->setPadding(2.0f, 6.0f, 2.0f, 6.0f);
+                bBox->setMarginRight(8.0f);
+                auto* bLabel = new brls::Label();
+                bLabel->setFontSize(11.0f);
+                bLabel->setSingleLine(true);
+                bBox->addView(bLabel);
+                rowBox->addView(bBox);
 
-            // 2. Name Label
-            auto* nameLabel = new brls::Label();
-            nameLabel->setFontSize(13.0f);
-            nameLabel->setSingleLine(true);
-            nameLabel->setWidth(240.0f);
-            nameLabel->setMarginRight(10.0f);
-            rowBox->addView(nameLabel);
+                // 1. Name Label
+                auto* nameLabel = new brls::Label();
+                nameLabel->setFontSize(13.0f);
+                nameLabel->setSingleLine(true);
+                nameLabel->setWidth(200.0f);
+                nameLabel->setMarginRight(8.0f);
+                rowBox->addView(nameLabel);
 
-            // 3. Progress Column (two thin bars)
-            auto* progCol = new brls::Box();
-            progCol->setAxis(brls::Axis::COLUMN);
-            progCol->setGrow(1.0f);
-            progCol->setMarginRight(15.0f);
+                // 2. SDK Warning Pill
+                auto* sdkPill = new brls::Box();
+                sdkPill->setCornerRadius(4.0f);
+                sdkPill->setPadding(2.0f, 5.0f, 2.0f, 5.0f);
+                sdkPill->setMarginRight(8.0f);
+                sdkPill->setVisibility(brls::Visibility::GONE);
+                auto* sdkPillLabel = new brls::Label();
+                sdkPillLabel->setFontSize(10.0f);
+                sdkPillLabel->setSingleLine(true);
+                sdkPill->addView(sdkPillLabel);
+                rowBox->addView(sdkPill);
 
-            // Download mini-bar row
-            auto* dlRow = new brls::Box();
-            dlRow->setAxis(brls::Axis::ROW);
-            dlRow->setAlignItems(brls::AlignItems::CENTER);
-            dlRow->setMarginBottom(2.0f);
-            auto* dlLbl = new brls::Label();
-            dlLbl->setText("Загрузка:");
-            dlLbl->setFontSize(10.0f);
-            dlLbl->setWidth(65.0f);
-            auto* dlBarBg = new brls::Box();
-            dlBarBg->setWidth(130.0f);
-            dlBarBg->setHeight(6.0f);
-            dlBarBg->setCornerRadius(3.0f);
-            dlBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
-            auto* dlBar = new brls::Box();
-            dlBar->setWidth(0.0f);
-            dlBar->setHeight(6.0f);
-            dlBar->setCornerRadius(3.0f);
-            dlBar->setBackgroundColor(nvgRGB(76, 175, 80));
-            dlBarBg->addView(dlBar);
-            auto* dlTxt = new brls::Label();
-            dlTxt->setFontSize(10.0f);
-            dlTxt->setMarginLeft(8.0f);
-            dlTxt->setWidth(120.0f);
-            dlTxt->setSingleLine(true);
-            dlRow->addView(dlLbl);
-            dlRow->addView(dlBarBg);
-            dlRow->addView(dlTxt);
-            progCol->addView(dlRow);
+                // 3. Progress Column (two thin bars)
+                auto* progCol = new brls::Box();
+                progCol->setAxis(brls::Axis::COLUMN);
+                progCol->setGrow(1.0f);
+                progCol->setMarginRight(12.0f);
 
-            // Install mini-bar row
-            auto* instRow = new brls::Box();
-            instRow->setAxis(brls::Axis::ROW);
-            instRow->setAlignItems(brls::AlignItems::CENTER);
-            auto* instLbl = new brls::Label();
-            instLbl->setText("Установка:");
-            instLbl->setFontSize(10.0f);
-            instLbl->setWidth(65.0f);
-            auto* instBarBg = new brls::Box();
-            instBarBg->setWidth(130.0f);
-            instBarBg->setHeight(6.0f);
-            instBarBg->setCornerRadius(3.0f);
-            instBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
-            auto* instBar = new brls::Box();
-            instBar->setWidth(0.0f);
-            instBar->setHeight(6.0f);
-            instBar->setCornerRadius(3.0f);
-            instBar->setBackgroundColor(nvgRGB(33, 150, 243));
-            instBarBg->addView(instBar);
-            auto* instTxt = new brls::Label();
-            instTxt->setFontSize(10.0f);
-            instTxt->setMarginLeft(8.0f);
-            instTxt->setWidth(120.0f);
-            instTxt->setSingleLine(true);
-            instRow->addView(instLbl);
-            instRow->addView(instBarBg);
-            instRow->addView(instTxt);
-            progCol->addView(instRow);
+                // Download mini-bar row
+                auto* dlRow = new brls::Box();
+                dlRow->setAxis(brls::Axis::ROW);
+                dlRow->setAlignItems(brls::AlignItems::CENTER);
+                dlRow->setMarginBottom(2.0f);
+                auto* dlLbl = new brls::Label();
+                dlLbl->setText("Загрузка:");
+                dlLbl->setFontSize(10.0f);
+                dlLbl->setWidth(65.0f);
+                auto* dlBarBg = new brls::Box();
+                dlBarBg->setWidth(130.0f);
+                dlBarBg->setHeight(6.0f);
+                dlBarBg->setCornerRadius(3.0f);
+                dlBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
+                auto* dlBar = new brls::Box();
+                dlBar->setWidth(0.0f);
+                dlBar->setHeight(6.0f);
+                dlBar->setCornerRadius(3.0f);
+                dlBar->setBackgroundColor(nvgRGB(76, 175, 80));
+                dlBarBg->addView(dlBar);
+                auto* dlTxt = new brls::Label();
+                dlTxt->setFontSize(10.0f);
+                dlTxt->setMarginLeft(8.0f);
+                dlTxt->setWidth(120.0f);
+                dlTxt->setSingleLine(true);
+                dlRow->addView(dlLbl);
+                dlRow->addView(dlBarBg);
+                dlRow->addView(dlTxt);
+                progCol->addView(dlRow);
 
-            rowBox->addView(progCol);
+                // Install mini-bar row
+                auto* instRow = new brls::Box();
+                instRow->setAxis(brls::Axis::ROW);
+                instRow->setAlignItems(brls::AlignItems::CENTER);
+                auto* instLbl = new brls::Label();
+                instLbl->setText("Установка:");
+                instLbl->setFontSize(10.0f);
+                instLbl->setWidth(65.0f);
+                auto* instBarBg = new brls::Box();
+                instBarBg->setWidth(130.0f);
+                instBarBg->setHeight(6.0f);
+                instBarBg->setCornerRadius(3.0f);
+                instBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
+                auto* instBar = new brls::Box();
+                instBar->setWidth(0.0f);
+                instBar->setHeight(6.0f);
+                instBar->setCornerRadius(3.0f);
+                instBar->setBackgroundColor(nvgRGB(33, 150, 243));
+                instBarBg->addView(instBar);
+                auto* instTxt = new brls::Label();
+                instTxt->setFontSize(10.0f);
+                instTxt->setMarginLeft(8.0f);
+                instTxt->setWidth(120.0f);
+                instTxt->setSingleLine(true);
+                instRow->addView(instLbl);
+                instRow->addView(instBarBg);
+                instRow->addView(instTxt);
+                progCol->addView(instRow);
 
-            // 4. Status Label
-            auto* compStatusLabel = new brls::Label();
-            compStatusLabel->setFontSize(12.0f);
-            compStatusLabel->setWidth(120.0f);
-            compStatusLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
-            compStatusLabel->setSingleLine(true);
-            rowBox->addView(compStatusLabel);
+                rowBox->addView(progCol);
 
-            cell->componentsBox->addView(rowBox);
+                // 4. Component Elapsed Time Label
+                auto* compTimeLabel = new brls::Label();
+                compTimeLabel->setFontSize(12.0f);
+                compTimeLabel->setWidth(65.0f);
+                compTimeLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
+                compTimeLabel->setMarginRight(12.0f);
+                compTimeLabel->setSingleLine(true);
+                rowBox->addView(compTimeLabel);
+
+                // 5. Status Label
+                auto* compStatusLabel = new brls::Label();
+                compStatusLabel->setFontSize(12.0f);
+                compStatusLabel->setWidth(125.0f);
+                compStatusLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
+                compStatusLabel->setSingleLine(true);
+                rowBox->addView(compStatusLabel);
+
+                cell->componentsBox->addView(rowBox);
+            }
         }
 
         // Populate component rows
@@ -1046,7 +1135,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             if (qidx >= queue.size()) continue;
             const auto& itm = queue[qidx];
             auto* rowBox = dynamic_cast<brls::Box*>(cell->componentsBox->getChildren()[i]);
-            if (!rowBox) continue;
+            if (!rowBox || rowBox->getChildren().size() < 6) continue;
 
             bool isFailed = (itm.state == download::DownloadState::Failed || itm.state == download::DownloadState::Cancelled);
 
@@ -1060,7 +1149,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 rowBox->setBorderColor(compBorder);
             }
 
-            // Badge
+            // 0. Badge
             auto* bBox = dynamic_cast<brls::Box*>(rowBox->getChildren()[0]);
             auto* bLabel = bBox ? dynamic_cast<brls::Label*>(bBox->getChildren()[0]) : nullptr;
             auto bStyle = getComponentBadgeStyle(itm.component_type, isLight);
@@ -1070,7 +1159,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 bLabel->setTextColor(bStyle.textCol);
             }
 
-            // Name
+            // 1. Name
             auto* nameLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[1]);
             if (nameLabel) {
                 std::string cname = itm.component_name;
@@ -1081,8 +1170,26 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 nameLabel->setTextColor(primaryText);
             }
 
-            // Progress Col
-            auto* progCol = dynamic_cast<brls::Box*>(rowBox->getChildren()[2]);
+            // 2. SDK Warning Pill
+            auto* sdkPill = dynamic_cast<brls::Box*>(rowBox->getChildren()[2]);
+            if (sdkPill) {
+                if (itm.sdk_mismatch && itm.game_sdk.valid) {
+                    sdkPill->setVisibility(brls::Visibility::VISIBLE);
+                    sdkPill->setBackgroundColor(isLight ? nvgRGBA(255, 235, 238, 240) : nvgRGBA(244, 67, 54, 40));
+                    sdkPill->setBorderThickness(1.0f);
+                    sdkPill->setBorderColor(isLight ? nvgRGBA(239, 83, 80, 200) : nvgRGBA(255, 112, 67, 180));
+                    auto* sdkPillLabel = dynamic_cast<brls::Label*>(sdkPill->getChildren()[0]);
+                    if (sdkPillLabel) {
+                        sdkPillLabel->setText("SDK " + itm.game_sdk.toString());
+                        sdkPillLabel->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(255, 112, 67));
+                    }
+                } else {
+                    sdkPill->setVisibility(brls::Visibility::GONE);
+                }
+            }
+
+            // 3. Progress Col
+            auto* progCol = dynamic_cast<brls::Box*>(rowBox->getChildren()[3]);
             if (progCol) {
                 auto* dlRow = dynamic_cast<brls::Box*>(progCol->getChildren()[0]);
                 auto* instRow = dynamic_cast<brls::Box*>(progCol->getChildren()[1]);
@@ -1151,8 +1258,22 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 }
             }
 
-            // Status Label
-            auto* compStatusLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[3]);
+            // 4. Component Elapsed Time Label
+            auto* compTimeLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[4]);
+            if (compTimeLabel) {
+                int64_t itemSec = getItemElapsedSeconds(itm);
+                if (itemSec > 0) {
+                    compTimeLabel->setText(formatElapsedSeconds(itemSec));
+                    compTimeLabel->setTextColor(secondaryText);
+                    compTimeLabel->setVisibility(brls::Visibility::VISIBLE);
+                } else {
+                    compTimeLabel->setText("");
+                    compTimeLabel->setVisibility(brls::Visibility::INVISIBLE);
+                }
+            }
+
+            // 5. Status Label
+            auto* compStatusLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[5]);
             if (compStatusLabel) {
                 std::string stStr = getStatusString(itm.state);
                 if (itm.state == download::DownloadState::Downloading) {

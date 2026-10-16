@@ -85,6 +85,11 @@
             alignItems="center"
             justifyContent="center"
             marginRight="15"
+            cornerRadius="6"
+            paddingTop="4"
+            paddingBottom="4"
+            paddingLeft="8"
+            paddingRight="8"
             visibility="gone">
             <brls:Label id="sdkConsoleLabel" text="" fontSize="11" textColor="@theme/brls/header/subtitle" marginBottom="2" />
             <brls:Label id="sdkGameLabel" text="" fontSize="12" textColor="#FF7043" />
