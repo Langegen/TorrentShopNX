@@ -129,6 +129,11 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
         item.topic_id = game.topic_id;
         item.title_id = game.title_id;
         item.cover_url = game.cover;
+        item.group_id = game.topic_id;
+        item.group_title = cleanTitle(game.title);
+        item.component_label = "Порт";
+        item.component_name = cleanTitle(game.title);
+        item.component_type = 4;
 
         // Start the download immediately if no transfers are active
         if (!impl_.hasActiveTransfers()) {
