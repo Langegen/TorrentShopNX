@@ -49,16 +49,28 @@ bool getArchiveTotals(
     size_t& outTotalEntries
 );
 
+using PathTransformFn = std::function<std::string(const std::string& entryName, bool isDir)>;
+
+// Iterates entries in an archive without decompressing file contents.
+// Calls callback for each entry until callback returns false or end of archive.
+// Returns true if the archive was successfully opened and read.
+bool iterateArchiveEntries(
+    const std::string& archivePath,
+    std::function<bool(const std::string& entryName, bool isDir)> callback
+);
+
 // Extracts the given archive to destination directory.
 // Runs synchronously — caller should invoke via background thread (e.g. brls::async).
 // Periodic progress callback is fired during unpacking.
 // Extraction can be cancelled via cancelToken.
+// If pathTransform is provided, each entry is mapped or skipped (if returns empty).
 bool extractArchive(
     const std::string& archivePath,
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    PathTransformFn pathTransform = nullptr
 );
 
 // Extracts a single file entry from an archive to destination directory.

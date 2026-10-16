@@ -441,6 +441,24 @@ static bool resolveAtmosphereModDest(const std::string& rel_path,
         }
     }
 
+    // 3b. Поиск сегмента 16-hex Title ID (например "0100FE701475A000/...")
+    for (size_t i = 0; i + 17 <= norm.size(); ++i) {
+        if ((i == 0 || norm[i - 1] == '/') && norm[i + 16] == '/') {
+            std::string tid_cand = norm.substr(i, 16);
+            if (is16Hex(tid_cand) && (tid_cand.rfind("0100", 0) == 0 || tid_cand.rfind("010", 0) == 0)) {
+                for (char& c : tid_cand) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                std::string rest = norm.substr(i + 17);
+                std::string atmo_path = "atmosphere/contents/" + tid_cand + (rest.empty() ? "" : ("/" + rest));
+#ifdef __SWITCH__
+                out_dest = "sdmc:/" + atmo_path;
+#else
+                out_dest = "./" + atmo_path;
+#endif
+                return true;
+            }
+        }
+    }
+
     // 4. Наличие папки "romfs/", "exefs/" или "cheats/" при известном TitleID игры
     if (is16Hex(effective_tid)) {
         for (const char* marker : {"romfs/", "exefs/", "cheats/"}) {
@@ -639,9 +657,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
         std::string rel_path = files[idx].path;
         std::filesystem::path dest_rel = resolveDestRel(rel_path);
 
+        bool is_archive = util::isArchiveFile(rel_path);
         bool is_mod = false;
         std::string mod_dest;
-        if (retro_console_id.empty() && !is_homebrew) {
+        if (retro_console_id.empty() && !is_homebrew && !is_archive) {
             is_mod = resolveAtmosphereModDest(rel_path, effective_tid, mod_dest);
         }
 
@@ -821,39 +840,90 @@ static void fileCopyWorker(datasource::IDataSource* source,
     }
 
     if (all_ok && !cancel->load()) {
-        if (any_mod && !mod_base_dir.empty()) {
-            st->dest = mod_base_dir;
-            util::logLine("download: mod/rusifier installed to: " + mod_base_dir);
-        } else {
-            st->dest = release_base.string();
-        }
-        st->done = true;
-        st->written.store(total_size);
+        // 1. Автораспаковка Switch модов/русификаторов из архивов (.zip, .7z, .rar)
+        if (retro_console_id.empty() && !is_homebrew) {
+            for (int idx : target_indices) {
+                if (cancel->load() || g_appExiting.load()) break;
+                if (idx < 0 || idx >= n) continue;
+                std::string rel_path = files[idx].path;
+                std::filesystem::path dest_rel = resolveDestRel(rel_path);
+                std::string file_dest = (release_base / dest_rel).string();
 
-        if (any_mod) {
-            // Очищаем пустую старую директорию в downloads/ если файлы были мигрированы
-            std::filesystem::path old_mod_dir = downloadsBaseDir() / release_folder;
-            std::error_code ec_rm;
-            try {
-                if (std::filesystem::exists(old_mod_dir, ec_rm)) {
-                    bool has_files = false;
-                    for (const auto& entry : std::filesystem::recursive_directory_iterator(old_mod_dir, std::filesystem::directory_options::skip_permission_denied, ec_rm)) {
-                        if (entry.is_regular_file(ec_rm)) {
-                            has_files = true;
-                            break;
+                if (util::isArchiveFile(file_dest)) {
+                    std::string archive_tid = effective_tid;
+                    bool is_mod_arch = false;
+
+                    // Сканируем заголовки архива на наличие LayeredFS файлов
+                    util::iterateArchiveEntries(file_dest, [&](const std::string& entryName, bool isDir) -> bool {
+                        (void)isDir;
+                        std::string test_dest;
+                        if (resolveAtmosphereModDest(entryName, archive_tid, test_dest)) {
+                            is_mod_arch = true;
+                            if (archive_tid.empty()) {
+                                size_t p = test_dest.find("contents/");
+                                if (p != std::string::npos && p + 9 + 16 <= test_dest.size()) {
+                                    archive_tid = test_dest.substr(p + 9, 16);
+                                }
+                            }
+                            return false; // Нашли мод-файл, прекращаем сканирование
+                        }
+                        return true;
+                    });
+
+                    if (is_mod_arch) {
+                        if (archive_tid.empty()) {
+                            uint64_t tid = util::parseTitleIdFromFileName(file_dest);
+                            if (tid == 0) tid = util::parseTitleIdFromFileName(release_title);
+                            if (tid != 0) {
+                                char buf[32];
+                                std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+                                archive_tid = buf;
+                            }
+                        }
+
+                        if (!archive_tid.empty()) {
+                            {
+                                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                                st->stage_label = brls::getStr("app/downloads/state_installing");
+                            }
+
+                            auto modPathTransform = [&](const std::string& entryName, bool isDir) -> std::string {
+                                (void)isDir;
+                                std::string dest;
+                                if (resolveAtmosphereModDest(entryName, archive_tid, dest)) {
+                                    return dest;
+                                }
+                                return ""; // Пропускаем файлы, не относящиеся к моду
+                            };
+
+                            std::string outErr;
+                            util::logLine("download: auto-extracting Switch mod archive: " + file_dest + " -> atmosphere/contents/" + archive_tid);
+                            bool extractOk = util::extractArchive(file_dest, "", nullptr, cancel, outErr, modPathTransform);
+                            if (extractOk) {
+                                util::logLine("download: Switch mod auto-extract succeeded for " + file_dest);
+                                std::error_code ec_rm;
+                                std::filesystem::remove(file_dest, ec_rm);
+                                any_mod = true;
+#ifdef __SWITCH__
+                                mod_base_dir = "sdmc:/atmosphere/contents/" + archive_tid;
+#else
+                                mod_base_dir = "./atmosphere/contents/" + archive_tid;
+#endif
+                            } else {
+                                util::logLine("download: Switch mod auto-extract failed: " + outErr);
+                            }
+                        } else {
+                            util::logLine("download: Switch mod archive detected, but TitleID is unknown: " + file_dest);
                         }
                     }
-                    if (!has_files && !ec_rm) {
-                        std::filesystem::remove_all(old_mod_dir, ec_rm);
-                        util::logLine("download: cleaned up old empty mod directory in downloads: " + old_mod_dir.string());
-                    }
                 }
-            } catch (...) {}
+            }
         }
 
+        // 2. Автораспаковка ретро-ромов
         if (!retro_console_id.empty() && config::ConfigManager::instance().getRetroAutoExtract()) {
             for (int idx : target_indices) {
-                if (cancel->load()) break;
+                if (cancel->load() || g_appExiting.load()) break;
                 if (idx < 0 || idx >= n) continue;
                 std::string rel_path = files[idx].path;
                 std::filesystem::path dest_rel = resolveDestRel(rel_path);
@@ -873,6 +943,36 @@ static void fileCopyWorker(datasource::IDataSource* source,
                     }
                 }
             }
+        }
+
+        if (any_mod && !mod_base_dir.empty()) {
+            st->dest = mod_base_dir;
+            util::logLine("download: mod/rusifier installed to: " + mod_base_dir);
+        } else {
+            st->dest = release_base.string();
+        }
+        st->done = true;
+        st->written.store(total_size);
+
+        if (any_mod) {
+            // Очищаем пустую старую директорию в downloads/ если файлы были мигрированы или архивы распакованы
+            std::filesystem::path old_mod_dir = downloadsBaseDir() / release_folder;
+            std::error_code ec_rm;
+            try {
+                if (std::filesystem::exists(old_mod_dir, ec_rm)) {
+                    bool has_files = false;
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(old_mod_dir, std::filesystem::directory_options::skip_permission_denied, ec_rm)) {
+                        if (entry.is_regular_file(ec_rm)) {
+                            has_files = true;
+                            break;
+                        }
+                    }
+                    if (!has_files && !ec_rm) {
+                        std::filesystem::remove_all(old_mod_dir, ec_rm);
+                        util::logLine("download: cleaned up old empty mod directory in downloads: " + old_mod_dir.string());
+                    }
+                }
+            } catch (...) {}
         }
     } else {
         st->failed = true;
