@@ -81,18 +81,17 @@
 //-----------------------------------------------------------------------------
 
 #ifdef __SWITCH__
-/* Live sessions. TCP sockets are non-blocking and don't touch the 16-session
-   blocking-BSD budget; memory is ~40 KB per TCP session plus ~1.25 MB per
-   uTP session, ~25 MB worst case -- fine in title mode. On a 100 Mbit wifi
-   link a few dozen 500-800 KB/s peers are what saturates it, so the cap sits
-   above the typical 20-25 reachable peers with headroom for churn. */
-#define MAX_SESS         96
-#define MAX_CONNECTING   32     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
-#define DIAL_STOP_LIVE   80     // enough live sessions: stop dialing new peers
+/* Live sessions: 20-25 reachable peers saturate 100 Mbit Wi-Fi.
+   Capping MAX_SESS at 32 and DIAL_STOP_LIVE at 24 ensures socket buffer allocations
+   stay well within the 32 MB BSD pool (~13 MB max), leaving plenty of buffer space
+   for DHT/tracker UDP sockets and HTTP image downloads without ENOBUFS (errno 105). */
+#define MAX_SESS         32
+#define MAX_CONNECTING   16     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
+#define DIAL_STOP_LIVE   24     // enough live sessions: stop dialing new peers
 #else
-#define MAX_SESS         96
-#define MAX_CONNECTING   32
-#define DIAL_STOP_LIVE   80
+#define MAX_SESS         32
+#define MAX_CONNECTING   16
+#define DIAL_STOP_LIVE   24
 #endif
 #define CONNECT_SECS     8      // outbound SYN patience (realistic for Switch Wi-Fi and NAT)
 #define CONNECT_STARVED_SECS 10 // slow-but-alive seeders need 10s floor

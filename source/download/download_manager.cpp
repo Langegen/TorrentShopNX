@@ -1987,6 +1987,7 @@ void DownloadManager::handleFileDownload(size_t index,
         }
         item.install_written = item.file_dl_state->written.load();
         item.install_total = item.file_dl_state->total.load();
+        releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
         util::logLine("download: file download failed: " + item.error_message);
         return;
     }
@@ -2086,6 +2087,7 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         item.state = DownloadState::Failed;
         item.error_message = item.port_install_state->error.empty()
             ? "Port installation failed" : item.port_install_state->error;
+        releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
         util::logLine("download: port install failed: " + item.error_message);
         return;
     }
@@ -2282,7 +2284,8 @@ void DownloadManager::trackProgress() {
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
-                    } else if (!item.torrent_hash.empty()) {
+                    }
+                    if (!item.torrent_hash.empty()) {
                         releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
                     }
                     util::logLine("download: hybrid install failed: " + item.error_message);
@@ -2299,7 +2302,8 @@ void DownloadManager::trackProgress() {
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
-                    } else if (!item.torrent_hash.empty()) {
+                    }
+                    if (!item.torrent_hash.empty()) {
                         releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
                     }
                     util::logLine("download: hybrid install completed: " + item.title);

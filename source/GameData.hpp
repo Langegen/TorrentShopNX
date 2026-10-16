@@ -1215,7 +1215,12 @@ inline void migrateStorageLayout() {
 
 // Helper to normalize image URLs (e.g. FastPic migrated fastpic.ru to fastpic.org and storage servers fail on HTTPS)
 inline std::string normalizeImageUrl(const std::string& url) {
-    std::string norm = url;
+    if (url.empty()) return "";
+    size_t start = url.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = url.find_last_not_of(" \t\r\n");
+    std::string norm = url.substr(start, end - start + 1);
+
     if (norm.find("fastpic.") != std::string::npos) {
         if (norm.rfind("https://", 0) == 0) {
             norm.replace(0, 5, "http");

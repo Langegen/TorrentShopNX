@@ -428,6 +428,9 @@ int main(int argc, char** argv) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
     }
+    // Snappy focus highlight and smooth scrolling transitions (down from sluggish 200ms default)
+    brls::getStyle().addMetric("brls/animations/highlight", 100.0f);
+
     // Exit directly to Nintendo Switch Home Menu instead of Homebrew Menu (hbmenu)
     brls::Application::getPlatform()->exitToHomeMode(true);
 

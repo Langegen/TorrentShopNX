@@ -134,6 +134,16 @@ bool isBacklightOff() {
 void triggerHapticFeedback(int style) {
 #ifdef __SWITCH__
     if (!config::ConfigManager::instance().getRumbleEnabled()) return;
+
+    static auto s_last_nav_haptic = std::chrono::steady_clock::time_point{};
+    if (style == 1) { // subtle tick (navigation)
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - s_last_nav_haptic).count() < 60) {
+            return;
+        }
+        s_last_nav_haptic = now;
+    }
+
     auto platform = brls::Application::getPlatform();
     if (!platform) return;
     auto input = platform->getInputManager();

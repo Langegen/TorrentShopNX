@@ -202,12 +202,12 @@ void ImageDownloader::reprioritizeQueueLocked() {
 }
 
 void ImageDownloader::setFocusedPosition(int row, int col) {
-    std::lock_guard<std::mutex> lock(queueMutex_);
-    if (currentFocusedRow_ == row && currentFocusedCol_ == col) return;
-    currentFocusedRow_ = row;
-    currentFocusedCol_ = col;
-    reprioritizeQueueLocked();
-    cv_.notify_all();
+    if (currentFocusedRow_.load(std::memory_order_relaxed) == row &&
+        currentFocusedCol_.load(std::memory_order_relaxed) == col) return;
+    currentFocusedRow_.store(row, std::memory_order_relaxed);
+    currentFocusedCol_.store(col, std::memory_order_relaxed);
+    needsSort_.store(true, std::memory_order_release);
+    cv_.notify_one();
 }
 
 void ImageDownloader::enqueue(brls::Image* img,
@@ -227,10 +227,10 @@ void ImageDownloader::enqueue(brls::Image* img,
 
     if (token && !*token) return;
 
-    // Set placeholder on UI thread immediately
+    // Set placeholder on UI thread immediately without marking shared placeholder as freeable
     if (bypassCache) {
         img->setImageFromFile(placeholder);
-        img->setFreeTexture(true);
+        img->setFreeTexture(false);
     } else {
         if (brls::TextureCache::instance().getCache(cacheKey) > 0) {
             img->setImageFromFile(cacheKey);
@@ -239,6 +239,19 @@ void ImageDownloader::enqueue(brls::Image* img,
         img->setImageFromFile(placeholder);
     }
 
+    enqueueInternal(img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride);
+}
+
+void ImageDownloader::enqueueInternal(brls::Image* img,
+                                       const std::string& url,
+                                       const std::string& cacheKey,
+                                       std::shared_ptr<bool> token,
+                                       const std::string& placeholder,
+                                       bool bypassCache,
+                                       const std::string& fallbackUrl,
+                                       int row,
+                                       int col,
+                                       int priorityOverride) {
     // Lazy init if workers were not explicitly started
     if (!running_.load()) {
         init(2);
@@ -267,6 +280,9 @@ void ImageDownloader::enqueue(brls::Image* img,
 }
 
 void ImageDownloader::workerLoop() {
+    net::HttpClient http;
+    http.setKeepAlive(true);
+
     while (running_.load() && !g_appExiting.load()) {
         ImageTask task;
         {
@@ -282,6 +298,10 @@ void ImageDownloader::workerLoop() {
 
             if (paused_.load() || tasks_.empty()) continue;
 
+            if (needsSort_.exchange(false, std::memory_order_acq_rel)) {
+                reprioritizeQueueLocked();
+            }
+
             task = tasks_.front();
             tasks_.pop_front();
         }
@@ -291,11 +311,11 @@ void ImageDownloader::workerLoop() {
             continue; // Skip invalidated task (card scrolled offscreen)
         }
 
-        processTask(task);
+        processTask(task, http);
     }
 }
 
-void ImageDownloader::processTask(const ImageTask& task) {
+void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) {
     if (g_appExiting.load()) return;
     if (task.token && !*task.token) return;
 
@@ -354,7 +374,6 @@ void ImageDownloader::processTask(const ImageTask& task) {
         std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }
 
-    net::HttpClient http;
     http.setTimeout(timeoutSec);
     auto res = http.httpGet(task.url);
 
@@ -468,7 +487,10 @@ void ImageDownloader::processTask(const ImageTask& task) {
                         nvgDeleteImage(brls::Application::getNVGContext(), tex);
                         return;
                     }
-                    if (img) img->innerSetImage(tex);
+                    if (img) {
+                        img->innerSetImage(tex);
+                        img->setFreeTexture(true); // Own dynamically created non-cached texture
+                    }
                 } else {
                     util::logLine("ImageDownloader: nvgCreateImageRGBA failed for " + url);
                 }
@@ -503,16 +525,18 @@ void ImageDownloader::processTask(const ImageTask& task) {
             }
         });
     } else {
-        util::logLine("ImageDownloader: HTTP fetch failed, code=" + std::to_string(res.status_code) + " url=" + task.url);
+        util::logLine("ImageDownloader: HTTP fetch failed, code=" + std::to_string(res.status_code) +
+                      " (" + res.body + ") url=" + task.url);
         if (!task.fallbackUrl.empty()) {
             if (task.token && !*task.token) return;
-            enqueue(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
         } else if (!task.placeholder.empty()) {
             brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
                 if (g_appExiting.load()) return;
                 if (token && !*token) return;
                 if (img) {
                     img->setImageFromFile(placeholder);
+                    img->setFreeTexture(false);
                 }
             });
         }

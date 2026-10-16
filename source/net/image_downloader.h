@@ -73,9 +73,19 @@ private:
     ImageDownloader& operator=(const ImageDownloader&) = delete;
 
     void workerLoop();
-    void processTask(const ImageTask& task);
+    void processTask(const ImageTask& task, class HttpClient& http);
     int calculatePriority(const ImageTask& task) const;
     void reprioritizeQueueLocked();
+    void enqueueInternal(brls::Image* img,
+                         const std::string& url,
+                         const std::string& cacheKey,
+                         std::shared_ptr<bool> token,
+                         const std::string& placeholder,
+                         bool bypassCache,
+                         const std::string& fallbackUrl,
+                         int row,
+                         int col,
+                         int priorityOverride);
 
     std::vector<std::thread> workers_;
     std::deque<ImageTask> tasks_;
@@ -83,8 +93,9 @@ private:
     std::condition_variable cv_;
     std::atomic<bool> running_{false};
     std::atomic<bool> paused_{false};
-    int currentFocusedRow_ = -1;
-    int currentFocusedCol_ = -1;
+    std::atomic<int> currentFocusedRow_{-1};
+    std::atomic<int> currentFocusedCol_{-1};
+    std::atomic<bool> needsSort_{false};
     ActiveCheckFn activeCheck_;
 };
 

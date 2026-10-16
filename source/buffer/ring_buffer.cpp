@@ -246,8 +246,8 @@ void RingBuffer::reinit(size_t capacity) {
 
         if (!reused && capacity > 0) {
             size_t try_cap = capacity;
-            const size_t min_cap = (capacity >= 8 * 1024 * 1024)
-                ? (8 * 1024 * 1024)
+            const size_t min_cap = (capacity >= 2 * 1024 * 1024)
+                ? (2 * 1024 * 1024)
                 : std::min<size_t>(capacity, 512 * 1024);
             while (try_cap >= min_cap) {
                 try {

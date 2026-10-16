@@ -381,14 +381,18 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
                         util::triggerHapticFeedback(1);
                     }
-                    titleLabel->setText(fullTitle);
+                    if (titleLabel->getFullText() != fullTitle) {
+                        titleLabel->setText(fullTitle);
+                    }
                     titleLabel->setAnimated(true);
                 });
 
                 // On focus lost → stop animation and restore short title (no overflow)
                 cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
                     titleLabel->setAnimated(false);
-                    titleLabel->setText(shortTitle);
+                    if (titleLabel->getFullText() != shortTitle) {
+                        titleLabel->setText(shortTitle);
+                    }
                 });
                 
                 GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());

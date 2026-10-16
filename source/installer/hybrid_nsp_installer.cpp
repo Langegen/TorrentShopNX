@@ -165,10 +165,10 @@ size_t HybridNspInstaller::autoBufferSize() {
     if (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet) {
         return 16 * 1024 * 1024; // 16MB для аплет-режима
     }
-    // Application/Title Mode: 128MB.
-    return 128 * 1024 * 1024;
+    // Application/Title Mode: 64MB is optimal for streaming without heap exhaustion
+    return 64 * 1024 * 1024;
 #else
-    return 128 * 1024 * 1024;
+    return 64 * 1024 * 1024;
 #endif
 }
 
@@ -185,6 +185,9 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     config_ = config;
 
     size_t max_buf = autoBufferSize();
+    if (config_.buffer_size > 0 && config_.buffer_size < max_buf) {
+        max_buf = config_.buffer_size;
+    }
     uint64_t file_sz = source_->totalSize();
     size_t buf_size = max_buf;
     if (file_sz > 0 && file_sz < max_buf) {
