@@ -48,4 +48,5 @@ scratch/
 data/
 config.ini
 log.txt
+logs/
 /build_pc

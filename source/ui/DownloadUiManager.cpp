@@ -89,6 +89,7 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
+        item.title_id = game.title_id;
         item.selected_files = selected_files;
         item.priorities_set = false;
         item.cover_url = game.cover;
@@ -119,6 +120,7 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
+        item.title_id = game.title_id;
         item.cover_url = game.cover;
 
         // Start the download immediately if no transfers are active

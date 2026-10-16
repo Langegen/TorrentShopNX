@@ -307,8 +307,8 @@ static std::string extractReleaseFolderName(const std::string& title) {
         }
     }
     std::string safe = sanitizePathComponent(name);
-    if (safe.size() > 100) {
-        safe.resize(100);
+    if (safe.size() > 48) {
+        safe.resize(48);
         while (!safe.empty() && (safe.back() == ' ' || safe.back() == '.' || safe.back() == '-' || safe.back() == '_')) {
             safe.pop_back();
         }
@@ -349,12 +349,131 @@ static inline int fseek64(FILE* f, int64_t offset, int origin) {
 #endif
 }
 
-// Фоновое копирование не-игровых файлов и Homebrew/портов: открывает стрим через источник данных,
-// последовательно читает и пишет в downloads/<имя_раздачи>/ с сохранением иерархии раздачи.
+// Проверяет, является ли относительный путь файла модом/русификатором Atmosphere (LayeredFS).
+// Если да, возвращает true и заполняет out_dest правильным целевым путём:
+// на Switch: sdmc:/atmosphere/contents/<title_id>/...
+// на PC: ./atmosphere/contents/<title_id>/...
+static bool resolveAtmosphereModDest(const std::string& rel_path,
+                                    const std::string& effective_tid,
+                                    std::string& out_dest) {
+    std::string norm = rel_path;
+    for (char& c : norm) {
+        if (c == '\\') c = '/';
+    }
+    while (!norm.empty() && norm.front() == '/') norm.erase(norm.begin());
+
+    std::string lower = norm;
+    for (char& c : lower) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    auto is16Hex = [](const std::string& s) -> bool {
+        if (s.size() != 16) return false;
+        for (char c : s) {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // 1. Поиск "atmosphere/" в пути (например "Russian Text + Voice Mod (27.11.2024)/atmosphere/contents/0100.../romfs/...")
+    size_t atmo_pos = lower.find("atmosphere/");
+    if (atmo_pos != std::string::npos) {
+        std::string atmo_sub = norm.substr(atmo_pos);
+        std::string atmo_sub_lower = lower.substr(atmo_pos);
+        // В старых модах использовался каталог atmosphere/titles/, заменяем на modern contents/
+        if (atmo_sub_lower.rfind("atmosphere/titles/", 0) == 0) {
+            atmo_sub = "atmosphere/contents/" + atmo_sub.substr(18);
+        }
+#ifdef __SWITCH__
+        out_dest = "sdmc:/" + atmo_sub;
+#else
+        out_dest = "./" + atmo_sub;
+#endif
+        return true;
+    }
+
+    // 2. Поиск "contents/<16-hex-tid>/" или "titles/<16-hex-tid>/"
+    for (const char* prefix : {"contents/", "titles/"}) {
+        size_t p = lower.find(prefix);
+        if (p != std::string::npos) {
+            size_t plen = std::strlen(prefix);
+            if (p + plen + 16 <= lower.size()) {
+                std::string tid_cand = norm.substr(p + plen, 16);
+                if (is16Hex(tid_cand)) {
+                    for (char& c : tid_cand) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    std::string rest;
+                    if (p + plen + 16 < norm.size() && norm[p + plen + 16] == '/') {
+                        rest = norm.substr(p + plen + 17);
+                    }
+                    std::string atmo_path = "atmosphere/contents/" + tid_cand + (rest.empty() ? "" : ("/" + rest));
+#ifdef __SWITCH__
+                    out_dest = "sdmc:/" + atmo_path;
+#else
+                    out_dest = "./" + atmo_path;
+#endif
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 3. Поиск "<16-hex-tid>/romfs/", "<16-hex-tid>/exefs/" или "<16-hex-tid>/cheats/"
+    for (const char* marker : {"/romfs/", "/exefs/", "/cheats/"}) {
+        size_t m = lower.find(marker);
+        if (m != std::string::npos && m >= 16) {
+            size_t seg_start = m - 16;
+            if (seg_start == 0 || norm[seg_start - 1] == '/') {
+                std::string tid_cand = norm.substr(seg_start, 16);
+                if (is16Hex(tid_cand)) {
+                    for (char& c : tid_cand) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    std::string rest = norm.substr(m + 1); // "romfs/..."
+                    std::string atmo_path = "atmosphere/contents/" + tid_cand + "/" + rest;
+#ifdef __SWITCH__
+                    out_dest = "sdmc:/" + atmo_path;
+#else
+                    out_dest = "./" + atmo_path;
+#endif
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 4. Наличие папки "romfs/", "exefs/" или "cheats/" при известном TitleID игры
+    if (is16Hex(effective_tid)) {
+        for (const char* marker : {"romfs/", "exefs/", "cheats/"}) {
+            size_t m = lower.find(marker);
+            while (m != std::string::npos) {
+                if (m == 0 || norm[m - 1] == '/') {
+                    std::string rest = norm.substr(m);
+                    std::string tid_upper = effective_tid;
+                    for (char& c : tid_upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    std::string atmo_path = "atmosphere/contents/" + tid_upper + "/" + rest;
+#ifdef __SWITCH__
+                    out_dest = "sdmc:/" + atmo_path;
+#else
+                    out_dest = "./" + atmo_path;
+#endif
+                    return true;
+                }
+                m = lower.find(marker, m + 1);
+            }
+        }
+    }
+
+    return false;
+}
+
+// Фоновое копирование не-игровых файлов, модов/русификаторов и Homebrew/портов.
+// Моды и русификаторы Nintendo Switch устанавливаются напрямую в atmosphere/contents/<title_id>/;
+// остальные файлы сохраняются в downloads/<имя_раздачи>/ с контролем длины пути.
 static void fileCopyWorker(datasource::IDataSource* source,
                            const std::string& hash,
                            const std::string& magnet,
                            const std::string& release_title,
+                           const std::string& title_id,
                            int file_index,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
@@ -478,6 +597,30 @@ static void fileCopyWorker(datasource::IDataSource* source,
     std::string first_dest;
     bool all_ok = true;
 
+    std::string effective_tid = title_id;
+    if (effective_tid.empty()) {
+        for (int i = 0; i < n; ++i) {
+            uint64_t tid = util::parseTitleIdFromFileName(files[i].path);
+            if (tid != 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+                effective_tid = buf;
+                break;
+            }
+        }
+    }
+    if (effective_tid.empty()) {
+        uint64_t tid = util::parseTitleIdFromFileName(release_title);
+        if (tid != 0) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+            effective_tid = buf;
+        }
+    }
+
+    bool any_mod = false;
+    std::string mod_base_dir;
+
     for (int idx : target_indices) {
         if (cancel->load() || g_appExiting.load()) {
             all_ok = false;
@@ -495,13 +638,77 @@ static void fileCopyWorker(datasource::IDataSource* source,
         uint64_t file_size = static_cast<uint64_t>(files[idx].size);
         std::string rel_path = files[idx].path;
         std::filesystem::path dest_rel = resolveDestRel(rel_path);
-        std::string file_dest = (release_base / dest_rel).string();
+
+        bool is_mod = false;
+        std::string mod_dest;
+        if (retro_console_id.empty() && !is_homebrew) {
+            is_mod = resolveAtmosphereModDest(rel_path, effective_tid, mod_dest);
+        }
+
+        std::string file_dest;
+        if (is_mod) {
+            file_dest = mod_dest;
+            any_mod = true;
+            if (mod_base_dir.empty()) {
+                std::string tid_val = effective_tid.empty() ? "0100000000000000" : effective_tid;
+#ifdef __SWITCH__
+                mod_base_dir = "sdmc:/atmosphere/contents/" + tid_val;
+#else
+                mod_base_dir = "./atmosphere/contents/" + tid_val;
+#endif
+            }
+
+            // Миграция ранее частично/полностью скачанных файлов из downloads/ в atmosphere/contents/
+            std::filesystem::path old_loc = release_base / dest_rel;
+            std::error_code ec_old;
+            if (std::filesystem::exists(old_loc, ec_old) && !std::filesystem::is_directory(old_loc, ec_old)) {
+                uint64_t old_sz = std::filesystem::file_size(old_loc, ec_old);
+                if (old_sz > 0 && !std::filesystem::exists(file_dest, ec_old)) {
+                    tsnx_ensure_parent_dirs(file_dest.c_str());
+                    std::error_code ec_mv;
+                    std::filesystem::rename(old_loc, file_dest, ec_mv);
+                    if (ec_mv) {
+                        std::filesystem::copy_file(old_loc, file_dest, std::filesystem::copy_options::overwrite_existing, ec_mv);
+                        if (!ec_mv) std::filesystem::remove(old_loc, ec_mv);
+                    }
+                    if (!ec_mv) {
+                        util::logLine("download: migrated existing mod file from " + old_loc.string() + " -> " + file_dest + " (" + std::to_string(old_sz) + " bytes)");
+                    }
+                }
+            }
+        } else {
+            file_dest = (release_base / dest_rel).string();
+            // Предотвращение ошибки FAT32 EIO при длине пути > 240 символов
+            if (file_dest.size() > 240) {
+                std::string fname = dest_rel.filename().string();
+                std::string base_s = release_base.string();
+                size_t max_parent_len = (240 > (base_s.size() + fname.size() + 2))
+                    ? (240 - base_s.size() - fname.size() - 2) : 10;
+                std::string parent_s = dest_rel.parent_path().generic_string();
+                if (parent_s.size() > max_parent_len) {
+                    parent_s.resize(max_parent_len);
+                    while (!parent_s.empty() && (parent_s.back() == '/' || parent_s.back() == ' ')) parent_s.pop_back();
+                }
+                file_dest = (release_base / std::filesystem::path(parent_s) / fname).string();
+            }
+        }
         if (first_dest.empty()) first_dest = file_dest;
 
         if (file_size == 0) {
             tsnx_ensure_parent_dirs(file_dest.c_str());
             FILE* empty_f = std::fopen(file_dest.c_str(), "wb");
             if (empty_f) std::fclose(empty_f);
+            continue;
+        }
+
+        // Проверка: файл уже полностью скачан
+        std::error_code ec_exist;
+        uint64_t existing_size = std::filesystem::exists(file_dest, ec_exist) ? std::filesystem::file_size(file_dest, ec_exist) : 0;
+        if (existing_size >= file_size) {
+            cumulative_written += file_size;
+            st->written.store(cumulative_written);
+            source->notifyStreamingComplete(true);
+            util::logLine("download: file already fully downloaded: " + file_dest);
             continue;
         }
 
@@ -525,8 +732,6 @@ static void fileCopyWorker(datasource::IDataSource* source,
         uint64_t offset = 0;
         FILE* f = nullptr;
 
-        std::error_code ec_exist;
-        uint64_t existing_size = std::filesystem::exists(file_dest, ec_exist) ? std::filesystem::file_size(file_dest, ec_exist) : 0;
         if (existing_size > 0 && existing_size < file_size) {
             uint64_t resume_offset = (existing_size / kChunk) * kChunk;
             f = std::fopen(file_dest.c_str(), "r+b");
@@ -616,9 +821,35 @@ static void fileCopyWorker(datasource::IDataSource* source,
     }
 
     if (all_ok && !cancel->load()) {
-        st->dest = release_base.string();
+        if (any_mod && !mod_base_dir.empty()) {
+            st->dest = mod_base_dir;
+            util::logLine("download: mod/rusifier installed to: " + mod_base_dir);
+        } else {
+            st->dest = release_base.string();
+        }
         st->done = true;
         st->written.store(total_size);
+
+        if (any_mod) {
+            // Очищаем пустую старую директорию в downloads/ если файлы были мигрированы
+            std::filesystem::path old_mod_dir = downloadsBaseDir() / release_folder;
+            std::error_code ec_rm;
+            try {
+                if (std::filesystem::exists(old_mod_dir, ec_rm)) {
+                    bool has_files = false;
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(old_mod_dir, std::filesystem::directory_options::skip_permission_denied, ec_rm)) {
+                        if (entry.is_regular_file(ec_rm)) {
+                            has_files = true;
+                            break;
+                        }
+                    }
+                    if (!has_files && !ec_rm) {
+                        std::filesystem::remove_all(old_mod_dir, ec_rm);
+                        util::logLine("download: cleaned up old empty mod directory in downloads: " + old_mod_dir.string());
+                    }
+                }
+            } catch (...) {}
+        }
 
         if (!retro_console_id.empty() && config::ConfigManager::instance().getRetroAutoExtract()) {
             for (int idx : target_indices) {
@@ -1945,10 +2176,11 @@ void DownloadManager::handleFileDownload(size_t index,
         const auto sel_files = item.selected_files;
         const bool is_hb = item.is_homebrew;
         const std::string retro_cid = item.retro_console_id;
+        const std::string title_id = item.title_id;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
-                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
+            std::async(std::launch::async, [source, hash, magnet, title, title_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
+                fileCopyWorker(source, hash, magnet, title, title_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +

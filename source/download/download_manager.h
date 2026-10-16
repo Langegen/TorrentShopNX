@@ -120,6 +120,7 @@ struct DownloadItem {
     std::string error_message;
 
     std::string topic_id;
+    std::string title_id;
     std::vector<int> selected_files;
     bool priorities_set = false;
     std::string cover_url;
