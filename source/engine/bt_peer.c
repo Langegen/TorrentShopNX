@@ -655,12 +655,15 @@ static void tcp_speed_opts(int sock) {
 
 void peer_nb_apply_speed_opts(peer_nb *p) {
     if (!p || p->sock < 0) return;
-    int rbuf = 256 * 1024;
+    int rbuf = 512 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-        rbuf = 128 * 1024;
+        rbuf = 384 * 1024;
         if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-            rbuf = 64 * 1024;
-            setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+            rbuf = 256 * 1024;
+            if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+                rbuf = 128 * 1024;
+                setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+            }
         }
     }
     int sbuf = 16 * 1024;

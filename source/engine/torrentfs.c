@@ -1497,7 +1497,7 @@ static int piece_priority(torrentfs *t, int64_t idx) {
 static int nominal_depth(torrentfs *t, sess *s) {
     if (s->nb.choked) return REQ_MIN;
     if (s->timeout_strikes > 0) return REQ_MIN;
-    if (s->expect_ticks <= t->freq) return REQ_INITIAL;   // initial aggressive pipeline
+    if (s->expect_ticks <= t->freq) return (t->st_live <= 2) ? 48 : REQ_INITIAL;   // initial aggressive pipeline
 
     double rate_bps = (s->rate > 0) ? (s->rate / (double)BLOCK_LEN) : 0.0;
     double life_bps = (s->expect_ticks > 0)
@@ -1509,7 +1509,7 @@ static int nominal_depth(torrentfs *t, sess *s) {
     double blocks_per_sec = (!stalling && life_bps > rate_bps) ? life_bps : rate_bps;
 
     int d = (int)(blocks_per_sec * 1.5);
-    int floor_d = stalling ? REQ_MIN : ((t->st_live <= 2) ? 20 : REQ_INITIAL);
+    int floor_d = stalling ? REQ_MIN : ((t->st_live <= 2) ? 48 : REQ_INITIAL);
     if (d < floor_d) d = floor_d;
     if (d > MAX_REQ_PER_CONN) d = MAX_REQ_PER_CONN;
     return d;
