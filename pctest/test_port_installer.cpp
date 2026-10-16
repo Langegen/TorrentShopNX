@@ -13,6 +13,7 @@
 #include "../source/utils/archive_utils.h"
 #include "../source/utils/file_ops.h"
 #include "../source/utils/string_utils.h"
+#include "../source/buffer/ring_buffer.h"
 
 struct Game {
     std::string title;
@@ -442,8 +443,46 @@ int main() {
         std::cout << "  -> PASSED: Real archive extracted, progress callback verified, disk content verified." << std::endl;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // TEST 8: RingBuffer allocation for small forwarder NSPs (< 8MB)
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+        std::cout << "\n[TEST 8] Testing RingBuffer allocation for small forwarder NSPs (< 8MB)..." << std::endl;
+
+        // Forwarder NSPs are typically 200KB - 3MB (e.g. 280,792 bytes + 2MB margin = ~2.26MB)
+        size_t forwarderBufSize = 280792 + 2 * 1024 * 1024; // ~2.26 MB
+        buffer::RingBuffer rb1(forwarderBufSize);
+        TEST_ASSERT(rb1.capacity() >= forwarderBufSize, "RingBuffer capacity must be at least requested forwarder size");
+
+        // Test writing and reading data through the small ring buffer
+        std::vector<uint8_t> dummyData(64 * 1024, 0xAA);
+        size_t written = rb1.write(dummyData.data(), dummyData.size());
+        TEST_ASSERT(written == dummyData.size(), "All data should be written to ring buffer");
+        TEST_ASSERT(rb1.available() == dummyData.size(), "RingBuffer available bytes must match written size");
+
+        std::vector<uint8_t> readBack(dummyData.size(), 0);
+        size_t readCount = rb1.read(readBack.data(), readBack.size());
+        TEST_ASSERT(readCount == dummyData.size(), "Read count must match written size");
+        TEST_ASSERT(readBack == dummyData, "Read data must match written data");
+
+        // Test reinit with various small and large capacities
+        rb1.reinit(512 * 1024); // 512 KB
+        TEST_ASSERT(rb1.capacity() >= 512 * 1024, "RingBuffer reinit(512KB) must succeed without 0 capacity");
+
+        rb1.reinit(1024 * 1024); // 1 MB
+        TEST_ASSERT(rb1.capacity() >= 1024 * 1024, "RingBuffer reinit(1MB) must succeed without 0 capacity");
+
+        rb1.reinit(16 * 1024 * 1024); // 16 MB
+        TEST_ASSERT(rb1.capacity() >= 16 * 1024 * 1024, "RingBuffer reinit(16MB) must succeed");
+
+        rb1.reinit(forwarderBufSize); // back to ~2.26 MB
+        TEST_ASSERT(rb1.capacity() >= forwarderBufSize, "RingBuffer reinit(2.26MB) must succeed after larger buffer");
+
+        std::cout << "  -> PASSED: RingBuffer supports small allocations (< 8MB) without OOM error." << std::endl;
+    }
+
     std::cout << "\n==================================================" << std::endl;
-    std::cout << "   ALL AUTOMATED TESTS PASSED SUCCESSFULLY! (7/7)  " << std::endl;
+    std::cout << "   ALL AUTOMATED TESTS PASSED SUCCESSFULLY! (8/8)  " << std::endl;
     std::cout << "==================================================" << std::endl;
     return 0;
 }

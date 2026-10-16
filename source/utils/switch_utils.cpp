@@ -1,7 +1,6 @@
 #include "switch_utils.h"
 #include "log.h"
 #include "../config/config.h"
-#include <borealis.hpp>
 #include <string>
 #include <chrono>
 #include <cctype>
@@ -9,6 +8,7 @@
 #include <cmath>
 
 #ifdef __SWITCH__
+#include <borealis.hpp>
 #include <switch.h>
 #include <atomic>
 #include <mutex>
@@ -132,8 +132,8 @@ bool isBacklightOff() {
 #endif
 
 void triggerHapticFeedback(int style) {
-    if (!config::ConfigManager::instance().getRumbleEnabled()) return;
 #ifdef __SWITCH__
+    if (!config::ConfigManager::instance().getRumbleEnabled()) return;
     auto platform = brls::Application::getPlatform();
     if (!platform) return;
     auto input = platform->getInputManager();
