@@ -75,7 +75,8 @@ bool DownloadManager::hasActiveDownload(const std::string& topic_id, const std::
     return false;
 }
 
-void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id) {
+void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id,
+                                 const std::string& group_id, const std::string& group_title, const std::string& component_label, const std::string& component_name, int component_type) {
     if (hasActiveDownload(game.topic_id, game.magnet, forced_file_index)) {
         util::logLine("download_ui: game " + game.title + " (topic_id=" + game.topic_id + ") is already in download queue, ignoring duplicate");
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
@@ -96,12 +97,18 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         item.is_homebrew = isHomebrewGame(game);
         item.retro_console_id = retro_console_id;
 
+        item.group_id = !group_id.empty() ? group_id : game.topic_id;
+        item.group_title = !group_title.empty() ? group_title : cleanTitle(game.title);
+        item.component_label = component_label;
+        item.component_name = component_name;
+        item.component_type = component_type;
+
         // Start the download immediately if no transfers are active
         if (!impl_.hasActiveTransfers()) {
             impl_.startDownload(idx);
         }
 
-        util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue, is_homebrew=" + (item.is_homebrew ? "true" : "false") + ", retro=" + retro_console_id);
+        util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue, is_homebrew=" + (item.is_homebrew ? "true" : "false") + ", retro=" + retro_console_id + ", group=" + item.group_id);
     }
     saveDownloads();
 }

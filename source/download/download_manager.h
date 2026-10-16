@@ -148,6 +148,13 @@ struct DownloadItem {
     std::shared_ptr<std::atomic<bool>> port_install_cancel = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<std::atomic<bool>> port_install_pause = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<PortInstallProgressState> port_install_state;
+
+    // Группировка и классификация компонентов раздачи
+    std::string group_id;
+    std::string group_title;
+    std::string component_label;
+    std::string component_name;
+    int component_type = 0; // 0: Base, 1: Update, 2: DLC, 3: Extra/Mod, 4: Port/HB
 };
 
 class DownloadManager {

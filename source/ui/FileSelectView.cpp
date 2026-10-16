@@ -1661,11 +1661,14 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         if (chosen.size() == 1) {
             size_t i = chosen[0];
             std::vector<int> singleSelected = { files_[i].index };
-            std::string itemTitle = cleanTitle(game_.title) + " (" + std::filesystem::path(files_[i].name).filename().string() + ")";
+            std::string filenameOnly = std::filesystem::path(files_[i].name).filename().string();
+            std::string itemTitle = cleanTitle(game_.title) + " (" + filenameOnly + ")";
             Game singleGame = game_;
             singleGame.title = itemTitle;
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
-            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
+            ui::DownloadManager::instance().addDownload(
+                singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), "Файл", filenameOnly, 4);
         } else if (!chosen.empty()) {
             std::vector<int> bundleSelected;
             bundleSelected.reserve(chosen.size());
@@ -1679,7 +1682,9 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             bundleGame.topic_id = game_.topic_id + (retro_console_id_.empty() ? "_hb_bundle" : "_romset");
             int firstIndex = files_[chosen[0]].index;
             std::string firstName = files_[chosen[0]].name;
-            ui::DownloadManager::instance().addDownload(bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_);
+            ui::DownloadManager::instance().addDownload(
+                bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), "Бандл", brls::getStr("app/fileselect/bundle_files", countStr), 4);
         }
     } else {
         std::vector<size_t> packages;
@@ -1715,7 +1720,11 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             Game singleGame = game_;
             singleGame.title = cleanTitle(game_.title);
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
-            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_);
+
+            auto comp = util::classifyDownloadComponent(files_[idx].name, game_.title);
+            ui::DownloadManager::instance().addDownload(
+                singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type);
         }
 
         // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
@@ -1726,21 +1735,21 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 extraIndices.push_back(files_[idx].index);
             }
 
-            std::string extraTitle = cleanTitle(game_.title);
-            if (extraFiles.size() == 1) {
-                extraTitle += " (" + files_[extraFiles[0]].name + ")";
-            } else {
-                std::string countStr = std::to_string(extraFiles.size());
-                extraTitle += " (" + brls::getStr("app/fileselect/extra_files_bundle", countStr) + ")";
+            auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
+            if (extraFiles.size() > 1) {
+                comp.cleanName += " (" + std::to_string(extraFiles.size()) + " ф.)";
             }
 
+            std::string extraTitle = cleanTitle(game_.title);
             Game extraGame = game_;
             extraGame.title = extraTitle;
             extraGame.topic_id = game_.topic_id + "_extras";
             int firstIndex = files_[extraFiles[0]].index;
             std::string forcedName = files_[extraFiles[0]].name;
 
-            ui::DownloadManager::instance().addDownload(extraGame, extraIndices, firstIndex, forcedName, retro_console_id_);
+            ui::DownloadManager::instance().addDownload(
+                extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type);
         }
     }
 
