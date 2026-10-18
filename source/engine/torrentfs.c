@@ -83,25 +83,27 @@
 #ifdef __SWITCH__
 /* Live sessions: with SO_RCVBUF sized to 128 KB, 40 sessions use only ~8 MB
    of BSD buffer pool (leaving 24 MB free for UDP trackers, DHT, and posters).
-   Targeting 30 live sessions with active unchoke upkeep ensures plenty of active uploaders. */
+   Targeting 32 live sessions with active unchoke upkeep ensures plenty of active uploaders. */
 #define MAX_SESS             40
 #define MAX_CONNECTING       16     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
-#define DIAL_STOP_LIVE       30     // baseline live sessions
-#define MIN_ACTIVE_UNCHOKED  14     // keep dialing up to MAX_SESS if unchoked peers are below this
-#define REQ_INITIAL          32     // Fast start on Switch: 32 blocks (512 KB) nominal pipeline
+#define DIAL_STOP_LIVE       32     // baseline live sessions
+#define MIN_ACTIVE_UNCHOKED  16     // keep dialing up to MAX_SESS if unchoked peers are below this
+#define REQ_INITIAL          24     // Initial probe window on Switch: 24 blocks (384 KB)
+#define MAX_REQ_PER_CONN     256    // Up to 4.0 MB in flight per fast session on Switch (matching pipensx MAX_PIPELINE)
 #else
 #define MAX_SESS             64
 #define MAX_CONNECTING       24
 #define DIAL_STOP_LIVE       48
 #define MIN_ACTIVE_UNCHOKED  24
-#define REQ_INITIAL          48     // Fast start on PC: 48 blocks (768 KB)
+#define REQ_INITIAL          32     // Initial probe window on PC: 32 blocks (512 KB)
+#define MAX_REQ_PER_CONN     256    // Up to 4.0 MB in flight per fast session on PC
 #endif
-#define CONNECT_SECS     8      // outbound SYN patience (realistic for Switch Wi-Fi and NAT)
-#define CONNECT_STARVED_SECS 10 // slow-but-alive seeders need 10s floor
-#define CONNECT_RETRY_SECS  12
+#define CONNECT_SECS         2      // 2.0s fast-fail for dead DHT peers (pipensx uses 1.5s; 8-10s starved connection pool)
+#define CONNECT_STARVED_SECS 3      // starved swarm floor
+#define CONNECT_RETRY_SECS   5      // patience for proven peers (peer_ok)
 // Dial budgets: bootstrap burst connects rapidly, upkeep maintains
 #define DIAL_BUDGET_PER_TICK 4
-#define DIAL_BUDGET_BOOTSTRAP 6
+#define DIAL_BUDGET_BOOTSTRAP 8
 #define PREHS_SECS       10     // connected but no handshake yet
 #define IDLE_SECS        130    // handshaked, nothing received (see header)
 #define KEEPALIVE_SECS   60
@@ -110,11 +112,6 @@
 #define MAX_DUP          4      // outstanding copies of one block
 
 #define REQ_RING         512    // per-session outstanding-request capacity
-#ifdef __SWITCH__
-#define MAX_REQ_PER_CONN 96     // Up to 1.5 MB in flight per session on Switch
-#else
-#define MAX_REQ_PER_CONN 200    // Up to 3.2 MB in flight per session on PC
-#endif
 #define REQ_MIN          2
 #define LOOKAHEAD_PIECES 16     // Multi-file lookahead: allow prefetching pieces into upcoming files
 
@@ -1043,8 +1040,8 @@ static bool discovery_wait(torrentfs *t) {
         }
         u64 secs = (armGetSystemTick() - start) / t->freq;
         if (secs >= DISC_INTERVAL_SECS) return true;
-        if (secs >= 30 && t->st_live == 0) return true;
-        if (secs >= DISC_STARVED_SECS && t->st_live < STARVED_LIVE) return true;
+        if (secs >= 30 && t->st_live == 0 && t->peer_count < 32) return true;
+        if (secs >= DISC_STARVED_SECS && t->st_live < STARVED_LIVE && t->peer_count < 32) return true;
     }
     return false;
 }
@@ -1596,20 +1593,20 @@ static int nominal_depth(torrentfs *t, sess *s) {
                      now - s->last_block > (u64)5 * t->freq);
     double blocks_per_sec = (!stalling && life_bps > rate_bps) ? life_bps : rate_bps;
 
-    // Bandwidth-Delay Product: target ~2.0s of throughput buffer
+    // Bandwidth-Delay Product: target ~2.0s of throughput buffer (up to 256 blocks = 4 MB)
     int d = (int)(blocks_per_sec * 2.0);
     int floor_d;
     if (s->timeout_strikes == 2) {
-        floor_d = REQ_INITIAL / 4;
+        floor_d = REQ_MIN * 2;
     } else if (s->timeout_strikes == 1 || stalling) {
         floor_d = REQ_INITIAL / 2;
     } else {
         // Fast-Ramp / Slow-Start:
         // As a peer successfully delivers blocks with 0 strikes, expand the floor
-        // dynamically (like TCP slow start) so fast peers aren't capped at REQ_INITIAL.
+        // rapidly so fast peers are not throttled by RTT.
         int ramp = REQ_INITIAL;
-        if (s->useful >= 8) {
-            int bonus = (int)(s->useful / 4);
+        if (s->useful >= 4) {
+            int bonus = (int)(s->useful);
             if (bonus > (MAX_REQ_PER_CONN - REQ_INITIAL))
                 bonus = MAX_REQ_PER_CONN - REQ_INITIAL;
             ramp += bonus;
@@ -1642,7 +1639,7 @@ static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
         if (sess_has_req(os, (int)piece_idx, b)) {
             total++;
             if (os->timeout_strikes == 0 &&
-                (os->last_block == 0 || now - os->last_block <= (u64)8 * t->freq)) {
+                (os->last_block == 0 || now - os->last_block <= (u64)4 * t->freq)) {
                 healthy++;
             }
         }
@@ -1652,22 +1649,26 @@ static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
 }
 
 // Find the next block of piece idx this session may request.
-// Critical playback-head piece (zone 1 or read_blocked) and Endgame pieces use
-// aggressive Request Stealing (hedging with up to 2-4 duplicate requests) if
-// a block takes longer than DUP_REQ_SECS.
-// Prefetch / background pieces (zone >= 2) disable duplicate requests to conserve
-// network bandwidth, only stealing if a holder peer completely stalled (> 6s).
+// Critical stream-head pieces (current playback head and next piece, or read_blocked)
+// and endgame pieces use aggressive Adaptive Hedging (up to 2-4 duplicate requests)
+// with short hedge timeouts so slow peers never stall the installer.
 static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int zone) {
-    bool is_critical = (zone == 1) || (t->read_blocked_piece == a->idx);
+    bool is_critical = (zone <= 2) || (t->read_blocked_piece == a->idx) ||
+                       (a->idx >= t->playhead_piece && a->idx <= t->playhead_piece + 1);
+    int remaining_blocks = a->nblocks - a->have_cnt;
     bool is_endgame  = (t->file_last_piece - t->playhead_piece <= 4) ||
-                       (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
+                       (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4) ||
+                       (is_critical && remaining_blocks > 0 && remaining_blocks <= 64);
 
-    int max_dup = 1; // Default for normal prefetch / background pieces: NO duplicate requests!
+    int max_dup = 1; // Default for background readahead pieces: 1 request
     if (is_endgame) {
         max_dup = 4;
     } else if (is_critical) {
-        max_dup = 2; // Critical playback head piece: allow stealing/hedging with up to 2 copies
+        max_dup = 2; // Critical stream-head piece: hedge with 2 copies
     }
+
+    // Adaptive hedge timeout: 500ms in endgame/tail of head piece, 1000ms for critical stream head
+    u64 hedge_timeout_ticks = is_endgame ? (t->freq / 2) : ((u64)DUP_REQ_SECS * t->freq);
 
     for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
@@ -1679,9 +1680,8 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
 
         // If duplicate requests are disabled for this piece tier:
         if (max_dup <= 1) {
-            // For background/readahead pieces, only steal if the existing request has been
-            // completely abandoned/stalled (> 6 seconds without delivery).
-            if (now - a->req_ts[b] > (u64)6 * t->freq) {
+            // For background pieces, steal if the existing request has stalled > 2.5s
+            if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000)) {
                 uint8_t actual_r = 0;
                 int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
                 a->req[b] = actual_r;
@@ -1691,13 +1691,12 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
             continue;
         }
 
-        // Critical piece or Endgame: Fast Request Stealing
-        // If the block was requested > DUP_REQ_SECS ago and has not arrived, hedge it!
-        if (now - a->req_ts[b] <= (u64)DUP_REQ_SECS * t->freq) continue;
+        // Critical piece or Endgame: Fast Request Stealing / Adaptive Hedging
+        if (now - a->req_ts[b] <= hedge_timeout_ticks) continue;
         if (r < max_dup) return b;
 
-        // If r reached max_dup, check if existing holders are actually stalled (> 4s)
-        if (now - a->req_ts[b] > (u64)4 * t->freq) {
+        // If r reached max_dup, check if existing holders are actually stalled (> 2.5s)
+        if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000)) {
             uint8_t actual_r = 0;
             int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
             a->req[b] = actual_r;
@@ -1708,47 +1707,53 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     return -1;
 }
 
-// Pick the next (piece, block) this session should request: scan every piece
-// the peer has, in priority order, and take the first requestable block.
-// This is anacrolix's iterUnbiasedPieceRequestOrder + iterUndirtiedChunks:
-// the highest-priority piece receives the whole swarm's in-flight capacity
-// before the next one gets any.
+// Pick the next (piece, block) this session should request:
+// Uses strict_fill_pending_first: existing open/assembling pieces are filled
+// to completion BEFORE opening new pieces far ahead, preventing pieces from
+// finishing out of order and starving the installer.
 static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                             int64_t *out_piece, int *out_block) {
     int64_t fhi = t->file_last_piece + LOOKAHEAD_PIECES;
     if (fhi >= t->meta.piece_count) fhi = t->meta.piece_count - 1;
-    int64_t flo = t->file_first_piece;
+    int64_t flo = (t->playhead_piece > t->file_first_piece) ? t->playhead_piece : t->file_first_piece;
+
     for (int zone = 1; zone <= 5; zone++) {
+        // Pass 1: Complete already active assembly slots first
         for (int64_t i = flo; i <= fhi; i++) {
             if (piece_priority(t, i) != zone) continue;
             if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) continue;
-            uint8_t st = t->status[i];
-            if (st == PIECE_DONE || st == PIECE_WRITING) continue;
-            aq_entry *a;
-            if (st == PIECE_ACTIVE) {
-                a = aq_find(t, i);
-                if (!a) {
-                    engine_log(ENGINE_LOG_WARN,
-                               "[claim] healing orphaned PIECE_ACTIVE for piece %lld",
-                               (long long)i);
-                    a = aq_alloc(t, i);
-                    if (!a) {
-                        mutexLock(&t->lock);
-                        if (t->status[i] == PIECE_ACTIVE) t->status[i] = PIECE_NEEDED;
-                        mutexUnlock(&t->lock);
-                        continue;
-                    }
-                }
-            } else {
-                if (t->n_active_aq >= t->n_aq) continue;
+            if (t->status[i] != PIECE_ACTIVE) continue;
+            aq_entry *a = aq_find(t, i);
+            if (!a) {
+                engine_log(ENGINE_LOG_WARN,
+                           "[claim] healing orphaned PIECE_ACTIVE for piece %lld",
+                           (long long)i);
                 a = aq_alloc(t, i);
                 if (!a) {
+                    mutexLock(&t->lock);
+                    if (t->status[i] == PIECE_ACTIVE) t->status[i] = PIECE_NEEDED;
+                    mutexUnlock(&t->lock);
                     continue;
                 }
-                mutexLock(&t->lock);
-                t->status[i] = PIECE_ACTIVE;
-                mutexUnlock(&t->lock);
             }
+            int b = next_block_in(t, s, a, now, zone);
+            if (b < 0) continue;
+            *out_piece = i;
+            *out_block = b;
+            return true;
+        }
+
+        // Pass 2: Open a new piece if no active piece has available blocks in this zone
+        for (int64_t i = flo; i <= fhi; i++) {
+            if (piece_priority(t, i) != zone) continue;
+            if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) continue;
+            if (t->status[i] != PIECE_NEEDED) continue;
+            if (t->n_active_aq >= t->n_aq) break; // Assembly budget capped
+            aq_entry *a = aq_alloc(t, i);
+            if (!a) continue;
+            mutexLock(&t->lock);
+            t->status[i] = PIECE_ACTIVE;
+            mutexUnlock(&t->lock);
             int b = next_block_in(t, s, a, now, zone);
             if (b < 0) continue;
             *out_piece = i;
@@ -2879,6 +2884,7 @@ static void netloop_main(void *arg) {
                     // Re-announce to trackers only after actual peer evacuation
                     // and at most once per 30s when live == 0 or starving.
                     if ((condemned > 0 || t->starve_round >= 2 || t->st_live == 0) &&
+                        t->peer_count < 64 &&
                         now - t->last_starve_announce > (u64)30 * t->freq) {
                         t->last_starve_announce = now;
                         t->announce_now = true;
@@ -2888,7 +2894,10 @@ static void netloop_main(void *arg) {
 
             // One uTP hole-punch retry per wave, ahead of the regular dials.
             int dial_budget = (t->st_live < 12) ? DIAL_BUDGET_BOOTSTRAP : DIAL_BUDGET_PER_TICK;
-            {
+            if (t->pause_dials_until && now < t->pause_dials_until) {
+                dial_budget = 0;
+            }
+            if (dial_budget > 0) {
                 peer_addr rpa;
                 int rp = take_utp_retry_peer(t, &rpa);
                 if (rp >= 0) {
@@ -3580,7 +3589,7 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
             hb_beat(tfs, HB_READER);
             tsnx_engine_wd_tick(6);
             u64 stall_secs = (now - last_recv_tick) / tfs->freq;
-            if (stall_secs >= 20 && tfs->st_live == 0) {
+            if (stall_secs >= 20 && tfs->st_live == 0 && tfs->peer_count < 32) {
                 tfs->announce_now = true;
             }
             // Self-heal if the needed piece is stuck in PIECE_ACTIVE without an aq slot
