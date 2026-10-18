@@ -81,20 +81,21 @@
 //-----------------------------------------------------------------------------
 
 #ifdef __SWITCH__
-/* Live sessions: with SO_RCVBUF sized to 128 KB, 40 sessions use only ~8 MB
-   of BSD buffer pool (leaving 24 MB free for UDP trackers, DHT, and posters).
-   Targeting 32 live sessions with active unchoke upkeep ensures plenty of active uploaders. */
-#define MAX_SESS             40
-#define MAX_CONNECTING       16     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
-#define DIAL_STOP_LIVE       32     // baseline live sessions
-#define MIN_ACTIVE_UNCHOKED  16     // keep dialing up to MAX_SESS if unchoked peers are below this
-#define REQ_INITIAL          24     // Initial probe window on Switch: 24 blocks (384 KB)
+/* Live sessions: with SO_RCVBUF sized to 128-256 KB, 64 sessions use only ~12-16 MB
+   of BSD buffer pool (leaving 16 MB free for UDP trackers, DHT, and posters).
+   Targeting 48-50 live sessions with active unchoke upkeep ensures 25-35 active uploaders,
+   easily saturating 100 Mbit/s (10-12 MB/s). */
+#define MAX_SESS             64
+#define MAX_CONNECTING       24     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
+#define DIAL_STOP_LIVE       50     // baseline live sessions
+#define MIN_ACTIVE_UNCHOKED  24     // keep dialing up to MAX_SESS if unchoked peers are below this
+#define REQ_INITIAL          32     // Initial probe window on Switch: 32 blocks (512 KB)
 #define MAX_REQ_PER_CONN     256    // Up to 4.0 MB in flight per fast session on Switch (matching pipensx MAX_PIPELINE)
 #else
-#define MAX_SESS             64
-#define MAX_CONNECTING       24
-#define DIAL_STOP_LIVE       48
-#define MIN_ACTIVE_UNCHOKED  24
+#define MAX_SESS             80
+#define MAX_CONNECTING       32
+#define DIAL_STOP_LIVE       64
+#define MIN_ACTIVE_UNCHOKED  32
 #define REQ_INITIAL          32     // Initial probe window on PC: 32 blocks (512 KB)
 #define MAX_REQ_PER_CONN     256    // Up to 4.0 MB in flight per fast session on PC
 #endif
@@ -102,8 +103,8 @@
 #define CONNECT_STARVED_SECS 3      // starved swarm floor
 #define CONNECT_RETRY_SECS   5      // patience for proven peers (peer_ok)
 // Dial budgets: bootstrap burst connects rapidly, upkeep maintains
-#define DIAL_BUDGET_PER_TICK 4
-#define DIAL_BUDGET_BOOTSTRAP 8
+#define DIAL_BUDGET_PER_TICK 6
+#define DIAL_BUDGET_BOOTSTRAP 12
 #define PREHS_SECS       10     // connected but no handshake yet
 #define IDLE_SECS        130    // handshaked, nothing received (see header)
 #define KEEPALIVE_SECS   60
@@ -3250,9 +3251,10 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
         torrentfs_close(t);
         return NULL;
     }
-    // Priority 0x2E: lower than app UI thread (0x2C) and writer thread (0x2D)
-    // so active torrent packet polling never starves 60 FPS UI rendering.
-    if (threadCreate(&t->netloop, netloop_main, t, NULL, 0x40000, 0x2E, -2) == 0) {
+    // Priority 0x2B, one notch above the app default (0x2C): Horizon never preempts
+    // between equal priorities, and CPU-bound threads otherwise starve this loop's
+    // ~100 IPC yield points for seconds at a time (v2's finding).
+    if (threadCreate(&t->netloop, netloop_main, t, NULL, 0x40000, 0x2B, -2) == 0) {
         t->netloop_started = true;
         threadStart(&t->netloop);
     } else {

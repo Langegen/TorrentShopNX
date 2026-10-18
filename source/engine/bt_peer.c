@@ -662,16 +662,17 @@ static void tcp_speed_opts(int sock) {
 void peer_nb_apply_speed_opts(peer_nb *p) {
     if (!p || p->sock < 0) return;
 #ifdef __SWITCH__
-    /* On Horizon OS (libnx), BSD socket buffers are allocated from a fixed 32 MB pool
-       and doubled internally. Sizing SO_RCVBUF to 128 KB uses ~8 MB for 32-40 peers,
-       leaving 24 MB free for UDP trackers, DHT, and HTTP images without ENOBUFS (errno 105).
-       128 KB easily sustains >25 MB/s throughput, fully saturating Switch Wi-Fi and SD card. */
-    int rbuf = 128 * 1024;
+    /* On Horizon OS (libnx), BSD socket buffers are allocated from a fixed 32 MB pool.
+       Try 256 KB first for high throughput on fast peers, falling back gracefully if memory is tight. */
+    int rbuf = 256 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-        rbuf = 96 * 1024;
+        rbuf = 192 * 1024;
         if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-            rbuf = 64 * 1024;
-            setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+            rbuf = 128 * 1024;
+            if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+                rbuf = 64 * 1024;
+                setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+            }
         }
     }
 #else
