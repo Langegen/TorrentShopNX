@@ -165,7 +165,20 @@ void DownloadsView::registerProgressCallback() {
             for (const auto& g : groups_) currentOrder.push_back(g.group_id);
 
             bool orderChanged = (currentOrder != lastOrder_);
-            if (currentRows != lastRows_ || orderChanged) {
+
+            // Check if recycler actually has populated cells
+            bool hasCells = false;
+            brls::Box* contentBox = nullptr;
+            for (auto* child : recycler->getChildren()) {
+                brls::Box* box = dynamic_cast<brls::Box*>(child);
+                if (box) {
+                    contentBox = box;
+                    hasCells = !box->getChildren().empty();
+                    break;
+                }
+            }
+
+            if (currentRows != lastRows_ || orderChanged || (!hasCells && !groups_.empty())) {
                 lastRows_ = currentRows;
                 lastOrder_ = std::move(currentOrder);
                 recycler->reloadData();
@@ -179,14 +192,6 @@ void DownloadsView::registerProgressCallback() {
             }
 
             // Update visible cells in-place to avoid focus jumping
-            brls::Box* contentBox = nullptr;
-            for (auto* child : recycler->getChildren()) {
-                brls::Box* box = dynamic_cast<brls::Box*>(child);
-                if (box) {
-                    contentBox = box;
-                    break;
-                }
-            }
             if (contentBox) {
                 for (auto* cellView : contentBox->getChildren()) {
                     DownloadCell* cell = dynamic_cast<DownloadCell*>(cellView);
@@ -223,9 +228,20 @@ void DownloadsView::willAppear(bool resetState) {
     std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     buildGroups(queue);
+
+    if (groups_.empty()) {
+        emptyLabel->setVisibility(brls::Visibility::VISIBLE);
+        recycler->setVisibility(brls::Visibility::GONE);
+    } else {
+        emptyLabel->setVisibility(brls::Visibility::GONE);
+        recycler->setVisibility(brls::Visibility::VISIBLE);
+    }
+
     lastRows_ = groups_.size();
     lastOrder_.clear();
     for (const auto& g : groups_) lastOrder_.push_back(g.group_id);
+    recycler->reloadData();
+
     if (!groups_.empty()) {
         int validRow = std::clamp(focusedRow_, 0, static_cast<int>(groups_.size()) - 1);
         recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
