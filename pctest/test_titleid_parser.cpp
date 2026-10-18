@@ -97,9 +97,22 @@ int main() {
         assert(c1.label == "MAIN");
 
         auto c2 = util::classifyDownloadComponent("Super Game [0100FE701475A800][v65536].nsp");
-        std::cout << "Test 10b (Patch A800): label=" << c2.label << " name=" << c2.cleanName << std::endl;
+        std::cout << "Test 10b (Patch A800 int ver): label=" << c2.label << " name=" << c2.cleanName << std::endl;
         assert(c2.type == 1);
         assert(c2.label == "UPD");
+        assert(c2.cleanName == "Патч [v65536]");
+
+        auto c2_sem = util::classifyDownloadComponent("Super Game [0100FE701475A800][v131072](v1.2.0).nsp");
+        std::cout << "Test 10b2 (Patch A800 sem ver): label=" << c2_sem.label << " name=" << c2_sem.cleanName << std::endl;
+        assert(c2_sem.type == 1);
+        assert(c2_sem.label == "UPD");
+        assert(c2_sem.cleanName == "Патч v1.2.0");
+
+        auto c2_bracket = util::classifyDownloadComponent("Super Game [0100FE701475A800][1.0.3].nsp");
+        std::cout << "Test 10b3 (Patch A800 bracket ver): label=" << c2_bracket.label << " name=" << c2_bracket.cleanName << std::endl;
+        assert(c2_bracket.type == 1);
+        assert(c2_bracket.label == "UPD");
+        assert(c2_bracket.cleanName == "Патч v1.0.3");
 
         auto c3 = util::classifyDownloadComponent("Super Game [0100FE701475A001][v0].nsp");
         std::cout << "Test 10c (DLC A001): label=" << c3.label << " name=" << c3.cleanName << std::endl;

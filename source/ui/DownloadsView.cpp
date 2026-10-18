@@ -160,8 +160,14 @@ void DownloadsView::registerProgressCallback() {
             }
 
             size_t currentRows = groups_.size();
-            if (currentRows != lastRows_) {
+            std::vector<std::string> currentOrder;
+            currentOrder.reserve(groups_.size());
+            for (const auto& g : groups_) currentOrder.push_back(g.group_id);
+
+            bool orderChanged = (currentOrder != lastOrder_);
+            if (currentRows != lastRows_ || orderChanged) {
                 lastRows_ = currentRows;
+                lastOrder_ = std::move(currentOrder);
                 recycler->reloadData();
                 if (!groups_.empty()) {
                     int validRow = std::clamp(focusedRow_, 0, static_cast<int>(groups_.size()) - 1);
@@ -217,6 +223,9 @@ void DownloadsView::willAppear(bool resetState) {
     std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     buildGroups(queue);
+    lastRows_ = groups_.size();
+    lastOrder_.clear();
+    for (const auto& g : groups_) lastOrder_.push_back(g.group_id);
     if (!groups_.empty()) {
         int validRow = std::clamp(focusedRow_, 0, static_cast<int>(groups_.size()) - 1);
         recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
@@ -589,6 +598,26 @@ static std::string getStatusString(download::DownloadState state) {
     }
 }
 
+static int getGroupSortPriority(download::DownloadState state) {
+    switch (state) {
+        case download::DownloadState::Downloading:
+        case download::DownloadState::StreamPreparing:
+        case download::DownloadState::StreamInstalling:
+        case download::DownloadState::Installing:
+            return 0; // 1. Активные раздачи
+        case download::DownloadState::Paused:
+            return 1; // 2. На паузе
+        case download::DownloadState::Queued:
+            return 2; // 3. В очереди
+        case download::DownloadState::Completed:
+            return 3; // 4. Завершенные
+        case download::DownloadState::Cancelled:
+        case download::DownloadState::Failed:
+        default:
+            return 4; // 5. Отмененные / Ошибки
+    }
+}
+
 struct ComponentBadgeStyle {
     std::string text;
     NVGcolor bg;
@@ -832,6 +861,12 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
             }
         }
     }
+
+    // Sort groups by status priority:
+    // 1. Active (Downloading/Installing) -> 2. Paused -> 3. Queued -> 4. Completed -> 5. Cancelled/Failed
+    std::stable_sort(groups_.begin(), groups_.end(), [](const DownloadGroup& a, const DownloadGroup& b) {
+        return getGroupSortPriority(a.state) < getGroupSortPriority(b.state);
+    });
 }
 
 // DATASOURCE IMPLEMENTATION
@@ -1276,8 +1311,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             auto* nameLabel = dynamic_cast<brls::Label*>(infoBox->getChildren()[1]);
             if (nameLabel) {
                 std::string cname = itm.component_name;
-                if (cname.empty()) {
-                    cname = getDownloadFileName(itm);
+                if (cname.empty() || cname == "Патч") {
+                    std::string fname = getDownloadFileName(itm);
+                    auto comp = util::classifyDownloadComponent(fname, itm.title);
+                    if (!comp.cleanName.empty()) {
+                        cname = comp.cleanName;
+                    } else if (cname.empty()) {
+                        cname = fname;
+                    }
                 }
                 nameLabel->setText(cname);
                 nameLabel->setTextColor(primaryText);

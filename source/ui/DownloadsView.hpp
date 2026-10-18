@@ -94,6 +94,7 @@ public:
     void updateCell(DownloadCell* cell, const DownloadGroup& group, const std::vector<download::DownloadItem>& queue, int row);
     std::vector<DownloadGroup> groups_;
     size_t lastRows_ = 0;
+    std::vector<std::string> lastOrder_;
     int focusedRow_ = 0;
 
 private:

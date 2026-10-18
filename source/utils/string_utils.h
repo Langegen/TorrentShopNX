@@ -118,6 +118,72 @@ namespace util {
         std::string cleanName;     // Clean, human-readable name without repeating the game title or Atmosphere paths
     };
 
+    inline std::string extractPatchVersionString(const std::string& filename) {
+        // 1. First priority: look for semantic version in brackets/parentheses, e.g. (v1.2.0), [v1.2.0], (1.2.0), [1.2.0], (v1.2), etc.
+        for (size_t i = 0; i < filename.size(); ++i) {
+            if (filename[i] == '[' || filename[i] == '(') {
+                char closeChar = (filename[i] == '[') ? ']' : ')';
+                size_t closePos = filename.find(closeChar, i + 1);
+                if (closePos != std::string::npos && closePos - i > 2) {
+                    std::string token = filename.substr(i + 1, closePos - i - 1);
+                    std::string lowerToken = toLowerUtf8(token);
+                    size_t vstart = 0;
+                    if (!lowerToken.empty() && lowerToken[0] == 'v') vstart = 1;
+                    bool hasDot = false;
+                    bool validVer = false;
+                    size_t numDigits = 0;
+                    for (size_t k = vstart; k < token.size(); ++k) {
+                        if (std::isdigit(static_cast<unsigned char>(token[k]))) {
+                            numDigits++;
+                        } else if (token[k] == '.') {
+                            hasDot = true;
+                        } else {
+                            validVer = false;
+                            break;
+                        }
+                    }
+                    if (hasDot && numDigits >= 2) {
+                        validVer = true;
+                    }
+                    if (validVer) {
+                        std::string verNum = (vstart == 1) ? ("v" + token.substr(1)) : ("v" + token);
+                        return verNum;
+                    }
+                }
+            }
+        }
+
+        // 2. Second priority: look for Nintendo internal integer revision: [v65536], (v131072), etc.
+        for (size_t i = 0; i < filename.size(); ++i) {
+            if (filename[i] == '[' || filename[i] == '(') {
+                char closeChar = (filename[i] == '[') ? ']' : ')';
+                size_t closePos = filename.find(closeChar, i + 1);
+                if (closePos != std::string::npos && closePos - i > 2) {
+                    std::string token = filename.substr(i + 1, closePos - i - 1);
+                    if ((token[0] == 'v' || token[0] == 'V') && token.size() > 1) {
+                        bool allDigits = true;
+                        for (size_t k = 1; k < token.size(); ++k) {
+                            if (!std::isdigit(static_cast<unsigned char>(token[k]))) {
+                                allDigits = false;
+                                break;
+                            }
+                        }
+                        if (allDigits) {
+                            try {
+                                unsigned long vval = std::stoul(token.substr(1));
+                                if (vval > 0) {
+                                    return "[" + token + "]";
+                                }
+                            } catch (...) {}
+                        }
+                    }
+                }
+            }
+        }
+
+        return "";
+    }
+
     inline ComponentClassification classifyDownloadComponent(const std::string& raw_name, const std::string& parent_title = "") {
         ComponentClassification res;
         std::string filename = raw_name;
@@ -260,7 +326,8 @@ namespace util {
         if (is_patch_tid) {
             res.type = 1;
             res.label = "UPD";
-            res.cleanName = "Патч";
+            std::string verStr = extractPatchVersionString(filename);
+            res.cleanName = verStr.empty() ? "Патч" : ("Патч " + verStr);
             return res;
         }
 
@@ -273,26 +340,18 @@ namespace util {
             return res;
         }
 
-        // Check for Update / Patch (v > 0)
-        size_t v_pos = filename.find("[v");
-        if (v_pos == std::string::npos) v_pos = filename.find("(v");
-        if (v_pos == std::string::npos) v_pos = filename.find("[V");
-        if (v_pos == std::string::npos) v_pos = filename.find("(V");
-
-        if (v_pos != std::string::npos) {
-            size_t close_bracket = filename.find_first_of("])", v_pos);
-            std::string v_str = (close_bracket != std::string::npos) ? filename.substr(v_pos + 1, close_bracket - v_pos - 1) : "";
-            std::string lower_v = toLowerUtf8(v_str);
-            if (lower_v != "v0" && lower_v != "v0.0" && lower_v != "v1.0.0" && lower_v != "v1.0") {
-                res.type = 1;
-                res.label = "UPD";
-                res.cleanName = "Патч " + v_str;
-                return res;
-            }
+        // Check for Update / Patch by version string or explicit keywords
+        std::string verStr = extractPatchVersionString(filename);
+        if (!verStr.empty()) {
+            res.type = 1;
+            res.label = "UPD";
+            res.cleanName = "Патч " + verStr;
+            return res;
         }
 
-        if (is_patch_tid || lower.find("[upd") != std::string::npos || lower.find("(upd") != std::string::npos ||
-            lower.find("[patch") != std::string::npos || lower.find("(patch") != std::string::npos) {
+        if (lower.find("[upd") != std::string::npos || lower.find("(upd") != std::string::npos ||
+            lower.find("[patch") != std::string::npos || lower.find("(patch") != std::string::npos ||
+            lower.find("_update") != std::string::npos || lower.find(" update ") != std::string::npos) {
             res.type = 1;
             res.label = "UPD";
             res.cleanName = "Патч";
