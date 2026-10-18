@@ -441,6 +441,22 @@ void FileSelectView::onContentAvailable() {
         return true;
     });
 
+    this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
+        if (files_.empty()) {
+            startProbe();
+            return true;
+        }
+        return false;
+    }, true);
+
+    startProbe();
+
+    updateTotalSize();
+    util::logLine("FileSelectView: onContentAvailable end");
+}
+
+void FileSelectView::startProbe() {
+    subtitle->setText("app/fileselect/probing"_i18n);
     auto alive = alive_flag_;
     auto status_running = std::make_shared<std::atomic<bool>>(true);
     brls::async([this, status_running, alive]() {
@@ -556,16 +572,15 @@ void FileSelectView::onContentAvailable() {
                     }
                 }
             } else {
-                subtitle->setText("app/fileselect/meta_error"_i18n);
+                std::string err_prompt = "app/fileselect/meta_error"_i18n;
+                err_prompt += " (Y: " + brls::getStr("app/actions/refresh") + ", START: " + brls::getStr("app/actions/start_download") + ")";
+                subtitle->setText(err_prompt);
                 brls::Application::notify("app/common/error"_i18n + ": " +
                     (err.empty() ? "app/fileselect/timeout_error"_i18n : err));
                 util::logLine("FileSelectView: probe error: " + err);
             }
         });
     });
-
-    updateTotalSize();
-    util::logLine("FileSelectView: onContentAvailable end");
 }
 
 brls::View* FileSelectView::create() { return nullptr; }
@@ -1536,6 +1551,13 @@ void FileSelectView::toggleAllSelection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::startDownloadAndGoToDownloads() {
+    if (files_.empty()) {
+        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+        brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+        brls::Application::popActivity();
+        return;
+    }
+
     std::vector<int> selectedIndices;
     int forcedIndex = -1;
     std::string forcedName;

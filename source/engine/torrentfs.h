@@ -55,6 +55,10 @@ void torrentfs_set_playhead(torrentfs *tfs, int64_t offset);
 // existing sessions and pipelines are left alone.
 void torrentfs_pause(torrentfs *tfs, int on);
 
+// Temporarily suspend dialing new peers for `seconds` to grant network headroom
+// to parallel metadata probes or tracker announces.
+void torrentfs_pause_dials(torrentfs *tfs, int seconds);
+
 // Unblock any in-progress read so playback can shut down.
 void torrentfs_cancel(torrentfs *tfs);
 

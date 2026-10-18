@@ -161,6 +161,7 @@
         "state_error": "错误",
         "peers_with_known": "做种者: {0} · 节点: {1} (已知 {2}) · DHT: {3}",
         "peers_standard": "做种者: {0} · 节点: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} 已完成",
         "stats": "下载中: {0} | 暂停: {1} | 已完成: {2} | 总速度: {3}/s",
         "state_installing": "正在向主机安装...",
         "state_waiting": "等待中",

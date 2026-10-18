@@ -3217,6 +3217,27 @@ bool DownloadManager::startHybridInstall(size_t index) {
                     util::logLine("download: no installable NSP/NSZ/XCI file found in torrent");
                     return false;
                 }
+            } else if (isLocalBackend()) {
+                std::vector<datasource::CustomEngineFileInfo> local_files;
+                std::string probe_err;
+                if (!datasource::CustomEngineClient::instance().probeFiles(item.torrent_hash, item.magnet, "", local_files, &probe_err) || local_files.empty()) {
+                    util::logLine("download: local probeFiles failed in hybrid start: " + probe_err);
+                    return false;
+                }
+                std::vector<torrent::TorrentFileInfo> files;
+                files.reserve(local_files.size());
+                for (const auto& lf : local_files) {
+                    torrent::TorrentFileInfo tf;
+                    tf.index = lf.index;
+                    tf.name = lf.path;
+                    tf.size = lf.size;
+                    tf.wanted = true;
+                    files.push_back(std::move(tf));
+                }
+                if (!chooseInstallFile(files, install_file_index, install_stream_name)) {
+                    util::logLine("download: no installable NSP/NSZ/XCI file found in local torrent");
+                    return false;
+                }
             } else {
                 util::logLine("download: hybrid install requires an explicit file selection in local mode");
                 return false;

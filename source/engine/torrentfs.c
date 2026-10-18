@@ -247,6 +247,7 @@ typedef struct {
     uint8_t *have;      // one byte per block: data present in buf
     uint8_t *req;       // one byte per block: outstanding-request COUNT (capped at 255)
     uint64_t *req_ts;   // when the block was last requested (dup gate: DUP_REQ_SECS)
+    int16_t *peer_from; // pidx of peer that delivered block b (-1 if none)
     int nblocks;
     int have_cnt;
     int next_req;       // scan cursor for the next block to request
@@ -302,6 +303,7 @@ typedef struct {
     int64_t idx;
     int64_t plen;
     uint8_t *buf;
+    int16_t *peer_from;
 } wjob;
 
 struct torrentfs {
@@ -372,7 +374,9 @@ struct torrentfs {
     uint8_t peer_mse_off[TFS_MAX_PEERS];    // peer proved not MSE-capable: plaintext only
     uint8_t peer_src[TFS_MAX_PEERS];     // where the address came from (PEER_SRC_*)
     uint8_t peer_fail_kind[TFS_MAX_PEERS];  // last failure: 1 = connect timeout, 2 = other
+    uint8_t peer_sha_fails[TFS_MAX_PEERS];  // accumulated sha1 check failures from this peer
     u64 peer_next_try[TFS_MAX_PEERS];
+    u64 pause_dials_until;               // temporarily suspend new TCP dials (e.g. metadata probe)
     int peer_count;
     int next_peer;
     int peer_evict_rr;
@@ -750,6 +754,12 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         memset(c->have, 0, (size_t)t->blocks_per_piece);
         memset(c->req, 0, (size_t)t->blocks_per_piece);
         memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
+        if (!c->peer_from) {
+            c->peer_from = malloc((size_t)t->blocks_per_piece * sizeof(int16_t));
+        }
+        if (c->peer_from) {
+            memset(c->peer_from, 0xFF, (size_t)t->blocks_per_piece * sizeof(int16_t));
+        }
         a = c;
         break;
     }
@@ -827,6 +837,7 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
         t->peers[slot]         = peers[i];
         t->peer_fails[slot]    = 0;
         t->peer_fail_kind[slot]= PEER_FAIL_NONE;
+        t->peer_sha_fails[slot]= 0;
         t->peer_next_try[slot] = 0;
         t->peer_ok[slot]       = 0;
         t->peer_src[slot]      = (uint8_t)src;
@@ -1166,13 +1177,44 @@ static void writer_main(void *arg) {
             t->st_sha_fail++;
             set_err(t, "sha fail piece %lld", (long long)j.idx);
             engine_log(ENGINE_LOG_WARN, "[writer] sha fail piece %lld", (long long)j.idx);
+
+            // Peer attribution and corrupt peer banning
+            if (j.peer_from && nb > 0) {
+                u64 now_t = armGetSystemTick();
+                for (int b = 0; b < nb; b++) {
+                    int16_t p = j.peer_from[b];
+                    if (p >= 0 && p < TFS_MAX_PEERS) {
+                        int cnt = 0;
+                        for (int k = 0; k < nb; k++) {
+                            if (j.peer_from[k] == p) cnt++;
+                        }
+                        if (cnt * 4 >= nb || (nb <= 4 && cnt >= 1)) {
+                            t->peer_sha_fails[p]++;
+                            if (t->peer_sha_fails[p] >= 2 || cnt * 2 >= nb) {
+                                t->peer_next_try[p] = now_t + (u64)1800 * t->freq;
+                                t->peer_ok[p] = 0;
+                                engine_log(ENGINE_LOG_WARN,
+                                           "[writer] banning corrupt peer %d for 30m (sha fails: %d, blocks: %d/%d)",
+                                           p, t->peer_sha_fails[p], cnt, nb);
+                            }
+                            for (int k = b + 1; k < nb; k++) {
+                                if (j.peer_from[k] == p) j.peer_from[k] = -1;
+                            }
+                        }
+                    }
+                }
+            }
         }
         t->st_blocks_have -= nb;
         t->writing_idx = -1;
         t->writing_buf = NULL;
         // Return the buffer to a bufferless slot for reuse, or pool it (bounded).
-        for (int i = 0; i < t->n_aq; i++)
-            if (t->aq[i].idx < 0 && !t->aq[i].buf) { t->aq[i].buf = j.buf; j.buf = NULL; break; }
+        for (int i = 0; i < t->n_aq; i++) {
+            if (t->aq[i].idx < 0) {
+                if (!t->aq[i].buf && j.buf) { t->aq[i].buf = j.buf; j.buf = NULL; }
+                if (!t->aq[i].peer_from && j.peer_from) { t->aq[i].peer_from = j.peer_from; j.peer_from = NULL; }
+            }
+        }
         if (j.buf && t->aq_buf_pool_cnt < 4 &&
             (int64_t)t->aq_buf_pool_cnt * t->meta.piece_len < (64LL << 20)) {
             t->aq_buf_pool[t->aq_buf_pool_cnt++] = j.buf;
@@ -1180,6 +1222,7 @@ static void writer_main(void *arg) {
         }
         mutexUnlock(&t->lock);
         if (j.buf) free(j.buf);   // pool full: don't leak
+        if (j.peer_from) free(j.peer_from);
     }
 }
 
@@ -1281,6 +1324,14 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
         release_peer(t, pidx, false, false, PEER_FAIL_NONE);
         return false;
     }
+#ifdef __SWITCH__
+    // Set lean socket buffers immediately upon creation on Switch so connecting sockets
+    // do not consume large chunks from the fixed 32 MB socket pool.
+    int rcvbuf = 32 * 1024;
+    int sndbuf = 16 * 1024;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+#endif
     int fl = fcntl(sock, F_GETFL, 0);
     if (fl >= 0) fcntl(sock, F_SETFL, fl | O_NONBLOCK);
 
@@ -1814,10 +1865,11 @@ static void piece_full(torrentfs *t, aq_entry *a) {
     mutexLock(&t->lock);
     t->status[idx] = PIECE_WRITING;
     int tail = (t->wq_head + t->wq_n) % (AQ_MAX + 2);
-    t->wq[tail] = (wjob){ idx, torrent_piece_len(&t->meta, idx), a->buf };
+    t->wq[tail] = (wjob){ idx, torrent_piece_len(&t->meta, idx), a->buf, a->peer_from };
     t->wq_n++;                 // can't overflow: each job holds one aq buffer
     a->idx = -1;               // slot reset inside the lock: the writer picks
     a->buf = NULL;             // its return slot by these very fields
+    a->peer_from = NULL;
     if (t->n_active_aq > 0) t->n_active_aq--;
     mutexUnlock(&t->lock);
 }
@@ -2153,7 +2205,15 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 t->st_dup_bytes += dlen;   // delivered twice: wasted traffic
                 break;
             }
+            if (matched == 0 && a->req[b] == 0) {
+                // Ghost-block rejection: never accept unsolicited blocks when no request was pending
+                t->st_dup_noring += dlen;
+                break;
+            }
             memcpy(a->buf + begin, pl + 8, dlen);
+            if (a->peer_from && b < a->nblocks) {
+                a->peer_from[b] = (int16_t)s->pidx;
+            }
             // Release so the streaming reader's acquire load of have[] (RAM
             // mode partial reads) can never observe the flag before the data.
             __atomic_store_n(&a->have[b], 1, __ATOMIC_RELEASE);
@@ -2581,6 +2641,12 @@ static void netloop_main(void *arg) {
             for (int i = 0; i < MAX_SESS; i++) {
                 sess *s = &t->S[i];
                 if (!s->active) continue;
+                if (s->pidx >= 0 && t->peer_next_try[s->pidx] > now + (u64)60 * t->freq) {
+                    engine_log(ENGINE_LOG_INFO, "[sess %d] close: peer %d is banned", i, s->pidx);
+                    s->fail_kind = PEER_FAIL_OTHER;
+                    sess_close(t, s, true);
+                    continue;
+                }
                 u64 age = now - (s->connecting ? s->started : s->last_rx);
                 if (s->connecting && s->conn_budget && now > s->conn_budget) {
                     t->st_conn_fail++;
@@ -2843,6 +2909,9 @@ static void netloop_main(void *arg) {
             }
             bool need_dial = (t->st_live < DIAL_STOP_LIVE) ||
                              (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < MAX_SESS);
+            if (t->pause_dials_until && now < t->pause_dials_until) {
+                need_dial = false;
+            }
 
             while (!t->paused && dial_budget > 0 &&
                    need_dial && connecting < MAX_CONNECTING) {
@@ -3192,6 +3261,7 @@ void torrentfs_close(torrentfs *tfs) {
         free(tfs->aq[i].have);
         free(tfs->aq[i].req);
         free(tfs->aq[i].req_ts);
+        free(tfs->aq[i].peer_from);
     }
     for (int i = 0; i < tfs->aq_buf_pool_cnt; i++) {
         free(tfs->aq_buf_pool[i]);
@@ -3442,6 +3512,13 @@ void torrentfs_pause(torrentfs *tfs, int on) {
         tfs->announce_now = true;
     }
     engine_log(ENGINE_LOG_INFO, "[torrentfs] %s", on ? "paused" : "resumed");
+}
+
+void torrentfs_pause_dials(torrentfs *tfs, int seconds) {
+    if (!tfs || seconds <= 0) return;
+    u64 now = armGetSystemTick();
+    tfs->pause_dials_until = now + (u64)seconds * tfs->freq;
+    engine_log(ENGINE_LOG_INFO, "[torrentfs] paused new dials for %d seconds", seconds);
 }
 
 static bool have_piece(torrentfs *t, int64_t idx) {

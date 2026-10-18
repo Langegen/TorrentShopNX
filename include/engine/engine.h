@@ -72,6 +72,9 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
 /* True if a torrent with this info-hash is registered in the engine. */
 bool tsnx_engine_has_torrent(tsnx_engine *eng, const char *hash);
 
+/* Returns the last error recorded by the engine (e.g. metadata probe failure). */
+const char *tsnx_engine_get_last_error(tsnx_engine *eng);
+
 /* Update the cancel flag this torrent's (re)opens poll (may be NULL). */
 void tsnx_engine_set_cancel(tsnx_engine *eng, const char *hash,
                             const volatile bool *flag);

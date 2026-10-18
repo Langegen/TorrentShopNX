@@ -20,7 +20,9 @@
 #include "magnet.h"
 #include "../utils/app_paths.h"
 
-#define MAX_TORRENTS 8
+#define MAX_TORRENTS 32
+
+static char s_last_err[256] = {0};
 
 struct tsnx_torrent {
     char            hash[TSNX_MAX_HASH_LEN + 1];
@@ -319,10 +321,24 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
     }
 
     slot = find_slot(eng);
-    if (!slot) return false;
-    if (torrent_load_magnet_cancel(&slot->meta, magnet_uri, cancel,
-                                   err, sizeof(err)) != 0)
+    if (!slot) {
+        snprintf(s_last_err, sizeof(s_last_err), "no free torrent slots");
         return false;
+    }
+
+    // Briefly pause new peer dials on active downloads to give network & socket headroom
+    // for tracker announcements and metadata fetch of the new torrent.
+    for (int i = 0; i < MAX_TORRENTS; i++) {
+        if (eng->torrents[i].used && eng->torrents[i].fs) {
+            torrentfs_pause_dials(eng->torrents[i].fs, 5);
+        }
+    }
+
+    if (torrent_load_magnet_cancel(&slot->meta, magnet_uri, cancel,
+                                   err, sizeof(err)) != 0) {
+        snprintf(s_last_err, sizeof(s_last_err), "%s", err[0] ? err : "metadata fetch failed");
+        return false;
+    }
     bin_to_hex(slot->meta.info_hash, slot->hash, 40);
     free(slot->source);
     slot->source = strdup(magnet_uri);
@@ -333,6 +349,7 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
                                               TSNX_TORRENTFS_CACHE,
                                               file_index, cancel, err, sizeof(err));
         if (!slot->fs) {
+            snprintf(s_last_err, sizeof(s_last_err), "%s", err[0] ? err : "torrentfs_open failed");
             torrent_unload(&slot->meta);
             free(slot->source);
             slot->source = NULL;
@@ -357,6 +374,11 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
 
 bool tsnx_engine_has_torrent(tsnx_engine *eng, const char *hash) {
     return find_by_hash(eng, hash) != NULL;
+}
+
+const char *tsnx_engine_get_last_error(tsnx_engine *eng) {
+    (void)eng;
+    return s_last_err;
 }
 
 /* Update the cancel flag a torrent's (re)opens poll. The download backend

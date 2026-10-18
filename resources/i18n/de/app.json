@@ -161,6 +161,7 @@
         "state_error": "Fehler",
         "peers_with_known": "Seeds: {0} · Peers: {1} ({2} bekannt) · DHT: {3}",
         "peers_standard": "Seeds: {0} · Peers: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} abgeschlossen",
         "stats": "Laufend: {0} | Pausiert: {1} | Fertig: {2} | Gesamt: {3}/s",
         "state_installing": "Installation auf der Konsole...",
         "state_waiting": "Warten",

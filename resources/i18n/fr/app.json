@@ -161,6 +161,7 @@
         "state_error": "Erreur",
         "peers_with_known": "Sources : {0} · Pairs : {1} ({2} connus) · DHT : {3}",
         "peers_standard": "Sources : {0} · Pairs : {1} · DHT : {2}",
+        "count_badge": "{0}/{1} terminé",
         "stats": "En cours : {0} | En pause : {1} | Terminés : {2} | Vitesse totale : {3}/s",
         "state_installing": "Installation sur la console...",
         "state_waiting": "En attente",

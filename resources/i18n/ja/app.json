@@ -161,6 +161,7 @@
         "state_error": "エラー",
         "peers_with_known": "シード: {0} · ピア: {1} (既知 {2}) · DHT: {3}",
         "peers_standard": "シード: {0} · ピア: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} 完了",
         "stats": "ダウンロード中: {0} | 停止中: {1} | 完了: {2} | 合計速度: {3}/s",
         "state_installing": "本体にインストール中...",
         "state_waiting": "待機中",

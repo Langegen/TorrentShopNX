@@ -496,6 +496,12 @@ int peer_fetch_metadata(peer_addr addr, const uint8_t info_hash[20],
         set_err(err, errlen, e);
         return -1;
     }
+#ifdef __SWITCH__
+    int rcvbuf = 64 * 1024;
+    int sndbuf = 16 * 1024;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+#endif
     set_timeout(sock, 10);
 
     struct sockaddr_in sa = {0};

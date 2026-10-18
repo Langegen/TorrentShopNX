@@ -1005,10 +1005,13 @@ static int announce_http(const char *tracker, const char *hash_enc,
 #define AJOB_PEERS 512
 
 /* At most this many tracker announces run in parallel: every one of them sits
-   in a blocking socket call. 4 threads keep the announce round short without
-   starving BSD sessions or causing thread contention during starvation recovery.
-   The rest of the trackers are announced inline after the parallel wave. */
+   in a blocking socket call. On Switch, 2 parallel threads keep the socket footprint
+   low to prevent BSD session/buffer pool exhaustion when downloading concurrently. */
+#ifdef __SWITCH__
+#define ANNOUNCE_MAX_THREADS 2
+#else
 #define ANNOUNCE_MAX_THREADS 4
+#endif
 
 /* Zero-initialised is a valid Mutex in libnx; the PC compat shim initialises
    lazily. Serialises metadata-fetch announces with torrentfs discovery

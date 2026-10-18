@@ -87,6 +87,7 @@ private:
     void updateRetroSubtitle();
     void updateRowSelectionState(size_t idx);
     void calculateUncompressedSizes();
+    void startProbe();
 };
 
 } // namespace ui
