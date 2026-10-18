@@ -118,7 +118,7 @@
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
 #define RAM_BUDGET       (256LL << 20)
-#define AQ_MAX           32
+#define AQ_MAX           48
 #define AQ_MIN           4
 
 // Streaming window
@@ -1670,9 +1670,11 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     bool is_critical = (zone <= 2) || (t->read_blocked_piece == a->idx) ||
                        (a->idx >= t->playhead_piece && a->idx <= t->playhead_piece + 1);
     int remaining_blocks = a->nblocks - a->have_cnt;
+    int tail_threshold = a->nblocks / 4;
+    if (tail_threshold < 64) tail_threshold = 64;
     bool is_endgame  = (t->file_last_piece - t->playhead_piece <= 4) ||
                        (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4) ||
-                       (is_critical && remaining_blocks > 0 && remaining_blocks <= 64);
+                       (is_critical && remaining_blocks > 0 && remaining_blocks <= tail_threshold);
 
     int max_dup = 1; // Default for background readahead pieces: 1 request
     if (is_endgame || is_critical) {
@@ -1680,7 +1682,7 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     }
 
     // Adaptive hedge timeout: 500ms in endgame/tail of head piece, 1000ms for critical stream head
-    u64 hedge_timeout_ticks = (is_endgame || (is_critical && remaining_blocks <= 64))
+    u64 hedge_timeout_ticks = (is_endgame || (is_critical && remaining_blocks <= tail_threshold))
                               ? (t->freq / 2) : ((u64)DUP_REQ_SECS * t->freq);
 
     for (int k = 0; k < a->nblocks; k++) {
