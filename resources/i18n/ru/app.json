@@ -135,9 +135,12 @@
     "downloads": {
         "title": "Загрузки",
         "empty": "Нет активных или завершенных загрузок.",
+        "already_in_queue": "Эта раздача уже добавлена в загрузки",
         "state_waiting": "Ожидание",
         "state_queued": "В очереди",
         "state_downloading": "Загрузка",
+        "state_resolving_meta": "Получение метаданных...",
+        "state_connecting_peers": "Подключение к пирам...",
         "state_preparing": "Подготовка к установке",
         "state_installing": "Установка",
         "state_no_peers": "Установка: нет пиров",
@@ -153,16 +156,17 @@
         "installed": "Установлено",
         "release_completed": "Все файлы раздачи скачаны: {0}",
         "unknown_error": "Неизвестная ошибка",
-        "peers_with_known": "Сиды: {0} · Пиры: {1} ({2} изв.) · DHT: {3}",
+        "peers_with_known": "Сиды: {0} · Пиры: {1} (всего {2}) · DHT: {3}",
         "peers_standard": "Сиды: {0} · Пиры: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} готово",
         "action_delete": "Удалить из списка",
         "action_open_folder": "Открыть папку",
         "action_resume": "Возобновить",
         "action_pause": "Приостановить",
         "action_cancel": "Отменить загрузку",
         "action_turn_off_backlight": "Отключить подсветку",
-        "action_turn_off_backlight_hint": "L - Пиры  [-] Отключить подсветку",
-        "downloads_header_hints": "L - Пиры  [-] Отключить подсветку",
+        "action_turn_off_backlight_hint": "\uE0E4 Пиры   \uE0F0 Отключить подсветку",
+        "downloads_header_hints": "\uE0E4 Пиры   \uE0F0 Отключить подсветку",
         "cancel_install": "Отмена",
         "confirm_delete_all_msg": "Удалить все торренты?",
         "confirm_delete_msg": "Удалить этот торрент?",
@@ -209,7 +213,13 @@
         "qr_no_url": "Для этой игры нет ссылки на раздачу",
         "download_rom": "Скачать РОМ",
         "compilation_badge": "СБОРНИК / РОМСЕТ",
+        "auto_install_btn": "Автоматическая установка",
+        "auto_install_probing": "Анализ файлов порта...",
+        "auto_install_probe_failed": "Не удалось получить список файлов раздачи",
+        "auto_install_not_port": "Раздача не опознана как порт хоумбрю",
+        "choose_version_title": "Выберите версию для установки",
         "select_files_btn": "Выбрать файлы",
+        "download_full_btn": "Скачать полностью",
         "download_romset_btn": "Скачать ромсет",
         "download": "Скачать",
         "favorite": "В избранное",
@@ -391,7 +401,8 @@
         "uptodate": "Актуально",
         "version": "Версия: {0}",
         "version_with_app": "Версия: {0} ({1})",
-        "view_in_catalog": "Открыть в каталоге"
+        "view_in_catalog": "Открыть в каталоге",
+        "release_completed": "Все файлы раздачи скачаны: {0}"
     },
     "filter": {
         "title": "Фильтры и сортировка",
@@ -437,7 +448,8 @@
         "sort_downloads_desc": "По загрузкам (сначала больше)",
         "sort_downloads_asc": "По загрузкам (сначала меньше)",
         "sort_date_desc": "По дате (сначала новые)",
-        "sort_date_asc": "По дате (сначала старые)"
+        "sort_date_asc": "По дате (сначала старые)",
+        "lang_ara": "С арабским языком (ARA)"
     },
     "genres": {
         "action": "Экшен",
@@ -505,6 +517,8 @@
         "force_app_update_confirm": "Скачать и принудительно переустановить приложение ({0})?",
         "force_app_update_fetch": "Получение информации о релизе...",
         "cache_thumbnails": "Кешировать миниатюры обложек",
+        "sound_effects": "Звуковые эффекты",
+        "joycon_rumble": "Вибрация Joy-Con",
         "keep_awake": "Предотвращать сон при скачивании",
         "backlight_timeout": "Отключать подсветку во время загрузки",
         "backlight_manual": "Вручную",
@@ -689,7 +703,8 @@
         "update_success": "Обновление успешно применилось",
         "version_str": "Версия {0}",
         "retro_update_catalogs_cached": "Кэш: {0} игр (A - обновить)",
-        "retro_update_catalogs_empty": "Нажмите A для обновления"
+        "retro_update_catalogs_empty": "Нажмите A для обновления",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "Режим апплета не поддерживается",

@@ -15,6 +15,9 @@
 #include "../utils/app_paths.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/archive_utils.h"
+#include "../utils/file_ops.h"
+#include "../datasource/file_data_source.h"
+#include "../installer/PortInstallPlanner.hpp"
 #include "../GameData.hpp"
 
 #include <engine/engine.h>
@@ -304,8 +307,8 @@ static std::string extractReleaseFolderName(const std::string& title) {
         }
     }
     std::string safe = sanitizePathComponent(name);
-    if (safe.size() > 100) {
-        safe.resize(100);
+    if (safe.size() > 48) {
+        safe.resize(48);
         while (!safe.empty() && (safe.back() == ' ' || safe.back() == '.' || safe.back() == '-' || safe.back() == '_')) {
             safe.pop_back();
         }
@@ -338,17 +341,163 @@ static std::filesystem::path sanitizeTorrentPath(const std::string& raw) {
     return out;
 }
 
-// Фоновое копирование не-игровых файлов и Homebrew/портов: открывает стрим через источник данных,
-// последовательно читает и пишет в downloads/<имя_раздачи>/ с сохранением иерархии раздачи.
+static inline int fseek64(FILE* f, int64_t offset, int origin) {
+#if defined(_WIN32)
+    return _fseeki64(f, static_cast<__int64>(offset), origin);
+#else
+    return fseeko(f, static_cast<off_t>(offset), origin);
+#endif
+}
+
+// Проверяет, является ли относительный путь файла модом/русификатором Atmosphere (LayeredFS).
+// Если да, возвращает true и заполняет out_dest правильным целевым путём:
+// на Switch: sdmc:/atmosphere/contents/<title_id>/...
+// на PC: ./atmosphere/contents/<title_id>/...
+static bool resolveAtmosphereModDest(const std::string& rel_path,
+                                    const std::string& effective_tid,
+                                    std::string& out_dest) {
+    std::string norm = rel_path;
+    for (char& c : norm) {
+        if (c == '\\') c = '/';
+    }
+    while (!norm.empty() && norm.front() == '/') norm.erase(norm.begin());
+
+    std::string lower = norm;
+    for (char& c : lower) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    auto is16Hex = [](const std::string& s) -> bool {
+        if (s.size() != 16) return false;
+        for (char c : s) {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // 1. Поиск "atmosphere/" в пути (например "Russian Text + Voice Mod (27.11.2024)/atmosphere/contents/0100.../romfs/...")
+    size_t atmo_pos = lower.find("atmosphere/");
+    if (atmo_pos != std::string::npos) {
+        std::string atmo_sub = norm.substr(atmo_pos);
+        std::string atmo_sub_lower = lower.substr(atmo_pos);
+        // В старых модах использовался каталог atmosphere/titles/, заменяем на modern contents/
+        if (atmo_sub_lower.rfind("atmosphere/titles/", 0) == 0) {
+            atmo_sub = "atmosphere/contents/" + atmo_sub.substr(18);
+        }
+#ifdef __SWITCH__
+        out_dest = "sdmc:/" + atmo_sub;
+#else
+        out_dest = "./" + atmo_sub;
+#endif
+        return true;
+    }
+
+    // 2. Поиск "contents/<16-hex-tid>/" или "titles/<16-hex-tid>/"
+    for (const char* prefix : {"contents/", "titles/"}) {
+        size_t p = lower.find(prefix);
+        if (p != std::string::npos) {
+            size_t plen = std::strlen(prefix);
+            if (p + plen + 16 <= lower.size()) {
+                std::string tid_cand = norm.substr(p + plen, 16);
+                if (is16Hex(tid_cand)) {
+                    for (char& c : tid_cand) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    std::string rest;
+                    if (p + plen + 16 < norm.size() && norm[p + plen + 16] == '/') {
+                        rest = norm.substr(p + plen + 17);
+                    }
+                    std::string atmo_path = "atmosphere/contents/" + tid_cand + (rest.empty() ? "" : ("/" + rest));
+#ifdef __SWITCH__
+                    out_dest = "sdmc:/" + atmo_path;
+#else
+                    out_dest = "./" + atmo_path;
+#endif
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 3. Поиск "<16-hex-tid>/romfs/", "<16-hex-tid>/exefs/" или "<16-hex-tid>/cheats/"
+    for (const char* marker : {"/romfs/", "/exefs/", "/cheats/"}) {
+        size_t m = lower.find(marker);
+        if (m != std::string::npos && m >= 16) {
+            size_t seg_start = m - 16;
+            if (seg_start == 0 || norm[seg_start - 1] == '/') {
+                std::string tid_cand = norm.substr(seg_start, 16);
+                if (is16Hex(tid_cand)) {
+                    for (char& c : tid_cand) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    std::string rest = norm.substr(m + 1); // "romfs/..."
+                    std::string atmo_path = "atmosphere/contents/" + tid_cand + "/" + rest;
+#ifdef __SWITCH__
+                    out_dest = "sdmc:/" + atmo_path;
+#else
+                    out_dest = "./" + atmo_path;
+#endif
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 3b. Поиск сегмента 16-hex Title ID (например "0100FE701475A000/...")
+    for (size_t i = 0; i + 17 <= norm.size(); ++i) {
+        if ((i == 0 || norm[i - 1] == '/') && norm[i + 16] == '/') {
+            std::string tid_cand = norm.substr(i, 16);
+            if (is16Hex(tid_cand) && (tid_cand.rfind("0100", 0) == 0 || tid_cand.rfind("010", 0) == 0)) {
+                for (char& c : tid_cand) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                std::string rest = norm.substr(i + 17);
+                std::string atmo_path = "atmosphere/contents/" + tid_cand + (rest.empty() ? "" : ("/" + rest));
+#ifdef __SWITCH__
+                out_dest = "sdmc:/" + atmo_path;
+#else
+                out_dest = "./" + atmo_path;
+#endif
+                return true;
+            }
+        }
+    }
+
+    // 4. Наличие папки "romfs/", "exefs/" или "cheats/" при известном TitleID игры
+    if (is16Hex(effective_tid)) {
+        for (const char* marker : {"romfs/", "exefs/", "cheats/"}) {
+            size_t m = lower.find(marker);
+            while (m != std::string::npos) {
+                if (m == 0 || norm[m - 1] == '/') {
+                    std::string rest = norm.substr(m);
+                    std::string tid_upper = effective_tid;
+                    for (char& c : tid_upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    std::string atmo_path = "atmosphere/contents/" + tid_upper + "/" + rest;
+#ifdef __SWITCH__
+                    out_dest = "sdmc:/" + atmo_path;
+#else
+                    out_dest = "./" + atmo_path;
+#endif
+                    return true;
+                }
+                m = lower.find(marker, m + 1);
+            }
+        }
+    }
+
+    return false;
+}
+
+// Фоновое копирование не-игровых файлов, модов/русификаторов и Homebrew/портов.
+// Моды и русификаторы Nintendo Switch устанавливаются напрямую в atmosphere/contents/<title_id>/;
+// остальные файлы сохраняются в downloads/<имя_раздачи>/ с контролем длины пути.
 static void fileCopyWorker(datasource::IDataSource* source,
                            const std::string& hash,
                            const std::string& magnet,
                            const std::string& release_title,
+                           const std::string& title_id,
                            int file_index,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
                            const std::string& retro_console_id,
                            const std::shared_ptr<std::atomic<bool>>& cancel,
+                           const std::shared_ptr<std::atomic<bool>>& pause,
                            const std::shared_ptr<FileDownloadState>& st) {
     if (!source || hash.empty()) {
         st->failed = true;
@@ -364,6 +513,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
     }
 
     if (!tsnx_engine_has_torrent(eng, hash.c_str())) {
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = brls::getStr("app/downloads/state_resolving_meta");
+        }
         char out_hash[TSNX_MAX_HASH_LEN + 1] = {0};
         if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
                                        reinterpret_cast<const volatile bool*>(cancel.get()),
@@ -462,8 +615,39 @@ static void fileCopyWorker(datasource::IDataSource* source,
     std::string first_dest;
     bool all_ok = true;
 
+    std::string effective_tid = title_id;
+    if (effective_tid.empty()) {
+        for (int i = 0; i < n; ++i) {
+            uint64_t tid = util::parseTitleIdFromFileName(files[i].path);
+            if (tid != 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+                effective_tid = buf;
+                break;
+            }
+        }
+    }
+    if (effective_tid.empty()) {
+        uint64_t tid = util::parseTitleIdFromFileName(release_title);
+        if (tid != 0) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+            effective_tid = buf;
+        }
+    }
+
+    bool any_mod = false;
+    std::string mod_base_dir;
+
     for (int idx : target_indices) {
-        if (cancel->load()) {
+        if (cancel->load() || g_appExiting.load()) {
+            all_ok = false;
+            break;
+        }
+        while (pause && pause->load() && !cancel->load() && !g_appExiting.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (cancel->load() || g_appExiting.load()) {
             all_ok = false;
             break;
         }
@@ -472,7 +656,61 @@ static void fileCopyWorker(datasource::IDataSource* source,
         uint64_t file_size = static_cast<uint64_t>(files[idx].size);
         std::string rel_path = files[idx].path;
         std::filesystem::path dest_rel = resolveDestRel(rel_path);
-        std::string file_dest = (release_base / dest_rel).string();
+
+        bool is_archive = util::isArchiveFile(rel_path);
+        bool is_mod = false;
+        std::string mod_dest;
+        if (retro_console_id.empty() && !is_homebrew && !is_archive) {
+            is_mod = resolveAtmosphereModDest(rel_path, effective_tid, mod_dest);
+        }
+
+        std::string file_dest;
+        if (is_mod) {
+            file_dest = mod_dest;
+            any_mod = true;
+            if (mod_base_dir.empty()) {
+                std::string tid_val = effective_tid.empty() ? "0100000000000000" : effective_tid;
+#ifdef __SWITCH__
+                mod_base_dir = "sdmc:/atmosphere/contents/" + tid_val;
+#else
+                mod_base_dir = "./atmosphere/contents/" + tid_val;
+#endif
+            }
+
+            // Миграция ранее частично/полностью скачанных файлов из downloads/ в atmosphere/contents/
+            std::filesystem::path old_loc = release_base / dest_rel;
+            std::error_code ec_old;
+            if (std::filesystem::exists(old_loc, ec_old) && !std::filesystem::is_directory(old_loc, ec_old)) {
+                uint64_t old_sz = std::filesystem::file_size(old_loc, ec_old);
+                if (old_sz > 0 && !std::filesystem::exists(file_dest, ec_old)) {
+                    tsnx_ensure_parent_dirs(file_dest.c_str());
+                    std::error_code ec_mv;
+                    std::filesystem::rename(old_loc, file_dest, ec_mv);
+                    if (ec_mv) {
+                        std::filesystem::copy_file(old_loc, file_dest, std::filesystem::copy_options::overwrite_existing, ec_mv);
+                        if (!ec_mv) std::filesystem::remove(old_loc, ec_mv);
+                    }
+                    if (!ec_mv) {
+                        util::logLine("download: migrated existing mod file from " + old_loc.string() + " -> " + file_dest + " (" + std::to_string(old_sz) + " bytes)");
+                    }
+                }
+            }
+        } else {
+            file_dest = (release_base / dest_rel).string();
+            // Предотвращение ошибки FAT32 EIO при длине пути > 240 символов
+            if (file_dest.size() > 240) {
+                std::string fname = dest_rel.filename().string();
+                std::string base_s = release_base.string();
+                size_t max_parent_len = (240 > (base_s.size() + fname.size() + 2))
+                    ? (240 - base_s.size() - fname.size() - 2) : 10;
+                std::string parent_s = dest_rel.parent_path().generic_string();
+                if (parent_s.size() > max_parent_len) {
+                    parent_s.resize(max_parent_len);
+                    while (!parent_s.empty() && (parent_s.back() == '/' || parent_s.back() == ' ')) parent_s.pop_back();
+                }
+                file_dest = (release_base / std::filesystem::path(parent_s) / fname).string();
+            }
+        }
         if (first_dest.empty()) first_dest = file_dest;
 
         if (file_size == 0) {
@@ -482,6 +720,21 @@ static void fileCopyWorker(datasource::IDataSource* source,
             continue;
         }
 
+        // Проверка: файл уже полностью скачан
+        std::error_code ec_exist;
+        uint64_t existing_size = std::filesystem::exists(file_dest, ec_exist) ? std::filesystem::file_size(file_dest, ec_exist) : 0;
+        if (existing_size >= file_size) {
+            cumulative_written += file_size;
+            st->written.store(cumulative_written);
+            source->notifyStreamingComplete(true);
+            util::logLine("download: file already fully downloaded: " + file_dest);
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = brls::getStr("app/downloads/state_connecting_peers");
+        }
         source->setSchedulerEnabled(true);
         source->setCancelFlag(cancel.get());
         if (cancel->load() || !source->open(hash, idx)) {
@@ -492,7 +745,29 @@ static void fileCopyWorker(datasource::IDataSource* source,
         }
 
         tsnx_ensure_parent_dirs(file_dest.c_str());
-        FILE* f = std::fopen(file_dest.c_str(), "wb");
+
+        // Horizon OS micro-SD cluster alignment: 2 MB write chunks with dedicated stream buffer
+        static constexpr size_t kChunk = 2 * 1024 * 1024;
+        uint64_t offset = 0;
+        FILE* f = nullptr;
+
+        if (existing_size > 0 && existing_size < file_size) {
+            uint64_t resume_offset = (existing_size / kChunk) * kChunk;
+            f = std::fopen(file_dest.c_str(), "r+b");
+            if (f && fseek64(f, static_cast<int64_t>(resume_offset), SEEK_SET) == 0) {
+                offset = resume_offset;
+                cumulative_written += resume_offset;
+                st->written.store(cumulative_written);
+                util::logLine("download: resuming partial file at offset=" + std::to_string(offset) + " / " + std::to_string(file_size));
+            } else {
+                if (f) std::fclose(f);
+                f = nullptr;
+                offset = 0;
+            }
+        }
+        if (!f) {
+            f = std::fopen(file_dest.c_str(), "wb");
+        }
         if (!f) {
             st->failed = true;
             st->error = "cannot create destination file: " + file_dest +
@@ -503,22 +778,32 @@ static void fileCopyWorker(datasource::IDataSource* source,
             break;
         }
 
-        // Horizon OS micro-SD cluster alignment: 2 MB write chunks with dedicated stream buffer
-        static constexpr size_t kChunk = 2 * 1024 * 1024;
         std::vector<unsigned char> fbuf(kChunk);
         std::setvbuf(f, reinterpret_cast<char*>(fbuf.data()), _IOFBF, kChunk);
 
         std::vector<unsigned char> buf(kChunk);
-        uint64_t offset = 0;
         bool file_ok = true;
 
-        while (offset < file_size && !cancel->load()) {
+        while (offset < file_size && !cancel->load() && !g_appExiting.load()) {
+            if (pause && pause->load()) {
+                std::fflush(f);
+                while (pause->load() && !cancel->load() && !g_appExiting.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                if (cancel->load() || g_appExiting.load()) break;
+            }
+
             size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
             size_t got = source->read(offset, buf.data(), want);
             if (got == 0) {
-                if (cancel->load()) break;
+                if (cancel->load() || g_appExiting.load()) break;
+                if (pause && pause->load()) continue;
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 continue;
+            }
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                if (!st->stage_label.empty()) st->stage_label.clear();
             }
             if (std::fwrite(buf.data(), 1, got, f) != got) {
                 file_ok = false;
@@ -535,23 +820,110 @@ static void fileCopyWorker(datasource::IDataSource* source,
             source->notifyStreamingComplete(true);
         } else {
             all_ok = false;
-            st->failed = true;
-            if (st->error.empty()) st->error = "download cancelled";
-            std::error_code e2;
-            std::filesystem::remove(file_dest, e2);
+            if (cancel->load() || g_appExiting.load()) {
+                st->failed = true;
+                st->error = "download cancelled";
+                std::error_code e2;
+                std::filesystem::remove(file_dest, e2);
+            } else if (!file_ok) {
+                st->failed = true;
+                if (st->error.empty()) st->error = "disk write failed";
+                std::error_code e2;
+                std::filesystem::remove(file_dest, e2);
+            } else {
+                st->failed = true;
+                if (st->error.empty()) st->error = "download failed";
+            }
             source->notifyStreamingComplete(false);
             break;
         }
     }
 
     if (all_ok && !cancel->load()) {
-        st->dest = release_base.string();
-        st->done = true;
-        st->written.store(total_size);
+        // 1. Автораспаковка Switch модов/русификаторов из архивов (.zip, .7z, .rar)
+        if (retro_console_id.empty() && !is_homebrew) {
+            for (int idx : target_indices) {
+                if (cancel->load() || g_appExiting.load()) break;
+                if (idx < 0 || idx >= n) continue;
+                std::string rel_path = files[idx].path;
+                std::filesystem::path dest_rel = resolveDestRel(rel_path);
+                std::string file_dest = (release_base / dest_rel).string();
 
+                if (util::isArchiveFile(file_dest)) {
+                    std::string archive_tid = effective_tid;
+                    bool is_mod_arch = false;
+
+                    // Сканируем заголовки архива на наличие LayeredFS файлов
+                    util::iterateArchiveEntries(file_dest, [&](const std::string& entryName, bool isDir) -> bool {
+                        (void)isDir;
+                        std::string test_dest;
+                        if (resolveAtmosphereModDest(entryName, archive_tid, test_dest)) {
+                            is_mod_arch = true;
+                            if (archive_tid.empty()) {
+                                size_t p = test_dest.find("contents/");
+                                if (p != std::string::npos && p + 9 + 16 <= test_dest.size()) {
+                                    archive_tid = test_dest.substr(p + 9, 16);
+                                }
+                            }
+                            return false; // Нашли мод-файл, прекращаем сканирование
+                        }
+                        return true;
+                    });
+
+                    if (is_mod_arch) {
+                        if (archive_tid.empty()) {
+                            uint64_t tid = util::parseTitleIdFromFileName(file_dest);
+                            if (tid == 0) tid = util::parseTitleIdFromFileName(release_title);
+                            if (tid != 0) {
+                                char buf[32];
+                                std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+                                archive_tid = buf;
+                            }
+                        }
+
+                        if (!archive_tid.empty()) {
+                            {
+                                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                                st->stage_label = brls::getStr("app/downloads/state_installing");
+                            }
+
+                            auto modPathTransform = [&](const std::string& entryName, bool isDir) -> std::string {
+                                (void)isDir;
+                                std::string dest;
+                                if (resolveAtmosphereModDest(entryName, archive_tid, dest)) {
+                                    return dest;
+                                }
+                                return ""; // Пропускаем файлы, не относящиеся к моду
+                            };
+
+                            std::string outErr;
+                            util::logLine("download: auto-extracting Switch mod archive: " + file_dest + " -> atmosphere/contents/" + archive_tid);
+                            bool extractOk = util::extractArchive(file_dest, "", nullptr, cancel, outErr, modPathTransform);
+                            if (extractOk) {
+                                util::logLine("download: Switch mod auto-extract succeeded for " + file_dest);
+                                std::error_code ec_rm;
+                                std::filesystem::remove(file_dest, ec_rm);
+                                any_mod = true;
+#ifdef __SWITCH__
+                                mod_base_dir = "sdmc:/atmosphere/contents/" + archive_tid;
+#else
+                                mod_base_dir = "./atmosphere/contents/" + archive_tid;
+#endif
+                            } else {
+                                util::logLine("download: Switch mod auto-extract failed: " + outErr);
+                            }
+                        } else {
+                            util::logLine("download: Switch mod archive detected, but TitleID is unknown: " + file_dest);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Автораспаковка ретро-ромов
         if (!retro_console_id.empty() && config::ConfigManager::instance().getRetroAutoExtract()) {
             for (int idx : target_indices) {
-                if (cancel->load()) break;
+                if (cancel->load() || g_appExiting.load()) break;
                 if (idx < 0 || idx >= n) continue;
                 std::string rel_path = files[idx].path;
                 std::filesystem::path dest_rel = resolveDestRel(rel_path);
@@ -572,9 +944,520 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 }
             }
         }
+
+        if (any_mod && !mod_base_dir.empty()) {
+            st->dest = mod_base_dir;
+            util::logLine("download: mod/rusifier installed to: " + mod_base_dir);
+        } else {
+            st->dest = release_base.string();
+        }
+        st->done = true;
+        st->written.store(total_size);
+
+        if (any_mod) {
+            // Очищаем пустую старую директорию в downloads/ если файлы были мигрированы или архивы распакованы
+            std::filesystem::path old_mod_dir = downloadsBaseDir() / release_folder;
+            std::error_code ec_rm;
+            try {
+                if (std::filesystem::exists(old_mod_dir, ec_rm)) {
+                    bool has_files = false;
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(old_mod_dir, std::filesystem::directory_options::skip_permission_denied, ec_rm)) {
+                        if (entry.is_regular_file(ec_rm)) {
+                            has_files = true;
+                            break;
+                        }
+                    }
+                    if (!has_files && !ec_rm) {
+                        std::filesystem::remove_all(old_mod_dir, ec_rm);
+                        util::logLine("download: cleaned up old empty mod directory in downloads: " + old_mod_dir.string());
+                    }
+                }
+            } catch (...) {}
+        }
     } else {
         st->failed = true;
         if (st->error.empty()) st->error = "download cancelled";
+    }
+}
+
+#ifdef __SWITCH__
+static std::string resolvePlatformPath(const std::string& path) {
+    return path;
+}
+#else
+static std::string resolvePlatformPath(const std::string& path) {
+    if (path.rfind("sdmc:/", 0) == 0) {
+        return "./" + path.substr(6);
+    }
+    return path;
+}
+#endif
+
+static void ensureParentDirs(const std::string& filePath) {
+    size_t lastSlash = filePath.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+        util::safeCreateDirectories(filePath.substr(0, lastSlash));
+    }
+}
+
+// Фоновый воркер автоматической установки портов хоумбрю:
+// 1. Скачивание архивов раздачи во временную папку cache/tmp/
+// 2. Распаковка архивов на карту памяти (sdmc:/) с отображением живого прогресса каждого файла
+// 3. Удаление временных архивов для экономии места на карте памяти
+// 4. Скачивание loose/overlay файлов (обновлений .nro, русификаторов) в sdmc:/switch/<game>/
+// 5. Скачивание и установка forwarder NSP через HybridNspInstaller в ОС Switch
+static void portInstallWorker(datasource::IDataSource* source,
+                              const std::string& hash,
+                              const std::string& magnet,
+                              const std::string& release_title,
+                              std::shared_ptr<installer::PortInstallPlan> plan,
+                              int variant_index,
+                              const std::shared_ptr<std::atomic<bool>>& cancel,
+                              const std::shared_ptr<std::atomic<bool>>& pause,
+                              const std::shared_ptr<PortInstallProgressState>& st) {
+    if (!source || hash.empty()) {
+        st->failed = true;
+        st->error = "Invalid port installation request";
+        return;
+    }
+
+    tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
+    if (!eng) {
+        st->failed = true;
+        st->error = "Torrent engine not available";
+        return;
+    }
+
+    if (!tsnx_engine_has_torrent(eng, hash.c_str())) {
+        char out_hash[TSNX_MAX_HASH_LEN + 1] = {0};
+        if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
+                                       reinterpret_cast<const volatile bool*>(cancel.get()),
+                                       out_hash, sizeof(out_hash))) {
+            st->failed = true;
+            st->error = "Failed to add torrent";
+            return;
+        }
+    }
+
+    int total_files = tsnx_engine_get_file_count(eng, hash.c_str());
+    if (total_files <= 0) total_files = 256;
+    std::vector<tsnx_file_info> files(total_files);
+    int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), total_files);
+    if (n <= 0) {
+        st->failed = true;
+        st->error = "Cannot resolve torrent file info";
+        return;
+    }
+
+    if (!plan) {
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "Анализ файлов...";
+        }
+        std::vector<torrent::TorrentFileInfo> tfiles(n);
+        for (int i = 0; i < n; ++i) {
+            tfiles[i].index = files[i].index;
+            tfiles[i].name = files[i].path;
+            tfiles[i].size = files[i].size;
+            tfiles[i].wanted = true;
+        }
+        std::string userLang = config::ConfigManager::instance().getLanguage();
+        auto analyzed = std::make_shared<installer::PortInstallPlan>(
+            installer::PortInstallPlanner::instance().analyze(release_title, tfiles, userLang));
+        if (!analyzed->is_port) {
+            st->failed = true;
+            st->error = "Release is not a recognized port";
+            return;
+        }
+        plan = analyzed;
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->resolved_plan = plan;
+        }
+    }
+
+    if (variant_index < 0 || variant_index >= static_cast<int>(plan->variants.size())) {
+        variant_index = 0;
+    }
+
+    std::vector<int> target_indices = plan->getFilesForVariant(variant_index);
+    if (target_indices.empty()) {
+        st->failed = true;
+        st->error = "No files to install for selected variant";
+        return;
+    }
+
+    uint64_t total_dl_bytes = 0;
+    for (int idx : target_indices) {
+        if (idx >= 0 && idx < n) {
+            total_dl_bytes += static_cast<uint64_t>(files[idx].size);
+        }
+    }
+    st->dl_total.store(total_dl_bytes);
+    st->dl_written.store(0);
+    st->dl_progress.store(0.0f);
+
+    // Настраиваем приоритеты в движке
+    for (int i = 0; i < n; ++i) {
+        bool wanted = (std::find(target_indices.begin(), target_indices.end(), files[i].index) != target_indices.end());
+        tsnx_engine_set_file_wanted(eng, hash.c_str(), files[i].index, wanted);
+    }
+
+    auto archives = plan->getArchivesForVariant(variant_index);
+    int forwarder_nsp_idx = plan->forwarder_nsp_index;
+
+    // Выделяем отдельные loose-файлы (не архивы и не NSP)
+    std::vector<int> loose_indices;
+    for (int idx : target_indices) {
+        if (idx == forwarder_nsp_idx) continue;
+        bool is_archive = false;
+        for (const auto& a : archives) {
+            if (a.file_index == idx) {
+                is_archive = true;
+                break;
+            }
+        }
+        if (!is_archive) {
+            loose_indices.push_back(idx);
+        }
+    }
+
+    int total_stages = 1;
+    if (!archives.empty()) total_stages++;
+    if (forwarder_nsp_idx >= 0) total_stages++;
+    int stage_num = 1;
+
+    uint64_t overall_dl_written = 0;
+
+    // Потоковое скачивание отдельного файла из раздачи по индексу
+    auto streamDownloadFile = [&](int file_idx, const std::string& target_path,
+                                  uint64_t& cumulative_written, uint64_t total_size) -> bool {
+        if (file_idx < 0 || file_idx >= n) return false;
+        uint64_t file_size = static_cast<uint64_t>(files[file_idx].size);
+        std::string resolved_dest = resolvePlatformPath(target_path);
+
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->current_file = std::filesystem::path(resolved_dest).filename().string();
+        }
+
+        if (file_size == 0) {
+            ensureParentDirs(resolved_dest);
+            FILE* empty_f = std::fopen(resolved_dest.c_str(), "wb");
+            if (empty_f) std::fclose(empty_f);
+            return true;
+        }
+
+        source->setSchedulerEnabled(true);
+        source->setCancelFlag(cancel.get());
+        if (cancel->load() || !source->open(hash, file_idx)) {
+            st->error = "Failed to open torrent stream for " + std::string(files[file_idx].path);
+            return false;
+        }
+
+        ensureParentDirs(resolved_dest);
+
+        static constexpr size_t kChunk = 2 * 1024 * 1024;
+        uint64_t offset = 0;
+        FILE* f = nullptr;
+
+        std::error_code ec_exist;
+        uint64_t existing_size = std::filesystem::exists(resolved_dest, ec_exist) ? std::filesystem::file_size(resolved_dest, ec_exist) : 0;
+        if (existing_size > 0 && existing_size < file_size) {
+            uint64_t resume_offset = (existing_size / kChunk) * kChunk;
+            f = std::fopen(resolved_dest.c_str(), "r+b");
+            if (f && fseek64(f, static_cast<int64_t>(resume_offset), SEEK_SET) == 0) {
+                offset = resume_offset;
+                cumulative_written += resume_offset;
+                st->written.store(cumulative_written);
+                st->dl_written.store(cumulative_written);
+                if (total_size > 0) {
+                    float p = std::clamp(static_cast<float>((double)cumulative_written / (double)total_size), 0.0f, 1.0f);
+                    st->progress.store(p);
+                    st->dl_progress.store(p);
+                }
+                util::logLine("download: resuming partial port file at offset=" + std::to_string(offset) + " / " + std::to_string(file_size));
+            } else {
+                if (f) std::fclose(f);
+                f = nullptr;
+                offset = 0;
+            }
+        }
+        if (!f) {
+            f = std::fopen(resolved_dest.c_str(), "wb");
+        }
+        if (!f) {
+            st->error = "Cannot create destination file: " + resolved_dest;
+            source->notifyStreamingComplete(false);
+            return false;
+        }
+
+        std::vector<unsigned char> fbuf(kChunk);
+        std::setvbuf(f, reinterpret_cast<char*>(fbuf.data()), _IOFBF, kChunk);
+        std::vector<unsigned char> buf(kChunk);
+        bool ok = true;
+
+        while (offset < file_size && !cancel->load() && !g_appExiting.load()) {
+            if (pause && pause->load()) {
+                std::fflush(f);
+                while (pause->load() && !cancel->load() && !g_appExiting.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                if (cancel->load() || g_appExiting.load()) break;
+            }
+
+            size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
+            size_t got = source->read(offset, buf.data(), want);
+            if (got == 0) {
+                if (cancel->load() || g_appExiting.load()) break;
+                if (pause && pause->load()) continue;
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                continue;
+            }
+            if (std::fwrite(buf.data(), 1, got, f) != got) {
+                ok = false;
+                st->error = "Disk write failed for " + resolved_dest;
+                break;
+            }
+            offset += got;
+            cumulative_written += got;
+            st->written.store(cumulative_written);
+            st->dl_written.store(cumulative_written);
+            if (total_size > 0) {
+                float p = std::clamp(static_cast<float>((double)cumulative_written / (double)total_size), 0.0f, 1.0f);
+                st->progress.store(p);
+                st->dl_progress.store(p);
+            }
+        }
+        std::fclose(f);
+
+        if (ok && offset >= file_size) {
+            source->notifyStreamingComplete(true);
+            return true;
+        } else {
+            source->notifyStreamingComplete(false);
+            if (cancel->load() || g_appExiting.load()) {
+                std::error_code ec;
+                std::filesystem::remove(resolved_dest, ec);
+                if (st->error.empty()) st->error = "Download cancelled";
+            } else if (!ok) {
+                std::error_code ec;
+                std::filesystem::remove(resolved_dest, ec);
+            }
+            return false;
+        }
+    };
+
+    // ── ЭТАП 1 & 2: СКАЧИВАНИЕ И РАСПАКОВКА АРХИВОВ ──
+    if (!archives.empty()) {
+        for (const auto& a : archives) {
+            if (cancel->load()) break;
+
+            // 1. Скачивание архива
+            std::string arch_filename = std::filesystem::path(a.archive_torrent_path).filename().string();
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = "Загрузка архива (" + std::to_string(stage_num) + "/" + std::to_string(total_stages) + ")";
+                st->current_file = arch_filename;
+            }
+            st->total.store(total_dl_bytes);
+            std::string arch_dest = plan->file_destinations[a.file_index];
+            if (arch_dest.empty()) {
+                arch_dest = std::string(TSNX_CACHE_TMP) + "/" + arch_filename;
+            }
+
+            if (!streamDownloadFile(a.file_index, arch_dest, overall_dl_written, total_dl_bytes)) {
+                st->failed = true;
+                return;
+            }
+
+            // 2. Распаковка архива
+            int extract_stage = stage_num + 1;
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = "Распаковка " + arch_filename + " (" + std::to_string(extract_stage) + "/" + std::to_string(total_stages) + ")";
+                st->current_file = arch_filename;
+            }
+            st->written.store(0);
+            st->total.store(0);
+            st->progress.store(0.0f);
+            st->inst_written.store(0);
+            st->inst_total.store(0);
+            st->inst_progress.store(0.0f);
+
+            std::string resolved_arch = resolvePlatformPath(arch_dest);
+            std::string resolved_extract_dir = resolvePlatformPath(a.extract_dest_dir);
+            util::safeCreateDirectories(resolved_extract_dir);
+
+            auto extractProgressCb = [&](const util::ArchiveProgress& prog) {
+                if (cancel->load()) return;
+                {
+                    std::lock_guard<std::mutex> lk(st->msg_mutex);
+                    if (!prog.currentFileName.empty()) {
+                        st->current_file = prog.currentFileName;
+                    }
+                }
+                float norm_pct = std::clamp(prog.percentage / 100.0f, 0.0f, 1.0f);
+                st->written.store(prog.bytesExtracted);
+                st->total.store(prog.totalUncompressedSize);
+                st->progress.store(norm_pct);
+
+                st->inst_written.store(prog.bytesExtracted);
+                st->inst_total.store(prog.totalUncompressedSize);
+                st->inst_progress.store(norm_pct);
+            };
+
+            std::string extractErr;
+            util::logLine("port_installer: extracting " + resolved_arch + " -> " + resolved_extract_dir);
+            bool extractOk = util::extractArchive(resolved_arch, resolved_extract_dir, extractProgressCb, cancel, extractErr);
+            if (!extractOk) {
+                st->failed = true;
+                st->error = "Archive extraction failed: " + extractErr;
+                util::logLine("port_installer: " + st->error);
+                std::error_code ec;
+                std::filesystem::remove(resolved_arch, ec);
+                return;
+            }
+
+            // Освобождаем память на SD карте
+            std::error_code ec;
+            std::filesystem::remove(resolved_arch, ec);
+            util::logLine("port_installer: cleaned up archive: " + resolved_arch);
+        }
+        stage_num += 2;
+    }
+
+    if (cancel->load()) {
+        st->failed = true;
+        st->error = "Installation cancelled";
+        return;
+    }
+
+    // ── ЭТАП 3: СКАЧИВАНИЕ LOOSE И OVERLAY ФАЙЛОВ (.NRO / РУСИФИКАТОРЫ) ──
+    if (!loose_indices.empty()) {
+        int current_stage = std::min(stage_num, total_stages);
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "Загрузка компонентов (" + std::to_string(current_stage) + "/" + std::to_string(total_stages) + ")";
+        }
+
+        for (int idx : loose_indices) {
+            if (cancel->load()) break;
+            std::string dest = plan->file_destinations[idx];
+            if (dest.empty()) {
+                dest = "sdmc:/switch/" + plan->port_game_name + "/" + std::filesystem::path(files[idx].path).filename().string();
+            }
+            if (!streamDownloadFile(idx, dest, overall_dl_written, total_dl_bytes)) {
+                st->failed = true;
+                return;
+            }
+        }
+    }
+
+    if (cancel->load()) {
+        st->failed = true;
+        st->error = "Installation cancelled";
+        return;
+    }
+
+    // ── ЭТАП 4: СКАЧИВАНИЕ И УСТАНОВКА ЯРЛЫКА FORWARDER NSP ──
+    if (forwarder_nsp_idx >= 0 && !cancel->load()) {
+        uint64_t nsp_size = static_cast<uint64_t>(files[forwarder_nsp_idx].size);
+
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "Загрузка ярлыка (" + std::to_string(total_stages) + "/" + std::to_string(total_stages) + ")";
+            st->current_file = plan->forwarder_nsp_name;
+        }
+
+        std::string nsp_dest = plan->file_destinations[forwarder_nsp_idx];
+        if (nsp_dest.empty()) {
+            nsp_dest = std::string(TSNX_CACHE_TMP) + "/" + plan->forwarder_nsp_name;
+        }
+
+        if (!streamDownloadFile(forwarder_nsp_idx, nsp_dest, overall_dl_written, total_dl_bytes)) {
+            st->failed = true;
+            return;
+        }
+
+        if (cancel->load()) {
+            st->failed = true;
+            st->error = "Installation cancelled";
+            return;
+        }
+
+        // Установка forwarder NSP в операционную систему Switch
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "Установка ярлыка (" + std::to_string(total_stages) + "/" + std::to_string(total_stages) + ")";
+            st->current_file = plan->forwarder_nsp_name;
+        }
+
+        std::string resolved_nsp = resolvePlatformPath(nsp_dest);
+        datasource::FileDataSource nspSource(resolved_nsp);
+        nspSource.setCancelFlag(cancel.get());
+        if (!nspSource.open()) {
+            st->failed = true;
+            st->error = "Cannot open downloaded forwarder NSP: " + resolved_nsp;
+            util::logLine("port_installer: " + st->error);
+            return;
+        }
+
+        installer::InstallConfig config;
+        config.buffer_size = 16 * 1024 * 1024;
+        config.chunk_size = 1 * 1024 * 1024;
+        config.verify_sha256 = true;
+        config.install_ticket = true;
+
+        installer::HybridNspInstaller nspInstaller;
+        if (nspInstaller.start(&nspSource, config)) {
+            while (!nspInstaller.isFinished() && !cancel->load()) {
+                float p = std::clamp(nspInstaller.progress(), 0.0f, 1.0f);
+                st->progress.store(p);
+                st->written.store(nspInstaller.bytesInstalled());
+                st->total.store(nspInstaller.totalBytes());
+
+                st->inst_progress.store(p);
+                st->inst_written.store(nspInstaller.bytesInstalled());
+                st->inst_total.store(nspInstaller.totalBytes());
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            if (cancel->load()) {
+                nspInstaller.cancel();
+                st->failed = true;
+                st->error = "Cancelled";
+            } else if (nspInstaller.state() == installer::InstallState::Failed) {
+                st->failed = true;
+                st->error = "Forwarder install failed: " + nspInstaller.errorMessage();
+                util::logLine("port_installer: " + st->error);
+            } else {
+                util::logLine("port_installer: forwarder NSP successfully installed!");
+            }
+        } else {
+            st->failed = true;
+            st->error = "Failed to start NSP installer: " + nspInstaller.errorMessage();
+            util::logLine("port_installer: " + st->error);
+        }
+
+        nspSource.close();
+
+        // Удаляем временный NSP файл после установки
+        std::error_code ec;
+        std::filesystem::remove(resolved_nsp, ec);
+    }
+
+    if (!st->failed.load() && !cancel->load()) {
+        st->done = true;
+        st->progress.store(1.0f);
+        st->dl_progress.store(1.0f);
+        st->inst_progress.store(1.0f);
+        if (total_dl_bytes > 0) st->dl_written.store(total_dl_bytes);
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "Установка завершена";
+            st->current_file = "Готово!";
+        }
+        util::logLine("port_installer: successfully finished all phases for " + release_title);
     }
 }
 
@@ -606,6 +1489,15 @@ bool DownloadManager::isLocalBackend() const {
 }
 
 static void updateSleepPolicy(bool has_active_transfers) {
+    static bool last_boosted = false;
+    if (has_active_transfers != last_boosted) {
+        if (has_active_transfers) {
+            util::cpuBoostBegin();
+        } else {
+            util::cpuBoostEnd();
+        }
+        last_boosted = has_active_transfers;
+    }
 #ifdef __SWITCH__
     static bool initialized = false;
     static bool last_keep_awake = false;
@@ -678,6 +1570,15 @@ void DownloadManager::shutdown() {
         if (item.file_dl_cancel) {
             item.file_dl_cancel->store(true);
         }
+        if (item.file_dl_pause) {
+            item.file_dl_pause->store(false);
+        }
+        if (item.port_install_cancel) {
+            item.port_install_cancel->store(true);
+        }
+        if (item.port_install_pause) {
+            item.port_install_pause->store(false);
+        }
         if (item.hybrid_installer) {
             item.hybrid_installer->cancel();
         }
@@ -708,10 +1609,16 @@ void DownloadManager::shutdown() {
         if (item.file_dl_worker) {
             item.file_dl_worker.reset();
         }
+        if (item.port_install_worker) {
+            item.port_install_worker.reset();
+        }
         item.file_dl_dispatched = false;
         item.file_dl_state.reset();
+        item.port_install_dispatched = false;
+        item.port_install_state.reset();
     }
 
+    updateSleepPolicy(false);
     datasource::CustomEngineClient::instance().shutdown();
 }
 
@@ -731,6 +1638,41 @@ size_t DownloadManager::addToQueue(const std::string& title,
     item.retro_console_id = retro_console_id;
     item.state = DownloadState::Queued;
     item.installer = installer::StreamInstaller(64 * 1024 * 1024);
+    if (isLocalBackend()) {
+        std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
+        if (!local_hash.empty()) {
+            item.torrent_hash = local_hash;
+            datasource::CustomEngineClient::instance().markInUse(local_hash);
+        }
+    }
+    queue_.push_back(std::move(item));
+    return queue_.size() - 1;
+}
+
+size_t DownloadManager::addPortInstall(const std::string& title,
+                                       const std::string& magnet,
+                                       std::shared_ptr<installer::PortInstallPlan> plan,
+                                       int variant_index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    DownloadItem item;
+    item.title = title;
+    item.magnet = magnet;
+    item.is_port_auto_install = true;
+    item.port_plan = plan;
+    item.selected_variant_index = variant_index;
+    if (plan) {
+        item.selected_files = plan->getFilesForVariant(variant_index);
+    }
+    item.state = DownloadState::Queued;
+    item.install_stage_label = "В очереди";
+    item.installer = installer::StreamInstaller(64 * 1024 * 1024);
+    if (isLocalBackend()) {
+        std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
+        if (!local_hash.empty()) {
+            item.torrent_hash = local_hash;
+            datasource::CustomEngineClient::instance().markInUse(local_hash);
+        }
+    }
     queue_.push_back(std::move(item));
     return queue_.size() - 1;
 }
@@ -806,18 +1748,7 @@ static bool equalsIgnoreCase(const std::string& a, const std::string& b) {
 }
 
 uint64_t parseTitleIdFromFileName(const std::string& name) {
-    size_t start = name.find('[');
-    while (start != std::string::npos) {
-        size_t end = name.find(']', start);
-        if (end != std::string::npos && (end - start) == 17) {
-            std::string tid_str = name.substr(start + 1, 16);
-            try {
-                return std::stoull(tid_str, nullptr, 16);
-            } catch (...) {}
-        }
-        start = name.find('[', start + 1);
-    }
-    return 0;
+    return util::parseTitleIdFromFileName(name);
 }
 
 int installFilePriority(const std::string& name) {
@@ -1392,9 +2323,11 @@ void DownloadManager::handleFileDownload(size_t index,
         }
         if (item.cancel_flag) item.cancel_flag->store(false);
         if (item.file_dl_cancel) item.file_dl_cancel->store(false);
+        if (item.file_dl_pause) item.file_dl_pause->store(false);
 
         source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
         auto cancel = item.file_dl_cancel;
+        auto pause = item.file_dl_pause;
         auto st = item.file_dl_state = std::make_shared<FileDownloadState>();
         const std::string hash = item.torrent_hash;
         const std::string magnet = normalizeTorrentLink(item.magnet);
@@ -1403,10 +2336,11 @@ void DownloadManager::handleFileDownload(size_t index,
         const auto sel_files = item.selected_files;
         const bool is_hb = item.is_homebrew;
         const std::string retro_cid = item.retro_console_id;
+        const std::string title_id = item.title_id;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, st]() {
-                fileCopyWorker(source, hash, magnet, title, idx, sel_files, is_hb, retro_cid, cancel, st);
+            std::async(std::launch::async, [source, hash, magnet, title, title_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
+                fileCopyWorker(source, hash, magnet, title, title_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +
@@ -1422,10 +2356,16 @@ void DownloadManager::handleFileDownload(size_t index,
         if (item.file_dl_state) {
             item.install_written = item.file_dl_state->written.load();
             item.install_total = item.file_dl_state->total.load();
+            item.bytes_downloaded = item.install_written;
+            item.download_total_bytes = item.install_total;
             if (item.install_total > 0) {
                 item.progress = static_cast<float>(
                     (double)item.install_written / (double)item.install_total);
                 item.install_progress = item.progress;
+            }
+            std::lock_guard<std::mutex> lk(item.file_dl_state->msg_mutex);
+            if (!item.file_dl_state->stage_label.empty()) {
+                item.install_stage_label = item.file_dl_state->stage_label;
             }
         }
         return;
@@ -1445,6 +2385,18 @@ void DownloadManager::handleFileDownload(size_t index,
         }
         item.install_written = item.file_dl_state->written.load();
         item.install_total = item.file_dl_state->total.load();
+        item.bytes_downloaded = item.install_written;
+        item.download_total_bytes = item.install_total;
+        if (item.finish_time.time_since_epoch().count() == 0) {
+            item.finish_time = std::chrono::steady_clock::now();
+            if (item.start_time.time_since_epoch().count() > 0) {
+                auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                    item.finish_time - item.start_time).count();
+                if (sec > 0) item.elapsed_seconds += sec;
+            }
+            if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+        }
+        releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
         util::logLine("download: file download failed: " + item.error_message);
         return;
     }
@@ -1452,10 +2404,148 @@ void DownloadManager::handleFileDownload(size_t index,
     item.state = DownloadState::Completed;
     item.progress = 1.0f;
     item.install_progress = 1.0f;
+    if (item.finish_time.time_since_epoch().count() == 0) {
+        item.finish_time = std::chrono::steady_clock::now();
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                item.finish_time - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+    }
     if (item.file_dl_state) {
         item.install_total = item.file_dl_state->total.load();
         item.install_written = item.install_total;
+        item.download_total_bytes = item.install_total;
+        item.bytes_downloaded = item.install_total;
         if (!item.file_dl_state->dest.empty()) item.file_dl_dest = item.file_dl_state->dest;
+    }
+    releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+    checkAndNotifyReleaseComplete(queue_, item);
+}
+
+void DownloadManager::handlePortAutoInstall(size_t index,
+                                            const std::vector<torrent::TorrentInfo>& list,
+                                            std::chrono::steady_clock::time_point now) {
+    if (index >= queue_.size()) return;
+    auto& item = queue_[index];
+    if (item.state == DownloadState::Paused || item.state == DownloadState::Failed) return;
+
+    if (!item.torrent_hash.empty()) {
+        for (const auto& t : list) {
+            if (!equalsIgnoreCase(item.torrent_hash, t.hash)) continue;
+            item.seeds = t.seeds;
+            item.peers = t.peers;
+            item.known_peers = t.known_peers;
+            item.dht = t.dht;
+            if (t.download_speed_kbps >= 0.0f) {
+                item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
+                                                                   t.download_speed_kbps,
+                                                                   item.speed_sample_at, now);
+            }
+            item.speed_sample_at = now;
+            break;
+        }
+    }
+
+    if (!item.port_install_dispatched) {
+        auto* source = ds_manager_.getSource();
+        if (!source) {
+            item.state = DownloadState::Failed;
+            item.error_message = "Data source is unavailable";
+            return;
+        }
+        if (item.cancel_flag) item.cancel_flag->store(false);
+        if (item.port_install_cancel) item.port_install_cancel->store(false);
+        if (item.port_install_pause) item.port_install_pause->store(false);
+
+        source->setTorrentContext(item.torrent_hash, normalizeTorrentLink(item.magnet), "");
+        auto cancel = item.port_install_cancel;
+        auto pause = item.port_install_pause;
+        auto st = item.port_install_state = std::make_shared<PortInstallProgressState>();
+        const std::string hash = item.torrent_hash;
+        const std::string magnet = normalizeTorrentLink(item.magnet);
+        const std::string title = item.title;
+        auto plan = item.port_plan;
+        const int variant_idx = item.selected_variant_index;
+
+        item.port_install_worker = std::make_shared<std::future<void>>(
+            std::async(std::launch::async, [source, hash, magnet, title, plan, variant_idx, cancel, pause, st]() {
+                portInstallWorker(source, hash, magnet, title, plan, variant_idx, cancel, pause, st);
+            }));
+        item.port_install_dispatched = true;
+        util::logLine("download: port auto install started hash=" + hash +
+                      " title='" + title + "' variant=" + std::to_string(variant_idx));
+        return;
+    }
+
+    if (!item.port_install_worker ||
+        item.port_install_worker->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        if (item.port_install_state) {
+            auto st = item.port_install_state;
+            item.install_written = st->inst_written.load();
+            item.install_total = st->inst_total.load();
+            item.install_progress = st->inst_progress.load();
+
+            item.bytes_downloaded = st->dl_written.load();
+            item.download_total_bytes = st->dl_total.load();
+            item.progress = st->dl_progress.load();
+
+            if (item.install_total == 0) {
+                item.install_total = item.download_total_bytes;
+            }
+
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            if (!item.port_plan && st->resolved_plan) {
+                item.port_plan = st->resolved_plan;
+                item.selected_files = item.port_plan->getFilesForVariant(item.selected_variant_index);
+            }
+            if (!st->stage_label.empty()) {
+                item.install_stage_label = st->stage_label;
+            }
+            if (!st->current_file.empty()) {
+                item.install_current_file = st->current_file;
+            }
+        }
+        return;
+    }
+
+    item.port_install_worker->get();
+    item.port_install_worker.reset();
+    item.port_install_dispatched = false;
+
+    if (item.port_install_state && item.port_install_state->failed.load()) {
+        item.state = DownloadState::Failed;
+        item.error_message = item.port_install_state->error.empty()
+            ? "Port installation failed" : item.port_install_state->error;
+        if (item.finish_time.time_since_epoch().count() == 0) {
+            item.finish_time = std::chrono::steady_clock::now();
+            if (item.start_time.time_since_epoch().count() > 0) {
+                auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                    item.finish_time - item.start_time).count();
+                if (sec > 0) item.elapsed_seconds += sec;
+            }
+            if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+        }
+        releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
+        util::logLine("download: port install failed: " + item.error_message);
+        return;
+    }
+
+    item.state = DownloadState::Completed;
+    item.progress = 1.0f;
+    item.install_progress = 1.0f;
+    if (item.download_total_bytes > 0) item.bytes_downloaded = item.download_total_bytes;
+    if (item.install_total > 0) item.install_written = item.install_total;
+    item.install_stage_label = "Установка завершена";
+    if (item.finish_time.time_since_epoch().count() == 0) {
+        item.finish_time = std::chrono::steady_clock::now();
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                item.finish_time - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
     }
     releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
     checkAndNotifyReleaseComplete(queue_, item);
@@ -1519,6 +2609,8 @@ bool DownloadManager::startDownload(size_t index) {
     item.download_speed_kbps = 0.0f;
     item.speed_sample_at = std::chrono::steady_clock::time_point{};
     item.start_time = std::chrono::steady_clock::now();
+    item.finish_time = std::chrono::steady_clock::time_point{};
+    item.elapsed_seconds = 0;
     item.error_message.clear();
     item.torrent_hash.clear();
 
@@ -1630,6 +2722,10 @@ void DownloadManager::trackProgress() {
             if (!(hybrid_speed_kbps >= 0.0f)) hybrid_speed_kbps = 0.0f;
             item.install_written = item.hybrid_installer->bytesInstalled();
             item.install_total = item.hybrid_installer->totalBytes();
+            uint64_t cur_dl_bytes = item.hybrid_installer->bytesDownloaded();
+            uint64_t cur_dl_total = item.hybrid_installer->downloadTotalBytes();
+            if (cur_dl_bytes > 0) item.bytes_downloaded = cur_dl_bytes;
+            if (cur_dl_total > 0) item.download_total_bytes = cur_dl_total;
 
             if (item.hybrid_installer->hasSdkMismatch()) {
                 item.sdk_mismatch = true;
@@ -1643,9 +2739,19 @@ void DownloadManager::trackProgress() {
                     item.error_message = item.hybrid_installer->errorMessage();
                     item.download_speed_kbps = 0.0f;
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                    if (item.finish_time.time_since_epoch().count() == 0) {
+                        item.finish_time = std::chrono::steady_clock::now();
+                        if (item.start_time.time_since_epoch().count() > 0) {
+                            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                                item.finish_time - item.start_time).count();
+                            if (sec > 0) item.elapsed_seconds += sec;
+                        }
+                        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+                    }
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
-                    } else if (!item.torrent_hash.empty()) {
+                    }
+                    if (!item.torrent_hash.empty()) {
                         releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
                     }
                     util::logLine("download: hybrid install failed: " + item.error_message);
@@ -1653,16 +2759,36 @@ void DownloadManager::trackProgress() {
                     item.state = DownloadState::Completed;
                     item.progress = 1.0f;
                     item.install_progress = 1.0f;
+                    if (item.hybrid_installer) {
+                        uint64_t dl_bytes = item.hybrid_installer->bytesDownloaded();
+                        uint64_t dl_total = item.hybrid_installer->downloadTotalBytes();
+                        uint64_t inst_total = item.hybrid_installer->totalBytes();
+                        if (dl_bytes > 0) item.bytes_downloaded = dl_bytes;
+                        if (dl_total > 0) item.download_total_bytes = dl_total;
+                        else if (item.download_total_bytes == 0 && inst_total > 0) item.download_total_bytes = inst_total;
+                        if (item.bytes_downloaded == 0 && item.download_total_bytes > 0) item.bytes_downloaded = item.download_total_bytes;
+                        if (item.install_total == 0) item.install_total = (inst_total > 0) ? inst_total : item.download_total_bytes;
+                    }
                     if (item.install_total == 0) {
-                        item.install_total = item.hybrid_installer->totalBytes();
+                        item.install_total = item.download_total_bytes;
                     }
                     item.install_written = item.install_total;
                     copyDownloadedOtherFiles(item);
                     item.download_speed_kbps = 0.0f;
                     item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                    if (item.finish_time.time_since_epoch().count() == 0) {
+                        item.finish_time = std::chrono::steady_clock::now();
+                        if (item.start_time.time_since_epoch().count() > 0) {
+                            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                                item.finish_time - item.start_time).count();
+                            if (sec > 0) item.elapsed_seconds += sec;
+                        }
+                        if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+                    }
                     if (item.torrent_id >= 0) {
                         torrent_->cancelTorrent(item.torrent_id);
-                    } else if (!item.torrent_hash.empty()) {
+                    }
+                    if (!item.torrent_hash.empty()) {
                         releaseTorrentIfUnneeded(queue_, i, item.torrent_hash);
                     }
                     util::logLine("download: hybrid install completed: " + item.title);
@@ -1679,6 +2805,14 @@ void DownloadManager::trackProgress() {
 
         if (item.state == DownloadState::StreamPreparing) {
             startHybridInstall(i);
+            continue;
+        }
+
+        // Homebrew ports: multi-phase auto install pipeline
+        if (isLocalBackend() &&
+            item.state == DownloadState::Downloading &&
+            item.is_port_auto_install) {
+            handlePortAutoInstall(i, list, now);
             continue;
         }
 
@@ -1713,7 +2847,8 @@ void DownloadManager::trackProgress() {
 
         if (item.state == DownloadState::Downloading ||
             item.state == DownloadState::StreamInstalling ||
-            item.state == DownloadState::StreamPreparing) {
+            item.state == DownloadState::StreamPreparing ||
+            item.state == DownloadState::Paused) {
             if (!item.priorities_set && !item.selected_files.empty()) {
                 std::vector<torrent::TorrentFileInfo> files;
                 bool got_files = false;
@@ -1943,6 +3078,15 @@ void DownloadManager::trackProgress() {
                 copyDownloadedOtherFiles(item);
                 item.download_speed_kbps = 0.0f;
                 item.speed_sample_at = std::chrono::steady_clock::time_point{};
+                if (item.finish_time.time_since_epoch().count() == 0) {
+                    item.finish_time = std::chrono::steady_clock::now();
+                    if (item.start_time.time_since_epoch().count() > 0) {
+                        auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                            item.finish_time - item.start_time).count();
+                        if (sec > 0) item.elapsed_seconds += sec;
+                    }
+                    if (item.elapsed_seconds <= 0) item.elapsed_seconds = 1;
+                }
                 if (item.stream_consumer_started && item.torrent_id >= 0) {
                     stopStreamConsumer(item.torrent_id);
                     item.stream_consumer_started = false;
@@ -2071,6 +3215,27 @@ bool DownloadManager::startHybridInstall(size_t index) {
                 }
                 if (!chooseInstallFile(files, install_file_index, install_stream_name)) {
                     util::logLine("download: no installable NSP/NSZ/XCI file found in torrent");
+                    return false;
+                }
+            } else if (isLocalBackend()) {
+                std::vector<datasource::CustomEngineFileInfo> local_files;
+                std::string probe_err;
+                if (!datasource::CustomEngineClient::instance().probeFiles(item.torrent_hash, item.magnet, "", local_files, &probe_err) || local_files.empty()) {
+                    util::logLine("download: local probeFiles failed in hybrid start: " + probe_err);
+                    return false;
+                }
+                std::vector<torrent::TorrentFileInfo> files;
+                files.reserve(local_files.size());
+                for (const auto& lf : local_files) {
+                    torrent::TorrentFileInfo tf;
+                    tf.index = lf.index;
+                    tf.name = lf.path;
+                    tf.size = lf.size;
+                    tf.wanted = true;
+                    files.push_back(std::move(tf));
+                }
+                if (!chooseInstallFile(files, install_file_index, install_stream_name)) {
+                    util::logLine("download: no installable NSP/NSZ/XCI file found in local torrent");
                     return false;
                 }
             } else {
@@ -2283,17 +3448,33 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.file_dl_cancel) {
         item.file_dl_cancel->store(true);
     }
+    if (item.file_dl_pause) {
+        item.file_dl_pause->store(false);
+    }
+    if (item.port_install_cancel) {
+        item.port_install_cancel->store(true);
+    }
+    if (item.port_install_pause) {
+        item.port_install_pause->store(false);
+    }
+
+    const bool is_active_item = (item.hybrid_installer != nullptr ||
+                                 item.file_dl_dispatched ||
+                                 item.port_install_dispatched ||
+                                 item.state == DownloadState::Downloading ||
+                                 item.state == DownloadState::StreamPreparing ||
+                                 item.state == DownloadState::StreamInstalling ||
+                                 item.state == DownloadState::Installing);
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
         item.hybrid_installer.reset();
     }
 
-    // Close the local engine's stream BEFORE joining the futures: the
-    // installer's start() may be blocked inside tsnx_engine_read waiting for
-    // a piece, and only the torrentfs teardown unblocks it. This also drops
-    // the engine torrent + RAM window, which otherwise leaked for good.
-    if (isLocalBackend()) {
+    // Close the local engine's stream BEFORE joining the futures ONLY if this item
+    // was actively downloading/installing. Cancelling a queued or paused item must
+    // NOT close the active data source of another running download!
+    if (isLocalBackend() && is_active_item) {
         if (auto* source = ds_manager_.getSource()) {
             source->close();
             util::logLine("download: closed local data source after cancel hash=" +
@@ -2314,9 +3495,14 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.file_dl_worker) {
         item.file_dl_worker.reset();
     }
+    if (item.port_install_worker) {
+        item.port_install_worker.reset();
+    }
     item.file_dl_dispatched = false;
     item.file_dl_state.reset();
     item.file_dl_dest.clear();
+    item.port_install_dispatched = false;
+    item.port_install_state.reset();
 
     has_open_pending_.store(false);
 
@@ -2333,6 +3519,14 @@ bool DownloadManager::cancelDownload(size_t index) {
     item.state = DownloadState::Cancelled;
     item.download_speed_kbps = 0.0f;
     item.speed_sample_at = std::chrono::steady_clock::time_point{};
+    if (item.finish_time.time_since_epoch().count() == 0) {
+        item.finish_time = std::chrono::steady_clock::now();
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                item.finish_time - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+    }
     return true;
 }
 
@@ -2350,6 +3544,15 @@ bool DownloadManager::retryDownload(size_t index) {
     if (item.file_dl_cancel) {
         item.file_dl_cancel->store(false);
     }
+    if (item.file_dl_pause) {
+        item.file_dl_pause->store(false);
+    }
+    if (item.port_install_cancel) {
+        item.port_install_cancel->store(false);
+    }
+    if (item.port_install_pause) {
+        item.port_install_pause->store(false);
+    }
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
@@ -2364,9 +3567,14 @@ bool DownloadManager::retryDownload(size_t index) {
     if (item.file_dl_worker) {
         item.file_dl_worker.reset();
     }
+    if (item.port_install_worker) {
+        item.port_install_worker.reset();
+    }
     item.file_dl_dispatched = false;
     item.file_dl_state.reset();
     item.file_dl_dest.clear();
+    item.port_install_dispatched = false;
+    item.port_install_state.reset();
     item.open_done.reset();
     item.open_success.reset();
 
@@ -2377,6 +3585,8 @@ bool DownloadManager::retryDownload(size_t index) {
     item.install_written = 0;
     item.install_total = 0;
     item.start_time = std::chrono::steady_clock::now();
+    item.finish_time = std::chrono::steady_clock::time_point{};
+    item.elapsed_seconds = 0;
     item.auto_hybrid_started = false;
     item.stream_consumer_started = false;
     item.preload_started = false;
@@ -2406,11 +3616,16 @@ bool DownloadManager::pauseDownload(size_t index) {
         item.state == DownloadState::StreamPreparing ||
         item.state == DownloadState::StreamInstalling) {
 
-        if (item.state == DownloadState::Downloading) {
-            if (item.file_dl_cancel) {
-                item.file_dl_cancel->store(true);
-            }
+        if (item.file_dl_pause) {
+            item.file_dl_pause->store(true);
         }
+        if (item.port_install_pause) {
+            item.port_install_pause->store(true);
+        }
+        if (item.hybrid_installer) {
+            item.hybrid_installer->setPaused(true);
+        }
+
         // Note: For streaming installations we do not set cancel_flag=true, as that
         // completely cancels the installer and destroys NCM placeholders.
         // Instead, pausing the torrent engine stops incoming data, causing the installer
@@ -2418,6 +3633,13 @@ bool DownloadManager::pauseDownload(size_t index) {
         if (!item.torrent_hash.empty()) {
             tsnx_engine_pause_torrent(nullptr, item.torrent_hash.c_str());
         }
+
+        if (item.start_time.time_since_epoch().count() > 0) {
+            auto sec = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - item.start_time).count();
+            if (sec > 0) item.elapsed_seconds += sec;
+        }
+        item.start_time = std::chrono::steady_clock::time_point{};
 
         item.state = DownloadState::Paused;
         item.download_speed_kbps = 0.0f;
@@ -2435,9 +3657,25 @@ bool DownloadManager::resumeDownload(size_t index) {
         if (item.cancel_flag) {
             item.cancel_flag->store(false);
         }
+        if (item.file_dl_cancel) {
+            item.file_dl_cancel->store(false);
+        }
+        if (item.file_dl_pause) {
+            item.file_dl_pause->store(false);
+        }
+        if (item.port_install_cancel) {
+            item.port_install_cancel->store(false);
+        }
+        if (item.port_install_pause) {
+            item.port_install_pause->store(false);
+        }
+        if (item.hybrid_installer) {
+            item.hybrid_installer->setPaused(false);
+        }
         if (!item.torrent_hash.empty()) {
             tsnx_engine_resume_torrent(nullptr, item.torrent_hash.c_str());
         }
+        item.start_time = std::chrono::steady_clock::now();
         if (item.hybrid_installer && item.auto_hybrid_started) {
             item.state = DownloadState::StreamInstalling;
         } else {

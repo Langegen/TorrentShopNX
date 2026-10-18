@@ -13,6 +13,7 @@
 
 #include "../installer/stream_installer.h"
 #include "../installer/hybrid_nsp_installer.h"
+#include "../installer/PortInstallPlanner.hpp"
 #include "../torrent/torrent_manager.h"
 #include "../datasource/data_source_manager.h"
 #include "../utils/switch_utils.h"
@@ -39,9 +40,35 @@ struct FileDownloadState {
     std::atomic<unsigned long long> total{0};
     std::atomic<bool> done{false};
     std::atomic<bool> failed{false};
+    std::mutex msg_mutex;
+    std::string stage_label;
     std::string error;
     std::string dest;              // итоговый путь на диске
     unsigned long long size = 0;   // размер исходного файла
+};
+
+// Прогресс многоэтапной автоматической установки хоумбрю портов
+struct PortInstallProgressState {
+    std::atomic<unsigned long long> written{0};
+    std::atomic<unsigned long long> total{0};
+    std::atomic<float> progress{0.0f};
+
+    // Отдельный трекинг загрузки и распаковки/установки для портов
+    std::atomic<unsigned long long> dl_written{0};
+    std::atomic<unsigned long long> dl_total{0};
+    std::atomic<float> dl_progress{0.0f};
+
+    std::atomic<unsigned long long> inst_written{0};
+    std::atomic<unsigned long long> inst_total{0};
+    std::atomic<float> inst_progress{0.0f};
+
+    std::atomic<bool> done{false};
+    std::atomic<bool> failed{false};
+    std::mutex msg_mutex;
+    std::string error;
+    std::string stage_label;
+    std::string current_file;
+    std::shared_ptr<installer::PortInstallPlan> resolved_plan;
 };
 
 struct DownloadItem {
@@ -56,10 +83,16 @@ struct DownloadItem {
     float download_speed_kbps = 0.0f;
     std::chrono::steady_clock::time_point speed_sample_at{};
     std::chrono::steady_clock::time_point start_time{};
+    std::chrono::steady_clock::time_point finish_time{};
+    int64_t elapsed_seconds = 0;
     int seeds = 0;
     int peers = 0;
     int known_peers = 0;
     int dht = 0;
+
+    // Сохранение точных размеров загрузки и установки
+    unsigned long long download_total_bytes = 0;
+    unsigned long long bytes_downloaded = 0;
 
     // Гибридный инсталлятор (новый режим)
     std::shared_ptr<installer::HybridNspInstaller> hybrid_installer;
@@ -104,6 +137,7 @@ struct DownloadItem {
     std::string error_message;
 
     std::string topic_id;
+    std::string title_id;
     std::vector<int> selected_files;
     bool priorities_set = false;
     std::string cover_url;
@@ -114,10 +148,30 @@ struct DownloadItem {
     bool file_dl_dispatched = false;
     std::shared_ptr<std::future<void>> file_dl_worker;
     std::shared_ptr<std::atomic<bool>> file_dl_cancel = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<bool>> file_dl_pause = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<FileDownloadState> file_dl_state;
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
     bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
     std::string retro_console_id;
+
+    // Автоматическая установка портов хоумбрю
+    bool is_port_auto_install = false;
+    std::shared_ptr<installer::PortInstallPlan> port_plan;
+    int selected_variant_index = 0;
+    std::string install_stage_label;
+    std::string install_current_file;
+    bool port_install_dispatched = false;
+    std::shared_ptr<std::future<void>> port_install_worker;
+    std::shared_ptr<std::atomic<bool>> port_install_cancel = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<bool>> port_install_pause = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<PortInstallProgressState> port_install_state;
+
+    // Группировка и классификация компонентов раздачи
+    std::string group_id;
+    std::string group_title;
+    std::string component_label;
+    std::string component_name;
+    int component_type = 0; // 0: Base, 1: Update, 2: DLC, 3: Extra/Mod, 4: Port/HB
 };
 
 class DownloadManager {
@@ -131,6 +185,10 @@ public:
                       const std::string& forced_stream_name = "",
                       bool is_homebrew = false,
                       const std::string& retro_console_id = "");
+    size_t addPortInstall(const std::string& title,
+                          const std::string& magnet,
+                          std::shared_ptr<installer::PortInstallPlan> plan,
+                          int variant_index);
     bool startDownload(size_t index);
     void startNextDownload();
     void trackProgress();
@@ -174,6 +232,10 @@ private:
     // Не-игровые файлы: скачивание в downloads/ через локальный движок.
     void handleFileDownload(size_t index, const std::vector<torrent::TorrentInfo>& list,
                             std::chrono::steady_clock::time_point now);
+
+    // Автоматическая многоэтапная установка портов хоумбрю
+    void handlePortAutoInstall(size_t index, const std::vector<torrent::TorrentInfo>& list,
+                               std::chrono::steady_clock::time_point now);
 
     mutable std::recursive_mutex queue_mutex_;
     std::vector<DownloadItem> queue_;

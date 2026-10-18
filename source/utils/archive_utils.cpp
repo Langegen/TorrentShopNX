@@ -327,6 +327,56 @@ bool getArchiveTotals(
     return (outTotalEntries > 0);
 }
 
+bool iterateArchiveEntries(
+    const std::string& archivePath,
+    std::function<bool(const std::string& entryName, bool isDir)> callback
+) {
+    if (!callback) return false;
+    if (is7zFile(archivePath)) {
+        return iterate7zArchiveEntries(archivePath, callback);
+    }
+
+    struct archive* a = archive_read_new();
+    if (!a) return false;
+
+    archive_read_support_format_all(a);
+    archive_read_support_filter_all(a);
+
+    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    if (r != ARCHIVE_OK) {
+        archive_read_free(a);
+        return false;
+    }
+
+    struct archive_entry* entry = nullptr;
+    bool keepGoing = true;
+    while (keepGoing && ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK || r == ARCHIVE_WARN)) {
+        const char* rawPath = archive_entry_pathname_utf8(entry);
+        if (!rawPath) rawPath = archive_entry_pathname(entry);
+        if (!rawPath || !*rawPath) {
+            archive_read_data_skip(a);
+            continue;
+        }
+
+        std::string clean = sanitizeEntryPath(rawPath);
+        if (clean.empty()) {
+            archive_read_data_skip(a);
+            continue;
+        }
+
+        bool isDir = (archive_entry_filetype(entry) == AE_IFDIR) ||
+                     ((archive_entry_mode(entry) & 0170000) == 0040000) ||
+                     (!clean.empty() && clean.back() == '/');
+
+        keepGoing = callback(clean, isDir);
+        archive_read_data_skip(a);
+    }
+
+    archive_read_close(a);
+    archive_read_free(a);
+    return true;
+}
+
 static bool extractLibarchiveInternal(
     const std::string& archivePath,
     const std::string& destinationDir,
@@ -335,7 +385,8 @@ static bool extractLibarchiveInternal(
     std::shared_ptr<std::atomic<bool>> cancelToken,
     std::string& outError,
     uint64_t knownUncompressedSize = 0,
-    size_t knownTotalEntries = 0
+    size_t knownTotalEntries = 0,
+    PathTransformFn pathTransform = nullptr
 ) {
     util::logLine("archive_utils: extractLibarchiveInternal start: " + archivePath + " -> " + destinationDir);
 
@@ -456,6 +507,15 @@ static bool extractLibarchiveInternal(
             }
         }
 
+        std::string targetPath = cleanName;
+        if (pathTransform) {
+            targetPath = pathTransform(cleanName, isDir);
+            if (targetPath.empty()) {
+                archive_read_data_skip(a);
+                continue;
+            }
+        }
+
         progress.currentFileName = cleanName;
         progress.entriesProcessed++;
 
@@ -463,11 +523,24 @@ static bool extractLibarchiveInternal(
             util::logLine("archive_utils: extracting entry #" + std::to_string(progress.entriesProcessed) + ": " + cleanName);
         }
 
-        std::string fullPath = destinationDir;
-        if (!fullPath.empty() && fullPath.back() != '/') {
-            fullPath += "/";
+        std::string fullPath;
+#ifdef _WIN32
+        bool isAbs = (targetPath.size() >= 2 && targetPath[1] == ':') ||
+                     (targetPath.rfind("./", 0) == 0) ||
+                     (targetPath.rfind("sdmc:/", 0) == 0);
+#else
+        bool isAbs = (targetPath.rfind("sdmc:/", 0) == 0) ||
+                     (!targetPath.empty() && targetPath[0] == '/');
+#endif
+        if (isAbs || destinationDir.empty()) {
+            fullPath = targetPath;
+        } else {
+            fullPath = destinationDir;
+            if (!fullPath.empty() && fullPath.back() != '/') {
+                fullPath += "/";
+            }
+            fullPath += targetPath;
         }
-        fullPath += cleanName;
 
         if (isDir) {
             safeCreateDirectories(fullPath);
@@ -592,7 +665,8 @@ bool extractArchive(
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    PathTransformFn pathTransform
 ) {
     ScopedCpuBoost boostGuard; // raises CPU to 1785 MHz and prevents auto-sleep!
 
@@ -600,7 +674,7 @@ bool extractArchive(
     if (is7zFile(archivePath)) {
         uint64_t knownUncompressed = 0;
         size_t knownEntries = 0;
-        bool ok = extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError, &knownUncompressed, &knownEntries);
+        bool ok = extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError, &knownUncompressed, &knownEntries, pathTransform);
         if (ok) return true;
         if (cancelToken && cancelToken->load()) return false;
 
@@ -608,7 +682,7 @@ bool extractArchive(
         // seamlessly fall back to streaming libarchive which streams 64KB blocks directly to disk!
         util::logLine("archive_utils: 7zsdk returned '" + outError + "', falling back to streaming libarchive");
         std::string fallbackErr;
-        if (extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, fallbackErr, knownUncompressed, knownEntries)) {
+        if (extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, fallbackErr, knownUncompressed, knownEntries, pathTransform)) {
             util::logLine("archive_utils: streaming libarchive fallback succeeded for 7z archive!");
             outError.clear();
             return true;
@@ -619,7 +693,7 @@ bool extractArchive(
         return false;
     }
 
-    return extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, outError, 0, 0);
+    return extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, outError, 0, 0, pathTransform);
 }
 
 bool extractSingleFileFromArchive(

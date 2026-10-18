@@ -602,12 +602,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         if (isRom) {
             cell->actionBox->setBackgroundColor(nvgRGBA(255, 170, 0, 35));
             cell->actionLabel->setTextColor(nvgRGBA(255, 170, 0, 255));
-            const auto& cfg = config::ConfigManager::instance();
-            if (cfg.getRetroRomsetMode() == "select") {
-                cell->actionLabel->setText("app/retro/btn_select"_i18n);
-            } else {
-                cell->actionLabel->setText("app/retro/btn_download_set"_i18n);
-            }
+            cell->actionLabel->setText("app/retro/btn_download_set"_i18n);
         } else {
             cell->actionBox->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
             cell->actionLabel->setTextColor(ThemeManager::instance().getAccentColor());

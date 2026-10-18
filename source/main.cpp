@@ -97,14 +97,17 @@ extern "C" {
             cfg.udp_rx_buf_size = 8192;
             cfg.udp_tx_buf_size = 8192;
         } else {
-            // Switch BSD buffer pool is fixed; keep per-socket initial cost low
-            // so the engine can open many peer sockets without ENOBUFS.
-            cfg.num_bsd_sessions = 12;
-            cfg.sb_efficiency = 4;
+            // Switch BSD buffer pool is fixed (32MB in Title mode).
+            // BitTorrent is downstream-heavy: large RX buffers (512KB) support 25+ MB/s
+            // speeds from fast seeders, while minimal TX buffers (32KB) prevent mbuf waste.
+            // sb_efficiency = 2 (standard Switch libnx factor) keeps (512+32)*2 ~ 1.08MB per socket,
+            // allowing 20-25 parallel peers with plenty of headroom for UDP/trackers without ENOBUFS.
+            cfg.num_bsd_sessions = 16;
+            cfg.sb_efficiency = 2;
             cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
             cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x60000;  // 384 KB max
-            cfg.tcp_rx_buf_max_size = 0x60000;  // 384 KB max
+            cfg.tcp_tx_buf_max_size = 0x8000;   // 32 KB max (only small 17-byte BT requests)
+            cfg.tcp_rx_buf_max_size = 0x80000;  // 512 KB max (high throughput receive window)
             cfg.udp_rx_buf_size = 0x8000;       // 32 KB
             cfg.udp_tx_buf_size = 0x4000;       // 16 KB
         }
@@ -404,6 +407,8 @@ int main(int argc, char** argv) {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_ZH_HANS;
     } else if (userLang == "ja") {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_JA;
+    } else if (userLang == "ar") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AR;
     } else {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     }
@@ -423,6 +428,9 @@ int main(int argc, char** argv) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
     }
+    // Snappy focus highlight and smooth scrolling transitions (down from sluggish 200ms default)
+    brls::getStyle().addMetric("brls/animations/highlight", 100.0f);
+
     // Exit directly to Nintendo Switch Home Menu instead of Homebrew Menu (hbmenu)
     brls::Application::getPlatform()->exitToHomeMode(true);
 
@@ -443,6 +451,13 @@ int main(int argc, char** argv) {
         brls::Application::setGlobalWallpaper(ui::ThemeManager::instance().getEffectiveWallpaperPath());
     });
     brls::Application::registerXMLView("QrCodeView", ui::QrCodeView::create);
+
+    // Global navigation haptic feedback: subtle, gentle Joy-Con tick on any focus change
+    brls::Application::getGlobalFocusChangeEvent()->subscribe([](brls::View* view) {
+        if (view && brls::Application::getInputType() == brls::InputType::GAMEPAD) {
+            util::triggerHapticFeedback(1);
+        }
+    });
 
     // Register focus change listener to handle console sleep / wake safely (Title Mode only)
     if (!checkAppletMode()) {
@@ -470,7 +485,11 @@ int main(int argc, char** argv) {
     #if __has_include(<curl/curl.h>)
         curl_global_init(CURL_GLOBAL_ALL);
     #endif
+    #ifdef __SWITCH__
+        net::ImageDownloader::instance().init(2);
+    #else
         net::ImageDownloader::instance().init(4);
+    #endif
 
         // Load database games via fast binary cache (or fallback to JSON)
         auto loadedGames = loadGamesCached(getCatalogPath(), getCatalogBinPath());

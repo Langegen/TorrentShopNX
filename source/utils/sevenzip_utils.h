@@ -19,7 +19,14 @@ bool extract7zArchive(
     std::shared_ptr<std::atomic<bool>> cancelToken,
     std::string& outError,
     uint64_t* outKnownUncompressedSize = nullptr,
-    size_t* outKnownTotalEntries = nullptr
+    size_t* outKnownTotalEntries = nullptr,
+    PathTransformFn pathTransform = nullptr
+);
+
+// Fast iteration of 7z directory entries without decompressing file data
+bool iterate7zArchiveEntries(
+    const std::string& archivePath,
+    std::function<bool(const std::string& entryName, bool isDir)> callback
 );
 
 // Fast listing of 7z directory contents without decompressing file data

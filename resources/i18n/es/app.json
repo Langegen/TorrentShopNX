@@ -135,6 +135,7 @@
     "downloads": {
         "title": "Descargas",
         "empty": "No hay descargas activas",
+        "already_in_queue": "Este juego ya esta en las descargas",
         "status_prefix": "Estado: ",
         "speed": "Velocidad: {0}/s",
         "downloaded": "Descargado: {0} / {1} ({2}%)",
@@ -160,6 +161,7 @@
         "state_error": "Error",
         "peers_with_known": "Seeds: {0} · Peers: {1} ({2} conocidos) · DHT: {3}",
         "peers_standard": "Seeds: {0} · Peers: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} completado",
         "stats": "Descargando: {0} | Pausados: {1} | Completados: {2} | Velocidad total: {3}/s",
         "state_installing": "Instalando en consola...",
         "state_waiting": "En espera",
@@ -174,7 +176,7 @@
         "elapsed": "Transcurrido: {0}",
         "saved_to": "Guardado en: {0}",
         "installed": "Instalado en consola",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "Todos los archivos del lanzamiento descargados: {0}",
         "unknown_error": "Error desconocido",
         "action_delete": "Eliminar descarga",
         "action_open_folder": "Abrir carpeta",
@@ -190,7 +192,9 @@
         "peers_title": "Estado de pares y enjambre",
         "peers_no_active": "Sin conexiones activas con pares",
         "action_peers_short": "Pares",
-        "downloads_header_hints": "L - Pares  [-] Apagar pantalla"
+        "downloads_header_hints": "L - Pares  [-] Apagar pantalla",
+        "state_connecting_peers": "Conectando a los pares...",
+        "state_resolving_meta": "Resolviendo metadatos..."
     },
     "detail": {
         "unknown_publisher": "Editor desconocido",
@@ -223,7 +227,13 @@
         "qr_hint": "Escanea para descargar en el PC",
         "qr_no_url": "Enlace no disponible",
         "compilation_badge": "COLECCIÓN / ROMSET",
+        "auto_install_btn": "Instalación automática",
+        "auto_install_probing": "Analizando archivos del port...",
+        "auto_install_probe_failed": "No se pudo obtener la lista de archivos",
+        "auto_install_not_port": "El release no se reconoció como un port homebrew",
+        "choose_version_title": "Elige la versión a instalar",
         "select_files_btn": "Seleccionar archivos",
+        "download_full_btn": "Descargar completo",
         "download_romset_btn": "Descargar set de ROMs",
         "stats_info": "Torrent: {0} seeds / {1} peers ({2} descargas)",
         "stats_date": "Añadido: {0}"
@@ -289,7 +299,11 @@
         "storage_nand": "NAND",
         "storage_auto": "Auto",
         "group_roms": "ROMs de juegos",
-        "extra_files_bundle": "Archivos adicionales [{0}]"
+        "extra_files_bundle": "Archivos adicionales [{0}]",
+        "bundle_files": "{0} archivos",
+        "folder_prefix": "Carpeta: ",
+        "parent_folder": ".. (Carpeta superior)",
+        "toggle_folder": "Seleccionar carpeta"
     },
     "remote": {
         "title": "Añadir torrent",
@@ -374,7 +388,7 @@
         "titledb_failed": "Error al cargar la base de títulos",
         "scanning_games": "Analizando juegos instalados...",
         "installed": "Instalado",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "Todos los archivos del lanzamiento descargados: {0}",
         "available": "Disponible",
         "uninstall_confirm": "¿Desinstalar \"{0}\"?\nEl juego, todas sus actualizaciones y DLC serán eliminados.",
         "uninstall_success": "\"{0}\" desinstalado",
@@ -434,7 +448,8 @@
         "sort_downloads_desc": "Por descargas (más primero)",
         "sort_downloads_asc": "Por descargas (menos primero)",
         "sort_date_desc": "Por fecha (más recientes)",
-        "sort_date_asc": "Por fecha (más antiguos)"
+        "sort_date_asc": "Por fecha (más antiguos)",
+        "lang_ara": "Árabe incluido (ARA)"
     },
     "settings": {
         "title": "Herramientas",
@@ -661,7 +676,10 @@
         "update_catalog_applying_diff": "Aplicando cambios...",
         "update_catalog_diff_success": "Catálogo actualizado: +{0} nuevos, {1} actualizados",
         "update_catalog_up_to_date": "El catálogo ya está actualizado",
-        "cat_appearance": "Apariencia"
+        "cat_appearance": "Apariencia",
+        "joycon_rumble": "Vibración de Joy-Con",
+        "sound_effects": "Efectos de sonido",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "Modo Applet detectado",

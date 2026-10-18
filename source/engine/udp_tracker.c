@@ -12,6 +12,10 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 // BEP 15 magic protocol id used to initiate a connection.
 #define UDP_PROTOCOL_ID 0x41727101980ULL
 
@@ -116,6 +120,12 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     }
 
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
+#ifdef __SWITCH__
+    if (sock < 0 && errno == 105) {
+        svcSleepThread(50000000ULL); // 50ms sleep if buffer pool momentarily full
+        sock = socket(AF_INET, SOCK_DGRAM, 0);
+    }
+#endif
     if (sock < 0) {
         freeaddrinfo(res);
         char ebuf[64];
@@ -123,6 +133,12 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
         set_err(err, errlen, ebuf);
         return -1;
     }
+#ifdef __SWITCH__
+    int rcvbuf = 16 * 1024;
+    int sndbuf = 8 * 1024;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+#endif
     struct timeval tv = { .tv_sec = 0, .tv_usec = 500000 };
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 

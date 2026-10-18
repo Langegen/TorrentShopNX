@@ -116,7 +116,8 @@ bool CustomEngineClient::probeFiles(const std::string& info_hash,
         probing_ = false;
 
         if (!added) {
-            last_error_ = "failed to add torrent to custom engine";
+            const char* eng_err = tsnx_engine_get_last_error(eng);
+            last_error_ = (eng_err && eng_err[0]) ? eng_err : "failed to add torrent to custom engine";
             if (err) *err = last_error_;
             return false;
         }

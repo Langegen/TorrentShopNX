@@ -11,6 +11,7 @@
 #include "../installer/nsp_header.h"
 #include "../installer/cnmt_parser.h"
 #include "../installer/ncz_parser.h"
+#include "../utils/app_paths.h"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
@@ -55,6 +56,17 @@ static bool isRomFile(const std::string& filename) {
         }
     }
     return false;
+}
+
+static bool isPlayableFile(const std::string& filename) {
+    if (isRomFile(filename)) return true;
+    std::string lower = filename;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower.size() >= 4 &&
+           (lower.rfind(".nro") == lower.size() - 4 ||
+            lower.rfind(".ovl") == lower.size() - 4 ||
+            lower.rfind(".elf") == lower.size() - 4);
 }
 
 static bool isMediaOrMetaPath(const std::string& fullpath) {
@@ -110,110 +122,174 @@ static bool isSwitchGameFile(const std::string& filename) {
             lower.rfind(".xci") == lower.size() - 4 ||
             lower.rfind(".xcz") == lower.size() - 4);
 }
+
+static std::vector<std::string> splitPath(const std::string& path) {
+    std::vector<std::string> parts;
+    std::string part;
+    for (char c : path) {
+        if (c == '/' || c == '\\') {
+            if (!part.empty()) {
+                parts.push_back(part);
+                part.clear();
+            }
+        } else {
+            part += c;
+        }
+    }
+    if (!part.empty()) {
+        parts.push_back(part);
+    }
+    return parts;
+}
 #ifdef __SWITCH__
 #include <switch.h>
 
 struct SwitchServiceGuard {
     bool ns_ok = false;
     bool ncm_ok = false;
-    NcmContentMetaDatabase db;
-    NcmStorageId db_storage = NcmStorageId_SdCard;
-    bool db_open = false;
+    NcmContentMetaDatabase db_sd = {};
+    bool db_sd_open = false;
+    NcmContentMetaDatabase db_nand = {};
+    bool db_nand_open = false;
+
+    NcmContentStorage cs_sd = {};
+    bool cs_sd_open = false;
+    NcmContentStorage cs_nand = {};
+    bool cs_nand_open = false;
 
     SwitchServiceGuard() {
         g_switch_service_mutex.lock();
         ns_ok = R_SUCCEEDED(nsInitialize());
         ncm_ok = R_SUCCEEDED(ncmInitialize());
         if (ncm_ok) {
-            Result rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
-            db_storage = NcmStorageId_SdCard;
-            if (R_FAILED(rc)) {
-                rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
-                db_storage = NcmStorageId_BuiltInUser;
-            }
-            db_open = R_SUCCEEDED(rc);
+            db_sd_open = R_SUCCEEDED(ncmOpenContentMetaDatabase(&db_sd, NcmStorageId_SdCard));
+            db_nand_open = R_SUCCEEDED(ncmOpenContentMetaDatabase(&db_nand, NcmStorageId_BuiltInUser));
+            cs_sd_open = R_SUCCEEDED(ncmOpenContentStorage(&cs_sd, NcmStorageId_SdCard));
+            cs_nand_open = R_SUCCEEDED(ncmOpenContentStorage(&cs_nand, NcmStorageId_BuiltInUser));
         }
+        util::logLine("FileSelectView: SwitchServiceGuard init: ns=" + std::to_string(ns_ok) +
+                      " ncm=" + std::to_string(ncm_ok) +
+                      " db_sd=" + std::to_string(db_sd_open) +
+                      " db_nand=" + std::to_string(db_nand_open) +
+                      " cs_sd=" + std::to_string(cs_sd_open) +
+                      " cs_nand=" + std::to_string(cs_nand_open));
     }
 
     ~SwitchServiceGuard() {
-        if (db_open) {
-            ncmContentMetaDatabaseClose(&db);
-        }
-        if (ncm_ok) {
-            ncmExit();
-        }
-        if (ns_ok) {
-            nsExit();
-        }
+        if (cs_sd_open) ncmContentStorageClose(&cs_sd);
+        if (cs_nand_open) ncmContentStorageClose(&cs_nand);
+        if (db_sd_open) ncmContentMetaDatabaseClose(&db_sd);
+        if (db_nand_open) ncmContentMetaDatabaseClose(&db_nand);
+        if (ncm_ok) ncmExit();
+        if (ns_ok) nsExit();
         g_switch_service_mutex.unlock();
+    }
+
+    bool hasContentId(const NcmContentId& cid) {
+        bool has = false;
+        if (cs_sd_open && R_SUCCEEDED(ncmContentStorageHas(&cs_sd, &has, &cid)) && has) return true;
+        if (cs_nand_open && R_SUCCEEDED(ncmContentStorageHas(&cs_nand, &has, &cid)) && has) return true;
+        return false;
+    }
+
+    bool verifyContentPresent(NcmContentMetaDatabase* db, const NcmContentMetaKey& key) {
+        if (!db) return false;
+        static const NcmContentType types[] = {
+            NcmContentType_Program,
+            NcmContentType_Data,
+            NcmContentType_Control,
+            NcmContentType_HtmlDocument,
+            NcmContentType_LegalInformation
+        };
+
+        bool foundAnyContent = false;
+        for (NcmContentType ct : types) {
+            NcmContentId cid;
+            if (R_SUCCEEDED(ncmContentMetaDatabaseGetContentIdByType(db, &cid, &key, ct))) {
+                foundAnyContent = true;
+                if (hasContentId(cid)) return true;
+            }
+        }
+
+        // AddOnContent / DLC can be metadata-only (license / unlock) with 0 content NCAs
+        if (!foundAnyContent && key.type == NcmContentMetaType_AddOnContent) {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool isInstalled(uint64_t tid, uint32_t file_version = 0) {
+        if (tid == 0) return false;
+
+        NcmContentMetaKey key = {};
+        // 1) Try SD card meta database
+        if (db_sd_open && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db_sd, &key, tid))) {
+            if (verifyContentPresent(&db_sd, key)) {
+                if ((tid & 0xFFFULL) == 0x800 && file_version > 0) {
+                    return key.version >= file_version;
+                }
+                return true;
+            }
+        }
+
+        // 2) Try NAND meta database
+        if (db_nand_open && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db_nand, &key, tid))) {
+            if (verifyContentPresent(&db_nand, key)) {
+                if ((tid & 0xFFFULL) == 0x800 && file_version > 0) {
+                    return key.version >= file_version;
+                }
+                return true;
+            }
+        }
+
+        return false;
     }
 };
 
-// Returns true if any of the real content (Program/Data) referenced by the
-// content meta is actually present in the ContentStorage. Deleting a game via
-// the Switch home menu can leave a stale content meta / record behind, so a
-// bare meta lookup (or application record) is NOT enough — we must verify the
-// content file still exists on disk.
-static bool contentPresentForMeta(NcmContentMetaDatabase& db, NcmContentStorage& cs, const NcmContentMetaKey& key) {
-    NcmContentType types[] = { NcmContentType_Program, NcmContentType_Data };
-    for (NcmContentType ct : types) {
-        NcmContentId cid;
-        if (R_FAILED(ncmContentMetaDatabaseGetContentIdByType(&db, &cid, &key, ct))) continue;
-        bool has = false;
-        if (R_SUCCEEDED(ncmContentStorageHas(&cs, &has, &cid)) && has) return true;
-    }
-    return false;
-}
-
-static bool titleHasContentOnStorage(NcmContentMetaDatabase& db, NcmStorageId storage, uint64_t tid) {
-    NcmContentMetaKey key;
-    if (R_FAILED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, tid))) return false;
-
-    NcmContentStorage cs;
-    if (R_FAILED(ncmOpenContentStorage(&cs, storage))) return false;
-    bool present = contentPresentForMeta(db, cs, key);
-    ncmContentStorageClose(&cs);
-    return present;
-}
-
-static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
-    if (tid == 0) return false;
-
-    // 1) The storage already opened by the guard (fast path)
-    if (guard.db_open && titleHasContentOnStorage(guard.db, guard.db_storage, tid)) return true;
-
-    // 2) The other storage (game may live on the other medium)
-    NcmStorageId other = (guard.db_storage == NcmStorageId_SdCard) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
-    NcmContentMetaDatabase db;
-    if (R_SUCCEEDED(ncmOpenContentMetaDatabase(&db, other))) {
-        bool found = titleHasContentOnStorage(db, other, tid);
-        ncmContentMetaDatabaseClose(&db);
-        if (found) return true;
-    }
-    return false;
+static inline bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard, uint32_t file_version = 0) {
+    return guard.isInstalled(tid, file_version);
 }
 #else
-struct SwitchServiceGuard {};
-static bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard) {
-    (void)guard;
-    if (tid == 0x01000BF0152FB131ULL) return true; // DLC Left 4 Dead Bundle (mock)
-    return false;
+struct SwitchServiceGuard {
+    bool isInstalled(uint64_t tid, uint32_t file_version = 0) {
+        (void)file_version;
+        if (tid == 0x01000BF0152FB131ULL) return true; // DLC Left 4 Dead Bundle (mock)
+        return false;
+    }
+};
+
+static inline bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard, uint32_t file_version = 0) {
+    return guard.isInstalled(tid, file_version);
 }
 #endif
 
-static uint64_t parseTitleIdFromFilename(const std::string& name) {
-    size_t start = name.find('[');
-    while (start != std::string::npos) {
-        size_t end = name.find(']', start);
-        if (end != std::string::npos && (end - start) == 17) {
-            std::string tid_str = name.substr(start + 1, 16);
+static uint64_t resolveFileTitleId(const std::string& filename, const std::string& game_title_id) {
+    uint64_t tid = util::parseTitleIdFromFileName(filename);
+    if (tid != 0) return tid;
+
+    // Fallback: if filename didn't contain a Title ID in brackets/name, but game_title_id is set
+    // and this file is a Switch base game (not marked as update or dlc), use game_title_id.
+    if (!game_title_id.empty() && isSwitchGameFile(filename)) {
+        std::string lower = filename;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        bool is_update = (lower.find("upd") != std::string::npos || lower.find("patch") != std::string::npos);
+        bool is_dlc = (lower.find("dlc") != std::string::npos || lower.find("addon") != std::string::npos);
+        if (!is_update && !is_dlc) {
             try {
-                return std::stoull(tid_str, nullptr, 16);
+                uint64_t g_tid = std::stoull(game_title_id, nullptr, 16);
+                if (util::isSwitchTitleId(g_tid)) {
+                    return g_tid;
+                }
             } catch (...) {}
         }
-        start = name.find('[', start + 1);
     }
     return 0;
+}
+
+static inline uint64_t parseTitleIdFromFilename(const std::string& name) {
+    return util::parseTitleIdFromFileName(name);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -247,6 +323,23 @@ void FileSelectView::onContentAvailable() {
     title->setText(cleanTitle(game_.title));
     subtitle->setText("app/fileselect/subtitle"_i18n);
 
+    if (toggleAllBox) {
+        toggleAllBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
+        toggleAllBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
+        toggleAllBox->setBorderThickness(1.0f);
+        toggleAllBox->registerClickAction([this](brls::View*) {
+            toggleAllSelection();
+            return true;
+        });
+    }
+    if (toggleAllBtnIcon) {
+        toggleAllBtnIcon->setText(brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_X));
+        toggleAllBtnIcon->setTextColor(ThemeManager::instance().getAccentColor());
+    }
+    if (toggleAllBtnText) {
+        toggleAllBtnText->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+    }
+
     if (bottomSummaryBox) {
         bottomSummaryBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
         bottomSummaryBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
@@ -277,6 +370,12 @@ void FileSelectView::onContentAvailable() {
             const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
             if (cInfo && !cInfo->default_rom_subfolder.empty()) sub = cInfo->default_rom_subfolder;
             installLocationText->setText(cfg.getEffectiveRetroRomsDir(sub));
+            installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
+        }
+    } else if (isHomebrewGame(game_)) {
+        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+        if (installLocationText) {
+            installLocationText->setText(TSNX_DOWNLOADS_DIR);
             installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
     } else {
@@ -318,14 +417,14 @@ void FileSelectView::onContentAvailable() {
     fileListScroll->setFocusable(true);
     brls::Application::giveFocus(fileListScroll);
 
-    this->registerAction("app/actions/toggle_all"_i18n, brls::ControllerButton::BUTTON_X,
-        [this](brls::View*) { toggleAllSelection(); return true; });
+    this->registerAction("", brls::ControllerButton::BUTTON_X,
+        [this](brls::View*) { toggleAllSelection(); return true; }, true);
 
     this->registerAction("app/actions/start_download"_i18n, brls::ControllerButton::BUTTON_START,
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
 
     this->registerAction("hints/back"_i18n, brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+        if (isFolderHierarchyMode() && currentFolder_ != baseFolder_) {
             navigateUp();
             return true;
         }
@@ -334,7 +433,7 @@ void FileSelectView::onContentAvailable() {
     });
 
     this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_BACKSPACE), [this](brls::View*) {
-        if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+        if (isFolderHierarchyMode() && currentFolder_ != baseFolder_) {
             navigateUp();
             return true;
         }
@@ -342,6 +441,22 @@ void FileSelectView::onContentAvailable() {
         return true;
     });
 
+    this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
+        if (files_.empty()) {
+            startProbe();
+            return true;
+        }
+        return false;
+    }, true);
+
+    startProbe();
+
+    updateTotalSize();
+    util::logLine("FileSelectView: onContentAvailable end");
+}
+
+void FileSelectView::startProbe() {
+    subtitle->setText("app/fileselect/probing"_i18n);
     auto alive = alive_flag_;
     auto status_running = std::make_shared<std::atomic<bool>>(true);
     brls::async([this, status_running, alive]() {
@@ -393,34 +508,41 @@ void FileSelectView::onContentAvailable() {
             if (success && !probedFiles.empty()) {
                 files_    = probedFiles;
                 selected_.assign(files_.size(), false);
-                if (!retro_console_id_.empty()) {
+                if (isFolderHierarchyMode()) {
                     baseFolder_ = computeBaseFolder(files_);
                     currentFolder_ = baseFolder_;
-                    bool anyRom = false;
+                    bool anySelected = false;
                     for (size_t i = 0; i < files_.size(); ++i) {
-                        if (isRomFile(files_[i].name) && !isMediaOrMetaPath(files_[i].name)) {
+                        bool isPrimary = false;
+                        if (!retro_console_id_.empty()) {
+                            isPrimary = isRomFile(files_[i].name);
+                        } else {
+                            isPrimary = !isMediaOrMetaPath(files_[i].name);
+                        }
+                        if (isPrimary && !isMediaOrMetaPath(files_[i].name)) {
                             selected_[i] = true;
-                            anyRom = true;
+                            anySelected = true;
                         }
                     }
-                    if (!anyRom) {
+                    if (!anySelected) {
                         for (size_t i = 0; i < files_.size(); ++i) {
                             if (!isMediaOrMetaPath(files_[i].name)) {
                                 selected_[i] = true;
-                                anyRom = true;
+                                anySelected = true;
                             }
                         }
                     }
-                    if (!anyRom) {
+                    if (!anySelected) {
                         selected_.assign(files_.size(), true);
                     }
                     updateRetroSubtitle();
                 } else {
                     SwitchServiceGuard guard;
                     for (size_t i = 0; i < files_.size(); ++i) {
-                        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
+                        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+                        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
                         bool isGame = isSwitchGameFile(files_[i].name);
-                        bool installed = isTitleIdInstalled(tid, guard);
+                        bool installed = isTitleIdInstalled(tid, guard, ver);
                         if (isGame && !installed) {
                             selected_[i] = true;
                         }
@@ -450,16 +572,15 @@ void FileSelectView::onContentAvailable() {
                     }
                 }
             } else {
-                subtitle->setText("app/fileselect/meta_error"_i18n);
+                std::string err_prompt = "app/fileselect/meta_error"_i18n;
+                err_prompt += " (Y: " + brls::getStr("app/actions/refresh") + ", START: " + brls::getStr("app/actions/start_download") + ")";
+                subtitle->setText(err_prompt);
                 brls::Application::notify("app/common/error"_i18n + ": " +
                     (err.empty() ? "app/fileselect/timeout_error"_i18n : err));
                 util::logLine("FileSelectView: probe error: " + err);
             }
         });
     });
-
-    updateTotalSize();
-    util::logLine("FileSelectView: onContentAvailable end");
 }
 
 brls::View* FileSelectView::create() { return nullptr; }
@@ -469,7 +590,7 @@ brls::View* FileSelectView::create() { return nullptr; }
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::rebuildFileList() {
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         rebuildRetroFolderList();
     } else {
         rebuildSwitchFileList();
@@ -762,8 +883,9 @@ void FileSelectView::rebuildRetroFolderList() {
         // File icon
         auto* icon = new brls::Label();
         icon->setFontSize(20);
-        icon->setText(isRomFile(file.name) ? "\uE0E0" : "\uE24D");
-        icon->setTextColor(isRomFile(file.name) ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
+        bool isPlayable = isPlayableFile(file.name);
+        icon->setText(isPlayable ? "\uE0E0" : "\uE24D");
+        icon->setTextColor(isPlayable ? ThemeManager::instance().getAccentColor() : ThemeManager::instance().getTextSecondaryColor());
         icon->setMarginRight(10);
         row->addView(icon);
 
@@ -821,86 +943,233 @@ void FileSelectView::rebuildRetroFolderList() {
     }
 }
 
+void FileSelectView::renderOtherFilesTree(const OtherFileTreeNode& node, int depth, brls::View*& lastFocusable, std::map<std::string, brls::View*>& focusMap) {
+    // 1. Render Subfolders
+    for (const auto& pair : node.subfolders) {
+        const auto& sub = pair.second;
+        bool isExpanded = (expandedFolders_.count(sub.fullPath) > 0);
+        bool allSel = (sub.selectedFiles == sub.totalFiles && sub.totalFiles > 0);
+        bool partialSel = (sub.selectedFiles > 0 && !allSel);
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10 + depth * 24);
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        // Expand/Collapse arrow
+        auto* arrow = new brls::Label();
+        arrow->setWidth(24);
+        arrow->setHeight(brls::View::AUTO);
+        arrow->setFontSize(14);
+        arrow->setText(isExpanded ? "▼" : "▶");
+        arrow->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(arrow);
+
+        // Checkbox label
+        auto* chk = new brls::Label();
+        chk->setWidth(40);
+        chk->setHeight(brls::View::AUTO);
+        chk->setFontSize(20);
+        if (allSel) {
+            chk->setText("[V]");
+            chk->setTextColor(nvgRGB(76, 175, 80));
+        } else if (partialSel) {
+            chk->setText("[-]");
+            chk->setTextColor(nvgRGB(255, 183, 77));
+        } else {
+            chk->setText("[ ]");
+            chk->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        }
+        row->addView(chk);
+
+        // Folder Icon
+        auto* icon = new brls::Label();
+        icon->setFontSize(22);
+        icon->setText("\uE2C7"); // Material folder
+        icon->setTextColor(ThemeManager::instance().getAccentColor());
+        icon->setMarginRight(10);
+        row->addView(icon);
+
+        // Folder Name
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText(sub.name);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        // Folder Info (file count + total size)
+        auto* infoLbl = new brls::Label();
+        infoLbl->setWidth(160);
+        infoLbl->setHeight(brls::View::AUTO);
+        infoLbl->setFontSize(14);
+        infoLbl->setText(std::to_string(sub.totalFiles) + " | " + formatBytes(sub.size));
+        infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(infoLbl);
+
+        std::string rowKey = "folder:" + sub.fullPath;
+        focusMap[rowKey] = row;
+
+        // Button A: expand / collapse
+        row->registerClickAction([this, path = sub.fullPath](brls::View*) {
+            if (expandedFolders_.count(path)) {
+                expandedFolders_.erase(path);
+            } else {
+                expandedFolders_.insert(path);
+            }
+            focusedKey_ = "folder:" + path;
+            rebuildSwitchFileList();
+            return true;
+        });
+
+        // Button Y: toggle folder selection
+        auto toggleFolder = [this, indices = sub.allFileIndices, path = sub.fullPath, selCount = sub.selectedFiles, totCount = sub.totalFiles](brls::View*) {
+            bool newState = (selCount < totCount);
+            for (size_t idx : indices) {
+                if (idx < selected_.size()) {
+                    selected_[idx] = newState;
+                }
+            }
+            focusedKey_ = "folder:" + path;
+            updateTotalSize();
+            rebuildSwitchFileList();
+            return true;
+        };
+        row->registerAction("app/fileselect/toggle_folder"_i18n, brls::ControllerButton::BUTTON_Y, toggleFolder);
+
+        fileListBox->addView(row);
+        lastFocusable = row;
+
+        // If expanded, recursively render children
+        if (isExpanded) {
+            renderOtherFilesTree(sub, depth + 1, lastFocusable, focusMap);
+        }
+    }
+
+    // 2. Render Direct Files
+    auto directFilesSorted = node.directFiles;
+    std::sort(directFilesSorted.begin(), directFilesSorted.end(), [](const OtherFileTreeNode& a, const OtherFileTreeNode& b) {
+        return a.name < b.name;
+    });
+
+    for (const auto& item : directFilesSorted) {
+        size_t idx = item.fileIndex;
+        bool isSel = (idx < selected_.size()) && selected_[idx];
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setHeight(60);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10 + depth * 24 + 24); // indented past folder arrow
+        row->setPaddingRight(10);
+        row->setFocusable(true);
+
+        // Checkbox label
+        auto* chk = new brls::Label();
+        chk->setWidth(40);
+        chk->setHeight(brls::View::AUTO);
+        chk->setFontSize(20);
+        chk->setText(isSel ? "[V]" : "[ ]");
+        chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
+        row->addView(chk);
+        if (idx < checkboxLabels_.size()) {
+            checkboxLabels_[idx] = chk;
+        }
+
+        // File icon
+        auto* icon = new brls::Label();
+        icon->setFontSize(20);
+        icon->setText("\uE24D"); // File icon
+        icon->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        icon->setMarginRight(10);
+        row->addView(icon);
+
+        // File name label
+        auto* nameLbl = new brls::Label();
+        nameLbl->setGrow(1.0f);
+        nameLbl->setHeight(brls::View::AUTO);
+        nameLbl->setFontSize(16);
+        nameLbl->setText(item.name);
+        nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+        row->addView(nameLbl);
+
+        // File size label
+        auto* sizeLbl = new brls::Label();
+        sizeLbl->setWidth(140);
+        sizeLbl->setHeight(brls::View::AUTO);
+        sizeLbl->setFontSize(14);
+        sizeLbl->setText(formatBytes(item.size));
+        sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        row->addView(sizeLbl);
+
+        std::string rowKey = "file:" + std::to_string(idx);
+        focusMap[rowKey] = row;
+
+        // Click to toggle file (Button A or Button Y)
+        auto toggleFile = [this, idx](brls::View*) {
+            if (idx < selected_.size()) {
+                selected_[idx] = !selected_[idx];
+                focusedKey_ = "file:" + std::to_string(idx);
+                updateTotalSize();
+                rebuildSwitchFileList();
+            }
+            return true;
+        };
+        row->registerClickAction(toggleFile);
+        row->registerAction("app/fileselect/toggle_folder"_i18n, brls::ControllerButton::BUTTON_Y, toggleFile);
+
+        fileListBox->addView(row);
+        lastFocusable = row;
+    }
+}
+
 void FileSelectView::rebuildSwitchFileList() {
-    // Remove all existing child rows
     fileListBox->clearViews();
     checkboxLabels_.assign(files_.size(), nullptr);
 
     SwitchServiceGuard guard;
+    std::map<std::string, brls::View*> focusMap;
+    brls::View* firstFocusable = nullptr;
+    brls::View* lastFocusable = nullptr;
 
-    struct DisplayItem {
-        size_t originalIndex;
-        bool isHeader;
-        std::string headerTitle;
+    auto addHeaderRow = [this](const std::string& titleText, bool isEmpty) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setHeight(50);
+        row->setWidth(brls::View::AUTO);
+        row->setPaddingLeft(10);
+        row->setPaddingRight(10);
+        row->setAlignItems(brls::AlignItems::CENTER);
+
+        auto* label = new brls::Label();
+        label->setFontSize(16);
+        label->setText(titleText);
+        if (isEmpty) {
+            label->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        } else {
+            label->setTextColor(ThemeManager::instance().getAccentColor());
+        }
+        row->addView(label);
+        fileListBox->addView(row);
     };
-    std::vector<DisplayItem> displayItems;
 
+    // ─────────────────────────────────────────────────────────────────────────
     // 1. Group: NOT INSTALLED
-    displayItems.push_back({0, true, "app/fileselect/group_uninstalled"_i18n});
+    // ─────────────────────────────────────────────────────────────────────────
+    addHeaderRow("app/fileselect/group_uninstalled"_i18n, false);
     bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard)) {
-            displayItems.push_back({i, false, ""});
+        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard, ver)) {
             hasUninstalled = true;
-        }
-    }
-    if (!hasUninstalled) {
-        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
-    }
-
-    // 2. Group: OTHER FILES
-    displayItems.push_back({0, true, "app/fileselect/group_other"_i18n});
-    bool hasOther = false;
-    for (size_t i = 0; i < files_.size(); ++i) {
-        if (!isSwitchGameFile(files_[i].name)) {
-            displayItems.push_back({i, false, ""});
-            hasOther = true;
-        }
-    }
-    if (!hasOther) {
-        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
-    }
-
-    // 3. Group: INSTALLED
-    displayItems.push_back({0, true, "app/fileselect/group_installed"_i18n});
-    bool hasInstalled = false;
-    for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = parseTitleIdFromFilename(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard)) {
-            displayItems.push_back({i, false, ""});
-            hasInstalled = true;
-        }
-    }
-    if (!hasInstalled) {
-        displayItems.push_back({0, true, "app/fileselect/no_files"_i18n});
-    }
-
-    // Now render them
-    brls::View* lastFocusable = nullptr;
-    for (const auto& item : displayItems) {
-        if (item.isHeader) {
-            auto* row = new brls::Box();
-            row->setAxis(brls::Axis::ROW);
-            row->setHeight(50);
-            row->setWidth(brls::View::AUTO);
-            row->setPaddingLeft(10);
-            row->setPaddingRight(10);
-            row->setAlignItems(brls::AlignItems::CENTER);
-            
-            auto* label = new brls::Label();
-            label->setFontSize(16);
-            label->setText(item.headerTitle);
-            
-            if (item.headerTitle == "app/fileselect/no_files"_i18n) {
-                label->setTextColor(ThemeManager::instance().getTextSecondaryColor());
-            } else {
-                label->setTextColor(ThemeManager::instance().getAccentColor());
-            }
-            row->addView(label);
-            fileListBox->addView(row);
-        } else {
-            size_t idx = item.originalIndex;
+            size_t idx = i;
             const auto& file = files_[idx];
             bool isSel = (idx < selected_.size()) && selected_[idx];
 
@@ -913,7 +1182,6 @@ void FileSelectView::rebuildSwitchFileList() {
             row->setPaddingRight(10);
             row->setFocusable(true);
 
-            // Checkbox label
             auto* chk = new brls::Label();
             chk->setWidth(40);
             chk->setHeight(brls::View::AUTO);
@@ -923,7 +1191,6 @@ void FileSelectView::rebuildSwitchFileList() {
             row->addView(chk);
             checkboxLabels_[idx] = chk;
 
-            // File name label
             auto* nameLbl = new brls::Label();
             nameLbl->setGrow(1.0f);
             nameLbl->setHeight(brls::View::AUTO);
@@ -931,16 +1198,9 @@ void FileSelectView::rebuildSwitchFileList() {
             nameLbl->setText(file.name);
             nameLbl->setMarginLeft(10);
             nameLbl->setMarginRight(10);
-            
-            uint64_t tid = parseTitleIdFromFilename(file.name);
-            if (isSwitchGameFile(file.name) && isTitleIdInstalled(tid, guard)) {
-                nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
-            } else {
-                nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
-            }
+            nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             row->addView(nameLbl);
 
-            // File size label
             auto* sizeLbl = new brls::Label();
             sizeLbl->setWidth(140);
             sizeLbl->setHeight(brls::View::AUTO);
@@ -949,7 +1209,9 @@ void FileSelectView::rebuildSwitchFileList() {
             sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
-            // Click to toggle
+            std::string rowKey = "game:" + std::to_string(idx);
+            focusMap[rowKey] = row;
+
             row->registerClickAction([this, idx](brls::View*) {
                 if (idx < selected_.size()) {
                     selected_[idx] = !selected_[idx];
@@ -960,15 +1222,178 @@ void FileSelectView::rebuildSwitchFileList() {
             });
 
             fileListBox->addView(row);
+            if (!firstFocusable) firstFocusable = row;
             lastFocusable = row;
-            util::logLine("FileSelectView: added row " + std::to_string(idx) +
-                          " name='" + file.name + "'");
         }
+    }
+    if (!hasUninstalled) {
+        addHeaderRow("app/fileselect/no_files"_i18n, true);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. Group: OTHER FILES (TREE VIEW)
+    // ─────────────────────────────────────────────────────────────────────────
+    addHeaderRow("app/fileselect/group_other"_i18n, false);
+    bool hasOther = false;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        if (!isSwitchGameFile(files_[i].name)) {
+            hasOther = true;
+            break;
+        }
+    }
+
+    if (hasOther) {
+        std::string basePrefix = computeBaseFolder(files_);
+        if (!basePrefix.empty()) {
+            basePrefix += "/";
+        }
+
+        OtherFileTreeNode rootNode;
+        for (size_t i = 0; i < files_.size(); ++i) {
+            if (isSwitchGameFile(files_[i].name)) continue;
+
+            std::string normPath = files_[i].name;
+            std::replace(normPath.begin(), normPath.end(), '\\', '/');
+
+            std::string relPath = normPath;
+            if (!basePrefix.empty() && relPath.rfind(basePrefix, 0) == 0) {
+                relPath = relPath.substr(basePrefix.size());
+            }
+
+            std::vector<std::string> parts = splitPath(relPath);
+            if (parts.empty()) continue;
+
+            OtherFileTreeNode* curr = &rootNode;
+            std::string currPath = "";
+            for (size_t p = 0; p + 1 < parts.size(); ++p) {
+                const std::string& seg = parts[p];
+                if (!currPath.empty()) currPath += "/";
+                currPath += seg;
+
+                auto& sub = curr->subfolders[seg];
+                if (sub.name.empty()) {
+                    sub.name = seg;
+                    sub.fullPath = currPath;
+                    sub.isFolder = true;
+                }
+                sub.allFileIndices.push_back(i);
+                sub.size += files_[i].size;
+                sub.totalFiles++;
+                if (i < selected_.size() && selected_[i]) {
+                    sub.selectedFiles++;
+                }
+                curr = &sub;
+            }
+
+            OtherFileTreeNode leaf;
+            leaf.name = parts.back();
+            leaf.fullPath = normPath;
+            leaf.isFolder = false;
+            leaf.fileIndex = i;
+            leaf.size = files_[i].size;
+            curr->directFiles.push_back(leaf);
+        }
+
+        renderOtherFilesTree(rootNode, 0, lastFocusable, focusMap);
+        if (!firstFocusable && lastFocusable) {
+            firstFocusable = lastFocusable;
+        }
+    } else {
+        addHeaderRow("app/fileselect/no_files"_i18n, true);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. Group: INSTALLED
+    // ─────────────────────────────────────────────────────────────────────────
+    addHeaderRow("app/fileselect/group_installed"_i18n, false);
+    bool hasInstalled = false;
+    for (size_t i = 0; i < files_.size(); ++i) {
+        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard, ver)) {
+            hasInstalled = true;
+            size_t idx = i;
+            const auto& file = files_[idx];
+            bool isSel = (idx < selected_.size()) && selected_[idx];
+
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setHeight(60);
+            row->setWidth(brls::View::AUTO);
+            row->setPaddingLeft(10);
+            row->setPaddingRight(10);
+            row->setFocusable(true);
+
+            auto* chk = new brls::Label();
+            chk->setWidth(40);
+            chk->setHeight(brls::View::AUTO);
+            chk->setFontSize(20);
+            chk->setText(isSel ? "[V]" : "[ ]");
+            chk->setTextColor(isSel ? nvgRGB(76, 175, 80) : ThemeManager::instance().getTextSecondaryColor());
+            row->addView(chk);
+            checkboxLabels_[idx] = chk;
+
+            auto* nameLbl = new brls::Label();
+            nameLbl->setGrow(1.0f);
+            nameLbl->setHeight(brls::View::AUTO);
+            nameLbl->setFontSize(16);
+            nameLbl->setText(file.name);
+            nameLbl->setMarginLeft(10);
+            nameLbl->setMarginRight(10);
+            nameLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor()); // Gray out installed
+            row->addView(nameLbl);
+
+            auto* sizeLbl = new brls::Label();
+            sizeLbl->setWidth(140);
+            sizeLbl->setHeight(brls::View::AUTO);
+            sizeLbl->setFontSize(14);
+            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            row->addView(sizeLbl);
+
+            std::string rowKey = "game_inst:" + std::to_string(idx);
+            focusMap[rowKey] = row;
+
+            row->registerClickAction([this, idx](brls::View*) {
+                if (idx < selected_.size()) {
+                    selected_[idx] = !selected_[idx];
+                    updateRowSelectionState(idx);
+                    updateTotalSize();
+                }
+                return true;
+            });
+
+            fileListBox->addView(row);
+            if (!firstFocusable) firstFocusable = row;
+            lastFocusable = row;
+        }
+    }
+    if (!hasInstalled) {
+        addHeaderRow("app/fileselect/no_files"_i18n, true);
     }
 
     if (lastFocusable && installLocationBox) {
         lastFocusable->setCustomNavigationRoute(brls::FocusDirection::DOWN, installLocationBox);
         installLocationBox->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
+    }
+
+    // Focus restoration
+    if (!focusedKey_.empty()) {
+        if (focusMap.count(focusedKey_)) {
+            brls::Application::giveFocus(focusMap[focusedKey_]);
+        } else {
+            std::string prefix = focusedKey_;
+            while (true) {
+                size_t slash = prefix.rfind('/');
+                if (slash == std::string::npos) break;
+                prefix = prefix.substr(0, slash);
+                if (focusMap.count(prefix)) {
+                    brls::Application::giveFocus(focusMap[prefix]);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -1042,7 +1467,7 @@ void FileSelectView::updateTotalSize() {
         totalSizeText->setText(sizeStr);
     }
 
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         int64_t sdFree = 0;
         if (freeSpaceSdText) {
             if (util::getStorageFreeSpace(1, sdFree)) {
@@ -1080,7 +1505,7 @@ void FileSelectView::updateTotalSize() {
 void FileSelectView::toggleAllSelection() {
     if (selected_.empty()) return;
 
-    if (!retro_console_id_.empty() && currentFolder_ != baseFolder_) {
+    if (isFolderHierarchyMode() && currentFolder_ != baseFolder_) {
         // Inside a subfolder: toggle selection for files inside currentFolder_
         std::string prefix = currentFolder_ + "/";
         std::vector<size_t> folderIndices;
@@ -1112,12 +1537,10 @@ void FileSelectView::toggleAllSelection() {
         for (size_t i = 0; i < selected_.size(); ++i) {
             selected_[i] = !anySelected;
         }
-        if (!retro_console_id_.empty()) {
+        if (isFolderHierarchyMode()) {
             rebuildRetroFolderList();
         } else {
-            for (size_t i = 0; i < files_.size(); ++i) {
-                updateRowSelectionState(i);
-            }
+            rebuildSwitchFileList();
         }
     }
     updateTotalSize();
@@ -1128,6 +1551,13 @@ void FileSelectView::toggleAllSelection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void FileSelectView::startDownloadAndGoToDownloads() {
+    if (files_.empty()) {
+        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+        brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+        brls::Application::popActivity();
+        return;
+    }
+
     std::vector<int> selectedIndices;
     int forcedIndex = -1;
     std::string forcedName;
@@ -1167,7 +1597,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         int64_t freeSpace = 0;
         util::getStorageFreeSpace(1, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
@@ -1249,29 +1679,37 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         }
     }
 
-    if (!retro_console_id_.empty()) {
+    if (isFolderHierarchyMode()) {
         if (chosen.size() == 1) {
             size_t i = chosen[0];
             std::vector<int> singleSelected = { files_[i].index };
-            std::string itemTitle = cleanTitle(game_.title) + " (" + std::filesystem::path(files_[i].name).filename().string() + ")";
+            std::string filenameOnly = std::filesystem::path(files_[i].name).filename().string();
+            std::string itemTitle = cleanTitle(game_.title) + " (" + filenameOnly + ")";
             Game singleGame = game_;
             singleGame.title = itemTitle;
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
-            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_);
+            unsigned long long fileSize = (files_[i].size > 0) ? static_cast<unsigned long long>(files_[i].size) : 0;
+            ui::DownloadManager::instance().addDownload(
+                singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize);
         } else if (!chosen.empty()) {
             std::vector<int> bundleSelected;
             bundleSelected.reserve(chosen.size());
+            unsigned long long bundleTotalBytes = 0;
             for (size_t i : chosen) {
                 bundleSelected.push_back(files_[i].index);
+                if (files_[i].size > 0) bundleTotalBytes += static_cast<unsigned long long>(files_[i].size);
             }
             std::string countStr = std::to_string(chosen.size());
             std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
             Game bundleGame = game_;
             bundleGame.title = bundleTitle;
-            bundleGame.topic_id = game_.topic_id + "_romset";
+            bundleGame.topic_id = game_.topic_id + (retro_console_id_.empty() ? "_hb_bundle" : "_romset");
             int firstIndex = files_[chosen[0]].index;
             std::string firstName = files_[chosen[0]].name;
-            ui::DownloadManager::instance().addDownload(bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_);
+            ui::DownloadManager::instance().addDownload(
+                bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes);
         }
     } else {
         std::vector<size_t> packages;
@@ -1307,32 +1745,39 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             Game singleGame = game_;
             singleGame.title = cleanTitle(game_.title);
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
-            ui::DownloadManager::instance().addDownload(singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_);
+
+            auto comp = util::classifyDownloadComponent(files_[idx].name, game_.title);
+            unsigned long long pkgSize = (files_[idx].size > 0) ? static_cast<unsigned long long>(files_[idx].size) : 0;
+            ui::DownloadManager::instance().addDownload(
+                singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize);
         }
 
         // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
         if (!extraFiles.empty()) {
             std::vector<int> extraIndices;
             extraIndices.reserve(extraFiles.size());
+            unsigned long long extraTotalBytes = 0;
             for (size_t idx : extraFiles) {
                 extraIndices.push_back(files_[idx].index);
+                if (files_[idx].size > 0) extraTotalBytes += static_cast<unsigned long long>(files_[idx].size);
+            }
+
+            auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
+            if (extraFiles.size() > 1) {
+                comp.cleanName += " (" + std::to_string(extraFiles.size()) + " ф.)";
             }
 
             std::string extraTitle = cleanTitle(game_.title);
-            if (extraFiles.size() == 1) {
-                extraTitle += " (" + files_[extraFiles[0]].name + ")";
-            } else {
-                std::string countStr = std::to_string(extraFiles.size());
-                extraTitle += " (" + brls::getStr("app/fileselect/extra_files_bundle", countStr) + ")";
-            }
-
             Game extraGame = game_;
             extraGame.title = extraTitle;
             extraGame.topic_id = game_.topic_id + "_extras";
             int firstIndex = files_[extraFiles[0]].index;
             std::string forcedName = files_[extraFiles[0]].name;
 
-            ui::DownloadManager::instance().addDownload(extraGame, extraIndices, firstIndex, forcedName, retro_console_id_);
+            ui::DownloadManager::instance().addDownload(
+                extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
+                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes);
         }
     }
 

@@ -104,7 +104,8 @@ bool extract7zArchive(
     std::shared_ptr<std::atomic<bool>> cancelToken,
     std::string& outError,
     uint64_t* outKnownUncompressedSize,
-    size_t* outKnownTotalEntries
+    size_t* outKnownTotalEntries,
+    PathTransformFn pathTransform
 ) {
     util::logLine("sevenzip: extractArchive start: " + archivePath + " -> " + destinationDir);
 
@@ -255,14 +256,35 @@ bool extract7zArchive(
                 continue;
             }
 
+            std::string targetPath = cleanName;
+            if (pathTransform) {
+                targetPath = pathTransform(cleanName, isDir);
+                if (targetPath.empty()) {
+                    continue;
+                }
+            }
+
             progress.currentFileName = cleanName;
             progress.entriesProcessed++;
 
-            std::string fullPath = destinationDir;
-            if (!fullPath.empty() && fullPath.back() != '/') {
-                fullPath += "/";
+            std::string fullPath;
+#ifdef _WIN32
+            bool isAbs = (targetPath.size() >= 2 && targetPath[1] == ':') ||
+                         (targetPath.rfind("./", 0) == 0) ||
+                         (targetPath.rfind("sdmc:/", 0) == 0);
+#else
+            bool isAbs = (targetPath.rfind("sdmc:/", 0) == 0) ||
+                         (!targetPath.empty() && targetPath[0] == '/');
+#endif
+            if (isAbs || destinationDir.empty()) {
+                fullPath = targetPath;
+            } else {
+                fullPath = destinationDir;
+                if (!fullPath.empty() && fullPath.back() != '/') {
+                    fullPath += "/";
+                }
+                fullPath += targetPath;
             }
-            fullPath += cleanName;
 
             if (progress.entriesProcessed == 1 || (progress.entriesProcessed % 50 == 0)) {
                 util::logLine("sevenzip: extracting entry #" + std::to_string(progress.entriesProcessed) + ": " + cleanName);
@@ -618,6 +640,91 @@ bool get7zArchiveTotals(
 
     SzFree(nullptr, lookStream.buf);
     lookStream.buf = nullptr;
+    SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+    File_Close(&archiveStream.file);
+    return true;
+}
+
+bool iterate7zArchiveEntries(
+    const std::string& archivePath,
+    std::function<bool(const std::string& entryName, bool isDir)> callback
+) {
+    if (!callback) return false;
+
+    CFileInStream archiveStream;
+    CLookToRead2 lookStream;
+    CSzArEx db;
+    File_Construct(&archiveStream.file);
+    archiveStream.wres = 0;
+
+    {
+        WRes wres;
+#ifdef _WIN32
+        std::wstring wpath = std::filesystem::u8path(archivePath).native();
+        wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
+#else
+        wres = InFile_Open(&archiveStream.file, archivePath.c_str());
+#endif
+        if (wres != 0) return false;
+    }
+
+    FileInStream_CreateVTable(&archiveStream);
+    archiveStream.wres = 0;
+
+    LookToRead2_CreateVTable(&lookStream, False);
+    lookStream.buf = nullptr;
+    lookStream.bufSize = 0;
+    lookStream.realStream = nullptr;
+
+    CrcGenerateTable();
+    SzArEx_Init(&db);
+
+    lookStream.buf = static_cast<Byte*>(SzAlloc(nullptr, kInputBufSize));
+    if (!lookStream.buf) {
+        File_Close(&archiveStream.file);
+        return false;
+    }
+    lookStream.bufSize = kInputBufSize;
+    lookStream.realStream = &archiveStream.vt;
+    LookToRead2_INIT(&lookStream);
+
+    SRes res = SzArEx_Open(&db, &lookStream.vt, (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
+    if (res != SZ_OK) {
+        SzFree(nullptr, lookStream.buf);
+        File_Close(&archiveStream.file);
+        return false;
+    }
+
+    UInt16* nameBuf = nullptr;
+    size_t nameBufSize = 0;
+    bool keepGoing = true;
+
+    for (UInt32 i = 0; i < db.NumFiles && keepGoing; i++) {
+        size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
+        if (nameLen == 0 || nameLen > (1u << 20)) continue;
+        if (nameLen > nameBufSize) {
+            SzFree(nullptr, nameBuf);
+            nameBufSize = nameLen;
+            nameBuf = static_cast<UInt16*>(SzAlloc(nullptr, nameBufSize * sizeof(UInt16)));
+            if (!nameBuf) break;
+        }
+        SzArEx_GetFileNameUtf16(&db, i, nameBuf);
+        std::string rawName = utf16leToUtf8(nameBuf, nameLen - 1);
+        std::string clean = sanitizeEntryName(rawName);
+        for (char& c : clean) {
+            if (c == '\\') c = '/';
+        }
+        if (clean.empty()) continue;
+
+        bool isDir = (SzArEx_IsDir(&db, i) != 0) || (!clean.empty() && clean.back() == '/');
+        while (!clean.empty() && clean.back() == '/') clean.pop_back();
+        if (clean.empty()) continue;
+
+        keepGoing = callback(clean, isDir);
+    }
+
+    if (nameBuf) SzFree(nullptr, nameBuf);
+    SzFree(nullptr, lookStream.buf);
     SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
     File_Close(&archiveStream.file);
     return true;

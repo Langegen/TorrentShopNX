@@ -496,6 +496,12 @@ int peer_fetch_metadata(peer_addr addr, const uint8_t info_hash[20],
         set_err(err, errlen, e);
         return -1;
     }
+#ifdef __SWITCH__
+    int rcvbuf = 64 * 1024;
+    int sndbuf = 16 * 1024;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+#endif
     set_timeout(sock, 10);
 
     struct sockaddr_in sa = {0};
@@ -655,6 +661,21 @@ static void tcp_speed_opts(int sock) {
 
 void peer_nb_apply_speed_opts(peer_nb *p) {
     if (!p || p->sock < 0) return;
+#ifdef __SWITCH__
+    /* On Horizon OS (libnx), BSD socket buffers are allocated from a fixed 32 MB pool.
+       Try 256 KB first for high throughput on fast peers, falling back gracefully if memory is tight. */
+    int rbuf = 256 * 1024;
+    if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+        rbuf = 192 * 1024;
+        if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+            rbuf = 128 * 1024;
+            if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
+                rbuf = 64 * 1024;
+                setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
+            }
+        }
+    }
+#else
     int rbuf = 512 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
         rbuf = 384 * 1024;
@@ -666,9 +687,10 @@ void peer_nb_apply_speed_opts(peer_nb *p) {
             }
         }
     }
-    int sbuf = 64 * 1024;
+#endif
+    int sbuf = 16 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_SNDBUF, &sbuf, sizeof(sbuf)) != 0) {
-        sbuf = 32 * 1024;
+        sbuf = 8 * 1024;
         setsockopt(p->sock, SOL_SOCKET, SO_SNDBUF, &sbuf, sizeof(sbuf));
     }
 }

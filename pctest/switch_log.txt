@@ -1,0 +1,1380 @@
+TorrentShopNX log start
+main: start g_nroPath=sdmc:/switch/TorrentShopNX/TorrentShopNX.nro
+main: socketInit result=0 mem_size=33554432 applet_type=0
+GameData: storage layout migration start
+GameData: storage layout migration done
+config: loaded config.ini, TorrServer URL: http://192.168.1.100:8090, theme: light, background_mode: custom
+main: romfsInit succeeded
+ThemeManager: initialized with theme=light, wallpaper=romfs:/img/backgrounds/bg_light.jpg
+favorites: loaded games_count=3 legacy_count=0
+ignored_updates: loaded count=1
+GameStatsManager: loaded 7253 switch stats from disk
+GameStatsManager: loaded 8677 console stats from disk
+GameStatsManager: loaded 7253 switch stats from disk
+GameStatsManager: loaded 8677 console stats from disk
+ds_mgr: remote URL: http://192.168.1.100:8090
+power: keep-awake disabled
+ds_mgr: mode set to: Custom engine
+ImageDownloader: initialized with 2 workers
+GameData: loaded 7241 games from binary cache sdmc:/switch/TorrentShopNX/data/switch_games_ru.bin
+main: initially loaded g_games count=7241 (path=sdmc:/switch/TorrentShopNX/data/switch_games_ru.json)
+main: instantiating and pushing MainMenu...
+MainMenu: constructor start (Modern Dashboard)
+MainMenu: constructor end
+main: MainMenu instantiated, pushing...
+MainMenu: onContentAvailable start
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b5f16c513bab00bf.jpg (11853 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/aded76bd826b4b8d.jpg (9369 bytes)
+catalog_updater: catalog is up-to-date, skipping update
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/4c63a5cac44631f6.jpg (11226 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/7f48ef2638099ce3.jpg (12684 bytes)
+main: initializing ScreenSleepManager
+ScreenSleepManager: initialized with global input interceptor
+main: entering mainLoop
+brls: internalMainLoop START frame=1
+brls: before mainLoopIteration
+main: focus regained (console waking up)
+brls: before processInput
+brls: before updateHighlightAnimation
+brls: before updateTickings
+brls: before frame
+brls: frame() enter #1
+brls: frame() before beginFrame
+brls: frame() before clear
+brls: frame() before nvgBeginFrame
+brls: loaded globalBgImage=15 from romfs:/img/backgrounds/bg_light.jpg (blur=0)
+brls: frame() before drawing views (count=1)
+brls: frame() drawing view #0 brls::Box
+brls: frame() after drawing views
+brls: frame() before highlight for ui::DashboardTile
+brls: frame() before notificationManager->frame
+brls: frame() before nvgEndFrame
+brls: frame() before videoContext->endFrame
+glfw_video: before glfwSwapBuffers #1
+glfw_video: after glfwSwapBuffers #1
+brls: frame() after videoContext->endFrame
+brls: before performSyncTasks
+brls: before runLoopEvent
+brls: internalMainLoop END frame=1
+main: mainLoop frame=1
+brls: internalMainLoop START frame=2
+brls: before mainLoopIteration
+brls: before processInput
+brls: before updateHighlightAnimation
+brls: before updateTickings
+brls: before frame
+brls: frame() enter #2
+brls: frame() before beginFrame
+brls: frame() before clear
+brls: frame() before nvgBeginFrame
+brls: frame() before drawing views (count=1)
+brls: frame() drawing view #0 brls::Box
+brls: frame() after drawing views
+brls: frame() before highlight for ui::DashboardTile
+brls: frame() before notificationManager->frame
+brls: frame() before nvgEndFrame
+brls: frame() before videoContext->endFrame
+glfw_video: before glfwSwapBuffers #2
+glfw_video: after glfwSwapBuffers #2
+brls: frame() after videoContext->endFrame
+brls: before performSyncTasks
+brls: before runLoopEvent
+brls: internalMainLoop END frame=2
+main: mainLoop frame=2
+brls: internalMainLoop START frame=3
+brls: before mainLoopIteration
+brls: before processInput
+brls: before updateHighlightAnimation
+brls: before updateTickings
+brls: before frame
+brls: frame() enter #3
+brls: frame() before beginFrame
+brls: frame() before clear
+brls: frame() before nvgBeginFrame
+brls: frame() before drawing views (count=1)
+brls: frame() drawing view #0 brls::Box
+brls: frame() after drawing views
+brls: frame() before highlight for ui::DashboardTile
+brls: frame() before notificationManager->frame
+brls: frame() before nvgEndFrame
+brls: frame() before videoContext->endFrame
+glfw_video: before glfwSwapBuffers #3
+glfw_video: after glfwSwapBuffers #3
+brls: frame() after videoContext->endFrame
+brls: before performSyncTasks
+brls: before runLoopEvent
+brls: internalMainLoop END frame=3
+main: mainLoop frame=3
+CollectionsView: successfully built 4xN grid with 5 rows
+collections: new_release parsed 37 entries
+collections: top_100 parsed 100 entries
+collections: action_adventure parsed 100 entries
+collections: arcade parsed 100 entries
+collections: horror parsed 100 entries
+collections: metroidvania parsed 100 entries
+collections: party_multiplayer parsed 100 entries
+collections: platformers parsed 100 entries
+collections: puzzles parsed 100 entries
+collections: roguelike_roguelite parsed 100 entries
+collections: rpg_jrpg parsed 100 entries
+collections: shooters parsed 100 entries
+collections: simulation_cozy parsed 100 entries
+collections: strategy_tactics parsed 100 entries
+collections: visual_novels parsed 100 entries
+collections: ports_homebrew loaded 268 entries from catalog
+collections: top_100 parsed 100 entries
+collections: match index built: title_ids=6858 titles=7241
+collections: covers row=0 url=https://raw.githubusercontent.com/Langegen/switch-game-collection/main/covers/6702315.jpg
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/3ab00310405df924.jpg (11608 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/33c0bf1e1f12937a.jpg (13611 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/0bced7ac2a672e89.jpg (14144 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b5e4abed58951391.jpg (11124 bytes)
+collections: covers row=1 url=https://raw.githubusercontent.com/Langegen/switch-game-collection/main/covers/6819657.jpg
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/94c7a4e1a6bf1144.jpg (12724 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/a60114d99b4a8e6c.jpg (15470 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/5edc92d871817d62.jpg (7299 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/12e27fcdf877f4db.jpg (11062 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/6ba86b2f5ba9ece1.jpg (11049 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/17fbd3e131766ad4.jpg (11424 bytes)
+collections: covers row=2 url=https://raw.githubusercontent.com/Langegen/switch-game-collection/main/covers/6223744.jpg
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/d4c30043ba0f2bc8.jpg (13642 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/f2e987e07d66ca42.jpg (13509 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/57f8880761373a0a.jpg (9504 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/332706152d3990f3.jpg (9146 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/58bb0313108fafa7.jpg (11206 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/41ef8654a4ff6f5e.jpg (9869 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/7ae7ad9a93605185.jpg (11644 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/434cd6f35a70df32.jpg (12445 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/eb552b89e0c5c2b7.jpg (5978 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/06fd16f735f01ffb.jpg (16017 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/edcd0c7dc1d111ba.jpg (12613 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/8cef8f1347bb3c07.jpg (16795 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/26cf91b26e97b668.jpg (6941 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/a79754198c0f6bde.jpg (11663 bytes)
+CollectionGamesView: loaded 100 entries for top_100 (cache)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b310f866b9181268.jpg (5259 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/6ef330fdd49687ff.jpg (7007 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b7478d8e79f27dff.jpg (10869 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/a9bc693439ec8e08.jpg (14918 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/daeb7de570fc9699.jpg (7628 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/fc3e6f35e71de836.jpg (14513 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/63ce42b92294351b.jpg (11927 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b22e17441d36435e.jpg (12762 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/4ea5f5a50aaf78a0.jpg (2046 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/a975e0aa3c2ad584.jpg (13454 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/9942a6f1c951c425.jpg (9005 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/809fc179be62048b.jpg (10834 bytes)
+ImageDownloader: host img-eshop.cdn.nintendo.net in hard cooldown, discarding https://img-eshop.cdn.nintendo.net/i/4e1d128b2d61199c302979303d7c8326d142ef8bc9b5cf00731e48eeaf4789a5.jpg
+ImageDownloader: host img-eshop.cdn.nintendo.net in hard cooldown, discarding https://img-eshop.cdn.nintendo.net/i/3b31bfb0edbf1de158664f1ad7d3be962a05b40c7992aa1e8ae9255c7e7849d1.jpg
+ImageDownloader: host img-eshop.cdn.nintendo.net in hard cooldown, discarding https://img-eshop.cdn.nintendo.net/i/d4b5b86c17ecd29131162f7bd6ab9807cfb477d6da77f065447fa9cfa1e0763c.jpg
+ImageDownloader: host img-eshop.cdn.nintendo.net in hard cooldown, discarding https://img-eshop.cdn.nintendo.net/i/e67c7df6aabdebcd977738dffedb4d513d10e00e5b094a72724c6418bde10298.jpg
+ImageDownloader: host img-eshop.cdn.nintendo.net in hard cooldown, discarding https://img-eshop.cdn.nintendo.net/i/4f432f38fc6c4a868771a6afc9d17847db4c840343d46542f654c58f48de56a6.jpg
+ImageDownloader: host img-eshop.cdn.nintendo.net in hard cooldown, discarding https://img-eshop.cdn.nintendo.net/i/9550df89621565b348dcafab44b03c6c973e0709850228eb6b07f779dea522fe.jpg
+ImageDownloader: paused
+FileSelectView: onContentAvailable start
+FileSelectView: probe thread started
+FileSelectView: onContentAvailable end
+FileSelectView: probing magnet magnet:?xt=urn:btih:DAB8228C6076E2AB8D522DD2B2B14DE71359E9B7&tr=http%3A%2F%2Fbt4.t-ru.org%2Fann%3Fmagnet
+FileSelectView: probe done, success=1 count=6
+FileSelectView: sync callback, success=1 count=6
+FileSelectView: SwitchServiceGuard init: ns=1 ncm=1 db_sd=1 db_nand=1 cs_sd=1 cs_nand=1
+FileSelectView: calculated NSZ ratio 1.127881 from image_format='.NSZ (сжато ~17%, установленный объём 5.01 ГБ)'
+FileSelectView: SwitchServiceGuard init: ns=1 ncm=1 db_sd=1 db_nand=1 cs_sd=1 cs_nand=1
+FileSelectView: rebuildFileList done, rows=6
+FileSelectView: SwitchServiceGuard init: ns=1 ncm=1 db_sd=1 db_nand=1 cs_sd=1 cs_nand=1
+download: local client queued hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+download_ui: added game Final Fantasy IX (9) (topic_id=5689875_0) to download queue, is_homebrew=false, retro=, group=5689875, size=4418851435
+download_ui: added game Final Fantasy IX (9) (topic_id=5689875_1) to download queue, is_homebrew=false, retro=, group=5689875, size=35804695
+download_ui: added game Final Fantasy IX (9) (topic_id=5689875_2) to download queue, is_homebrew=false, retro=, group=5689875, size=35833967
+download_ui: added game Final Fantasy IX (9) (topic_id=5689875_extras) to download queue, is_homebrew=false, retro=, group=5689875, size=279025732
+ImageDownloader: resumed
+download: local client starts selected file without HTTP preload hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7 file_index=0
+download: starting async open for hybrid hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7 index=0
+CustomEngineBackend: reusing probed torrent dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+switch_utils: sleep inhibited (auto-sleep disabled & keep-awake active)
+custom_engine: streaming installer scheduler enabled (window=24, strict_verify=1) for dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+switch_utils: CPU boost enabled (1785 MHz)
+power: keep-awake enabled
+hybrid: start install, buffer=64MB
+hybrid: phase 1 - parsing header
+scheduler: current=0 critical=0..0 urgent=1..2
+hybrid: NSP header probe read=4096 need=464 files=7
+hybrid: NSP contains 7 files, total size=4214MB, ticket=yes
+scheduler: current=0 critical=0..0 urgent=1..2
+hybrid: phase 2 - creating placeholders
+ncm: initialized, storage=5
+installer: skipping placeholder creation for NCZ (will create later): 4f23e2a161ea5612f7bc2b5c9b917593.ncz
+ncm: placeholder created for b42859d5e82cda22567fd42e4e63b0a3.nca
+ncm: placeholder created for f226f0ac0fb52299a08f770e7c11c3ca.cnmt.nca
+ncm: placeholder created for f2d94cb64755eb835cca0d0940a6350f.nca
+hybrid: phase 3 - starting Collector + Installer threads
+hybrid: both threads started
+collector: start
+installer: start
+collector: source_type=1 chunk_size=4194304
+installer: local chunk size=4194304
+collector: local chunk size=4194304
+installer: waiting local prebuffer target=16777216
+collector: partial read advance offset=4194768 requested=4194304 got=4193840
+scheduler: current=1 critical=1..1 urgent=2..3
+download: hybrid install started for Final Fantasy IX (9) (index=0)
+download: configured file priorities and size=4418851435 for Final Fantasy IX (9)
+collections: ports_homebrew loaded 268 entries from catalog
+collections: covers row=0 url=https://i5.imageban.ru/out/2026/10/18/89205f1499c0e1f27db5dce01c262356.png
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b5f16c513bab00bf.jpg (11853 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/7f48ef2638099ce3.jpg (12684 bytes)
+collections: covers row=1 url=https://raw.githubusercontent.com/Langegen/switch-game-collection/main/covers/6922682.jpg
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/7ff41e74f3fd3f20.jpg (9300 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/4c63a5cac44631f6.jpg (11226 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/20d8640334e04a17.jpg (13030 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/2607d66c807ad8bd.jpg (9966 bytes)
+collections: covers row=2 url=https://raw.githubusercontent.com/Langegen/switch-game-collection/main/covers/6921774.jpg
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/5cdae49a77f4d58f.jpg (10059 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/391480473b091dbe.jpg (11727 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/74a0d5a245d61ed5.jpg (10378 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/4efb2b9159a35622.jpg (9756 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/e6a7fd4b248ad5fa.jpg (11895 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/2d96747d3d33ec1c.jpg (12920 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/64d37f526406cac4.jpg (7598 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/1141b65ffe7fce76.jpg (9300 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/ab4294d48e5a578c.jpg (5902 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/d3db0da51a4a7724.jpg (11190 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/77db0ce91c49f60b.jpg (10493 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/610b2be10daad188.jpg (14259 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/51cd73bd6f6ed729.jpg (9381 bytes)
+CollectionGamesView: loaded 268 entries for ports_homebrew (cache)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/7f2fc863d30f02f6.jpg (10696 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/b5608056e4919e00.jpg (12530 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/93807bea37263530.jpg (15617 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/544390453362db31.jpg (12416 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/10bce4552b7b6946.jpg (10495 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/3ef0e0c6a5c6b76e.jpg (12388 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/97fb328fc27afaa0.jpg (14342 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/efbeef5f4ae2a2c0.jpg (16058 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/bdba8a25c2ace865.jpg (12271 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/2df181ab5ce188ea.jpg (14950 bytes)
+ImageDownloader: loaded thumbnail from disk: sdmc:/switch/TorrentShopNX/cache/thumbnails/fbabd18e01b78600.jpg (12905 bytes)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/22/484e0c0d66642225bc436743c10b2a22.jpeg (size=26534)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/9f/dd9e9b7e4d1fbf2accdc05dc8a5aa49f.jpeg (size=22818)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/c979be2f37e3e157.jpg (3763 bytes, 160x90)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/89e69f1b7974030d.jpg (4463 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/84/9eb6888412ef7650ccbdd8ba0507fd84.jpeg (size=20513)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/5882716c8abdc0ee.jpg (3504 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/5f/2ee658e11eb3c391415ccf9e5460295f.jpeg (size=19216)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/0b2caaffc3c45c97.jpg (3164 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/b0/90883483278315466e385a3dfe7723b0.jpeg (size=16838)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/c15ac47047bd15b1.jpg (2772 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/64/d6a3a0074a57d4f955d504e2f300fc64.jpeg (size=15875)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/dd757bd67c15d011.jpg (2662 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/47/6f026d0cd33c40e32732186445083647.jpeg (size=8971)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/5c20e81ff8a3393e.jpg (2182 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/17/a4f9d9f183de5a1dc05adbe180140317.jpeg (size=15302)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/e3c0025a96116179.jpg (3289 bytes, 160x90)
+ImageDownloader: HTTP 200 OK for url=http://i129.fastpic.org/thumb/2026/1018/66/4e1e8f8a728bbc5861c10c2645948866.jpeg (size=17279)
+ImageDownloader: saved thumbnail to sdmc:/switch/TorrentShopNX/cache/thumbnails/8a73fe3317369572.jpg (3463 bytes, 160x90)
+download_ui: added port auto install for Silent Hill 3 (порт) [NRO][RUS/ENG] (topic_id=6924378) variant=0 size=0
+collector: stats downloaded=12582448 speed=581KB/s rb_avail=12582448 rb_free=54526416 rb_cap=67108864
+scheduler: current=1 critical=1..1 urgent=2..3
+scheduler: current=2 critical=2..2 urgent=3..4
+installer: prebuffer timeout after 30000ms, starting with available=16776752
+installer: local prebuffer ready available=16776752
+installer: [RingBuffer] read start rb_avail=16776752 downloaded=16776752
+installer: [RingBuffer] read done got=4194304
+ncz: using Solid Zstd decompression
+ncz: adjusted logical install size for 4f23e2a161ea5612f7bc2b5c9b917593.ncz from 4418401585 to 5303255040
+ncz: installing 4f23e2a161ea5612f7bc2b5c9b917593.ncz (compressed: 4213MB, orig: 5057MB)
+installer: stats installed=2496 install_speed=0KB/s downloaded=16776752 source_speed=539KB/s consume_speed=136KB/s rb_avail=12531048 rb_free=54577816 rb_cap=67108864
+switch_utils: detected console firmware/SDK: 22.1.0 (22.1.0)
+hybrid: detected Program NCA SDK=5.4.0 console SDK=22.1.0 file=4f23e2a161ea5612f7bc2b5c9b917593.ncz
+collector: stats downloaded=20971056 speed=460KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=8094 got=51864 rb_avail=4142440 downloaded=20971056 installed=20974016 starvation_total=1
+scheduler: current=2 critical=2..2 urgent=3..4
+scheduler: current=3 critical=3..3 urgent=4..5
+collector: stats downloaded=29359664 speed=333KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=24378 got=51864 rb_avail=4142440 downloaded=29359664 installed=29362624 starvation_total=2
+scheduler: current=3 critical=3..3 urgent=4..5
+installer: stats installed=29362624 install_speed=864KB/s downloaded=29359664 source_speed=370KB/s consume_speed=617KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=4 critical=4..4 urgent=5..6
+collector: stats downloaded=37748272 speed=564KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=14347 got=51864 rb_avail=4142440 downloaded=37748272 installed=37751232 starvation_total=3
+scheduler: current=4 critical=4..4 urgent=5..6
+installer: stats installed=37751232 install_speed=564KB/s downloaded=37748272 source_speed=564KB/s consume_speed=564KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=5 critical=5..5 urgent=6..7
+collector: stats downloaded=46136880 speed=523KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=15487 got=51864 rb_avail=4142440 downloaded=46136880 installed=46139840 starvation_total=4
+scheduler: current=5 critical=5..5 urgent=6..7
+installer: stats installed=46139840 install_speed=523KB/s downloaded=46136880 source_speed=523KB/s consume_speed=523KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=6 critical=6..6 urgent=7..8
+collector: stats downloaded=54525488 speed=370KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=21965 got=51864 rb_avail=4142440 downloaded=54525488 installed=54528448 starvation_total=5
+scheduler: current=6 critical=6..6 urgent=7..8
+installer: stats installed=54528448 install_speed=370KB/s downloaded=54525488 source_speed=370KB/s consume_speed=370KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=7 critical=7..7 urgent=8..9
+collector: stats downloaded=62914096 speed=363KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=22367 got=51864 rb_avail=4142440 downloaded=62914096 installed=62917056 starvation_total=6
+scheduler: current=7 critical=7..7 urgent=8..9
+installer: stats installed=62917056 install_speed=363KB/s downloaded=62914096 source_speed=363KB/s consume_speed=363KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=8 critical=8..8 urgent=9..10
+collector: stats downloaded=71302704 speed=781KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=10306 got=51864 rb_avail=4142440 downloaded=71302704 installed=71305664 starvation_total=7
+scheduler: current=8 critical=8..8 urgent=9..10
+installer: stats installed=71305664 install_speed=781KB/s downloaded=71302704 source_speed=781KB/s consume_speed=781KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=9 critical=9..9 urgent=10..11
+scheduler: current=9 critical=9..9 urgent=10..11
+installer: ncz buffer wait wait_ms=7441 got=51864 rb_avail=4142440 downloaded=79691312 installed=79694272 starvation_total=8
+scheduler: current=10 critical=10..10 urgent=11..12
+collector: stats downloaded=88079920 speed=1138KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=6614 got=51864 rb_avail=4142440 downloaded=88079920 installed=88082880 starvation_total=9
+scheduler: current=10 critical=10..10 urgent=11..12
+installer: stats installed=88082880 install_speed=1138KB/s downloaded=88079920 source_speed=1138KB/s consume_speed=1138KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=11 critical=11..11 urgent=12..13
+scheduler: current=11 critical=11..11 urgent=12..13
+installer: ncz buffer wait wait_ms=6410 got=51864 rb_avail=4142440 downloaded=96468528 installed=96471488 starvation_total=10
+scheduler: current=12 critical=12..12 urgent=13..14
+installer: ncz buffer wait wait_ms=2771 got=51864 rb_avail=4142440 downloaded=104857136 installed=104860096 starvation_total=11
+scheduler: current=13 critical=13..13 urgent=14..15
+collector: stats downloaded=113245744 speed=1415KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=7648 got=51864 rb_avail=4142440 downloaded=113245744 installed=113248704 starvation_total=12
+scheduler: current=13 critical=13..13 urgent=14..15
+installer: stats installed=113248704 install_speed=1415KB/s downloaded=113245744 source_speed=1415KB/s consume_speed=1415KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=14 critical=14..14 urgent=15..16
+collector: stats downloaded=121634352 speed=545KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=14833 got=51864 rb_avail=4142440 downloaded=121634352 installed=121637312 starvation_total=13
+scheduler: current=14 critical=14..14 urgent=15..16
+installer: stats installed=121637312 install_speed=545KB/s downloaded=121634352 source_speed=545KB/s consume_speed=545KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=15 critical=15..15 urgent=16..17
+scheduler: current=15 critical=15..15 urgent=16..17
+installer: ncz buffer wait wait_ms=8900 got=51864 rb_avail=4142440 downloaded=130022960 installed=130025920 starvation_total=14
+scheduler: current=16 critical=16..16 urgent=17..18
+collector: stats downloaded=138411568 speed=829KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=10517 got=51864 rb_avail=4142440 downloaded=138411568 installed=138414528 starvation_total=15
+scheduler: current=16 critical=16..16 urgent=17..18
+installer: stats installed=138414528 install_speed=829KB/s downloaded=138411568 source_speed=829KB/s consume_speed=829KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=17 critical=17..17 urgent=18..19
+collector: stats downloaded=146800176 speed=727KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=11084 got=51864 rb_avail=4142440 downloaded=146800176 installed=146803136 starvation_total=16
+scheduler: current=17 critical=17..17 urgent=18..19
+installer: stats installed=146803136 install_speed=727KB/s downloaded=146800176 source_speed=727KB/s consume_speed=727KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=18 critical=18..18 urgent=19..20
+scheduler: current=18 critical=18..18 urgent=19..20
+installer: ncz buffer wait wait_ms=6848 got=51864 rb_avail=4142440 downloaded=155188784 installed=155191744 starvation_total=17
+scheduler: current=19 critical=19..19 urgent=20..21
+collector: stats downloaded=163577392 speed=1558KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=3326 got=51864 rb_avail=4142440 downloaded=163577392 installed=163580352 starvation_total=18
+scheduler: current=20 critical=20..20 urgent=21..22
+installer: stats installed=163580352 install_speed=1558KB/s downloaded=167771696 source_speed=1947KB/s consume_speed=1558KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=1259 got=51864 rb_avail=4142440 downloaded=171966000 installed=171968960 starvation_total=19
+scheduler: current=21 critical=21..21 urgent=22..23
+installer: ncz buffer wait wait_ms=4650 got=51864 rb_avail=4142440 downloaded=180354608 installed=180357568 starvation_total=20
+scheduler: current=22 critical=22..22 urgent=23..24
+collector: stats downloaded=188743216 speed=1400KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=11115 got=51864 rb_avail=4142440 downloaded=188743216 installed=188746176 starvation_total=21
+scheduler: current=22 critical=22..22 urgent=23..24
+installer: stats installed=188746176 install_speed=1400KB/s downloaded=188743216 source_speed=1166KB/s consume_speed=1400KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=23 critical=23..23 urgent=24..25
+scheduler: current=23 critical=23..23 urgent=24..25
+installer: ncz buffer wait wait_ms=5619 got=51864 rb_avail=4142440 downloaded=197131824 installed=197134784 starvation_total=22
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=24 critical=24..24 urgent=25..26
+collector: stats downloaded=205520432 speed=1630KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=4048 got=51864 rb_avail=4142440 downloaded=205520432 installed=205523392 starvation_total=23
+scheduler: current=25 critical=25..25 urgent=26..27
+installer: stats installed=205523392 install_speed=1628KB/s downloaded=209714736 source_speed=2036KB/s consume_speed=1628KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+installer: ncz buffer wait wait_ms=1284 got=51864 rb_avail=4142440 downloaded=213909040 installed=213912000 starvation_total=24
+scheduler: current=26 critical=26..26 urgent=27..28
+collector: stats downloaded=222297648 speed=1134KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=12774 got=51864 rb_avail=4142440 downloaded=222297648 installed=222300608 starvation_total=25
+scheduler: current=26 critical=26..26 urgent=27..28
+installer: stats installed=222300608 install_speed=1135KB/s downloaded=222297648 source_speed=851KB/s consume_speed=1135KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=27 critical=27..27 urgent=28..29
+scheduler: current=27 critical=27..27 urgent=28..29
+installer: ncz buffer wait wait_ms=9496 got=51864 rb_avail=4142440 downloaded=230686256 installed=230689216 starvation_total=26
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=28 critical=28..28 urgent=29..30
+collector: stats downloaded=239074864 speed=865KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=9083 got=51864 rb_avail=4142440 downloaded=239074864 installed=239077824 starvation_total=27
+scheduler: current=28 critical=28..28 urgent=29..30
+installer: stats installed=239077824 install_speed=865KB/s downloaded=239074864 source_speed=865KB/s consume_speed=865KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=29 critical=29..29 urgent=30..31
+scheduler: current=29 critical=29..29 urgent=30..31
+installer: ncz buffer wait wait_ms=7024 got=51864 rb_avail=4142440 downloaded=247463472 installed=247466432 starvation_total=28
+scheduler: current=30 critical=30..30 urgent=31..32
+collector: stats downloaded=255852080 speed=1394KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=4374 got=51864 rb_avail=4142440 downloaded=255852080 installed=255855040 starvation_total=29
+scheduler: current=31 critical=31..31 urgent=32..33
+installer: stats installed=255855040 install_speed=1394KB/s downloaded=260046384 source_speed=1743KB/s consume_speed=1394KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+installer: ncz buffer wait wait_ms=3084 got=51864 rb_avail=4142440 downloaded=264240688 installed=264243648 starvation_total=30
+scheduler: current=32 critical=32..32 urgent=33..34
+installer: ncz buffer wait wait_ms=3003 got=51864 rb_avail=4142440 downloaded=272629296 installed=272632256 starvation_total=31
+scheduler: current=33 critical=33..33 urgent=34..35
+collector: stats downloaded=281017904 speed=1942KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=5956 got=51864 rb_avail=4142440 downloaded=281017904 installed=285215168 starvation_total=32
+scheduler: current=33 critical=33..33 urgent=34..35
+installer: stats installed=285215168 install_speed=2267KB/s downloaded=281017904 source_speed=1619KB/s consume_speed=1943KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=34 critical=34..34 urgent=35..36
+installer: ncz buffer wait wait_ms=3623 got=51864 rb_avail=4142440 downloaded=289406512 installed=293603776 starvation_total=33
+scheduler: current=35 critical=35..35 urgent=36..37
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=3489 got=51864 rb_avail=4142440 downloaded=297795120 installed=297798080 starvation_total=34
+scheduler: current=36 critical=36..36 urgent=37..38
+collector: stats downloaded=306183728 speed=2427KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=2453 got=51864 rb_avail=4142440 downloaded=306183728 installed=310380992 starvation_total=35
+scheduler: current=37 critical=37..37 urgent=38..39
+installer: stats installed=310380992 install_speed=2426KB/s downloaded=310378032 source_speed=2830KB/s consume_speed=2426KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+installer: ncz buffer wait wait_ms=3065 got=51864 rb_avail=4142440 downloaded=314572336 installed=318769600 starvation_total=36
+scheduler: current=38 critical=38..38 urgent=39..40
+installer: ncz buffer wait wait_ms=4706 got=51864 rb_avail=4142440 downloaded=322960944 installed=327158208 starvation_total=37
+scheduler: current=39 critical=39..39 urgent=40..41
+collector: stats downloaded=331349552 speed=2005KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=3942 got=51864 rb_avail=4142440 downloaded=331349552 installed=335546816 starvation_total=38
+scheduler: current=40 critical=40..40 urgent=41..42
+installer: stats installed=335546816 install_speed=2006KB/s downloaded=335543856 source_speed=2006KB/s consume_speed=2006KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+scheduler: current=40 critical=40..40 urgent=41..42
+installer: ncz buffer wait wait_ms=6816 got=51864 rb_avail=4142440 downloaded=339738160 installed=343935424 starvation_total=39
+scheduler: current=41 critical=41..41 urgent=42..43
+installer: ncz buffer wait wait_ms=1524 got=51864 rb_avail=4142440 downloaded=348126768 installed=360712640 starvation_total=40
+scheduler: current=42 critical=42..42 urgent=43..44
+collector: stats downloaded=356515376 speed=1973KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=3397 got=51864 rb_avail=4142440 downloaded=356515376 installed=369101248 starvation_total=41
+scheduler: current=43 critical=43..43 urgent=44..45
+installer: stats installed=369101248 install_speed=2631KB/s downloaded=360709680 source_speed=1973KB/s consume_speed=1973KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+installer: ncz buffer wait wait_ms=2479 got=51864 rb_avail=4142440 downloaded=364903984 installed=377489856 starvation_total=42
+scheduler: current=44 critical=44..44 urgent=45..46
+collector: stats downloaded=373292592 speed=1472KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=8306 got=51864 rb_avail=4142440 downloaded=373292592 installed=385878464 starvation_total=43
+scheduler: current=44 critical=44..44 urgent=45..46
+installer: stats installed=385878464 install_speed=1473KB/s downloaded=373292592 source_speed=1105KB/s consume_speed=1473KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=45 critical=45..45 urgent=46..47
+installer: ncz buffer wait wait_ms=4322 got=51864 rb_avail=4142440 downloaded=381681200 installed=411044288 starvation_total=44
+scheduler: current=46 critical=46..46 urgent=47..48
+installer: ncz buffer wait wait_ms=2672 got=51864 rb_avail=4142440 downloaded=390069808 installed=436210112 starvation_total=45
+scheduler: current=47 critical=47..47 urgent=48..49
+collector: stats downloaded=398458416 speed=1625KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=6948 got=51864 rb_avail=4142440 downloaded=398458416 installed=444598720 starvation_total=46
+scheduler: current=47 critical=47..47 urgent=48..49
+installer: stats installed=444598720 install_speed=3793KB/s downloaded=398458416 source_speed=1625KB/s consume_speed=1625KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=48 critical=48..48 urgent=49..50
+installer: ncz buffer wait wait_ms=3248 got=51864 rb_avail=4142440 downloaded=406847024 installed=452987328 starvation_total=47
+scheduler: current=49 critical=49..49 urgent=50..51
+collector: stats downloaded=415235632 speed=1394KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=8155 got=51864 rb_avail=4142440 downloaded=415235632 installed=461375936 starvation_total=48
+scheduler: current=49 critical=49..49 urgent=50..51
+installer: stats installed=461375936 install_speed=1393KB/s downloaded=415235632 source_speed=1393KB/s consume_speed=1393KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=50 critical=50..50 urgent=51..52
+scheduler: current=50 critical=50..50 urgent=51..52
+installer: ncz buffer wait wait_ms=8953 got=51864 rb_avail=4142440 downloaded=423624240 installed=469764544 starvation_total=49
+scheduler: current=51 critical=51..51 urgent=52..53
+collector: stats downloaded=432012848 speed=918KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=8526 got=51864 rb_avail=4142440 downloaded=432012848 installed=478153152 starvation_total=50
+scheduler: current=51 critical=51..51 urgent=52..53
+installer: stats installed=478153152 install_speed=918KB/s downloaded=432012848 source_speed=918KB/s consume_speed=918KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=52 critical=52..52 urgent=53..54
+collector: stats downloaded=440401456 speed=566KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=14282 got=51864 rb_avail=4142440 downloaded=440401456 installed=486541760 starvation_total=51
+scheduler: current=52 critical=52..52 urgent=53..54
+installer: stats installed=486541760 install_speed=565KB/s downloaded=440401456 source_speed=565KB/s consume_speed=565KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=53 critical=53..53 urgent=54..55
+scheduler: current=53 critical=53..53 urgent=54..55
+installer: ncz buffer wait wait_ms=8105 got=51864 rb_avail=4142440 downloaded=448790064 installed=499124672 starvation_total=52
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=54 critical=54..54 urgent=55..56
+collector: stats downloaded=457178672 speed=894KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=9789 got=51864 rb_avail=4142440 downloaded=457178672 installed=507513280 starvation_total=53
+scheduler: current=54 critical=54..54 urgent=55..56
+installer: stats installed=507513280 install_speed=1117KB/s downloaded=457178672 source_speed=894KB/s consume_speed=894KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=55 critical=55..55 urgent=56..57
+scheduler: current=55 critical=55..55 urgent=56..57
+installer: ncz buffer wait wait_ms=6021 got=51864 rb_avail=4142440 downloaded=465567280 installed=515901888 starvation_total=54
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=56 critical=56..56 urgent=57..58
+installer: ncz buffer wait wait_ms=2946 got=51864 rb_avail=4142440 downloaded=473955888 installed=524290496 starvation_total=55
+scheduler: current=57 critical=57..57 urgent=58..59
+collector: stats downloaded=482344496 speed=1751KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=4542 got=51864 rb_avail=4142440 downloaded=482344496 installed=532679104 starvation_total=56
+scheduler: current=58 critical=58..58 urgent=59..60
+installer: stats installed=532679104 install_speed=1751KB/s downloaded=486538800 source_speed=2043KB/s consume_speed=1751KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+scheduler: current=58 critical=58..58 urgent=59..60
+installer: ncz buffer wait wait_ms=8087 got=51864 rb_avail=4142440 downloaded=490733104 installed=541067712 starvation_total=57
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=59 critical=59..59 urgent=60..61
+collector: stats downloaded=499121712 speed=1018KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=7566 got=51864 rb_avail=4142440 downloaded=499121712 installed=553650624 starvation_total=58
+scheduler: current=59 critical=59..59 urgent=60..61
+installer: stats installed=553650624 install_speed=1273KB/s downloaded=499121712 source_speed=763KB/s consume_speed=1018KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=60 critical=60..60 urgent=61..62
+scheduler: current=60 critical=60..60 urgent=61..62
+installer: ncz buffer wait wait_ms=4969 got=51864 rb_avail=4142440 downloaded=507510320 installed=562039232 starvation_total=59
+scheduler: current=61 critical=61..61 urgent=62..63
+collector: stats downloaded=515898928 speed=1571KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=5073 got=51864 rb_avail=4142440 downloaded=515898928 installed=570427840 starvation_total=60
+scheduler: current=61 critical=61..61 urgent=62..63
+installer: stats installed=570427840 install_speed=1572KB/s downloaded=515898928 source_speed=1572KB/s consume_speed=1572KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=62 critical=62..62 urgent=63..64
+scheduler: current=62 critical=62..62 urgent=63..64
+installer: ncz buffer wait wait_ms=7733 got=51864 rb_avail=4142440 downloaded=524287536 installed=578816448 starvation_total=61
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=63 critical=63..63 urgent=64..65
+collector: stats downloaded=532676144 speed=1316KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=4251 got=51864 rb_avail=4142440 downloaded=532676144 installed=591399360 starvation_total=62
+scheduler: current=64 critical=64..64 urgent=65..66
+installer: stats installed=591399360 install_speed=1645KB/s downloaded=536870448 source_speed=1645KB/s consume_speed=1316KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=3141 got=51864 rb_avail=4142440 downloaded=541064752 installed=599787968 starvation_total=63
+scheduler: current=65 critical=65..65 urgent=66..67
+installer: ncz buffer wait wait_ms=4339 got=51864 rb_avail=4142440 downloaded=549453360 installed=608176576 starvation_total=64
+scheduler: current=66 critical=66..66 urgent=67..68
+collector: stats downloaded=557841968 speed=1500KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=8384 got=51864 rb_avail=4142440 downloaded=557841968 installed=616565184 starvation_total=65
+scheduler: current=66 critical=66..66 urgent=67..68
+installer: stats installed=616565184 install_speed=1500KB/s downloaded=557841968 source_speed=1250KB/s consume_speed=1500KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: current=67 critical=67..67 urgent=68..69
+scheduler: boosted 2 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=3561 got=51864 rb_avail=4142440 downloaded=566230576 installed=624953792 starvation_total=66
+scheduler: current=68 critical=68..68 urgent=69..70
+scheduler: boosted 1 slow-peer claims to Critical
+installer: ncz buffer wait wait_ms=3789 got=51864 rb_avail=4142440 downloaded=574619184 installed=633342400 starvation_total=67
+scheduler: current=69 critical=69..69 urgent=70..71
+collector: stats downloaded=583007792 speed=2303KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=2792 got=51864 rb_avail=4142440 downloaded=583007792 installed=641731008 starvation_total=68
+scheduler: current=70 critical=70..70 urgent=71..72
+installer: stats installed=641731008 install_speed=2302KB/s downloaded=587202096 source_speed=2686KB/s consume_speed=2302KB/s rb_avail=8336744 rb_free=58772120 rb_cap=67108864
+installer: ncz buffer wait wait_ms=3653 got=51864 rb_avail=4142440 downloaded=591396400 installed=650119616 starvation_total=69
+scheduler: current=71 critical=71..71 urgent=72..73
+installer: ncz buffer wait wait_ms=1951 got=51864 rb_avail=4142440 downloaded=599785008 installed=658508224 starvation_total=70
+scheduler: current=72 critical=72..72 urgent=73..74
+installer: ncz buffer wait wait_ms=3462 got=51864 rb_avail=4142440 downloaded=608173616 installed=666896832 starvation_total=71
+scheduler: current=73 critical=73..73 urgent=74..75
+collector: stats downloaded=616562224 speed=2215KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=5032 got=51864 rb_avail=4142440 downloaded=616562224 installed=675285440 starvation_total=72
+scheduler: current=73 critical=73..73 urgent=74..75
+installer: stats installed=675285440 install_speed=2215KB/s downloaded=616562224 source_speed=1938KB/s consume_speed=2215KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=74 critical=74..74 urgent=75..76
+installer: ncz buffer wait wait_ms=2305 got=51864 rb_avail=4142440 downloaded=624950832 installed=683674048 starvation_total=73
+scheduler: current=75 critical=75..75 urgent=76..77
+collector: stats downloaded=633339440 speed=990KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+installer: ncz buffer wait wait_ms=13899 got=51864 rb_avail=4142440 downloaded=633339440 installed=692062656 starvation_total=74
+scheduler: current=75 critical=75..75 urgent=76..77
+installer: stats installed=692062656 install_speed=989KB/s downloaded=633339440 source_speed=989KB/s consume_speed=989KB/s rb_avail=4142440 rb_free=62966424 rb_cap=67108864
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=76 critical=76..76 urgent=77..78
+hybrid: cancelling installation...
+installer: summary starvation_events=74 wait_p50_ms=5619 wait_p95_ms=15487 wait_max_ms=24378 stall_total_ms=512401 install_speed_avg_kbps=1331 install_speed_max_kbps=3793 source_speed_avg_kbps=1239 source_speed_max_kbps=2830 consume_speed_avg_kbps=1219 consume_speed_max_kbps=2426 live_peers_min=1
+installer: thread finished, installed 704310280 bytes
+collector: finished, downloaded 637533744 bytes
+ncm: cleanup 4 placeholders
+switch_utils: sleep inhibition released
+switch_utils: CPU boost released
+hybrid: installation cancelled
+download: closed local data source after cancel hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+download: keeping torrent active as it is needed by another queued item, hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+download_ui: cancelled topic_id=5689875_0
+download: keeping torrent active as it is needed by another queued item, hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+download_ui: cancelled topic_id=5689875_1
+download: keeping torrent active as it is needed by another queued item, hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+download_ui: cancelled topic_id=5689875_2
+download: released unneeded torrent and cleared cache, hash=dab8228c6076e2ab8d522dd2b2b14de71359e9b7
+download_ui: cancelled topic_id=5689875_extras
+download: local client queued hash=031f07d48dd06e1187066fd240eefe60c7adaf6e
+ncm: cleanup 0 placeholders
+download: port auto install started hash=031f07d48dd06e1187066fd240eefe60c7adaf6e title='Silent Hill 3 (порт) [NRO][RUS/ENG]' variant=0
+PortInstallPlanner: analyzed 'Silent Hill 3 (порт) [NRO][RUS/ENG]' -> is_port=true game='sh3-nx' forwarder=Silent Hill 3 (port) [03DB11C4CEA64000][v0].nsp variants=2 archives=2
+CustomEngineBackend: reusing probed torrent 031f07d48dd06e1187066fd240eefe60c7adaf6e
+custom_engine: high-throughput scheduler enabled (window=32, strict_verify=1) for 031f07d48dd06e1187066fd240eefe60c7adaf6e
+scheduler: current=0 critical=0..0 urgent=1..3
+scheduler: current=0 critical=0..0 urgent=1..3
+scheduler: current=1 critical=1..1 urgent=2..4
+scheduler: current=2 critical=2..2 urgent=3..5
+scheduler: current=2 critical=2..2 urgent=3..5
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=3 critical=3..3 urgent=4..6
+scheduler: current=4 critical=4..4 urgent=5..7
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=5 critical=5..5 urgent=6..8
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=6 critical=6..6 urgent=7..9
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=7 critical=7..7 urgent=8..10
+scheduler: current=8 critical=8..8 urgent=9..11
+scheduler: current=9 critical=9..9 urgent=10..12
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=10 critical=10..10 urgent=11..13
+scheduler: current=11 critical=11..11 urgent=12..14
+scheduler: current=11 critical=11..11 urgent=12..14
+scheduler: current=12 critical=12..12 urgent=13..15
+scheduler: current=13 critical=13..13 urgent=14..16
+scheduler: current=13 critical=13..13 urgent=14..16
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=14 critical=14..14 urgent=15..17
+scheduler: current=14 critical=14..14 urgent=15..17
+scheduler: current=15 critical=15..15 urgent=16..18
+scheduler: current=16 critical=16..16 urgent=17..19
+scheduler: current=17 critical=17..17 urgent=18..20
+scheduler: current=18 critical=18..18 urgent=19..21
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=19 critical=19..19 urgent=20..22
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=20 critical=20..20 urgent=21..23
+scheduler: current=21 critical=21..21 urgent=22..24
+scheduler: current=22 critical=22..22 urgent=23..25
+scheduler: current=23 critical=23..23 urgent=24..26
+scheduler: current=24 critical=24..24 urgent=25..27
+scheduler: current=25 critical=25..25 urgent=26..28
+scheduler: current=26 critical=26..26 urgent=27..29
+scheduler: current=26 critical=26..26 urgent=27..29
+scheduler: current=27 critical=27..27 urgent=28..30
+scheduler: current=28 critical=28..28 urgent=29..31
+scheduler: current=29 critical=29..29 urgent=30..32
+scheduler: current=30 critical=30..30 urgent=31..33
+scheduler: current=31 critical=31..31 urgent=32..34
+scheduler: current=32 critical=32..32 urgent=33..35
+scheduler: current=33 critical=33..33 urgent=34..36
+scheduler: current=34 critical=34..34 urgent=35..37
+scheduler: current=35 critical=35..35 urgent=36..38
+scheduler: current=36 critical=36..36 urgent=37..39
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=37 critical=37..37 urgent=38..40
+scheduler: current=38 critical=38..38 urgent=39..41
+scheduler: current=39 critical=39..39 urgent=40..42
+scheduler: current=40 critical=40..40 urgent=41..43
+scheduler: current=41 critical=41..41 urgent=42..44
+scheduler: current=42 critical=42..42 urgent=43..45
+scheduler: current=43 critical=43..43 urgent=44..46
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=44 critical=44..44 urgent=45..47
+scheduler: current=45 critical=45..45 urgent=46..48
+scheduler: current=46 critical=46..46 urgent=47..49
+scheduler: current=47 critical=47..47 urgent=48..50
+scheduler: current=48 critical=48..48 urgent=49..51
+scheduler: current=49 critical=49..49 urgent=50..52
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=50 critical=50..50 urgent=51..53
+scheduler: current=51 critical=51..51 urgent=52..54
+scheduler: current=51 critical=51..51 urgent=52..54
+scheduler: current=52 critical=52..52 urgent=53..55
+scheduler: current=53 critical=53..53 urgent=54..56
+scheduler: current=54 critical=54..54 urgent=55..57
+scheduler: current=55 critical=55..55 urgent=56..58
+scheduler: current=56 critical=56..56 urgent=57..59
+scheduler: current=57 critical=57..57 urgent=58..60
+scheduler: current=58 critical=58..58 urgent=59..61
+scheduler: current=58 critical=58..58 urgent=59..61
+scheduler: current=59 critical=59..59 urgent=60..62
+scheduler: current=60 critical=60..60 urgent=61..63
+scheduler: current=61 critical=61..61 urgent=62..64
+scheduler: current=62 critical=62..62 urgent=63..65
+scheduler: current=63 critical=63..63 urgent=64..66
+scheduler: current=64 critical=64..64 urgent=65..67
+scheduler: current=65 critical=65..65 urgent=66..68
+scheduler: current=66 critical=66..66 urgent=67..69
+scheduler: current=67 critical=67..67 urgent=68..70
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=68 critical=68..68 urgent=69..71
+scheduler: current=69 critical=69..69 urgent=70..72
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=70 critical=70..70 urgent=71..73
+scheduler: current=71 critical=71..71 urgent=72..74
+scheduler: current=72 critical=72..72 urgent=73..75
+scheduler: current=73 critical=73..73 urgent=74..76
+scheduler: current=74 critical=74..74 urgent=75..77
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=75 critical=75..75 urgent=76..78
+scheduler: current=76 critical=76..76 urgent=77..79
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=77 critical=77..77 urgent=78..80
+scheduler: current=78 critical=78..78 urgent=79..81
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=79 critical=79..79 urgent=80..82
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=80 critical=80..80 urgent=81..83
+scheduler: current=81 critical=81..81 urgent=82..84
+scheduler: current=82 critical=82..82 urgent=83..85
+scheduler: current=83 critical=83..83 urgent=84..86
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=84 critical=84..84 urgent=85..87
+scheduler: current=84 critical=84..84 urgent=85..87
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=85 critical=85..85 urgent=86..88
+scheduler: current=86 critical=86..86 urgent=87..89
+scheduler: current=87 critical=87..87 urgent=88..90
+scheduler: current=88 critical=88..88 urgent=89..91
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=89 critical=89..89 urgent=90..92
+scheduler: current=90 critical=90..90 urgent=91..93
+scheduler: current=91 critical=91..91 urgent=92..94
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=92 critical=92..92 urgent=93..95
+scheduler: current=93 critical=93..93 urgent=94..96
+scheduler: current=94 critical=94..94 urgent=95..97
+scheduler: current=94 critical=94..94 urgent=95..97
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=95 critical=95..95 urgent=96..98
+scheduler: current=96 critical=96..96 urgent=97..99
+scheduler: current=96 critical=96..96 urgent=97..99
+scheduler: current=97 critical=97..97 urgent=98..100
+scheduler: current=98 critical=98..98 urgent=99..101
+scheduler: current=99 critical=99..99 urgent=100..102
+scheduler: current=100 critical=100..100 urgent=101..103
+scheduler: current=101 critical=101..101 urgent=102..104
+scheduler: current=102 critical=102..102 urgent=103..105
+scheduler: current=103 critical=103..103 urgent=104..106
+scheduler: current=104 critical=104..104 urgent=105..107
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=105 critical=105..105 urgent=106..108
+scheduler: current=106 critical=106..106 urgent=107..109
+scheduler: current=107 critical=107..107 urgent=108..110
+scheduler: current=108 critical=108..108 urgent=109..111
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=109 critical=109..109 urgent=110..112
+scheduler: current=110 critical=110..110 urgent=111..113
+scheduler: current=111 critical=111..111 urgent=112..114
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=112 critical=112..112 urgent=113..115
+scheduler: current=113 critical=113..113 urgent=114..116
+scheduler: current=114 critical=114..114 urgent=115..117
+scheduler: current=114 critical=114..114 urgent=115..117
+scheduler: current=115 critical=115..115 urgent=116..118
+scheduler: current=116 critical=116..116 urgent=117..119
+scheduler: current=117 critical=117..117 urgent=118..120
+scheduler: current=118 critical=118..118 urgent=119..121
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=119 critical=119..119 urgent=120..122
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=120 critical=120..120 urgent=121..123
+scheduler: current=121 critical=121..121 urgent=122..124
+scheduler: current=122 critical=122..122 urgent=123..125
+scheduler: current=123 critical=123..123 urgent=124..126
+scheduler: current=124 critical=124..124 urgent=125..127
+scheduler: current=125 critical=125..125 urgent=126..128
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=126 critical=126..126 urgent=127..129
+scheduler: current=127 critical=127..127 urgent=128..130
+scheduler: current=128 critical=128..128 urgent=129..131
+scheduler: current=129 critical=129..129 urgent=130..132
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=130 critical=130..130 urgent=131..133
+scheduler: current=131 critical=131..131 urgent=132..134
+scheduler: current=132 critical=132..132 urgent=133..135
+scheduler: current=133 critical=133..133 urgent=134..136
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=134 critical=134..134 urgent=135..137
+scheduler: current=135 critical=135..135 urgent=136..138
+scheduler: current=135 critical=135..135 urgent=136..138
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=136 critical=136..136 urgent=137..139
+scheduler: current=137 critical=137..137 urgent=138..140
+scheduler: current=138 critical=138..138 urgent=139..141
+scheduler: current=139 critical=139..139 urgent=140..142
+scheduler: current=140 critical=140..140 urgent=141..143
+scheduler: current=141 critical=141..141 urgent=142..144
+scheduler: current=142 critical=142..142 urgent=143..145
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=143 critical=143..143 urgent=144..146
+scheduler: current=144 critical=144..144 urgent=145..147
+scheduler: current=145 critical=145..145 urgent=146..148
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=146 critical=146..146 urgent=147..149
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=147 critical=147..147 urgent=148..150
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=148 critical=148..148 urgent=149..151
+scheduler: current=149 critical=149..149 urgent=150..152
+scheduler: current=150 critical=150..150 urgent=151..153
+scheduler: current=151 critical=151..151 urgent=152..154
+scheduler: current=151 critical=151..151 urgent=152..154
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=152 critical=152..152 urgent=153..155
+scheduler: current=153 critical=153..153 urgent=154..156
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=154 critical=154..154 urgent=155..157
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=155 critical=155..155 urgent=156..158
+scheduler: current=156 critical=156..156 urgent=157..159
+scheduler: current=157 critical=157..157 urgent=158..160
+scheduler: current=158 critical=158..158 urgent=159..161
+scheduler: current=159 critical=159..159 urgent=160..162
+scheduler: current=160 critical=160..160 urgent=161..163
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=161 critical=161..161 urgent=162..164
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=162 critical=162..162 urgent=163..165
+scheduler: current=163 critical=163..163 urgent=164..166
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=164 critical=164..164 urgent=165..167
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=165 critical=165..165 urgent=166..168
+scheduler: current=166 critical=166..166 urgent=167..169
+scheduler: current=167 critical=167..167 urgent=168..170
+scheduler: current=168 critical=168..168 urgent=169..171
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=169 critical=169..169 urgent=170..172
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=170 critical=170..170 urgent=171..173
+scheduler: current=171 critical=171..171 urgent=172..174
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=172 critical=172..172 urgent=173..175
+scheduler: current=173 critical=173..173 urgent=174..176
+scheduler: current=174 critical=174..174 urgent=175..177
+scheduler: current=175 critical=175..175 urgent=176..178
+scheduler: current=176 critical=176..176 urgent=177..179
+scheduler: current=177 critical=177..177 urgent=178..180
+scheduler: current=178 critical=178..178 urgent=179..181
+scheduler: current=179 critical=179..179 urgent=180..182
+scheduler: current=180 critical=180..180 urgent=181..183
+scheduler: current=181 critical=181..181 urgent=182..184
+scheduler: current=182 critical=182..182 urgent=183..185
+scheduler: current=183 critical=183..183 urgent=184..186
+scheduler: current=184 critical=184..184 urgent=185..187
+scheduler: current=185 critical=185..185 urgent=186..188
+scheduler: current=186 critical=186..186 urgent=187..189
+scheduler: current=187 critical=187..187 urgent=188..190
+scheduler: current=188 critical=188..188 urgent=189..191
+scheduler: current=189 critical=189..189 urgent=190..192
+scheduler: current=190 critical=190..190 urgent=191..193
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=191 critical=191..191 urgent=192..194
+scheduler: current=192 critical=192..192 urgent=193..195
+scheduler: current=193 critical=193..193 urgent=194..196
+scheduler: current=194 critical=194..194 urgent=195..197
+scheduler: current=195 critical=195..195 urgent=196..198
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=196 critical=196..196 urgent=197..199
+scheduler: current=197 critical=197..197 urgent=198..200
+scheduler: current=198 critical=198..198 urgent=199..201
+scheduler: current=199 critical=199..199 urgent=200..202
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=200 critical=200..200 urgent=201..203
+scheduler: current=201 critical=201..201 urgent=202..204
+scheduler: current=202 critical=202..202 urgent=203..205
+scheduler: current=203 critical=203..203 urgent=204..206
+scheduler: current=204 critical=204..204 urgent=205..207
+scheduler: current=205 critical=205..205 urgent=206..208
+scheduler: current=206 critical=206..206 urgent=207..209
+scheduler: current=207 critical=207..207 urgent=208..210
+scheduler: current=208 critical=208..208 urgent=209..211
+scheduler: current=209 critical=209..209 urgent=210..212
+scheduler: current=210 critical=210..210 urgent=211..213
+scheduler: current=211 critical=211..211 urgent=212..214
+scheduler: current=212 critical=212..212 urgent=213..215
+scheduler: current=213 critical=213..213 urgent=214..216
+scheduler: current=214 critical=214..214 urgent=215..217
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=215 critical=215..215 urgent=216..218
+scheduler: current=216 critical=216..216 urgent=217..219
+scheduler: current=217 critical=217..217 urgent=218..220
+scheduler: current=218 critical=218..218 urgent=219..221
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=219 critical=219..219 urgent=220..222
+scheduler: current=220 critical=220..220 urgent=221..223
+scheduler: current=221 critical=221..221 urgent=222..224
+scheduler: current=222 critical=222..222 urgent=223..225
+scheduler: current=223 critical=223..223 urgent=224..226
+scheduler: current=224 critical=224..224 urgent=225..227
+scheduler: current=225 critical=225..225 urgent=226..228
+scheduler: current=225 critical=225..225 urgent=226..228
+scheduler: current=226 critical=226..226 urgent=227..229
+scheduler: current=227 critical=227..227 urgent=228..230
+scheduler: current=228 critical=228..228 urgent=229..231
+scheduler: current=229 critical=229..229 urgent=230..232
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=230 critical=230..230 urgent=231..233
+scheduler: current=231 critical=231..231 urgent=232..234
+scheduler: current=232 critical=232..232 urgent=233..235
+scheduler: current=233 critical=233..233 urgent=234..236
+scheduler: current=234 critical=234..234 urgent=235..237
+scheduler: current=235 critical=235..235 urgent=236..238
+scheduler: current=236 critical=236..236 urgent=237..239
+scheduler: current=237 critical=237..237 urgent=238..240
+scheduler: current=238 critical=238..238 urgent=239..241
+scheduler: current=239 critical=239..239 urgent=240..242
+scheduler: current=240 critical=240..240 urgent=241..243
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=241 critical=241..241 urgent=242..244
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=242 critical=242..242 urgent=243..245
+scheduler: current=243 critical=243..243 urgent=244..246
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=244 critical=244..244 urgent=245..247
+scheduler: current=245 critical=245..245 urgent=246..248
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=246 critical=246..246 urgent=247..249
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=247 critical=247..247 urgent=248..250
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=248 critical=248..248 urgent=249..251
+scheduler: current=249 critical=249..249 urgent=250..252
+scheduler: current=250 critical=250..250 urgent=251..253
+scheduler: current=251 critical=251..251 urgent=252..254
+scheduler: current=252 critical=252..252 urgent=253..255
+scheduler: current=253 critical=253..253 urgent=254..256
+scheduler: current=254 critical=254..254 urgent=255..257
+scheduler: current=255 critical=255..255 urgent=256..258
+scheduler: current=256 critical=256..256 urgent=257..259
+scheduler: current=257 critical=257..257 urgent=258..260
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=258 critical=258..258 urgent=259..261
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=259 critical=259..259 urgent=260..262
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=260 critical=260..260 urgent=261..263
+scheduler: current=261 critical=261..261 urgent=262..264
+scheduler: current=262 critical=262..262 urgent=263..265
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=263 critical=263..263 urgent=264..266
+scheduler: current=264 critical=264..264 urgent=265..267
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=265 critical=265..265 urgent=266..268
+scheduler: current=266 critical=266..266 urgent=267..269
+scheduler: current=267 critical=267..267 urgent=268..270
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=268 critical=268..268 urgent=269..271
+scheduler: current=269 critical=269..269 urgent=270..272
+scheduler: current=270 critical=270..270 urgent=271..273
+scheduler: current=271 critical=271..271 urgent=272..274
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=272 critical=272..272 urgent=273..275
+scheduler: current=273 critical=273..273 urgent=274..276
+scheduler: current=274 critical=274..274 urgent=275..277
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=275 critical=275..275 urgent=276..278
+scheduler: current=276 critical=276..276 urgent=277..279
+scheduler: current=277 critical=277..277 urgent=278..280
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=278 critical=278..278 urgent=279..281
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=279 critical=279..279 urgent=280..282
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=280 critical=280..280 urgent=281..283
+scheduler: current=281 critical=281..281 urgent=282..284
+scheduler: current=282 critical=282..282 urgent=283..285
+scheduler: current=283 critical=283..283 urgent=284..286
+scheduler: current=284 critical=284..284 urgent=285..287
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=285 critical=285..285 urgent=286..288
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=286 critical=286..286 urgent=287..289
+scheduler: current=287 critical=287..287 urgent=288..290
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=288 critical=288..288 urgent=289..291
+scheduler: current=289 critical=289..289 urgent=290..292
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=290 critical=290..290 urgent=291..293
+scheduler: current=291 critical=291..291 urgent=292..294
+scheduler: current=292 critical=292..292 urgent=293..295
+scheduler: current=293 critical=293..293 urgent=294..296
+scheduler: current=294 critical=294..294 urgent=295..297
+scheduler: current=295 critical=295..295 urgent=296..298
+scheduler: current=296 critical=296..296 urgent=297..299
+scheduler: current=297 critical=297..297 urgent=298..300
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=298 critical=298..298 urgent=299..301
+scheduler: current=299 critical=299..299 urgent=300..302
+scheduler: current=300 critical=300..300 urgent=301..303
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=301 critical=301..301 urgent=302..304
+scheduler: current=302 critical=302..302 urgent=303..305
+scheduler: current=303 critical=303..303 urgent=304..306
+scheduler: current=304 critical=304..304 urgent=305..307
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=305 critical=305..305 urgent=306..308
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=306 critical=306..306 urgent=307..309
+scheduler: current=307 critical=307..307 urgent=308..310
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=308 critical=308..308 urgent=309..311
+scheduler: current=309 critical=309..309 urgent=310..312
+scheduler: current=310 critical=310..310 urgent=311..313
+scheduler: current=311 critical=311..311 urgent=312..314
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=312 critical=312..312 urgent=313..315
+scheduler: current=312 critical=312..312 urgent=313..315
+scheduler: current=313 critical=313..313 urgent=314..316
+scheduler: current=314 critical=314..314 urgent=315..317
+scheduler: current=315 critical=315..315 urgent=316..318
+scheduler: current=316 critical=316..316 urgent=317..319
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=317 critical=317..317 urgent=318..320
+scheduler: current=318 critical=318..318 urgent=319..321
+scheduler: current=319 critical=319..319 urgent=320..322
+scheduler: current=320 critical=320..320 urgent=321..323
+scheduler: current=321 critical=321..321 urgent=322..324
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=322 critical=322..322 urgent=323..325
+scheduler: current=323 critical=323..323 urgent=324..326
+scheduler: current=324 critical=324..324 urgent=325..327
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=325 critical=325..325 urgent=326..328
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=326 critical=326..326 urgent=327..329
+scheduler: current=327 critical=327..327 urgent=328..330
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=328 critical=328..328 urgent=329..331
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=329 critical=329..329 urgent=330..332
+scheduler: current=330 critical=330..330 urgent=331..333
+scheduler: current=331 critical=331..331 urgent=332..334
+scheduler: current=332 critical=332..332 urgent=333..335
+scheduler: current=333 critical=333..333 urgent=334..336
+scheduler: current=334 critical=334..334 urgent=335..337
+scheduler: current=335 critical=335..335 urgent=336..338
+scheduler: current=336 critical=336..336 urgent=337..339
+scheduler: current=337 critical=337..337 urgent=338..340
+scheduler: current=338 critical=338..338 urgent=339..341
+scheduler: current=339 critical=339..339 urgent=340..342
+scheduler: current=340 critical=340..340 urgent=341..343
+scheduler: current=341 critical=341..341 urgent=342..344
+scheduler: current=342 critical=342..342 urgent=343..345
+scheduler: current=343 critical=343..343 urgent=344..346
+scheduler: current=344 critical=344..344 urgent=345..347
+scheduler: current=345 critical=345..345 urgent=346..348
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=346 critical=346..346 urgent=347..349
+scheduler: current=347 critical=347..347 urgent=348..350
+scheduler: current=348 critical=348..348 urgent=349..351
+scheduler: current=349 critical=349..349 urgent=350..352
+scheduler: current=350 critical=350..350 urgent=351..353
+scheduler: current=351 critical=351..351 urgent=352..354
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=352 critical=352..352 urgent=353..355
+scheduler: current=353 critical=353..353 urgent=354..356
+scheduler: current=354 critical=354..354 urgent=355..357
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=355 critical=355..355 urgent=356..358
+scheduler: current=356 critical=356..356 urgent=357..359
+scheduler: current=357 critical=357..357 urgent=358..360
+scheduler: current=358 critical=358..358 urgent=359..361
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=359 critical=359..359 urgent=360..362
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=360 critical=360..360 urgent=361..363
+scheduler: current=361 critical=361..361 urgent=362..364
+scheduler: current=362 critical=362..362 urgent=363..365
+scheduler: current=363 critical=363..363 urgent=364..366
+scheduler: current=364 critical=364..364 urgent=365..367
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=365 critical=365..365 urgent=366..368
+scheduler: current=366 critical=366..366 urgent=367..369
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=367 critical=367..367 urgent=368..370
+scheduler: current=368 critical=368..368 urgent=369..371
+scheduler: current=369 critical=369..369 urgent=370..372
+scheduler: current=370 critical=370..370 urgent=371..373
+scheduler: current=371 critical=371..371 urgent=372..374
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=372 critical=372..372 urgent=373..375
+scheduler: current=373 critical=373..373 urgent=374..376
+scheduler: current=374 critical=374..374 urgent=375..377
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=375 critical=375..375 urgent=376..378
+scheduler: current=376 critical=376..376 urgent=377..379
+scheduler: current=377 critical=377..377 urgent=378..380
+scheduler: current=378 critical=378..378 urgent=379..381
+scheduler: current=379 critical=379..379 urgent=380..382
+scheduler: current=380 critical=380..380 urgent=381..383
+scheduler: current=381 critical=381..381 urgent=382..384
+scheduler: current=382 critical=382..382 urgent=383..385
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=383 critical=383..383 urgent=384..386
+scheduler: current=384 critical=384..384 urgent=385..387
+scheduler: current=385 critical=385..385 urgent=386..388
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=386 critical=386..386 urgent=387..389
+scheduler: current=387 critical=387..387 urgent=388..390
+scheduler: current=388 critical=388..388 urgent=389..391
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=389 critical=389..389 urgent=390..392
+scheduler: current=390 critical=390..390 urgent=391..393
+scheduler: current=391 critical=391..391 urgent=392..394
+scheduler: current=392 critical=392..392 urgent=393..395
+scheduler: current=393 critical=393..393 urgent=394..396
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=394 critical=394..394 urgent=395..397
+scheduler: current=395 critical=395..395 urgent=396..398
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=396 critical=396..396 urgent=397..399
+scheduler: current=397 critical=397..397 urgent=398..400
+scheduler: current=398 critical=398..398 urgent=399..401
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=399 critical=399..399 urgent=400..402
+scheduler: current=400 critical=400..400 urgent=401..403
+scheduler: current=401 critical=401..401 urgent=402..404
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=402 critical=402..402 urgent=403..405
+scheduler: current=403 critical=403..403 urgent=404..406
+scheduler: current=404 critical=404..404 urgent=405..407
+scheduler: current=405 critical=405..405 urgent=406..408
+scheduler: current=406 critical=406..406 urgent=407..409
+scheduler: current=407 critical=407..407 urgent=408..410
+scheduler: current=408 critical=408..408 urgent=409..411
+scheduler: current=409 critical=409..409 urgent=410..412
+scheduler: current=410 critical=410..410 urgent=411..413
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=411 critical=411..411 urgent=412..414
+scheduler: current=412 critical=412..412 urgent=413..415
+scheduler: current=413 critical=413..413 urgent=414..416
+scheduler: current=414 critical=414..414 urgent=415..417
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=415 critical=415..415 urgent=416..418
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=416 critical=416..416 urgent=417..419
+scheduler: current=417 critical=417..417 urgent=418..420
+scheduler: current=418 critical=418..418 urgent=419..421
+scheduler: current=419 critical=419..419 urgent=420..422
+scheduler: current=420 critical=420..420 urgent=421..423
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=421 critical=421..421 urgent=422..424
+scheduler: current=422 critical=422..422 urgent=423..425
+scheduler: current=423 critical=423..423 urgent=424..426
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=424 critical=424..424 urgent=425..427
+scheduler: current=425 critical=425..425 urgent=426..428
+scheduler: current=426 critical=426..426 urgent=427..429
+scheduler: current=427 critical=427..427 urgent=428..430
+scheduler: current=428 critical=428..428 urgent=429..431
+scheduler: current=429 critical=429..429 urgent=430..432
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=430 critical=430..430 urgent=431..433
+scheduler: current=431 critical=431..431 urgent=432..434
+scheduler: current=432 critical=432..432 urgent=433..435
+scheduler: current=433 critical=433..433 urgent=434..436
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=434 critical=434..434 urgent=435..437
+scheduler: current=435 critical=435..435 urgent=436..438
+scheduler: current=436 critical=436..436 urgent=437..439
+scheduler: current=437 critical=437..437 urgent=438..440
+scheduler: current=438 critical=438..438 urgent=439..441
+scheduler: current=439 critical=439..439 urgent=440..442
+scheduler: current=440 critical=440..440 urgent=441..443
+scheduler: current=441 critical=441..441 urgent=442..444
+scheduler: current=442 critical=442..442 urgent=443..445
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=443 critical=443..443 urgent=444..446
+scheduler: current=444 critical=444..444 urgent=445..447
+scheduler: current=445 critical=445..445 urgent=446..448
+scheduler: current=446 critical=446..446 urgent=447..449
+scheduler: current=447 critical=447..447 urgent=448..450
+scheduler: current=448 critical=448..448 urgent=449..451
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=449 critical=449..449 urgent=450..452
+scheduler: current=450 critical=450..450 urgent=451..453
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=451 critical=451..451 urgent=452..454
+scheduler: current=452 critical=452..452 urgent=453..455
+scheduler: current=453 critical=453..453 urgent=454..456
+scheduler: current=454 critical=454..454 urgent=455..457
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=455 critical=455..455 urgent=456..458
+scheduler: current=456 critical=456..456 urgent=457..459
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=457 critical=457..457 urgent=458..460
+scheduler: current=458 critical=458..458 urgent=459..461
+scheduler: current=459 critical=459..459 urgent=460..462
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=460 critical=460..460 urgent=461..463
+scheduler: current=461 critical=461..461 urgent=462..464
+scheduler: current=462 critical=462..462 urgent=463..465
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=463 critical=463..463 urgent=464..466
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=464 critical=464..464 urgent=465..467
+scheduler: current=465 critical=465..465 urgent=466..468
+scheduler: current=466 critical=466..466 urgent=467..469
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=467 critical=467..467 urgent=468..470
+scheduler: current=468 critical=468..468 urgent=469..471
+scheduler: current=469 critical=469..469 urgent=470..472
+scheduler: current=470 critical=470..470 urgent=471..473
+scheduler: current=471 critical=471..471 urgent=472..474
+scheduler: current=472 critical=472..472 urgent=473..475
+scheduler: current=473 critical=473..473 urgent=474..476
+scheduler: current=474 critical=474..474 urgent=475..477
+scheduler: current=475 critical=475..475 urgent=476..478
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=476 critical=476..476 urgent=477..479
+scheduler: current=477 critical=477..477 urgent=478..480
+scheduler: current=478 critical=478..478 urgent=479..481
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=479 critical=479..479 urgent=480..482
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=480 critical=480..480 urgent=481..483
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=481 critical=481..481 urgent=482..484
+scheduler: current=482 critical=482..482 urgent=483..485
+scheduler: current=483 critical=483..483 urgent=484..486
+scheduler: current=484 critical=484..484 urgent=485..487
+scheduler: current=484 critical=484..484 urgent=485..487
+scheduler: current=485 critical=485..485 urgent=486..488
+scheduler: current=486 critical=486..486 urgent=487..489
+scheduler: current=487 critical=487..487 urgent=488..490
+scheduler: current=488 critical=488..488 urgent=489..491
+scheduler: current=489 critical=489..489 urgent=490..492
+scheduler: current=490 critical=490..490 urgent=491..493
+scheduler: current=491 critical=491..491 urgent=492..494
+scheduler: current=492 critical=492..492 urgent=493..495
+scheduler: current=493 critical=493..493 urgent=494..496
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=494 critical=494..494 urgent=495..497
+scheduler: current=495 critical=495..495 urgent=496..498
+scheduler: current=496 critical=496..496 urgent=497..499
+scheduler: current=497 critical=497..497 urgent=498..500
+scheduler: current=498 critical=498..498 urgent=499..501
+scheduler: current=499 critical=499..499 urgent=500..502
+scheduler: current=500 critical=500..500 urgent=501..503
+scheduler: current=501 critical=501..501 urgent=502..504
+scheduler: current=502 critical=502..502 urgent=503..505
+scheduler: current=503 critical=503..503 urgent=504..506
+scheduler: current=504 critical=504..504 urgent=505..507
+scheduler: current=505 critical=505..505 urgent=506..508
+scheduler: current=506 critical=506..506 urgent=507..509
+scheduler: current=507 critical=507..507 urgent=508..510
+scheduler: current=508 critical=508..508 urgent=509..511
+scheduler: current=510 critical=510..510 urgent=511..513
+scheduler: current=511 critical=511..511 urgent=512..514
+scheduler: current=512 critical=512..512 urgent=513..515
+scheduler: current=513 critical=513..513 urgent=514..516
+scheduler: current=514 critical=514..514 urgent=515..517
+scheduler: current=515 critical=515..515 urgent=516..518
+scheduler: current=516 critical=516..516 urgent=517..519
+scheduler: current=517 critical=517..517 urgent=518..520
+scheduler: current=518 critical=518..518 urgent=519..521
+scheduler: current=519 critical=519..519 urgent=520..522
+scheduler: current=520 critical=520..520 urgent=521..523
+scheduler: current=521 critical=521..521 urgent=522..524
+scheduler: current=522 critical=522..522 urgent=523..525
+scheduler: current=523 critical=523..523 urgent=524..526
+scheduler: current=524 critical=524..524 urgent=525..527
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=525 critical=525..525 urgent=526..528
+scheduler: current=526 critical=526..526 urgent=527..529
+scheduler: current=527 critical=527..527 urgent=528..530
+scheduler: current=528 critical=528..528 urgent=529..531
+scheduler: current=529 critical=529..529 urgent=530..532
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=530 critical=530..530 urgent=531..533
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=531 critical=531..531 urgent=532..534
+scheduler: current=532 critical=532..532 urgent=533..535
+scheduler: current=533 critical=533..533 urgent=534..536
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=534 critical=534..534 urgent=535..537
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=535 critical=535..535 urgent=536..538
+scheduler: current=536 critical=536..536 urgent=537..539
+scheduler: current=537 critical=537..537 urgent=538..540
+scheduler: current=538 critical=538..538 urgent=539..541
+scheduler: current=539 critical=539..539 urgent=540..542
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=540 critical=540..540 urgent=541..543
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=541 critical=541..541 urgent=542..544
+scheduler: current=542 critical=542..542 urgent=543..545
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=543 critical=543..543 urgent=544..546
+scheduler: current=544 critical=544..544 urgent=545..547
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=545 critical=545..545 urgent=546..548
+scheduler: current=546 critical=546..546 urgent=547..549
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=547 critical=547..547 urgent=548..550
+scheduler: current=548 critical=548..548 urgent=549..551
+scheduler: current=549 critical=549..549 urgent=550..552
+scheduler: current=550 critical=550..550 urgent=551..553
+scheduler: current=551 critical=551..551 urgent=552..554
+scheduler: current=552 critical=552..552 urgent=553..555
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=553 critical=553..553 urgent=554..556
+scheduler: current=554 critical=554..554 urgent=555..557
+scheduler: current=555 critical=555..555 urgent=556..558
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=556 critical=556..556 urgent=557..559
+scheduler: current=557 critical=557..557 urgent=558..560
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=558 critical=558..558 urgent=559..561
+scheduler: current=559 critical=559..559 urgent=560..562
+scheduler: current=560 critical=560..560 urgent=561..563
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=561 critical=561..561 urgent=562..564
+scheduler: current=562 critical=562..562 urgent=563..565
+scheduler: current=563 critical=563..563 urgent=564..566
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=564 critical=564..564 urgent=565..567
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=565 critical=565..565 urgent=566..568
+scheduler: current=566 critical=566..566 urgent=567..569
+scheduler: current=567 critical=567..567 urgent=568..570
+scheduler: current=568 critical=568..568 urgent=569..571
+scheduler: current=569 critical=569..569 urgent=570..572
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=570 critical=570..570 urgent=571..573
+scheduler: current=571 critical=571..571 urgent=572..574
+scheduler: current=572 critical=572..572 urgent=573..575
+scheduler: current=573 critical=573..573 urgent=574..576
+scheduler: current=574 critical=574..574 urgent=575..577
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=575 critical=575..575 urgent=576..578
+scheduler: current=576 critical=576..576 urgent=577..579
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=577 critical=577..577 urgent=578..580
+scheduler: current=578 critical=578..578 urgent=579..581
+scheduler: current=579 critical=579..579 urgent=580..582
+scheduler: current=580 critical=580..580 urgent=581..583
+scheduler: current=581 critical=581..581 urgent=582..584
+scheduler: current=582 critical=582..582 urgent=583..585
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=583 critical=583..583 urgent=584..586
+scheduler: current=584 critical=584..584 urgent=585..587
+scheduler: current=585 critical=585..585 urgent=586..588
+scheduler: current=586 critical=586..586 urgent=587..589
+scheduler: current=587 critical=587..587 urgent=588..590
+scheduler: current=588 critical=588..588 urgent=589..591
+scheduler: current=589 critical=589..589 urgent=590..592
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=590 critical=590..590 urgent=591..593
+scheduler: current=591 critical=591..591 urgent=592..594
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=592 critical=592..592 urgent=593..595
+scheduler: current=593 critical=593..593 urgent=594..596
+scheduler: current=594 critical=594..594 urgent=595..597
+scheduler: current=595 critical=595..595 urgent=596..598
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=596 critical=596..596 urgent=597..599
+scheduler: current=597 critical=597..597 urgent=598..600
+scheduler: current=598 critical=598..598 urgent=599..601
+scheduler: current=599 critical=599..599 urgent=600..602
+scheduler: current=600 critical=600..600 urgent=601..603
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=601 critical=601..601 urgent=602..604
+scheduler: current=602 critical=602..602 urgent=603..605
+scheduler: current=603 critical=603..603 urgent=604..606
+scheduler: current=604 critical=604..604 urgent=605..607
+scheduler: boosted 2 slow-peer claims to Critical
+scheduler: current=605 critical=605..605 urgent=606..608
+scheduler: current=606 critical=606..606 urgent=607..609
+scheduler: current=607 critical=607..607 urgent=608..610
+scheduler: current=608 critical=608..608 urgent=609..611
+scheduler: boosted 1 slow-peer claims to Critical
+scheduler: current=609 critical=609..609 urgent=610..612
+scheduler: current=610 critical=610..610 urgent=611..613
+scheduler: current=611 critical=611..611 urgent=612..614
+scheduler: current=612 critical=612..612 urgent=613..615
+scheduler: current=613 critical=613..613 urgent=614..616
+scheduler: current=614 critical=614..614 urgent=615..617
+scheduler: current=615 critical=615..615 urgent=616..618
+scheduler: current=616 critical=616..616 urgent=617..619
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: boosted 3 slow-peer claims to Critical
+scheduler: current=617 critical=617..617 urgent=618..620
+scheduler: current=618 critical=618..618 urgent=619..621
+scheduler: current=619 critical=619..619 urgent=620..622
+scheduler: current=620 critical=620..620 urgent=621..623
+scheduler: current=621 critical=621..621 urgent=622..624
+scheduler: boosted 4 slow-peer claims to Critical
+scheduler: current=622 critical=622..622 urgent=623..625

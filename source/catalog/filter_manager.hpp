@@ -58,7 +58,8 @@ enum class LanguageFilter {
     JAPANESE_ONLY = 7,
     CHINESE_ONLY = 8,
     PORTUGUESE_ONLY = 9,
-    MULTI_ONLY = 10,
+    ARABIC_ONLY = 10,
+    MULTI_ONLY = 11,
 };
 
 inline std::vector<std::string> getLanguageFilterNames() {
@@ -73,6 +74,7 @@ inline std::vector<std::string> getLanguageFilterNames() {
         "app/filter/lang_jpn"_i18n,
         "app/filter/lang_zho"_i18n,
         "app/filter/lang_por"_i18n,
+        "app/filter/lang_ara"_i18n,
         "app/filter/lang_multi"_i18n
     };
 }
@@ -265,6 +267,9 @@ inline bool checkLanguageMatch(const std::string& lowerLang, LanguageFilter lang
         case LanguageFilter::PORTUGUESE_ONLY:
             return (lowerLang.find("por") != std::string::npos || lowerLang.find("порт") != std::string::npos ||
                     lowerLang.find("portug") != std::string::npos);
+        case LanguageFilter::ARABIC_ONLY:
+            return (lowerLang.find("ara") != std::string::npos || lowerLang.find("arb") != std::string::npos ||
+                    lowerLang.find("араб") != std::string::npos || lowerLang.find("arabic") != std::string::npos);
         case LanguageFilter::MULTI_ONLY:
             return (lowerLang.find("multi") != std::string::npos || lowerLang.find("мульти") != std::string::npos);
         default:
@@ -460,36 +465,32 @@ inline uint64_t parseTopicId(const std::string& tid) {
     return id;
 }
 
-// Comparator for Game sorting
+// Comparator for Game sorting (zero heap allocations using precomputed sort_key)
 inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
     switch (sort) {
         case SortOption::TITLE_ASC: {
-            std::string tA = toLowerUtf8(normalizeTitleForSort(a.title));
-            std::string tB = toLowerUtf8(normalizeTitleForSort(b.title));
-            return tA < tB;
+            return a.sort_key < b.sort_key;
         }
         case SortOption::TITLE_DESC: {
-            std::string tA = toLowerUtf8(normalizeTitleForSort(a.title));
-            std::string tB = toLowerUtf8(normalizeTitleForSort(b.title));
-            return tA > tB;
+            return a.sort_key > b.sort_key;
         }
         case SortOption::SIZE_ASC: {
             uint64_t sA = parseSizeToBytes(a.size);
             uint64_t sB = parseSizeToBytes(b.size);
             if (sA != sB) return sA < sB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::SIZE_DESC: {
             uint64_t sA = parseSizeToBytes(a.size);
             uint64_t sB = parseSizeToBytes(b.size);
             if (sA != sB) return sA > sB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::YEAR_DESC: {
             int yA = parseYear(a.year);
             int yB = parseYear(b.year);
             if (yA != yB) return yA > yB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::YEAR_ASC: {
             int yA = parseYear(a.year);
@@ -498,7 +499,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             if (yA == 0) yA = 9999;
             if (yB == 0) yB = 9999;
             if (yA != yB) return yA < yB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::SEEDS_DESC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
@@ -506,7 +507,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             int32_t valA = sA ? sA->seeds : -1;
             int32_t valB = sB ? sB->seeds : -1;
             if (valA != valB) return valA > valB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::SEEDS_ASC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
@@ -514,7 +515,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             int32_t valA = (sA && sA->seeds > 0) ? sA->seeds : INT32_MAX;
             int32_t valB = (sB && sB->seeds > 0) ? sB->seeds : INT32_MAX;
             if (valA != valB) return valA < valB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::DOWNLOADS_DESC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
@@ -522,7 +523,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             int64_t valA = sA ? sA->downloads : -1;
             int64_t valB = sB ? sB->downloads : -1;
             if (valA != valB) return valA > valB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::DOWNLOADS_ASC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
@@ -530,7 +531,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             int64_t valA = (sA && sA->downloads > 0) ? sA->downloads : INT64_MAX;
             int64_t valB = (sB && sB->downloads > 0) ? sB->downloads : INT64_MAX;
             if (valA != valB) return valA < valB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::DATE_DESC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
@@ -541,7 +542,7 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             uint64_t idA = parseTopicId(a.topic_id);
             uint64_t idB = parseTopicId(b.topic_id);
             if (idA != idB) return idA > idB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::DATE_ASC: {
             const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
@@ -554,12 +555,19 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             if (idA == 0) idA = UINT64_MAX;
             if (idB == 0) idB = UINT64_MAX;
             if (idA != idB) return idA < idB;
-            return toLowerUtf8(normalizeTitleForSort(a.title)) < toLowerUtf8(normalizeTitleForSort(b.title));
+            return a.sort_key < b.sort_key;
         }
         case SortOption::DEFAULT:
         default:
             return false;
     }
+}
+
+inline bool compareGames(const Game* a, const Game* b, SortOption sort) {
+    if (!a && !b) return false;
+    if (!a) return false;
+    if (!b) return true;
+    return compareGames(*a, *b, sort);
 }
 
 } // namespace catalog

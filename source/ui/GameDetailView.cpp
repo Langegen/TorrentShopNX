@@ -9,6 +9,8 @@
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
+#include "../installer/PortInstallPlanner.hpp"
+#include "../utils/file_ops.h"
 #include <sstream>
 
 namespace ui {
@@ -173,12 +175,7 @@ void GameDetailView::onContentAvailable() {
 
             badgesBox->addView(setBadge);
 
-            const auto& cfg = config::ConfigManager::instance();
-            if (cfg.getRetroRomsetMode() == "select") {
-                btnDownload->setText("app/detail/select_files_btn"_i18n);
-            } else {
-                btnDownload->setText("app/detail/download_romset_btn"_i18n);
-            }
+            btnDownload->setText("app/detail/download_romset_btn"_i18n);
         } else {
             btnDownload->setText("app/detail/download_rom"_i18n);
         }
@@ -300,26 +297,47 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     btnDownload->registerClickAction([this](brls::View* view) {
-        if (!retro_console_id_.empty()) {
-            const auto& cfg = config::ConfigManager::instance();
-            if (isRomsetGame(game_) && cfg.getRetroRomsetMode() == "select") {
-                brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
-                return true;
-            } else {
-                ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+        if (!retro_console_id_.empty() || isHomebrewGame(game_) || isHomebrewPort(game_)) {
+            auto* dialog = new brls::Dialog(cleanTitle(game_.title));
+            dialog->setCancelable(true);
+
+            // 1. Автоматическая установка (только для хоумбрю / портов)
+            if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
+                dialog->addButton("app/detail/auto_install_btn"_i18n, [this]() {
+                    // Instantly enqueue with analysis deferred to when download starts.
+                    // This allows queueing multiple ports without UI freezes, network competition,
+                    // or socket exhaustion.
+                    ui::DownloadManager::instance().addPortInstall(game_, nullptr, 0);
+                    brls::sync([]() {
+                        brls::Application::pushActivity(new ui::DownloadsView());
+                    });
+                });
+            }
+
+            // 2. Скачать полностью
+            dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
+                if (!retro_console_id_.empty()) {
+                    ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+                } else {
+                    ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+                }
                 brls::sync([]() {
                     brls::Application::pushActivity(new ui::DownloadsView());
                 });
-                return true;
-            }
-        }
-        if (isHomebrewGame(game_)) {
-            ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-            brls::sync([]() {
-                brls::Application::pushActivity(new ui::DownloadsView());
             });
+
+            // 3. Выбрать файлы
+            dialog->addButton("app/detail/select_files_btn"_i18n, [this]() {
+                brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
+            });
+
+            // 4. Отмена
+            dialog->addButton("app/common/cancel"_i18n, []() {});
+
+            dialog->open();
             return true;
         }
+
         brls::Application::pushActivity(new FileSelectView(game_));
         return true;
     });
@@ -396,12 +414,7 @@ void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
     if (!retro_console_id_.empty() && isRomsetGame(game_)) {
-        const auto& cfg = config::ConfigManager::instance();
-        if (cfg.getRetroRomsetMode() == "select") {
-            btnDownload->setText("app/detail/select_files_btn"_i18n);
-        } else {
-            btnDownload->setText("app/detail/download_romset_btn"_i18n);
-        }
+        btnDownload->setText("app/detail/download_romset_btn"_i18n);
     }
     brls::Application::giveFocus(btnDownload);
 }

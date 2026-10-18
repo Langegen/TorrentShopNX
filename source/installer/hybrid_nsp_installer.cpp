@@ -66,7 +66,7 @@ static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 24 * 1024 * 1024; // 24MB 
 // with whatever has arrived after this long -- provided at least one byte is
 // there. Without the timeout a slow wifi swarm that trickles below the
 // target keeps the install stuck in the buffering phase forever.
-static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 5000;
+static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 30000;
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
 static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (smooth streaming buffer)
@@ -165,10 +165,10 @@ size_t HybridNspInstaller::autoBufferSize() {
     if (type == AppletType_LibraryApplet || type == AppletType_OverlayApplet) {
         return 16 * 1024 * 1024; // 16MB для аплет-режима
     }
-    // Application/Title Mode: 128MB.
-    return 128 * 1024 * 1024;
+    // Application/Title Mode: 64MB is optimal for streaming without heap exhaustion
+    return 64 * 1024 * 1024;
 #else
-    return 128 * 1024 * 1024;
+    return 64 * 1024 * 1024;
 #endif
 }
 
@@ -185,6 +185,9 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     config_ = config;
 
     size_t max_buf = autoBufferSize();
+    if (config_.buffer_size > 0 && config_.buffer_size < max_buf) {
+        max_buf = config_.buffer_size;
+    }
     uint64_t file_sz = source_->totalSize();
     size_t buf_size = max_buf;
     if (file_sz > 0 && file_sz < max_buf) {
@@ -577,6 +580,16 @@ void HybridNspInstaller::collectorThreadFunc() {
             }
 
             // No data accumulated and read == 0 -> retry logic
+            if (is_paused_.load()) {
+                retry_count = 0;
+#ifdef __SWITCH__
+                svcSleepThread(100000000LL); // 100ms
+#else
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+#endif
+                continue;
+            }
+
             ++retry_count;
             if (retry_count >= max_retries) {
                 util::logLine("collector: retry limit reached at offset="
@@ -663,43 +676,6 @@ static Result nsPushApplicationRecordCustom(u64 application_id, u8 record_type, 
     serviceClose(&app_manager);
     return rc;
 }
-
-static Result nsListApplicationRecordContentMetaCustom(u64 offset, u64 application_id, ContentStorageRecord* out_records, size_t out_buf_size, u32* out_entries_read) {
-    Service app_manager;
-    Result rc = nsGetApplicationManagerInterface(&app_manager);
-    if (R_FAILED(rc)) return rc;
-
-    struct {
-        u64 offset;
-        u64 application_id;
-    } in;
-    in.offset = offset;
-    in.application_id = application_id;
-
-    rc = serviceDispatchInOut(&app_manager, 17, in, *out_entries_read,
-        .buffer_attrs = { SfBufferAttr_Out | SfBufferAttr_HipcMapAlias },
-        .buffers = { { out_records, out_buf_size } }
-    );
-    serviceClose(&app_manager);
-    return rc;
-}
-
-static Result nsDeleteApplicationRecordCustom(u64 application_id) {
-    Service app_manager;
-    Result rc = nsGetApplicationManagerInterface(&app_manager);
-    if (R_FAILED(rc)) return rc;
-
-    struct {
-        u64 application_id;
-    } in;
-    in.application_id = application_id;
-
-    rc = serviceDispatchIn(&app_manager, 27, in);
-    serviceClose(&app_manager);
-    return rc;
-}
-
-
 
 static constexpr u8 NsApplicationRecordType_Installed = 0x3;
 #endif

@@ -100,11 +100,57 @@ function Build-AppTest {
     Write-Host "OK -> pctest\apptest"
 }
 
+function Build-NetBrowsingTest {
+    & $GPP @CXXFLAGS -std=c++17 -Ipctest\compat -Iinclude -Isource pctest\test_net_browsing.cpp source\net\http_client.cpp source\utils\log.cpp -lcurl -lws2_32 -liphlpapi -lpthread -o "pctest\test_net_browsing"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_net_browsing"
+}
+
 function Build-Test($name) {
     $src = @("pctest\$name.c") + $COMMON_SOURCES + $CPP_OBJ
     & $GCC @CFLAGS @src -o "pctest\$name" @LIBS
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Write-Host "OK -> pctest\$name"
+}
+
+function Build-PerfTest {
+    $OBJDIR = "pctest\obj"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
+    $cobj = @()
+    foreach ($src in $COMMON_SOURCES) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        if (-not (Test-Path $o)) {
+            & $GCC @CFLAGS -c $src -o $o
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        $cobj += $o
+    }
+    $o_perf = Join-Path $OBJDIR "test_engine_perf.o"
+    & $GPP @CXXFLAGS -std=c++17 -c pctest\test_engine_perf.cpp -o $o_perf
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_perf $CPP_OBJ -o "pctest\test_engine_perf" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_engine_perf"
+}
+
+function Build-MechanismsTest {
+    $OBJDIR = "pctest\obj"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
+    $cobj = @()
+    foreach ($src in $COMMON_SOURCES) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        if (-not (Test-Path $o)) {
+            & $GCC @CFLAGS -c $src -o $o
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        $cobj += $o
+    }
+    $o_mech = Join-Path $OBJDIR "test_mechanisms.o"
+    & $GPP @CXXFLAGS -std=c++17 -c pctest\test_mechanisms.cpp -o $o_mech
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_mech $CPP_OBJ -o "pctest\test_mechanisms" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_mechanisms"
 }
 
 Build-CppObjects
@@ -117,3 +163,7 @@ Build-Test "streamtest"
 Build-Test "diagtest"
 Build-Test "dhttest"
 Build-AppTest
+Build-NetBrowsingTest
+Build-PerfTest
+Build-MechanismsTest
+

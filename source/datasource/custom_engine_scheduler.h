@@ -59,61 +59,47 @@ public:
     static CustomSchedulerConfig defaultInstallerConfig(int piece_size = 0) {
         CustomSchedulerConfig cfg;
         if (piece_size >= 16 * 1024 * 1024) {
-            cfg.critical_pieces    = 1;
-            cfg.urgent_pieces      = 1;
-            cfg.prefetch_pieces    = 3;
-            cfg.speculative_pieces = 3;
-            cfg.normal_pieces      = 6;
-        } else if (piece_size >= 8 * 1024 * 1024) {
-            cfg.critical_pieces    = 1;
-            cfg.urgent_pieces      = 1;
-            cfg.prefetch_pieces    = 3;
-            cfg.speculative_pieces = 4;
-            cfg.normal_pieces      = 8;
-        } else {
-            cfg.critical_pieces    = 1;
-            cfg.urgent_pieces      = 1;
-            cfg.prefetch_pieces    = 4;
-            cfg.speculative_pieces = 5;
-            cfg.normal_pieces      = 14;
-        }
-        return cfg;
-    }
-
-    static CustomSchedulerConfig highThroughputFileConfig(int piece_size = 0) {
-        CustomSchedulerConfig cfg;
-        if (piece_size >= 16 * 1024 * 1024) {
-            // ~18 pieces total = 288 MB RAM window, safe under RAM_STREAM_BUDGET (512MB)
+            // ~16 pieces = 256 MB RAM window, fully saturated across 64 peers
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 2;
-            cfg.prefetch_pieces    = 6;
+            cfg.prefetch_pieces    = 5;
             cfg.speculative_pieces = 4;
-            cfg.normal_pieces      = 5;
+            cfg.normal_pieces      = 4;
+            cfg.slow_peer_speed_bps = 250.0f * 1024.0f;
+            cfg.slow_peer_count_max = 6;
         } else if (piece_size >= 8 * 1024 * 1024) {
-            // ~24 pieces total = 192 MB RAM window
+            // ~24 pieces = 192 MB RAM window
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 2;
             cfg.prefetch_pieces    = 8;
             cfg.speculative_pieces = 6;
             cfg.normal_pieces      = 7;
+            cfg.slow_peer_speed_bps = 150.0f * 1024.0f;
+            cfg.slow_peer_count_max = 5;
         } else if (piece_size >= 4 * 1024 * 1024) {
-            // ~32 pieces total = 128 MB RAM window
-            cfg.critical_pieces    = 1;
-            cfg.urgent_pieces      = 2;
-            cfg.prefetch_pieces    = 12;
-            cfg.speculative_pieces = 8;
-            cfg.normal_pieces      = 9;
-        } else {
-            // 60 pieces for <= 2MB
+            // ~32 pieces = 128 MB RAM window
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 3;
-            cfg.prefetch_pieces    = 20;
-            cfg.speculative_pieces = 16;
-            cfg.normal_pieces      = 20;
+            cfg.prefetch_pieces    = 12;
+            cfg.speculative_pieces = 8;
+            cfg.normal_pieces      = 8;
+            cfg.slow_peer_speed_bps = 100.0f * 1024.0f;
+            cfg.slow_peer_count_max = 4;
+        } else {
+            // ~44 pieces = 44-88 MB RAM window for small piece sizes
+            cfg.critical_pieces    = 1;
+            cfg.urgent_pieces      = 3;
+            cfg.prefetch_pieces    = 16;
+            cfg.speculative_pieces = 12;
+            cfg.normal_pieces      = 12;
+            cfg.slow_peer_speed_bps = 80.0f * 1024.0f;
+            cfg.slow_peer_count_max = 4;
         }
-        cfg.slow_peer_speed_bps = 150.0f * 1024.0f;
-        cfg.slow_peer_count_max = 5;
         return cfg;
+    }
+
+    static CustomSchedulerConfig highThroughputFileConfig(int piece_size = 0) {
+        return defaultInstallerConfig(piece_size);
     }
 
     void init(tsnx_engine* engine,

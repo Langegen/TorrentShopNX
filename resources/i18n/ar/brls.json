@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "موافق",
+        "back": "رجوع",
+        "exit": "خروج",
+        "cancel": "إلغاء",
+        "on": "تشغيل",
+        "off": "إيقاف"
+    },
+    "crash_frame": {
+        "button": "موافق"
+    },
+    "thumbnail_sidebar": {
+        "save": "حفظ"
+    }
+}

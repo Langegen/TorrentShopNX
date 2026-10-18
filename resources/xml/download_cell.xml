@@ -1,111 +1,127 @@
 <brls:Box
     width="auto"
-    height="138px"
+    height="auto"
     focusable="true"
-    padding="15"
-    axis="row"
-    alignItems="center">
+    paddingTop="12"
+    paddingBottom="12"
+    paddingLeft="15"
+    paddingRight="15"
+    axis="column"
+    cornerRadius="8">
 
-    <!-- Cover -->
-    <brls:Image
-        id="cover"
-        width="60px"
-        height="100px"
-        marginRight="20" />
-
-    <!-- Details Column -->
+    <!-- Main Card Header Row -->
     <brls:Box
         width="auto"
-        height="auto"
-        grow="1.0"
-        axis="column"
-        marginRight="20">
+        height="114px"
+        axis="row"
+        alignItems="center">
 
-        <!-- Title -->
-        <brls:Label
-            id="title"
-            fontSize="17"
-            marginBottom="2"
-            singleLine="true" />
+        <!-- Cover Image -->
+        <brls:Image
+            id="cover"
+            width="60px"
+            height="100px"
+            marginRight="18" />
 
-        <!-- File Name (for NSP / NSZ / XCI) -->
-        <brls:Label
-            id="fileName"
-            fontSize="12"
-            textColor="#AAAAAA"
-            marginBottom="4"
-            singleLine="true" />
+        <!-- Details Column -->
+        <brls:Box
+            width="auto"
+            height="auto"
+            grow="1.0"
+            axis="column"
+            marginRight="15">
 
-        <!-- Download Progress Bar -->
-        <brls:Box width="auto" height="18px" axis="row" alignItems="center" marginBottom="4">
-            <brls:Label text="@i18n/app/downloads/download_label" fontSize="12" width="115px" singleLine="true" />
-            <brls:Box id="progressBarBg" width="275px" height="10px" backgroundColor="#444444" cornerRadius="5">
-                <brls:Box id="progressBar" width="0" height="10px" backgroundColor="#4CAF50" cornerRadius="5" />
+            <!-- Title -->
+            <brls:Label
+                id="title"
+                fontSize="18"
+                singleLine="true"
+                marginBottom="4" />
+
+            <!-- Download Progress Bar Row -->
+            <brls:Box width="auto" height="18px" axis="row" alignItems="center" marginBottom="3">
+                <brls:Label text="@i18n/app/downloads/download_label" fontSize="12" width="115px" singleLine="true" />
+                <brls:Box id="progressBarBg" width="275px" height="8px" backgroundColor="#444444" cornerRadius="4">
+                    <brls:Box id="progressBar" width="0" height="8px" backgroundColor="#4CAF50" cornerRadius="4" />
+                </brls:Box>
+                <brls:Label id="progressText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
             </brls:Box>
-            <brls:Label id="progressText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
+
+            <!-- Install Progress Bar Row -->
+            <brls:Box id="installProgressRow" width="auto" height="18px" axis="row" alignItems="center" marginBottom="3">
+                <brls:Label text="@i18n/app/downloads/install_label" fontSize="12" width="115px" singleLine="true" />
+                <brls:Box id="installBarBg" width="275px" height="8px" backgroundColor="#444444" cornerRadius="4">
+                    <brls:Box id="installBar" width="0" height="8px" backgroundColor="#2196F3" cornerRadius="4" />
+                </brls:Box>
+                <brls:Label id="installText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
+            </brls:Box>
+
+            <!-- Stats Row -->
+            <brls:Box width="auto" height="auto" axis="row" alignItems="center">
+                <brls:Label id="statsText" fontSize="12" textColor="#AAAAAA" singleLine="true" marginRight="12" />
+                <brls:Label id="elapsedText" fontSize="12" textColor="#AAAAAA" singleLine="true" marginRight="12" />
+                <brls:Label id="peersText" fontSize="12" textColor="#AAAAAA" singleLine="true" />
+            </brls:Box>
+
         </brls:Box>
 
-        <!-- Install Progress Bar -->
-        <brls:Box id="installProgressRow" width="auto" height="18px" axis="row" alignItems="center" marginBottom="4">
-            <brls:Label text="@i18n/app/downloads/install_label" fontSize="12" width="115px" singleLine="true" />
-            <brls:Box id="installBarBg" width="275px" height="10px" backgroundColor="#444444" cornerRadius="5">
-                <brls:Box id="installBar" width="0" height="10px" backgroundColor="#2196F3" cornerRadius="5" />
-            </brls:Box>
-            <brls:Label id="installText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
+        <!-- SDK Warning Box -->
+        <brls:Box
+            id="sdkWarningBox"
+            width="auto"
+            height="auto"
+            axis="column"
+            alignItems="center"
+            justifyContent="center"
+            marginRight="15"
+            cornerRadius="6"
+            paddingTop="4"
+            paddingBottom="4"
+            paddingLeft="8"
+            paddingRight="8"
+            visibility="gone">
+            <brls:Label id="sdkConsoleLabel" text="" fontSize="11" textColor="@theme/brls/header/subtitle" marginBottom="2" />
+            <brls:Label id="sdkGameLabel" text="" fontSize="12" textColor="#FF7043" />
         </brls:Box>
 
-        <!-- Stats text: speed, ETA, size -->
-        <brls:Box width="auto" height="auto" axis="row">
+        <!-- Right Status & Controls Column -->
+        <brls:Box
+            width="180px"
+            height="100px"
+            shrink="0.0"
+            axis="column"
+            alignItems="flexEnd"
+            justifyContent="center">
             <brls:Label
-                id="statsText"
+                id="countBadge"
                 fontSize="12"
                 textColor="#AAAAAA"
-                marginRight="20" />
-
+                horizontalAlign="right"
+                singleLine="true"
+                marginBottom="6" />
             <brls:Label
-                id="elapsedText"
-                fontSize="12"
-                textColor="#AAAAAA"
-                marginRight="20" />
-
+                id="statusText"
+                fontSize="14"
+                horizontalAlign="right"
+                singleLine="true" />
             <brls:Label
-                id="peersText"
+                id="expandHint"
                 fontSize="12"
-                textColor="#AAAAAA" />
+                textColor="#00C8F5"
+                horizontalAlign="right"
+                singleLine="true"
+                marginTop="6" />
         </brls:Box>
 
     </brls:Box>
 
-    <!-- SDK Mismatch Warning Box -->
+    <!-- Accordion Components Box (populated dynamically in C++) -->
     <brls:Box
-        id="sdkWarningBox"
+        id="componentsBox"
         width="auto"
         height="auto"
         axis="column"
-        alignItems="center"
-        justifyContent="center"
-        marginRight="20"
-        visibility="gone">
-
-        <brls:Label
-            id="sdkConsoleLabel"
-            text=""
-            fontSize="12"
-            textColor="@theme/brls/header/subtitle"
-            marginBottom="3" />
-
-        <brls:Label
-            id="sdkGameLabel"
-            text=""
-            fontSize="13"
-            textColor="#FF7043" />
-    </brls:Box>
-
-    <!-- Status Text / Controls -->
-    <brls:Label
-        id="statusText"
-        width="150px"
-        horizontalAlign="center"
-        fontSize="14" />
+        marginTop="10"
+        visibility="gone" />
 
 </brls:Box>

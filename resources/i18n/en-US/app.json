@@ -135,9 +135,12 @@
     "downloads": {
         "title": "Downloads",
         "empty": "No active or completed downloads.",
+        "already_in_queue": "This game is already in downloads",
         "state_waiting": "Waiting",
         "state_queued": "Queued",
         "state_downloading": "Downloading",
+        "state_resolving_meta": "Resolving metadata...",
+        "state_connecting_peers": "Connecting to peers...",
         "state_preparing": "Preparing install",
         "state_installing": "Installing",
         "state_no_peers": "Installing: no peers",
@@ -153,16 +156,17 @@
         "installed": "Installed",
         "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "Unknown error",
-        "peers_with_known": "Seeds: {0} · Peers: {1} ({2} known) · DHT: {3}",
+        "peers_with_known": "Seeds: {0} · Peers: {1} (total {2}) · DHT: {3}",
         "peers_standard": "Seeds: {0} · Peers: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} completed",
         "action_delete": "Remove from list",
         "action_open_folder": "Open folder",
         "action_resume": "Resume",
         "action_pause": "Pause",
         "action_cancel": "Cancel download",
         "action_turn_off_backlight": "Turn off screen",
-        "action_turn_off_backlight_hint": "L - Peers  [-] Turn off screen",
-        "downloads_header_hints": "L - Peers  [-] Turn off screen",
+        "action_turn_off_backlight_hint": "\uE0E4 Peers   \uE0F0 Turn off screen",
+        "downloads_header_hints": "\uE0E4 Peers   \uE0F0 Turn off screen",
         "cancel_install": "Cancel",
         "confirm_delete_all_msg": "Delete all torrents?",
         "confirm_delete_msg": "Delete this torrent?",
@@ -209,7 +213,13 @@
         "qr_no_url": "No torrent page link for this game",
         "download_rom": "Download ROM",
         "compilation_badge": "COMPILATION / ROMSET",
+        "auto_install_btn": "Automatic Installation",
+        "auto_install_probing": "Analyzing port files...",
+        "auto_install_probe_failed": "Failed to get release file list",
+        "auto_install_not_port": "Release not recognized as a homebrew port",
+        "choose_version_title": "Choose version to install",
         "select_files_btn": "Select files",
+        "download_full_btn": "Download Full",
         "download_romset_btn": "Download ROMset",
         "download": "Download",
         "favorite": "Favorite",
@@ -391,7 +401,8 @@
         "uptodate": "Up to date",
         "version": "Version: {0}",
         "version_with_app": "Version: {0} ({1})",
-        "view_in_catalog": "View in Catalog"
+        "view_in_catalog": "View in Catalog",
+        "release_completed": "All files in release downloaded: {0}"
     },
     "filter": {
         "title": "Filters & Sorting",
@@ -437,7 +448,8 @@
         "sort_downloads_desc": "By downloads (highest first)",
         "sort_downloads_asc": "By downloads (lowest first)",
         "sort_date_desc": "By date (newest first)",
-        "sort_date_asc": "By date (oldest first)"
+        "sort_date_asc": "By date (oldest first)",
+        "lang_ara": "Arabic included (ARA)"
     },
     "genres": {
         "action": "Action",
@@ -505,6 +517,8 @@
         "force_app_update_confirm": "Download and force reinstall the app ({0})?",
         "force_app_update_fetch": "Fetching latest release info...",
         "cache_thumbnails": "Cache cover thumbnails",
+        "sound_effects": "Sound Effects",
+        "joycon_rumble": "Joy-Con Rumble",
         "keep_awake": "Prevent sleep during downloads",
         "backlight_timeout": "Turn off backlight during download",
         "backlight_manual": "Manual",
@@ -689,7 +703,8 @@
         "update_success": "Update applied successfully",
         "version_str": "Version {0}",
         "retro_update_catalogs_cached": "Cache: {0} games (A - update)",
-        "retro_update_catalogs_empty": "Press A to update"
+        "retro_update_catalogs_empty": "Press A to update",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "Applet Mode Not Supported",

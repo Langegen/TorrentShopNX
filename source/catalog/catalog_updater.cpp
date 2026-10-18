@@ -393,11 +393,10 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     // If the user navigated away from CatalogView between now and when the lambda runs,
     // *viewToken will be false and we skip filterCatalog() on a potentially-dead object.
     auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(gamesCopy));
+    catalog::FavoritesManager::instance().syncLegacyFavorites(*newSnapshot);
     auto viewToken = ui::g_catalogViewAliveToken;
     brls::sync([newSnapshot, viewToken]() {
         setCatalogSnapshot(newSnapshot);
-        auto snap = getCatalogSnapshot();
-        catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
         if (viewToken && *viewToken && ui::g_activeCatalogView) {
             ui::g_activeCatalogView->filterCatalog();
         }
@@ -573,12 +572,11 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         cfg.save();
 
         auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(online_games));
+        catalog::FavoritesManager::instance().syncLegacyFavorites(*newSnapshot);
         // Capture viewToken in the background thread before scheduling on main thread.
         auto viewToken = ui::g_catalogViewAliveToken;
         brls::sync([newSnapshot, viewToken]() {
             setCatalogSnapshot(newSnapshot);
-            auto snap = getCatalogSnapshot();
-            catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
             if (viewToken && *viewToken && ui::g_activeCatalogView) {
                 ui::g_activeCatalogView->filterCatalog();
             }

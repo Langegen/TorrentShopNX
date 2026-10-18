@@ -8,8 +8,39 @@
         grow="1.0">
 
         <!-- Header -->
-        <brls:Label id="title" text="@i18n/app/fileselect/title" fontSize="26" marginBottom="10" />
-        <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/header/subtitle" marginBottom="10" />
+        <brls:Box
+            width="auto"
+            height="auto"
+            axis="row"
+            alignItems="center"
+            justifyContent="spaceBetween"
+            marginBottom="10">
+
+            <brls:Box
+                axis="column"
+                grow="1.0"
+                shrink="1.0"
+                marginRight="20">
+                <brls:Label id="title" text="@i18n/app/fileselect/title" fontSize="26" marginBottom="4" />
+                <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/header/subtitle" />
+            </brls:Box>
+
+            <!-- Top-right hint for Button X (Toggle All) -->
+            <brls:Box
+                id="toggleAllBox"
+                width="auto"
+                height="40"
+                axis="row"
+                alignItems="center"
+                paddingLeft="14"
+                paddingRight="14"
+                cornerRadius="8"
+                focusable="false">
+                <brls:Label id="toggleAllBtnIcon" fontSize="18" marginRight="8" />
+                <brls:Label id="toggleAllBtnText" text="@i18n/app/actions/toggle_all" fontSize="15" />
+            </brls:Box>
+
+        </brls:Box>
 
 
         <!-- Scrollable file list -->

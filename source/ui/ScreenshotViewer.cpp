@@ -5,7 +5,13 @@
 namespace ui {
 
 ScreenshotViewer::ScreenshotViewer(const std::vector<std::string>& urls, size_t startIndex)
-    : urls_(urls), currentIndex_(startIndex), imageToken_(std::make_shared<bool>(true)) {
+    : currentIndex_(0), imageToken_(std::make_shared<bool>(true)) {
+    for (const auto& u : urls) {
+        if (!u.empty()) urls_.push_back(u);
+    }
+    if (!urls_.empty()) {
+        currentIndex_ = (startIndex < urls_.size()) ? startIndex : 0;
+    }
 }
 
 brls::View* ScreenshotViewer::createContentView() {
@@ -51,7 +57,7 @@ brls::View* ScreenshotViewer::createContentView() {
     closeBtn->setBackgroundColor(nvgRGBA(255, 255, 255, 30));
     closeBtn->setJustifyContent(brls::JustifyContent::CENTER);
     closeBtn->setAlignItems(brls::AlignItems::CENTER);
-    closeBtn->setFocusable(true);
+    closeBtn->setFocusable(false); // Touch-only, don't steal D-pad focus from root
 
     auto* closeIcon = new brls::Label();
     closeIcon->setText("\uE5CD"); // Material close
@@ -77,7 +83,7 @@ brls::View* ScreenshotViewer::createContentView() {
     prevBtn_->setBackgroundColor(nvgRGBA(0, 0, 0, 150));
     prevBtn_->setJustifyContent(brls::JustifyContent::CENTER);
     prevBtn_->setAlignItems(brls::AlignItems::CENTER);
-    prevBtn_->setFocusable(true);
+    prevBtn_->setFocusable(false); // Touch-only, don't hijack controller navigation
 
     auto* prevIcon = new brls::Label();
     prevIcon->setText("\uE5CB"); // Material chevron left
@@ -102,7 +108,7 @@ brls::View* ScreenshotViewer::createContentView() {
     nextBtn_->setBackgroundColor(nvgRGBA(0, 0, 0, 150));
     nextBtn_->setJustifyContent(brls::JustifyContent::CENTER);
     nextBtn_->setAlignItems(brls::AlignItems::CENTER);
-    nextBtn_->setFocusable(true);
+    nextBtn_->setFocusable(false); // Touch-only, don't hijack controller navigation
 
     auto* nextIcon = new brls::Label();
     nextIcon->setText("\uE5CC"); // Material chevron right
@@ -128,16 +134,24 @@ brls::View* ScreenshotViewer::createContentView() {
         }
     }, brls::PanAxis::HORIZONTAL));
     
-    // Navigation actions (supports both left stick and D-Pad)
+    // Navigation actions (supports left stick, D-Pad, and bumpers)
     root->registerAction("Next", brls::ControllerButton::BUTTON_NAV_RIGHT, [this](brls::View* view) {
         nextImage();
         return true;
     });
+    root->registerAction("Next (D-Pad)", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View* view) {
+        nextImage();
+        return true;
+    }, true /* hidden */);
     
     root->registerAction("Prev", brls::ControllerButton::BUTTON_NAV_LEFT, [this](brls::View* view) {
         prevImage();
         return true;
     });
+    root->registerAction("Prev (D-Pad)", brls::ControllerButton::BUTTON_LEFT, [this](brls::View* view) {
+        prevImage();
+        return true;
+    }, true /* hidden */);
 
     root->registerAction("Next (RB)", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
         nextImage();
@@ -153,6 +167,10 @@ brls::View* ScreenshotViewer::createContentView() {
         brls::Application::popActivity();
         return true;
     });
+    root->registerAction("Close (Start)", brls::ControllerButton::BUTTON_START, [](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    }, true /* hidden */);
 
     return root;
 }
@@ -167,6 +185,10 @@ ScreenshotViewer::~ScreenshotViewer() {
 }
 
 void ScreenshotViewer::onContentAvailable() {
+    if (urls_.empty()) {
+        brls::Application::popActivity();
+        return;
+    }
     loadCurrent();
     brls::Application::giveFocus(this->getContentView());
 }
@@ -180,11 +202,11 @@ void ScreenshotViewer::loadCurrent() {
     }
     imageToken_ = std::make_shared<bool>(true);
     
-    // Clear previous texture safely to prevent memory leak
+    // Clear previous texture safely without deleting shared placeholder
     if (image_) {
         image_->clear();
         image_->setImageFromFile("romfs:/img/borealis_96.png");
-        image_->setFreeTexture(true);
+        image_->setFreeTexture(false);
     }
     
     std::string rawUrl = urls_[currentIndex_];

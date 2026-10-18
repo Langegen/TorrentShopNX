@@ -86,6 +86,8 @@ static void loadLocale(std::string locale, nlohmann::json* target)
             fallbackLocale = LOCALE_RU;
         else if (startsWith(locale, "ja"))
             fallbackLocale = LOCALE_JA;
+        else if (startsWith(locale, "ar"))
+            fallbackLocale = LOCALE_AR;
         else if (startsWith(locale, "en"))
             fallbackLocale = LOCALE_EN_US;
 

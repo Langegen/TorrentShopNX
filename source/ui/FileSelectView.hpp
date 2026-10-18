@@ -3,6 +3,10 @@
 #include <borealis.hpp>
 #include <memory>
 #include <atomic>
+#include <set>
+#include <map>
+#include <string>
+#include <vector>
 #include "../GameData.hpp"
 #include "../torrent/torrent_manager.h"
 #include "../utils/switch_utils.h"
@@ -26,6 +30,7 @@ public:
 private:
     Game game_;
     std::string retro_console_id_;
+    bool isFolderHierarchyMode() const { return !retro_console_id_.empty() || isHomebrewGame(game_); }
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;
     std::vector<brls::Label*> checkboxLabels_;
@@ -33,6 +38,9 @@ private:
 
     BRLS_BIND(brls::Label,          title,          "title");
     BRLS_BIND(brls::Label,          subtitle,       "subtitle");
+    BRLS_BIND(brls::Box,            toggleAllBox,   "toggleAllBox");
+    BRLS_BIND(brls::Label,          toggleAllBtnIcon, "toggleAllBtnIcon");
+    BRLS_BIND(brls::Label,          toggleAllBtnText, "toggleAllBtnText");
     BRLS_BIND(brls::ScrollingFrame, fileListScroll, "fileListScroll");
     BRLS_BIND(brls::Box,            fileListBox,    "fileListBox");
     BRLS_BIND(brls::Label,          totalSizeText,  "totalSizeText");
@@ -52,6 +60,24 @@ private:
     std::string currentFolder_;
     std::string baseFolder_;
 
+    std::set<std::string> expandedFolders_;
+    std::string focusedKey_;
+
+    struct OtherFileTreeNode {
+        std::string name;
+        std::string fullPath;
+        bool isFolder = false;
+        size_t fileIndex = 0;
+        uint64_t size = 0;
+        size_t totalFiles = 0;
+        size_t selectedFiles = 0;
+        std::vector<size_t> allFileIndices;
+        std::map<std::string, OtherFileTreeNode> subfolders;
+        std::vector<OtherFileTreeNode> directFiles;
+    };
+
+    void renderOtherFilesTree(const OtherFileTreeNode& node, int depth, brls::View*& lastFocusable, std::map<std::string, brls::View*>& focusMap);
+
     // Rebuild the visible list from files_ / selected_
     void rebuildFileList();
     void rebuildRetroFolderList();
@@ -61,6 +87,7 @@ private:
     void updateRetroSubtitle();
     void updateRowSelectionState(size_t idx);
     void calculateUncompressedSizes();
+    void startProbe();
 };
 
 } // namespace ui

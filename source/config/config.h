@@ -70,7 +70,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.15"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.16"; // Keep in sync with Makefile APP_VERSION
 
     const std::string& getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
@@ -131,6 +131,12 @@ public:
     void setFontScale(int level);
     float getFontScaleMultiplier() const;
 
+    bool getSoundEffectsEnabled() const; // default true
+    void setSoundEffectsEnabled(bool enabled);
+
+    bool getRumbleEnabled() const; // default true
+    void setRumbleEnabled(bool enabled);
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -162,6 +168,8 @@ private:
     int background_dim_ = 2;
     bool show_bottom_dashboard_ = true;
     int font_scale_ = 0;
+    bool sound_effects_enabled_ = true;
+    bool rumble_enabled_ = true;
     std::string config_path_;
     std::string legacy_config_path_;
 };

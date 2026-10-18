@@ -174,6 +174,82 @@ void ImageDownloader::resume() {
     util::logLine("ImageDownloader: resumed");
 }
 
+static bool isKnownBlockedHost(const std::string& host) {
+    if (host.empty()) return false;
+    return (host.find(".nintendo.net") != std::string::npos ||
+            host.find(".nintendo.com") != std::string::npos);
+}
+
+std::string ImageDownloader::extractHost(const std::string& url) {
+    if (url.empty()) return "";
+    size_t start = 0;
+    if (url.rfind("http://", 0) == 0) start = 7;
+    else if (url.rfind("https://", 0) == 0) start = 8;
+    else return "";
+
+    size_t end = url.find('/', start);
+    size_t colon = url.find(':', start);
+    if (colon != std::string::npos && (end == std::string::npos || colon < end)) {
+        end = colon;
+    }
+    if (end == std::string::npos) return url.substr(start);
+    return url.substr(start, end - start);
+}
+
+bool ImageDownloader::isHostInCooldown(const std::string& host, bool& isHardCooldown, std::chrono::steady_clock::time_point& until) {
+    isHardCooldown = false;
+    if (host.empty()) return false;
+    if (isKnownBlockedHost(host)) {
+        isHardCooldown = true;
+        until = std::chrono::steady_clock::now() + std::chrono::hours(24);
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(failedHostsMutex_);
+    auto it = failedHosts_.find(host);
+    if (it == failedHosts_.end()) return false;
+    auto now = std::chrono::steady_clock::now();
+    if (now < it->second.until) {
+        isHardCooldown = (it->second.consecutiveFails >= 3);
+        until = it->second.until;
+        return true;
+    }
+    // Cooldown expired
+    if (it->second.consecutiveFails < 3) {
+        failedHosts_.erase(it);
+    }
+    return false;
+}
+
+bool ImageDownloader::isHostInCooldown(const std::string& host) {
+    bool isHard = false;
+    std::chrono::steady_clock::time_point until;
+    return isHostInCooldown(host, isHard, until);
+}
+
+void ImageDownloader::markHostFailed(const std::string& host) {
+    if (host.empty()) return;
+    std::lock_guard<std::mutex> lock(failedHostsMutex_);
+    auto& entry = failedHosts_[host];
+    entry.consecutiveFails++;
+    // Transient failure: short cooldown 2s (or 3s on 2nd fail).
+    // Hard failure (3+ consecutive fails): host is confirmed dead/blocked (e.g. 90DNS), cooldown 1 hour.
+    int cooldownSec = 2;
+    if (entry.consecutiveFails == 2) {
+        cooldownSec = 3;
+    } else if (entry.consecutiveFails >= 3) {
+        cooldownSec = 3600;
+    }
+    entry.until = std::chrono::steady_clock::now() + std::chrono::seconds(cooldownSec);
+    util::logLine("ImageDownloader: marked host " + host + " in cooldown for " +
+                  std::to_string(cooldownSec) + "s (consecutive fails=" + std::to_string(entry.consecutiveFails) + ")");
+}
+
+void ImageDownloader::markHostSuccess(const std::string& host) {
+    if (host.empty()) return;
+    std::lock_guard<std::mutex> lock(failedHostsMutex_);
+    failedHosts_.erase(host);
+}
+
 int ImageDownloader::calculatePriority(const ImageTask& task) const {
     if (task.priorityOverride > 0) {
         return task.priorityOverride;
@@ -202,12 +278,12 @@ void ImageDownloader::reprioritizeQueueLocked() {
 }
 
 void ImageDownloader::setFocusedPosition(int row, int col) {
-    std::lock_guard<std::mutex> lock(queueMutex_);
-    if (currentFocusedRow_ == row && currentFocusedCol_ == col) return;
-    currentFocusedRow_ = row;
-    currentFocusedCol_ = col;
-    reprioritizeQueueLocked();
-    cv_.notify_all();
+    if (currentFocusedRow_.load(std::memory_order_relaxed) == row &&
+        currentFocusedCol_.load(std::memory_order_relaxed) == col) return;
+    currentFocusedRow_.store(row, std::memory_order_relaxed);
+    currentFocusedCol_.store(col, std::memory_order_relaxed);
+    needsSort_.store(true, std::memory_order_release);
+    cv_.notify_one();
 }
 
 void ImageDownloader::enqueue(brls::Image* img,
@@ -227,10 +303,10 @@ void ImageDownloader::enqueue(brls::Image* img,
 
     if (token && !*token) return;
 
-    // Set placeholder on UI thread immediately
+    // Set placeholder on UI thread immediately without marking shared placeholder as freeable
     if (bypassCache) {
         img->setImageFromFile(placeholder);
-        img->setFreeTexture(true);
+        img->setFreeTexture(false);
     } else {
         if (brls::TextureCache::instance().getCache(cacheKey) > 0) {
             img->setImageFromFile(cacheKey);
@@ -239,6 +315,19 @@ void ImageDownloader::enqueue(brls::Image* img,
         img->setImageFromFile(placeholder);
     }
 
+    enqueueInternal(img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride);
+}
+
+void ImageDownloader::enqueueInternal(brls::Image* img,
+                                       const std::string& url,
+                                       const std::string& cacheKey,
+                                       std::shared_ptr<bool> token,
+                                       const std::string& placeholder,
+                                       bool bypassCache,
+                                       const std::string& fallbackUrl,
+                                       int row,
+                                       int col,
+                                       int priorityOverride) {
     // Lazy init if workers were not explicitly started
     if (!running_.load()) {
         init(2);
@@ -267,23 +356,92 @@ void ImageDownloader::enqueue(brls::Image* img,
 }
 
 void ImageDownloader::workerLoop() {
+    net::HttpClient http;
+    http.setKeepAlive(true);
+
     while (running_.load() && !g_appExiting.load()) {
         ImageTask task;
+        bool hasTask = false;
         {
             std::unique_lock<std::mutex> lock(queueMutex_);
-            cv_.wait(lock, [this]() {
-                return !running_.load() || g_appExiting.load() ||
-                       (!paused_.load() && !tasks_.empty());
-            });
+            while (running_.load() && !g_appExiting.load()) {
+                if (paused_.load() || tasks_.empty()) {
+                    cv_.wait(lock, [this]() {
+                        return !running_.load() || g_appExiting.load() ||
+                               (!paused_.load() && !tasks_.empty());
+                    });
+                    if (!running_.load() || g_appExiting.load()) break;
+                    if (paused_.load() || tasks_.empty()) continue;
+                }
 
-            if (!running_.load() || g_appExiting.load()) {
-                break;
+                if (needsSort_.exchange(false, std::memory_order_acq_rel)) {
+                    reprioritizeQueueLocked();
+                }
+
+                auto earliestCooldown = std::chrono::steady_clock::time_point::max();
+                bool foundExecutableTask = false;
+
+                for (auto it = tasks_.begin(); it != tasks_.end(); ) {
+                    if (it->token && !*it->token) {
+                        it = tasks_.erase(it);
+                        continue;
+                    }
+
+                    std::string host = extractHost(it->url);
+                    bool isHard = false;
+                    std::chrono::steady_clock::time_point until;
+                    if (!host.empty() && isHostInCooldown(host, isHard, until)) {
+                        if (isHard) {
+                            // Host is confirmed dead/blocked (3+ consecutive fails, e.g. 90DNS).
+                            // Discard with placeholder immediately so we don't stall the queue.
+                            util::logLine("ImageDownloader: host " + host + " in hard cooldown, discarding " + it->url);
+                            ImageTask deadTask = std::move(*it);
+                            it = tasks_.erase(it);
+                            if (!deadTask.placeholder.empty() && deadTask.img) {
+                                brls::sync([img = deadTask.img, token = deadTask.token, placeholder = deadTask.placeholder]() {
+                                    if (g_appExiting.load()) return;
+                                    if (token && !*token) return;
+                                    if (img) {
+                                        img->setImageFromFile(placeholder);
+                                        img->setFreeTexture(false);
+                                    }
+                                });
+                            }
+                            continue;
+                        }
+
+                        // Soft cooldown (transient backoff, 2-3s).
+                        // Keep this task in the queue and record when to wake up!
+                        if (until < earliestCooldown) {
+                            earliestCooldown = until;
+                        }
+                        ++it;
+                        continue;
+                    }
+
+                    // Host is ready to fetch!
+                    task = std::move(*it);
+                    tasks_.erase(it);
+                    foundExecutableTask = true;
+                    break;
+                }
+
+                if (foundExecutableTask) {
+                    hasTask = true;
+                    break;
+                }
+
+                // If all remaining tasks in queue are in soft cooldown, wait until earliest cooldown expires or a new task arrives
+                if (!tasks_.empty() && earliestCooldown != std::chrono::steady_clock::time_point::max()) {
+                    cv_.wait_until(lock, earliestCooldown);
+                } else if (tasks_.empty()) {
+                    continue;
+                }
             }
+        }
 
-            if (paused_.load() || tasks_.empty()) continue;
-
-            task = tasks_.front();
-            tasks_.pop_front();
+        if (!hasTask || !running_.load() || g_appExiting.load()) {
+            break;
         }
 
         if (task.token && !*task.token) {
@@ -291,11 +449,11 @@ void ImageDownloader::workerLoop() {
             continue; // Skip invalidated task (card scrolled offscreen)
         }
 
-        processTask(task);
+        processTask(task, http);
     }
 }
 
-void ImageDownloader::processTask(const ImageTask& task) {
+void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) {
     if (g_appExiting.load()) return;
     if (task.token && !*task.token) return;
 
@@ -305,52 +463,97 @@ void ImageDownloader::processTask(const ImageTask& task) {
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
             util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
-            brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(cachedBody), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-                util::logLine("ImageDownloader: sync lambda START url=" + url);
+            // Pre-decode RGBA in worker thread to prevent main UI thread frame drops
+            int dw = 0, dh = 0, dcomp = 0;
+            stbi_uc* rgba = stbi_load_from_memory(
+                reinterpret_cast<const stbi_uc*>(cachedBody.data()),
+                static_cast<int>(cachedBody.size()),
+                &dw, &dh, &dcomp, 4
+            );
+            brls::sync([img = task.img, cacheKey = task.cacheKey, rgba, dw, dh, token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
                 if (g_appExiting.load()) {
-                    util::logLine("ImageDownloader: sync lambda ABORT (app exiting) url=" + url);
+                    if (rgba) stbi_image_free(rgba);
                     return;
                 }
 
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
-                    util::logLine("ImageDownloader: sync lambda before nvgCreateImageMem for " + url);
-                    tex = nvgCreateImageMem(
-                        brls::Application::getNVGContext(),
-                        NVG_IMAGE_GENERATE_MIPMAPS,
-                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
-                        body.size()
-                    );
-                    util::logLine("ImageDownloader: sync lambda after nvgCreateImageMem tex=" + std::to_string(tex) + " for " + url);
+                    if (rgba) {
+                        tex = nvgCreateImageRGBA(
+                            brls::Application::getNVGContext(),
+                            dw, dh,
+                            NVG_IMAGE_GENERATE_MIPMAPS,
+                            rgba
+                        );
+                    }
                     if (tex > 0) {
                         brls::TextureCache::instance().addCache(cacheKey, tex);
                     } else {
-                        util::logLine("ImageDownloader: nvgCreateImageMem failed for disk cached " + url);
+                        util::logLine("ImageDownloader: nvgCreateImageRGBA failed for disk cached " + url);
                     }
                 }
+                if (rgba) {
+                    stbi_image_free(rgba);
+                }
                 if (token && !*token) {
-                    util::logLine("ImageDownloader: sync lambda token invalidated for " + url);
                     return;
                 }
-                if (tex > 0) {
-                    util::logLine("ImageDownloader: sync lambda before innerSetImage for " + url);
+                if (tex > 0 && img) {
                     img->innerSetImage(tex);
-                    util::logLine("ImageDownloader: sync lambda after innerSetImage for " + url);
                 }
-                util::logLine("ImageDownloader: sync lambda END url=" + url);
             });
             return;
         }
     }
 
-    net::HttpClient http;
-    http.setTimeout(5);
+    std::string host = extractHost(task.url);
+    bool isHard = false;
+    std::chrono::steady_clock::time_point until;
+    if (!host.empty() && isHostInCooldown(host, isHard, until)) {
+        if (!isHard) {
+            // Soft cooldown active: re-queue task so it is preserved and retried when cooldown passes!
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                tasks_.push_back(task);
+                needsSort_.store(true, std::memory_order_release);
+            }
+            cv_.notify_one();
+            return;
+        }
+        util::logLine("ImageDownloader: host " + host + " in hard cooldown, skipping network fetch for " + task.url);
+        std::string fbHost = extractHost(task.fallbackUrl);
+        if (!task.fallbackUrl.empty() && fbHost != host && !isHostInCooldown(fbHost)) {
+            if (task.token && !*task.token) return;
+            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+        } else if (!task.placeholder.empty()) {
+            brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
+                if (g_appExiting.load()) return;
+                if (token && !*token) return;
+                if (img) {
+                    img->setImageFromFile(placeholder);
+                    img->setFreeTexture(false);
+                }
+            });
+        }
+        return;
+    }
+
+    bool dlActive = isDownloadActive();
+    int timeoutSec = dlActive ? 8 : 6;
+    if (dlActive) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    }
+
+    http.setTimeout(timeoutSec);
     auto res = http.httpGet(task.url);
 
     if (g_appExiting.load()) return;
 
     if (res.status_code == 200 && !res.body.empty()) {
         util::logLine("ImageDownloader: HTTP 200 OK for url=" + task.url + " (size=" + std::to_string(res.body.size()) + ")");
+        if (!host.empty()) {
+            markHostSuccess(host);
+        }
         
         std::string bodyToDisplay = std::move(res.body);
 
@@ -421,69 +624,123 @@ void ImageDownloader::processTask(const ImageTask& task) {
             }
         }
 
-        brls::sync([img = task.img, cacheKey = task.cacheKey, body = std::move(bodyToDisplay), token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
-            if (g_appExiting.load()) return;
+        // Pre-decode RGBA in worker thread before scheduling on main thread
+        int dw = 0, dh = 0, dcomp = 0;
+        stbi_uc* rgba = stbi_load_from_memory(
+            reinterpret_cast<const stbi_uc*>(bodyToDisplay.data()),
+            static_cast<int>(bodyToDisplay.size()),
+            &dw, &dh, &dcomp, 4
+        );
+
+        brls::sync([img = task.img, cacheKey = task.cacheKey, rgba, dw, dh, token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
+            if (g_appExiting.load()) {
+                if (rgba) stbi_image_free(rgba);
+                return;
+            }
 
             if (bypassCache) {
                 if (token && !*token) {
+                    if (rgba) stbi_image_free(rgba);
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
                     return;
                 }
-                int tex = nvgCreateImageMem(
-                    brls::Application::getNVGContext(),
-                    NVG_IMAGE_GENERATE_MIPMAPS,
-                    const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
-                    body.size()
-                );
+                int tex = 0;
+                if (rgba) {
+                    tex = nvgCreateImageRGBA(
+                        brls::Application::getNVGContext(),
+                        dw, dh,
+                        NVG_IMAGE_GENERATE_MIPMAPS,
+                        rgba
+                    );
+                    stbi_image_free(rgba);
+                }
                 if (tex > 0) {
                     if (token && !*token) {
                         nvgDeleteImage(brls::Application::getNVGContext(), tex);
                         return;
                     }
-                    img->innerSetImage(tex);
+                    if (img) {
+                        img->innerSetImage(tex);
+                        img->setFreeTexture(true); // Own dynamically created non-cached texture
+                    }
                 } else {
-                    util::logLine("ImageDownloader: nvgCreateImageMem failed for " + url + " (size=" + std::to_string(body.size()) + ")");
+                    util::logLine("ImageDownloader: nvgCreateImageRGBA failed for " + url);
                 }
             } else {
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
-                    tex = nvgCreateImageMem(
-                        brls::Application::getNVGContext(),
-                        NVG_IMAGE_GENERATE_MIPMAPS,
-                        const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(body.data())),
-                        body.size()
-                    );
+                    if (rgba) {
+                        tex = nvgCreateImageRGBA(
+                            brls::Application::getNVGContext(),
+                            dw, dh,
+                            NVG_IMAGE_GENERATE_MIPMAPS,
+                            rgba
+                        );
+                    }
                     if (tex > 0) {
                         brls::TextureCache::instance().addCache(cacheKey, tex);
                     } else {
-                        util::logLine("ImageDownloader: nvgCreateImageMem failed for " + url + " (size=" + std::to_string(body.size()) + ")");
+                        util::logLine("ImageDownloader: nvgCreateImageRGBA failed for " + url);
                     }
+                }
+                if (rgba) {
+                    stbi_image_free(rgba);
                 }
                 if (token && !*token) {
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
                     return;
                 }
-                if (tex > 0) {
+                if (tex > 0 && img) {
                     img->innerSetImage(tex);
                 }
             }
         });
     } else {
-        util::logLine("ImageDownloader: HTTP fetch failed, code=" + std::to_string(res.status_code) + " url=" + task.url);
-        if (!task.fallbackUrl.empty()) {
+        util::logLine("ImageDownloader: HTTP fetch failed, code=" + std::to_string(res.status_code) +
+                      " (" + res.body + ") url=" + task.url);
+        if (res.status_code == 0 && !host.empty()) {
+            markHostFailed(host);
+        }
+
+        // If it was a network timeout / connection error (code == 0) and we haven't exhausted retries,
+        // retry the task instead of giving up immediately and setting a placeholder (skip retrying known blocked hosts)
+        if (res.status_code == 0 && !isKnownBlockedHost(host) && task.retryCount < 2) {
+            ImageTask retryTask = task;
+            retryTask.retryCount++;
+            util::logLine("ImageDownloader: transient error for " + task.url + ", will retry (attempt " +
+                          std::to_string(retryTask.retryCount) + "/2)");
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                tasks_.push_back(retryTask);
+                needsSort_.store(true, std::memory_order_release);
+            }
+            cv_.notify_one();
+            return;
+        }
+
+        std::string fbHost = extractHost(task.fallbackUrl);
+        bool canTryFallback = !task.fallbackUrl.empty() &&
+                              (res.status_code != 0 || fbHost != host) &&
+                              !isHostInCooldown(fbHost);
+        if (canTryFallback) {
             if (task.token && !*task.token) return;
-            enqueue(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
         } else if (!task.placeholder.empty()) {
             brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
                 if (g_appExiting.load()) return;
                 if (token && !*token) return;
                 if (img) {
                     img->setImageFromFile(placeholder);
+                    img->setFreeTexture(false);
                 }
             });
         }
+    }
+
+    if (dlActive) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }
 }
 

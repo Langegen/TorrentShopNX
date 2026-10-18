@@ -337,7 +337,8 @@ brls::View* SettingsTab::buildGeneralTab() {
         "app/settings/lang_it"_i18n,
         "app/settings/lang_pt_br"_i18n,
         "app/settings/lang_zh_hans"_i18n,
-        "app/settings/lang_ja"_i18n
+        "app/settings/lang_ja"_i18n,
+        "app/settings/lang_ar"_i18n
     };
     int initialLang = 0;
     std::string curLang = cfg.getLanguage();
@@ -350,6 +351,7 @@ brls::View* SettingsTab::buildGeneralTab() {
     else if (curLang == "pt-BR" || curLang == "pt") initialLang = 7;
     else if (curLang == "zh-Hans" || curLang == "zh-CN" || curLang == "zh") initialLang = 8;
     else if (curLang == "ja") initialLang = 9;
+    else if (curLang == "ar") initialLang = 10;
 
     auto* languageCell = new brls::SelectorCell();
     languageCell->init("app/settings/language"_i18n, languages, initialLang, [](int selected) {}, [&cfg](int selected) {
@@ -363,6 +365,7 @@ brls::View* SettingsTab::buildGeneralTab() {
         else if (selected == 7) newLang = "pt-BR";
         else if (selected == 8) newLang = "zh-Hans";
         else if (selected == 9) newLang = "ja";
+        else if (selected == 10) newLang = "ar";
 
         if (newLang != cfg.getLanguage()) {
             cfg.setLanguage(newLang);
@@ -457,6 +460,24 @@ brls::View* SettingsTab::buildGeneralTab() {
         cfg.save();
     });
     box->addView(cacheThumbnailsCell);
+
+    // Звуковые эффекты
+    auto* soundEffectsCell = new brls::BooleanCell();
+    soundEffectsCell->init("app/settings/sound_effects"_i18n, cfg.getSoundEffectsEnabled(), [&cfg](bool value) {
+        cfg.setSoundEffectsEnabled(value);
+        util::triggerHapticFeedback(1);
+    });
+    box->addView(soundEffectsCell);
+
+    // Вибрация Joy-Con / контроллеров
+    auto* rumbleCell = new brls::BooleanCell();
+    rumbleCell->init("app/settings/joycon_rumble"_i18n, cfg.getRumbleEnabled(), [&cfg](bool value) {
+        cfg.setRumbleEnabled(value);
+        if (value) {
+            util::triggerHapticFeedback(3);
+        }
+    });
+    box->addView(rumbleCell);
 
     // URL каталога JSON
     auto* catalogUrlCell = new brls::DetailCell();
@@ -894,25 +915,7 @@ brls::View* SettingsTab::buildRetroTab() {
     });
     box->addView(autoExtractCell);
 
-    // 3. Romset download mode
-    std::vector<std::string> romsetOptions = {
-        "app/settings/retro_romset_full"_i18n,
-        "app/settings/retro_romset_select"_i18n
-    };
-    int initialRomsetIdx = (cfg.getRetroRomsetMode() == "select") ? 1 : 0;
-
-    auto* romsetModeCell = new brls::SelectorCell();
-    romsetModeCell->init("app/settings/retro_romset_mode"_i18n, romsetOptions, initialRomsetIdx, [&cfg](int selected) {
-        if (selected == 1) {
-            cfg.setRetroRomsetMode("select");
-        } else {
-            cfg.setRetroRomsetMode("full");
-        }
-        cfg.save();
-    });
-    box->addView(romsetModeCell);
-
-    // 4. Update retro game databases
+    // 3. Update retro game databases
     auto* updateCatalogsCell = new brls::DetailCell();
     updateCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
 

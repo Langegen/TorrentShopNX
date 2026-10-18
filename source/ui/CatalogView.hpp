@@ -99,7 +99,8 @@ public:
 
 private:
     catalog::FilterSortState filterState_;
-    std::vector<Game> filteredGames_;
+    std::shared_ptr<const std::vector<Game>> catalogSnapshot_;
+    std::vector<const Game*> filteredGames_;
     int focusedRow_ = 0;
     int focusedCol_ = 0;
 

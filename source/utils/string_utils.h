@@ -13,6 +13,28 @@ namespace util {
         return value;
     }
 
+    inline bool equalsIgnoreCase(const std::string& a, const std::string& b) {
+        if (a.size() != b.size()) return false;
+        return std::equal(a.begin(), a.end(), b.begin(), [](unsigned char ca, unsigned char cb) {
+            return std::tolower(ca) == std::tolower(cb);
+        });
+    }
+
+    inline std::string extractBtihHash(std::string magnet) {
+        std::transform(magnet.begin(), magnet.end(), magnet.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+
+        const std::string marker = "xt=urn:btih:";
+        size_t pos = magnet.find(marker);
+        if (pos == std::string::npos) return {};
+        pos += marker.size();
+        size_t end = magnet.find('&', pos);
+        if (end == std::string::npos) end = magnet.size();
+        if (end <= pos) return {};
+        return magnet.substr(pos, end - pos);
+    }
+
     // UTF-8 lowercase helper handling both ASCII and Cyrillic (CP1251 / UTF-8)
     inline std::string toLowerUtf8(const std::string& s) {
         std::string out;
@@ -88,5 +110,258 @@ namespace util {
             }
         }
         return 0;
+    }
+
+    struct ComponentClassification {
+        int type = 0;              // 0: Base (MAIN), 1: Update (UPD), 2: DLC (DLC), 3: Mod/Extra (OTH)
+        std::string label;         // "MAIN", "UPD", "DLC", "OTH"
+        std::string cleanName;     // Clean, human-readable name without repeating the game title or Atmosphere paths
+    };
+
+    inline std::string extractPatchVersionString(const std::string& filename) {
+        // 1. First priority: look for semantic version in brackets/parentheses, e.g. (v1.2.0), [v1.2.0], (1.2.0), [1.2.0], (v1.2), etc.
+        for (size_t i = 0; i < filename.size(); ++i) {
+            if (filename[i] == '[' || filename[i] == '(') {
+                char closeChar = (filename[i] == '[') ? ']' : ')';
+                size_t closePos = filename.find(closeChar, i + 1);
+                if (closePos != std::string::npos && closePos - i > 2) {
+                    std::string token = filename.substr(i + 1, closePos - i - 1);
+                    std::string lowerToken = toLowerUtf8(token);
+                    size_t vstart = 0;
+                    if (!lowerToken.empty() && lowerToken[0] == 'v') vstart = 1;
+                    bool hasDot = false;
+                    bool validVer = false;
+                    size_t numDigits = 0;
+                    for (size_t k = vstart; k < token.size(); ++k) {
+                        if (std::isdigit(static_cast<unsigned char>(token[k]))) {
+                            numDigits++;
+                        } else if (token[k] == '.') {
+                            hasDot = true;
+                        } else {
+                            validVer = false;
+                            break;
+                        }
+                    }
+                    if (hasDot && numDigits >= 2) {
+                        validVer = true;
+                    }
+                    if (validVer) {
+                        std::string verNum = (vstart == 1) ? ("v" + token.substr(1)) : ("v" + token);
+                        return verNum;
+                    }
+                }
+            }
+        }
+
+        // 2. Second priority: look for Nintendo internal integer revision: [v65536], (v131072), etc.
+        for (size_t i = 0; i < filename.size(); ++i) {
+            if (filename[i] == '[' || filename[i] == '(') {
+                char closeChar = (filename[i] == '[') ? ']' : ')';
+                size_t closePos = filename.find(closeChar, i + 1);
+                if (closePos != std::string::npos && closePos - i > 2) {
+                    std::string token = filename.substr(i + 1, closePos - i - 1);
+                    if ((token[0] == 'v' || token[0] == 'V') && token.size() > 1) {
+                        bool allDigits = true;
+                        for (size_t k = 1; k < token.size(); ++k) {
+                            if (!std::isdigit(static_cast<unsigned char>(token[k]))) {
+                                allDigits = false;
+                                break;
+                            }
+                        }
+                        if (allDigits) {
+                            try {
+                                unsigned long vval = std::stoul(token.substr(1));
+                                if (vval > 0) {
+                                    return "[" + token + "]";
+                                }
+                            } catch (...) {}
+                        }
+                    }
+                }
+            }
+        }
+
+        return "";
+    }
+
+    inline ComponentClassification classifyDownloadComponent(const std::string& raw_name, const std::string& parent_title = "") {
+        ComponentClassification res;
+        std::string filename = raw_name;
+        size_t slash = filename.find_last_of("/\\");
+        if (slash != std::string::npos) {
+            filename = filename.substr(slash + 1);
+        }
+
+        std::string lower = toLowerUtf8(raw_name);
+
+        bool is_package = (lower.size() >= 4 && (lower.rfind(".nsp") == lower.size() - 4 ||
+                                                lower.rfind(".nsz") == lower.size() - 4 ||
+                                                lower.rfind(".xci") == lower.size() - 4 ||
+                                                lower.rfind(".xcz") == lower.size() - 4));
+
+        if (!is_package) {
+            res.type = 3;
+            res.label = "OTH";
+
+            // Find best human-readable directory or file name
+            // e.g. "TMNT/Russian Text + Voice Mod (27.11.2024)/atmosphere/..."
+            std::vector<std::string> parts;
+            size_t start = 0;
+            for (size_t i = 0; i < raw_name.size(); ++i) {
+                if (raw_name[i] == '/' || raw_name[i] == '\\') {
+                    if (i > start) parts.push_back(raw_name.substr(start, i - start));
+                    start = i + 1;
+                }
+            }
+            if (start < raw_name.size()) parts.push_back(raw_name.substr(start));
+
+            std::string chosen;
+            for (const auto& p : parts) {
+                std::string lp = toLowerUtf8(p);
+                if (lp == "atmosphere" || lp == "contents" || lp == "romfs" || lp == "exefs" || lp == "content") continue;
+                if (lp.size() == 16 && lp.find("0100") == 0) continue;
+                chosen = p;
+                if (lp.find("rus") != std::string::npos || lp.find("mod") != std::string::npos || lp.find("voice") != std::string::npos || lp.find("русиф") != std::string::npos) {
+                    break;
+                }
+            }
+            if (chosen.empty()) chosen = filename;
+            res.cleanName = chosen;
+            return res;
+        }
+
+        // --- Package (.nsp, .nsz, .xci, .xcz) classification ---
+
+        // 1. Check for 16-character hexadecimal Title ID in filename
+        uint64_t tid = 0;
+        for (size_t i = 0; i < filename.size(); ++i) {
+            if (filename[i] == '[' || filename[i] == '(') {
+                size_t closePos = filename.find(filename[i] == '[' ? ']' : ')', i + 1);
+                if (closePos != std::string::npos && (closePos - i - 1 == 16)) {
+                    std::string hexStr = filename.substr(i + 1, 16);
+                    bool isHex = true;
+                    for (char c : hexStr) {
+                        if (!std::isxdigit(static_cast<unsigned char>(c))) { isHex = false; break; }
+                    }
+                    if (isHex) {
+                        try {
+                            tid = std::stoull(hexStr, nullptr, 16);
+                            break;
+                        } catch (...) {}
+                    }
+                }
+            }
+        }
+
+        // 2. Check explicit base game markers (v0, Base, v1.0.0)
+        bool is_explicit_base = (
+            lower.find("[v0]") != std::string::npos ||
+            lower.find("(v0)") != std::string::npos ||
+            lower.find("[v0.") != std::string::npos ||
+            lower.find("(v0.") != std::string::npos ||
+            lower.find("_v0.") != std::string::npos ||
+            lower.find("_v0_") != std::string::npos ||
+            lower.find(" v0 ") != std::string::npos ||
+            lower.find(" v0.") != std::string::npos ||
+            lower.find(" v0]") != std::string::npos ||
+            lower.find("[base]") != std::string::npos ||
+            lower.find("(base)") != std::string::npos ||
+            lower.find("_base_") != std::string::npos ||
+            lower.find("[base game]") != std::string::npos ||
+            lower.find("(base game)") != std::string::npos ||
+            lower.find("[v1.0.0]") != std::string::npos ||
+            lower.find("(v1.0.0)") != std::string::npos ||
+            lower.find("[v1.0]") != std::string::npos
+        );
+
+        // 3. Nintendo Switch Title ID type mask:
+        //    (tid & 0xFFF) == 0      -> Application (Base game)
+        //    (tid & 0xFFF) == 0x800  -> Patch (Update)
+        //    Otherwise               -> AddOnContent (DLC)
+        bool is_base_tid = (tid != 0 && (tid & 0xFFFULL) == 0);
+        bool is_patch_tid = (tid != 0 && (tid & 0xFFFULL) == 0x800ULL);
+        bool is_dlc_tid = (tid != 0 && !is_base_tid && !is_patch_tid);
+
+        // Explicit DLC checks by name
+        bool is_dlc_name = (lower.find("[dlc") != std::string::npos ||
+                            lower.find("(dlc") != std::string::npos ||
+                            lower.find(" dlc ") != std::string::npos ||
+                            lower.find("[addon") != std::string::npos);
+
+        // Priority 1: DLC (by Title ID or explicit DLC in name)
+        // Switch DLC Title IDs have (tid & 0xFFF) != 0 and != 0x800. Even if DLC is v0, it is DLC.
+        if (is_dlc_name || is_dlc_tid) {
+            res.type = 2;
+            res.label = "DLC";
+            size_t dlc_pos = filename.find("[DLC");
+            if (dlc_pos == std::string::npos) dlc_pos = filename.find("(DLC");
+            if (dlc_pos == std::string::npos) dlc_pos = filename.find("[dlc");
+            if (dlc_pos == std::string::npos) dlc_pos = filename.find("(dlc");
+
+            if (dlc_pos != std::string::npos) {
+                size_t close_bracket = filename.find_first_of("])", dlc_pos);
+                if (close_bracket != std::string::npos) {
+                    std::string dlc_str = filename.substr(dlc_pos + 1, close_bracket - dlc_pos - 1);
+                    if (toLowerUtf8(dlc_str).find("dlc") == 0) {
+                        dlc_str = dlc_str.substr(3);
+                        while (!dlc_str.empty() && (dlc_str.front() == ' ' || dlc_str.front() == ':' || dlc_str.front() == '-')) {
+                            dlc_str.erase(dlc_str.begin());
+                        }
+                    }
+                    res.cleanName = dlc_str.empty() ? filename : dlc_str;
+                } else {
+                    res.cleanName = filename;
+                }
+            } else if (tid != 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "DLC %016llX", (unsigned long long)tid);
+                res.cleanName = buf;
+            } else {
+                res.cleanName = filename;
+            }
+            return res;
+        }
+
+        // Priority 2: Patch / Update by Title ID (ends in 0x800)
+        if (is_patch_tid) {
+            res.type = 1;
+            res.label = "UPD";
+            std::string verStr = extractPatchVersionString(filename);
+            res.cleanName = verStr.empty() ? "Патч" : ("Патч " + verStr);
+            return res;
+        }
+
+        // Priority 3: Base Game
+        // Either explicit base marker (e.g. [v0]) or Base Title ID (ends in 0x000)
+        if (is_base_tid || is_explicit_base) {
+            res.type = 0;
+            res.label = "MAIN";
+            res.cleanName = "Базовая игра [v0]";
+            return res;
+        }
+
+        // Check for Update / Patch by version string or explicit keywords
+        std::string verStr = extractPatchVersionString(filename);
+        if (!verStr.empty()) {
+            res.type = 1;
+            res.label = "UPD";
+            res.cleanName = "Патч " + verStr;
+            return res;
+        }
+
+        if (lower.find("[upd") != std::string::npos || lower.find("(upd") != std::string::npos ||
+            lower.find("[patch") != std::string::npos || lower.find("(patch") != std::string::npos ||
+            lower.find("_update") != std::string::npos || lower.find(" update ") != std::string::npos) {
+            res.type = 1;
+            res.label = "UPD";
+            res.cleanName = "Патч";
+            return res;
+        }
+
+        // Default: Base Game
+        res.type = 0;
+        res.label = "MAIN";
+        res.cleanName = "Базовая игра [v0]";
+        return res;
     }
 }

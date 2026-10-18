@@ -135,6 +135,7 @@
     "downloads": {
         "title": "ダウンロード",
         "empty": "進行中のダウンロードはありません",
+        "already_in_queue": "このゲームはすでにダウンロード一覧にあります",
         "status_prefix": "ステータス: ",
         "speed": "速度: {0}/s",
         "downloaded": "進行状況: {0} / {1} ({2}%)",
@@ -160,6 +161,7 @@
         "state_error": "エラー",
         "peers_with_known": "シード: {0} · ピア: {1} (既知 {2}) · DHT: {3}",
         "peers_standard": "シード: {0} · ピア: {1} · DHT: {2}",
+        "count_badge": "{0}/{1} 完了",
         "stats": "ダウンロード中: {0} | 停止中: {1} | 完了: {2} | 合計速度: {3}/s",
         "state_installing": "本体にインストール中...",
         "state_waiting": "待機中",
@@ -174,7 +176,7 @@
         "elapsed": "経過時間: {0}",
         "saved_to": "保存先: {0}",
         "installed": "本体にインストール済み",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "リリースのすべてのファイルがダウンロードされました: {0}",
         "unknown_error": "不明なエラー",
         "action_delete": "タスク削除",
         "action_open_folder": "フォルダを開く",
@@ -190,7 +192,9 @@
         "peers_title": "Swarmとピアの状態",
         "peers_no_active": "アクティブなピア接続がありません",
         "action_peers_short": "ピア",
-        "downloads_header_hints": "L - ピア  [-] 画面を消灯"
+        "downloads_header_hints": "L - ピア  [-] 画面を消灯",
+        "state_connecting_peers": "ピアに接続中...",
+        "state_resolving_meta": "メタデータを取得中..."
     },
     "detail": {
         "unknown_publisher": "発売元不明",
@@ -223,7 +227,13 @@
         "qr_hint": "PCでダウンロードするためのQRコード",
         "qr_no_url": "リンクがありません",
         "compilation_badge": "コンピレーション / ROMセット",
+        "auto_install_btn": "自動インストール",
+        "auto_install_probing": "ポートファイルを解析中...",
+        "auto_install_probe_failed": "ファイルリストの取得に失敗しました",
+        "auto_install_not_port": "Homebrewポートとして認識されませんでした",
+        "choose_version_title": "インストールするバージョンを選択",
         "select_files_btn": "ファイルを選択",
+        "download_full_btn": "完全ダウンロード",
         "download_romset_btn": "ROMセットをダウンロード",
         "stats_info": "トレント: {0} シード / {1} ピア ({2} DL)",
         "stats_date": "追加日: {0}"
@@ -289,7 +299,11 @@
         "storage_nand": "本体メモリー",
         "storage_auto": "自動",
         "group_roms": "ゲームROMファイル",
-        "extra_files_bundle": "追加ファイル [{0}]"
+        "extra_files_bundle": "追加ファイル [{0}]",
+        "bundle_files": "{0} 個のファイル",
+        "folder_prefix": "フォルダ: ",
+        "parent_folder": ".. (親ディレクトリ)",
+        "toggle_folder": "フォルダを選択"
     },
     "remote": {
         "title": "トレントを追加",
@@ -374,7 +388,7 @@
         "titledb_failed": "TitleDB の読み込みに失敗しました",
         "scanning_games": "本体のゲームを解析中...",
         "installed": "インストール済み",
-        "release_completed": "All files in release downloaded: {0}",
+        "release_completed": "リリースのすべてのファイルがダウンロードされました: {0}",
         "available": "利用可能",
         "uninstall_confirm": "「{0}」をアンインストールしますか？\nゲーム本体、すべての更新データおよびDLCが削除されます。",
         "uninstall_success": "「{0}」をアンインストールしました",
@@ -434,7 +448,8 @@
         "sort_downloads_desc": "ダウンロード数降順 (多い順)",
         "sort_downloads_asc": "ダウンロード数昇順 (少ない順)",
         "sort_date_desc": "追加日降順 (新しい順)",
-        "sort_date_asc": "追加日昇順 (古い順)"
+        "sort_date_asc": "追加日昇順 (古い順)",
+        "lang_ara": "アラビア語を含む (ARA)"
     },
     "settings": {
         "title": "設定・ツール",
@@ -661,7 +676,10 @@
         "update_catalog_applying_diff": "変更を適用中...",
         "update_catalog_diff_success": "カタログを更新しました：新規 +{0}、更新 {1}",
         "update_catalog_up_to_date": "カタログはすでに最新です",
-        "cat_appearance": "外観"
+        "cat_appearance": "外観",
+        "joycon_rumble": "Joy-Conの振動",
+        "sound_effects": "効果音",
+        "lang_ar": "العربية"
     },
     "applet": {
         "title": "アプレットモードを検出しました",
