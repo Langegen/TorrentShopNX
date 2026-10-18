@@ -31,20 +31,12 @@
             axis="column"
             marginRight="15">
 
-            <!-- Title & Count Badge Row -->
-            <brls:Box width="auto" height="auto" axis="row" alignItems="center" marginBottom="4">
-                <brls:Label
-                    id="title"
-                    fontSize="18"
-                    grow="1.0"
-                    singleLine="true" />
-                <brls:Label
-                    id="countBadge"
-                    fontSize="12"
-                    textColor="#AAAAAA"
-                    marginLeft="10"
-                    singleLine="true" />
-            </brls:Box>
+            <!-- Title -->
+            <brls:Label
+                id="title"
+                fontSize="18"
+                singleLine="true"
+                marginBottom="4" />
 
             <!-- Download Progress Bar Row -->
             <brls:Box width="auto" height="18px" axis="row" alignItems="center" marginBottom="3">
@@ -64,14 +56,11 @@
                 <brls:Label id="installText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
             </brls:Box>
 
-            <!-- Stats & Expand Hint Row -->
-            <brls:Box width="auto" height="auto" axis="row" alignItems="center" justifyContent="spaceBetween">
-                <brls:Box width="auto" height="auto" axis="row">
-                    <brls:Label id="statsText" fontSize="12" textColor="#AAAAAA" marginRight="16" />
-                    <brls:Label id="elapsedText" fontSize="12" textColor="#AAAAAA" marginRight="16" />
-                    <brls:Label id="peersText" fontSize="12" textColor="#AAAAAA" />
-                </brls:Box>
-                <brls:Label id="expandHint" fontSize="12" textColor="#00C8F5" singleLine="true" />
+            <!-- Stats Row -->
+            <brls:Box width="auto" height="auto" axis="row" alignItems="center">
+                <brls:Label id="statsText" fontSize="12" textColor="#AAAAAA" singleLine="true" marginRight="12" />
+                <brls:Label id="elapsedText" fontSize="12" textColor="#AAAAAA" singleLine="true" marginRight="12" />
+                <brls:Label id="peersText" fontSize="12" textColor="#AAAAAA" singleLine="true" />
             </brls:Box>
 
         </brls:Box>
@@ -95,12 +84,34 @@
             <brls:Label id="sdkGameLabel" text="" fontSize="12" textColor="#FF7043" />
         </brls:Box>
 
-        <!-- Overall Status Text -->
-        <brls:Label
-            id="statusText"
-            width="140px"
-            horizontalAlign="center"
-            fontSize="14" />
+        <!-- Right Status & Controls Column -->
+        <brls:Box
+            width="180px"
+            height="100px"
+            shrink="0.0"
+            axis="column"
+            alignItems="flexEnd"
+            justifyContent="center">
+            <brls:Label
+                id="countBadge"
+                fontSize="12"
+                textColor="#AAAAAA"
+                horizontalAlign="right"
+                singleLine="true"
+                marginBottom="6" />
+            <brls:Label
+                id="statusText"
+                fontSize="14"
+                horizontalAlign="right"
+                singleLine="true" />
+            <brls:Label
+                id="expandHint"
+                fontSize="12"
+                textColor="#00C8F5"
+                horizontalAlign="right"
+                singleLine="true"
+                marginTop="6" />
+        </brls:Box>
 
     </brls:Box>
 

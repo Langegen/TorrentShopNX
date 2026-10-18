@@ -934,6 +934,8 @@ static int announce_http(const char *tracker, const char *hash_enc,
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);  // bound announce/close time
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     // Poll `cancel` during the transfer so teardown aborts within ~1s instead
     // of blocking the announce join for the full timeout above.
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -949,6 +951,18 @@ static int announce_http(const char *tracker, const char *hash_enc,
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "SwitchTorrent/0.1");
     CURLcode rc = curl_easy_perform(curl);
+    if (rc == CURLE_COULDNT_CONNECT && (!cancel || !*cancel)) {
+        // Retry once after 50ms backoff in case of transient socket pool congestion
+#ifdef __SWITCH__
+        svcSleepThread(50000000ULL);
+#else
+        usleep(50000);
+#endif
+        free(resp.data);
+        resp.data = NULL;
+        resp.len = 0;
+        rc = curl_easy_perform(curl);
+    }
     curl_easy_cleanup(curl);
 
     if (rc != CURLE_OK) {
@@ -1163,6 +1177,9 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
             if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
                 j->has_thread = true;
                 threadStart(&j->thread);
+#ifdef __SWITCH__
+                svcSleepThread(20000000ULL); // 20ms stagger between concurrent tracker thread launches
+#endif
             } else {
                 j->count = -1;
                 snprintf(j->terr, sizeof(j->terr), "thread create failed");

@@ -271,7 +271,9 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         curl_easy_setopt(curl, CURLOPT_HEADERDATA, &resp.headers);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout_sec_));
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout_sec_, 30)));
+        long conn_timeout = std::min(static_cast<long>(timeout_sec_), 8L);
+        if (conn_timeout < 1L) conn_timeout = 1L;
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, conn_timeout);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
         curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
@@ -347,8 +349,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
             last_errno = errno;
             continue;
         }
-        if (connect_with_timeout(sock, rp->ai_addr, rp->ai_addrlen,
-                                 timeout_sec_ > 0 ? timeout_sec_ : 30) == 0) {
+        int conn_to = std::min(timeout_sec_ > 0 ? timeout_sec_ : 30, 4);
+        if (connect_with_timeout(sock, rp->ai_addr, rp->ai_addrlen, conn_to) == 0) {
             break;
         }
         last_errno = errno;

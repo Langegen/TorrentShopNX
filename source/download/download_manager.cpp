@@ -1015,7 +1015,7 @@ static void portInstallWorker(datasource::IDataSource* source,
                               const std::shared_ptr<std::atomic<bool>>& cancel,
                               const std::shared_ptr<std::atomic<bool>>& pause,
                               const std::shared_ptr<PortInstallProgressState>& st) {
-    if (!source || hash.empty() || !plan) {
+    if (!source || hash.empty()) {
         st->failed = true;
         st->error = "Invalid port installation request";
         return;
@@ -1049,12 +1049,53 @@ static void portInstallWorker(datasource::IDataSource* source,
         return;
     }
 
+    if (!plan) {
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "Анализ файлов...";
+        }
+        std::vector<torrent::TorrentFileInfo> tfiles(n);
+        for (int i = 0; i < n; ++i) {
+            tfiles[i].index = files[i].index;
+            tfiles[i].name = files[i].path;
+            tfiles[i].size = files[i].size;
+            tfiles[i].wanted = true;
+        }
+        std::string userLang = config::ConfigManager::instance().getLanguage();
+        auto analyzed = std::make_shared<installer::PortInstallPlan>(
+            installer::PortInstallPlanner::instance().analyze(release_title, tfiles, userLang));
+        if (!analyzed->is_port) {
+            st->failed = true;
+            st->error = "Release is not a recognized port";
+            return;
+        }
+        plan = analyzed;
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->resolved_plan = plan;
+        }
+    }
+
+    if (variant_index < 0 || variant_index >= static_cast<int>(plan->variants.size())) {
+        variant_index = 0;
+    }
+
     std::vector<int> target_indices = plan->getFilesForVariant(variant_index);
     if (target_indices.empty()) {
         st->failed = true;
         st->error = "No files to install for selected variant";
         return;
     }
+
+    uint64_t total_dl_bytes = 0;
+    for (int idx : target_indices) {
+        if (idx >= 0 && idx < n) {
+            total_dl_bytes += static_cast<uint64_t>(files[idx].size);
+        }
+    }
+    st->dl_total.store(total_dl_bytes);
+    st->dl_written.store(0);
+    st->dl_progress.store(0.0f);
 
     // Настраиваем приоритеты в движке
     for (int i = 0; i < n; ++i) {
@@ -1085,6 +1126,8 @@ static void portInstallWorker(datasource::IDataSource* source,
     if (!archives.empty()) total_stages++;
     if (forwarder_nsp_idx >= 0) total_stages++;
     int stage_num = 1;
+
+    uint64_t overall_dl_written = 0;
 
     // Потоковое скачивание отдельного файла из раздачи по индексу
     auto streamDownloadFile = [&](int file_idx, const std::string& target_path,
@@ -1127,6 +1170,12 @@ static void portInstallWorker(datasource::IDataSource* source,
                 offset = resume_offset;
                 cumulative_written += resume_offset;
                 st->written.store(cumulative_written);
+                st->dl_written.store(cumulative_written);
+                if (total_size > 0) {
+                    float p = std::clamp(static_cast<float>((double)cumulative_written / (double)total_size), 0.0f, 1.0f);
+                    st->progress.store(p);
+                    st->dl_progress.store(p);
+                }
                 util::logLine("download: resuming partial port file at offset=" + std::to_string(offset) + " / " + std::to_string(file_size));
             } else {
                 if (f) std::fclose(f);
@@ -1173,8 +1222,11 @@ static void portInstallWorker(datasource::IDataSource* source,
             offset += got;
             cumulative_written += got;
             st->written.store(cumulative_written);
+            st->dl_written.store(cumulative_written);
             if (total_size > 0) {
-                st->progress.store(static_cast<float>((double)cumulative_written / (double)total_size));
+                float p = std::clamp(static_cast<float>((double)cumulative_written / (double)total_size), 0.0f, 1.0f);
+                st->progress.store(p);
+                st->dl_progress.store(p);
             }
         }
         std::fclose(f);
@@ -1196,39 +1248,31 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
     };
 
-    // Общий размер архивов
-    uint64_t archives_total_size = 0;
-    for (const auto& a : archives) {
-        if (a.file_index >= 0 && a.file_index < n) {
-            archives_total_size += static_cast<uint64_t>(files[a.file_index].size);
-        }
-    }
-
     // ── ЭТАП 1 & 2: СКАЧИВАНИЕ И РАСПАКОВКА АРХИВОВ ──
     if (!archives.empty()) {
-        uint64_t arch_written = 0;
         for (const auto& a : archives) {
             if (cancel->load()) break;
 
             // 1. Скачивание архива
+            std::string arch_filename = std::filesystem::path(a.archive_torrent_path).filename().string();
             {
                 std::lock_guard<std::mutex> lk(st->msg_mutex);
                 st->stage_label = "Загрузка архива (" + std::to_string(stage_num) + "/" + std::to_string(total_stages) + ")";
+                st->current_file = arch_filename;
             }
-            st->total.store(archives_total_size);
+            st->total.store(total_dl_bytes);
             std::string arch_dest = plan->file_destinations[a.file_index];
             if (arch_dest.empty()) {
-                arch_dest = std::string(TSNX_CACHE_TMP) + "/" + std::filesystem::path(a.archive_torrent_path).filename().string();
+                arch_dest = std::string(TSNX_CACHE_TMP) + "/" + arch_filename;
             }
 
-            if (!streamDownloadFile(a.file_index, arch_dest, arch_written, archives_total_size)) {
+            if (!streamDownloadFile(a.file_index, arch_dest, overall_dl_written, total_dl_bytes)) {
                 st->failed = true;
                 return;
             }
 
             // 2. Распаковка архива
             int extract_stage = stage_num + 1;
-            std::string arch_filename = std::filesystem::path(arch_dest).filename().string();
             {
                 std::lock_guard<std::mutex> lk(st->msg_mutex);
                 st->stage_label = "Распаковка " + arch_filename + " (" + std::to_string(extract_stage) + "/" + std::to_string(total_stages) + ")";
@@ -1237,6 +1281,9 @@ static void portInstallWorker(datasource::IDataSource* source,
             st->written.store(0);
             st->total.store(0);
             st->progress.store(0.0f);
+            st->inst_written.store(0);
+            st->inst_total.store(0);
+            st->inst_progress.store(0.0f);
 
             std::string resolved_arch = resolvePlatformPath(arch_dest);
             std::string resolved_extract_dir = resolvePlatformPath(a.extract_dest_dir);
@@ -1250,9 +1297,14 @@ static void portInstallWorker(datasource::IDataSource* source,
                         st->current_file = prog.currentFileName;
                     }
                 }
+                float norm_pct = std::clamp(prog.percentage / 100.0f, 0.0f, 1.0f);
                 st->written.store(prog.bytesExtracted);
                 st->total.store(prog.totalUncompressedSize);
-                st->progress.store(prog.percentage);
+                st->progress.store(norm_pct);
+
+                st->inst_written.store(prog.bytesExtracted);
+                st->inst_total.store(prog.totalUncompressedSize);
+                st->inst_progress.store(norm_pct);
             };
 
             std::string extractErr;
@@ -1283,30 +1335,19 @@ static void portInstallWorker(datasource::IDataSource* source,
 
     // ── ЭТАП 3: СКАЧИВАНИЕ LOOSE И OVERLAY ФАЙЛОВ (.NRO / РУСИФИКАТОРЫ) ──
     if (!loose_indices.empty()) {
-        uint64_t loose_total_size = 0;
-        for (int idx : loose_indices) {
-            if (idx >= 0 && idx < n) {
-                loose_total_size += static_cast<uint64_t>(files[idx].size);
-            }
-        }
-        st->total.store(loose_total_size);
-        st->written.store(0);
-        st->progress.store(0.0f);
-
         int current_stage = std::min(stage_num, total_stages);
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
             st->stage_label = "Загрузка компонентов (" + std::to_string(current_stage) + "/" + std::to_string(total_stages) + ")";
         }
 
-        uint64_t loose_written = 0;
         for (int idx : loose_indices) {
             if (cancel->load()) break;
             std::string dest = plan->file_destinations[idx];
             if (dest.empty()) {
                 dest = "sdmc:/switch/" + plan->port_game_name + "/" + std::filesystem::path(files[idx].path).filename().string();
             }
-            if (!streamDownloadFile(idx, dest, loose_written, loose_total_size)) {
+            if (!streamDownloadFile(idx, dest, overall_dl_written, total_dl_bytes)) {
                 st->failed = true;
                 return;
             }
@@ -1322,13 +1363,11 @@ static void portInstallWorker(datasource::IDataSource* source,
     // ── ЭТАП 4: СКАЧИВАНИЕ И УСТАНОВКА ЯРЛЫКА FORWARDER NSP ──
     if (forwarder_nsp_idx >= 0 && !cancel->load()) {
         uint64_t nsp_size = static_cast<uint64_t>(files[forwarder_nsp_idx].size);
-        st->total.store(nsp_size);
-        st->written.store(0);
-        st->progress.store(0.0f);
 
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
             st->stage_label = "Загрузка ярлыка (" + std::to_string(total_stages) + "/" + std::to_string(total_stages) + ")";
+            st->current_file = plan->forwarder_nsp_name;
         }
 
         std::string nsp_dest = plan->file_destinations[forwarder_nsp_idx];
@@ -1336,8 +1375,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             nsp_dest = std::string(TSNX_CACHE_TMP) + "/" + plan->forwarder_nsp_name;
         }
 
-        uint64_t nsp_written = 0;
-        if (!streamDownloadFile(forwarder_nsp_idx, nsp_dest, nsp_written, nsp_size)) {
+        if (!streamDownloadFile(forwarder_nsp_idx, nsp_dest, overall_dl_written, total_dl_bytes)) {
             st->failed = true;
             return;
         }
@@ -1374,9 +1412,14 @@ static void portInstallWorker(datasource::IDataSource* source,
         installer::HybridNspInstaller nspInstaller;
         if (nspInstaller.start(&nspSource, config)) {
             while (!nspInstaller.isFinished() && !cancel->load()) {
-                st->progress.store(nspInstaller.progress());
+                float p = std::clamp(nspInstaller.progress(), 0.0f, 1.0f);
+                st->progress.store(p);
                 st->written.store(nspInstaller.bytesInstalled());
                 st->total.store(nspInstaller.totalBytes());
+
+                st->inst_progress.store(p);
+                st->inst_written.store(nspInstaller.bytesInstalled());
+                st->inst_total.store(nspInstaller.totalBytes());
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
             if (cancel->load()) {
@@ -1406,6 +1449,9 @@ static void portInstallWorker(datasource::IDataSource* source,
     if (!st->failed.load() && !cancel->load()) {
         st->done = true;
         st->progress.store(1.0f);
+        st->dl_progress.store(1.0f);
+        st->inst_progress.store(1.0f);
+        if (total_dl_bytes > 0) st->dl_written.store(total_dl_bytes);
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
             st->stage_label = "Установка завершена";
@@ -1592,6 +1638,13 @@ size_t DownloadManager::addToQueue(const std::string& title,
     item.retro_console_id = retro_console_id;
     item.state = DownloadState::Queued;
     item.installer = installer::StreamInstaller(64 * 1024 * 1024);
+    if (isLocalBackend()) {
+        std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
+        if (!local_hash.empty()) {
+            item.torrent_hash = local_hash;
+            datasource::CustomEngineClient::instance().markInUse(local_hash);
+        }
+    }
     queue_.push_back(std::move(item));
     return queue_.size() - 1;
 }
@@ -1613,6 +1666,13 @@ size_t DownloadManager::addPortInstall(const std::string& title,
     item.state = DownloadState::Queued;
     item.install_stage_label = "В очереди";
     item.installer = installer::StreamInstaller(64 * 1024 * 1024);
+    if (isLocalBackend()) {
+        std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
+        if (!local_hash.empty()) {
+            item.torrent_hash = local_hash;
+            datasource::CustomEngineClient::instance().markInUse(local_hash);
+        }
+    }
     queue_.push_back(std::move(item));
     return queue_.size() - 1;
 }
@@ -2296,10 +2356,16 @@ void DownloadManager::handleFileDownload(size_t index,
         if (item.file_dl_state) {
             item.install_written = item.file_dl_state->written.load();
             item.install_total = item.file_dl_state->total.load();
+            item.bytes_downloaded = item.install_written;
+            item.download_total_bytes = item.install_total;
             if (item.install_total > 0) {
                 item.progress = static_cast<float>(
                     (double)item.install_written / (double)item.install_total);
                 item.install_progress = item.progress;
+            }
+            std::lock_guard<std::mutex> lk(item.file_dl_state->msg_mutex);
+            if (!item.file_dl_state->stage_label.empty()) {
+                item.install_stage_label = item.file_dl_state->stage_label;
             }
         }
         return;
@@ -2319,6 +2385,8 @@ void DownloadManager::handleFileDownload(size_t index,
         }
         item.install_written = item.file_dl_state->written.load();
         item.install_total = item.file_dl_state->total.load();
+        item.bytes_downloaded = item.install_written;
+        item.download_total_bytes = item.install_total;
         if (item.finish_time.time_since_epoch().count() == 0) {
             item.finish_time = std::chrono::steady_clock::now();
             if (item.start_time.time_since_epoch().count() > 0) {
@@ -2348,6 +2416,8 @@ void DownloadManager::handleFileDownload(size_t index,
     if (item.file_dl_state) {
         item.install_total = item.file_dl_state->total.load();
         item.install_written = item.install_total;
+        item.download_total_bytes = item.install_total;
+        item.bytes_downloaded = item.install_total;
         if (!item.file_dl_state->dest.empty()) item.file_dl_dest = item.file_dl_state->dest;
     }
     releaseTorrentIfUnneeded(queue_, index, item.torrent_hash);
@@ -2413,12 +2483,23 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         item.port_install_worker->wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
         if (item.port_install_state) {
             auto st = item.port_install_state;
-            item.install_written = st->written.load();
-            item.install_total = st->total.load();
-            item.progress = st->progress.load();
-            item.install_progress = item.progress;
+            item.install_written = st->inst_written.load();
+            item.install_total = st->inst_total.load();
+            item.install_progress = st->inst_progress.load();
+
+            item.bytes_downloaded = st->dl_written.load();
+            item.download_total_bytes = st->dl_total.load();
+            item.progress = st->dl_progress.load();
+
+            if (item.install_total == 0) {
+                item.install_total = item.download_total_bytes;
+            }
 
             std::lock_guard<std::mutex> lk(st->msg_mutex);
+            if (!item.port_plan && st->resolved_plan) {
+                item.port_plan = st->resolved_plan;
+                item.selected_files = item.port_plan->getFilesForVariant(item.selected_variant_index);
+            }
             if (!st->stage_label.empty()) {
                 item.install_stage_label = st->stage_label;
             }
@@ -2454,6 +2535,8 @@ void DownloadManager::handlePortAutoInstall(size_t index,
     item.state = DownloadState::Completed;
     item.progress = 1.0f;
     item.install_progress = 1.0f;
+    if (item.download_total_bytes > 0) item.bytes_downloaded = item.download_total_bytes;
+    if (item.install_total > 0) item.install_written = item.install_total;
     item.install_stage_label = "Установка завершена";
     if (item.finish_time.time_since_epoch().count() == 0) {
         item.finish_time = std::chrono::steady_clock::now();
@@ -2639,6 +2722,10 @@ void DownloadManager::trackProgress() {
             if (!(hybrid_speed_kbps >= 0.0f)) hybrid_speed_kbps = 0.0f;
             item.install_written = item.hybrid_installer->bytesInstalled();
             item.install_total = item.hybrid_installer->totalBytes();
+            uint64_t cur_dl_bytes = item.hybrid_installer->bytesDownloaded();
+            uint64_t cur_dl_total = item.hybrid_installer->downloadTotalBytes();
+            if (cur_dl_bytes > 0) item.bytes_downloaded = cur_dl_bytes;
+            if (cur_dl_total > 0) item.download_total_bytes = cur_dl_total;
 
             if (item.hybrid_installer->hasSdkMismatch()) {
                 item.sdk_mismatch = true;
@@ -2672,8 +2759,18 @@ void DownloadManager::trackProgress() {
                     item.state = DownloadState::Completed;
                     item.progress = 1.0f;
                     item.install_progress = 1.0f;
+                    if (item.hybrid_installer) {
+                        uint64_t dl_bytes = item.hybrid_installer->bytesDownloaded();
+                        uint64_t dl_total = item.hybrid_installer->downloadTotalBytes();
+                        uint64_t inst_total = item.hybrid_installer->totalBytes();
+                        if (dl_bytes > 0) item.bytes_downloaded = dl_bytes;
+                        if (dl_total > 0) item.download_total_bytes = dl_total;
+                        else if (item.download_total_bytes == 0 && inst_total > 0) item.download_total_bytes = inst_total;
+                        if (item.bytes_downloaded == 0 && item.download_total_bytes > 0) item.bytes_downloaded = item.download_total_bytes;
+                        if (item.install_total == 0) item.install_total = (inst_total > 0) ? inst_total : item.download_total_bytes;
+                    }
                     if (item.install_total == 0) {
-                        item.install_total = item.hybrid_installer->totalBytes();
+                        item.install_total = item.download_total_bytes;
                     }
                     item.install_written = item.install_total;
                     copyDownloadedOtherFiles(item);
@@ -3340,16 +3437,23 @@ bool DownloadManager::cancelDownload(size_t index) {
         item.port_install_pause->store(false);
     }
 
+    const bool is_active_item = (item.hybrid_installer != nullptr ||
+                                 item.file_dl_dispatched ||
+                                 item.port_install_dispatched ||
+                                 item.state == DownloadState::Downloading ||
+                                 item.state == DownloadState::StreamPreparing ||
+                                 item.state == DownloadState::StreamInstalling ||
+                                 item.state == DownloadState::Installing);
+
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
         item.hybrid_installer.reset();
     }
 
-    // Close the local engine's stream BEFORE joining the futures: the
-    // installer's start() may be blocked inside tsnx_engine_read waiting for
-    // a piece, and only the torrentfs teardown unblocks it. This also drops
-    // the engine torrent + RAM window, which otherwise leaked for good.
-    if (isLocalBackend()) {
+    // Close the local engine's stream BEFORE joining the futures ONLY if this item
+    // was actively downloading/installing. Cancelling a queued or paused item must
+    // NOT close the active data source of another running download!
+    if (isLocalBackend() && is_active_item) {
         if (auto* source = ds_manager_.getSource()) {
             source->close();
             util::logLine("download: closed local data source after cancel hash=" +

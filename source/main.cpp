@@ -485,7 +485,11 @@ int main(int argc, char** argv) {
     #if __has_include(<curl/curl.h>)
         curl_global_init(CURL_GLOBAL_ALL);
     #endif
+    #ifdef __SWITCH__
+        net::ImageDownloader::instance().init(2);
+    #else
         net::ImageDownloader::instance().init(4);
+    #endif
 
         // Load database games via fast binary cache (or fallback to JSON)
         auto loadedGames = loadGamesCached(getCatalogPath(), getCatalogBinPath());

@@ -66,7 +66,7 @@ static constexpr size_t LOCAL_PREBUFFER_TARGET_SIZE = 24 * 1024 * 1024; // 24MB 
 // with whatever has arrived after this long -- provided at least one byte is
 // there. Without the timeout a slow wifi swarm that trickles below the
 // target keeps the install stuck in the buffering phase forever.
-static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 5000;
+static constexpr int LOCAL_PREBUFFER_TIMEOUT_MS = 30000;
 static constexpr int LOCAL_HEADER_READ_TIMEOUT_MS = 180000;
 static constexpr int LOCAL_HEADER_READ_LOG_MS = 5000;
 static constexpr size_t MIN_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB (smooth streaming buffer)

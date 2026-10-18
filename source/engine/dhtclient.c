@@ -473,6 +473,11 @@ static void dht_bg_main(void *arg) {
         memcpy(&addr.sin_addr, cached_nodes[i], 4);
         memcpy(&addr.sin_port, cached_nodes[i] + 4, 2);
         dht_ping_node((struct sockaddr *)&addr, sizeof(addr));
+#ifdef __SWITCH__
+        if ((i & 7) == 7) {
+            svcSleepThread(5000000ULL); // 5ms sleep every 8 pings to prevent socket buffer exhaustion (ENOBUFS 105)
+        }
+#endif
     }
     if (cached_count > 0)
         engine_log(ENGINE_LOG_INFO, "[dht] cache: pinged %d nodes", cached_count);

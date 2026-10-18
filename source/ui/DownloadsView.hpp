@@ -73,6 +73,7 @@ struct DownloadGroup {
     download::DownloadState state = download::DownloadState::Queued;
     std::string failed_name;
     std::string failed_error;
+    bool has_port_install = false;
 };
 
 class DownloadsView : public brls::Activity {

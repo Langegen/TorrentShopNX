@@ -81,17 +81,20 @@
 //-----------------------------------------------------------------------------
 
 #ifdef __SWITCH__
-/* Live sessions: 20-25 reachable peers saturate 100 Mbit Wi-Fi.
-   Capping MAX_SESS at 32 and DIAL_STOP_LIVE at 24 ensures socket buffer allocations
-   stay well within the 32 MB BSD pool (~13 MB max), leaving plenty of buffer space
-   for DHT/tracker UDP sockets and HTTP image downloads without ENOBUFS (errno 105). */
-#define MAX_SESS         32
-#define MAX_CONNECTING   16     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
-#define DIAL_STOP_LIVE   24     // enough live sessions: stop dialing new peers
+/* Live sessions: with SO_RCVBUF sized to 128 KB, 40 sessions use only ~8 MB
+   of BSD buffer pool (leaving 24 MB free for UDP trackers, DHT, and posters).
+   Targeting 30 live sessions with active unchoke upkeep ensures plenty of active uploaders. */
+#define MAX_SESS             40
+#define MAX_CONNECTING       16     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
+#define DIAL_STOP_LIVE       30     // baseline live sessions
+#define MIN_ACTIVE_UNCHOKED  14     // keep dialing up to MAX_SESS if unchoked peers are below this
+#define REQ_INITIAL          32     // Fast start on Switch: 32 blocks (512 KB) nominal pipeline
 #else
-#define MAX_SESS         32
-#define MAX_CONNECTING   16
-#define DIAL_STOP_LIVE   24
+#define MAX_SESS             64
+#define MAX_CONNECTING       24
+#define DIAL_STOP_LIVE       48
+#define MIN_ACTIVE_UNCHOKED  24
+#define REQ_INITIAL          48     // Fast start on PC: 48 blocks (768 KB)
 #endif
 #define CONNECT_SECS     8      // outbound SYN patience (realistic for Switch Wi-Fi and NAT)
 #define CONNECT_STARVED_SECS 10 // slow-but-alive seeders need 10s floor
@@ -107,9 +110,12 @@
 #define MAX_DUP          4      // outstanding copies of one block
 
 #define REQ_RING         512    // per-session outstanding-request capacity
-#define MAX_REQ_PER_CONN 250
+#ifdef __SWITCH__
+#define MAX_REQ_PER_CONN 96     // Up to 1.5 MB in flight per session on Switch
+#else
+#define MAX_REQ_PER_CONN 200    // Up to 3.2 MB in flight per session on PC
+#endif
 #define REQ_MIN          2
-#define REQ_INITIAL      16     // Fast start: new unchoked peers immediately get 16 blocks (256 KB)
 #define LOOKAHEAD_PIECES 16     // Multi-file lookahead: allow prefetching pieces into upcoming files
 
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
@@ -146,7 +152,7 @@
 // the forward window plenty of seek-back slack; needs a full-RAM launch.
 #define RAM_STREAM_BUDGET (256LL << 20)
 
-#define TFS_MAX_PEERS    512
+#define TFS_MAX_PEERS    2048
 #define BACKOFF_CONN_SECS 5
 #define BACKOFF_MAX_SECS  120
 #define BACKOFF_DROP_SECS 5
@@ -342,6 +348,7 @@ struct torrentfs {
 
     aq_entry aq[AQ_MAX];
     int n_aq;
+    int n_active_aq;
     uint8_t *aq_buf_pool[AQ_MAX];
     int aq_buf_pool_cnt;
 
@@ -368,6 +375,7 @@ struct torrentfs {
     u64 peer_next_try[TFS_MAX_PEERS];
     int peer_count;
     int next_peer;
+    int peer_evict_rr;
 
     // Starvation recovery state (escalating rounds).
     u64 last_starve;
@@ -733,6 +741,7 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         }
         if (!c->buf) continue;
         c->idx = idx;
+        t->n_active_aq++;
         c->have_cnt = 0;
         c->next_req = 0;
         c->last_deliver = armGetSystemTick();
@@ -751,6 +760,21 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
 //-----------------------------------------------------------------------------
 // Peer pool (shared with the discovery thread -> under t->lock)
 //-----------------------------------------------------------------------------
+
+static inline int peer_eval_score(const torrentfs *t, int j) {
+    int score = 0;
+    if (t->peer_ok[j]) score += 1000;
+    if (t->peer_src[j] == PEER_SRC_TRACKER) score += 500;
+    else if (t->peer_src[j] == PEER_SRC_PEX) score += 400;
+    else score += 100; // DHT
+
+    if (t->peer_fails[j] == 0) {
+        score += 200;
+    } else {
+        score -= (int)t->peer_fails[j] * 40;
+    }
+    return score;
+}
 
 static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) {
     int added = 0;
@@ -781,20 +805,23 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
         if (t->peer_count < TFS_MAX_PEERS) {
             slot = t->peer_count++;
         } else {
-            // Pool full: evict a failed DHT-sourced entry first (it is the
-            // most stale class of address); only fall back to any failed entry
-            // when the pool holds no DHT junk. Never evict healthy/untried
-            // entries -- they cost nothing to keep.
+            // Pool full: find the lowest scoring entry to evict (anacrolix dropCandidate model).
+            // A dead DHT entry that failed repeatedly has the lowest score and will be evicted first.
+            int incoming_score = (src == PEER_SRC_TRACKER) ? 700 : (src == PEER_SRC_PEX ? 600 : 300);
             int worst = -1;
-            for (int pass = 0; pass < 2 && worst < 0; pass++) {
-                for (int j = 0; j < TFS_MAX_PEERS; j++) {
-                    if (t->peer_busy[j] || t->peer_fails[j] == 0) continue;
-                    if (pass == 0 && t->peer_src[j] != PEER_SRC_DHT) continue;
-                    if (worst < 0 || t->peer_fails[j] > t->peer_fails[worst])
-                        worst = j;
+            int worst_score = 999999;
+            for (int j = 0; j < TFS_MAX_PEERS; j++) {
+                if (t->peer_busy[j]) continue;
+                int score = peer_eval_score(t, j);
+                if (score < worst_score) {
+                    worst_score = score;
+                    worst = j;
+                    if (score <= -20) break; // Dead entry, evict immediately
                 }
             }
-            slot = worst;
+            if (worst >= 0 && (worst_score < incoming_score || worst_score <= 300)) {
+                slot = worst;
+            }
         }
         if (slot < 0) continue;
         t->peers[slot]         = peers[i];
@@ -821,40 +848,49 @@ static void add_peers_dht_cb(void *ctx, const peer_addr *peers, int n) {
     add_peers_src(ctx, peers, n, PEER_SRC_DHT);
 }
 
-// Take a pool peer (round-robin from the ready set). Tracker/PEX/manual
-// addresses get the first pass: they were reported live moments ago, while a
-// DHT address is somebody's 30-minute-old cache entry. DHT peers are only
-// dialed when nothing better is ready, so the DHT flood can no longer starve
-// the few dozen real seeds of dialing slots.
+// Take a pool peer with candidate scoring (anacrolix priority model).
+// Proven peers (peer_ok) and live tracker/PEX peers get first priority,
+// while stale or failing DHT addresses are only dialed when nothing better is ready.
 static int take_peer(torrentfs *t, peer_addr *out) {
     u64 now = armGetSystemTick();
     mutexLock(&t->lock);
-    int idx = -1;
+    int best_idx = -1;
+    int best_score = -999999;
     if (!t->stop && t->peer_count > 0) {
-        for (int pass = 0; pass < 2 && idx < 0; pass++) {
-            for (int tries = 0; tries < t->peer_count; tries++) {
-                int i = t->next_peer++ % t->peer_count;
-                if (t->peer_busy[i]) continue;
-                if (t->peer_next_try[i] > now) continue;
-                if (pass == 0 && t->peer_src[i] == PEER_SRC_DHT) continue;
-                // Avoid opening multiple parallel connections to the same IP.
-                bool ip_busy = false;
-                for (int s = 0; s < MAX_SESS; s++) {
-                    if (t->S[s].active && t->S[s].addr.ip == t->peers[i].ip) {
-                        ip_busy = true;
-                        break;
-                    }
+        for (int tries = 0; tries < t->peer_count; tries++) {
+            int i = (t->next_peer + tries) % t->peer_count;
+            if (t->peer_busy[i]) continue;
+            if (t->peer_next_try[i] > now) continue;
+
+            // Avoid opening multiple parallel connections to the same IP.
+            bool ip_busy = false;
+            for (int s = 0; s < MAX_SESS; s++) {
+                if (t->S[s].active && t->S[s].addr.ip == t->peers[i].ip) {
+                    ip_busy = true;
+                    break;
                 }
-                if (ip_busy) continue;
-                idx = i;
-                *out = t->peers[i];
-                break;
+            }
+            if (ip_busy) continue;
+
+            int score = peer_eval_score(t, i);
+            if (score > best_score) {
+                best_score = score;
+                best_idx = i;
+                // Proven peer or fresh tracker peer: take immediately without scanning further
+                if (score >= 700) {
+                    t->next_peer = (i + 1) % t->peer_count;
+                    break;
+                }
             }
         }
+        if (best_idx >= 0) {
+            t->next_peer = (best_idx + 1) % t->peer_count;
+            *out = t->peers[best_idx];
+            t->peer_busy[best_idx] = 1;
+        }
     }
-    if (idx >= 0) t->peer_busy[idx] = 1;
     mutexUnlock(&t->lock);
-    return idx;
+    return best_idx;
 }
 
 static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
@@ -1492,12 +1528,13 @@ static int piece_priority(torrentfs *t, int64_t idx) {
 }
 
 // Per-session in-flight request budget: dynamic window scaled by rate EMA and
-// connection RTT (~1.5s of useful throughput). Active unchoked peers are never
-// choked below 16 blocks (256 KB) so round-trip latency never limits throughput.
+// connection RTT (~2.0s of useful throughput) with TCP slow-start fast-ramp.
+// Active unchoked peers ramp up their pipeline as blocks land without strikes,
+// so fast peers are never bottlenecked by static initial floors.
 static int nominal_depth(torrentfs *t, sess *s) {
     if (s->nb.choked) return REQ_MIN;
-    if (s->timeout_strikes > 0) return REQ_MIN;
-    if (s->expect_ticks <= t->freq) return (t->st_live <= 2) ? 48 : REQ_INITIAL;   // initial aggressive pipeline
+    if (s->timeout_strikes >= 3) return REQ_MIN;
+    if (s->expect_ticks <= t->freq) return (t->st_live <= 2) ? 48 : REQ_INITIAL;
 
     double rate_bps = (s->rate > 0) ? (s->rate / (double)BLOCK_LEN) : 0.0;
     double life_bps = (s->expect_ticks > 0)
@@ -1508,8 +1545,27 @@ static int nominal_depth(torrentfs *t, sess *s) {
                      now - s->last_block > (u64)5 * t->freq);
     double blocks_per_sec = (!stalling && life_bps > rate_bps) ? life_bps : rate_bps;
 
-    int d = (int)(blocks_per_sec * 1.5);
-    int floor_d = stalling ? REQ_MIN : ((t->st_live <= 2) ? 48 : REQ_INITIAL);
+    // Bandwidth-Delay Product: target ~2.0s of throughput buffer
+    int d = (int)(blocks_per_sec * 2.0);
+    int floor_d;
+    if (s->timeout_strikes == 2) {
+        floor_d = REQ_INITIAL / 4;
+    } else if (s->timeout_strikes == 1 || stalling) {
+        floor_d = REQ_INITIAL / 2;
+    } else {
+        // Fast-Ramp / Slow-Start:
+        // As a peer successfully delivers blocks with 0 strikes, expand the floor
+        // dynamically (like TCP slow start) so fast peers aren't capped at REQ_INITIAL.
+        int ramp = REQ_INITIAL;
+        if (s->useful >= 8) {
+            int bonus = (int)(s->useful / 4);
+            if (bonus > (MAX_REQ_PER_CONN - REQ_INITIAL))
+                bonus = MAX_REQ_PER_CONN - REQ_INITIAL;
+            ramp += bonus;
+        }
+        floor_d = (t->st_live <= 2 && ramp < 48) ? 48 : ramp;
+    }
+    if (floor_d < REQ_MIN) floor_d = REQ_MIN;
     if (d < floor_d) d = floor_d;
     if (d > MAX_REQ_PER_CONN) d = MAX_REQ_PER_CONN;
     return d;
@@ -1544,33 +1600,59 @@ static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
     return healthy;
 }
 
-// Find the next block of piece idx this session may request: not received
-// yet, not already requested by THIS session, and either unrequested or last
-// requested more than DUP_REQ_SECS ago with fewer than max_dup copies in flight.
-// Returns -1 when the piece has nothing requestable right now.
-static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now) {
-    int max_dup = MAX_DUP;
-    bool is_endgame = (t->read_blocked_piece == a->idx) ||
-                      (t->file_last_piece - t->playhead_piece <= 4) ||
-                      (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
+// Find the next block of piece idx this session may request.
+// Critical playback-head piece (zone 1 or read_blocked) and Endgame pieces use
+// aggressive Request Stealing (hedging with up to 2-4 duplicate requests) if
+// a block takes longer than DUP_REQ_SECS.
+// Prefetch / background pieces (zone >= 2) disable duplicate requests to conserve
+// network bandwidth, only stealing if a holder peer completely stalled (> 6s).
+static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int zone) {
+    bool is_critical = (zone == 1) || (t->read_blocked_piece == a->idx);
+    bool is_endgame  = (t->file_last_piece - t->playhead_piece <= 4) ||
+                       (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
+
+    int max_dup = 1; // Default for normal prefetch / background pieces: NO duplicate requests!
     if (is_endgame) {
-        max_dup = 8;
+        max_dup = 4;
+    } else if (is_critical) {
+        max_dup = 2; // Critical playback head piece: allow stealing/hedging with up to 2 copies
     }
+
     for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
         a->next_req = (b + 1) % a->nblocks;
         if (a->have[b]) continue;
         if (sess_has_req(s, (int)a->idx, b)) continue;
         uint8_t r = a->req[b];
-        if (r == 0) return b;
+        if (r == 0) return b; // Fresh unrequested block: always grab
+
+        // If duplicate requests are disabled for this piece tier:
+        if (max_dup <= 1) {
+            // For background/readahead pieces, only steal if the existing request has been
+            // completely abandoned/stalled (> 6 seconds without delivery).
+            if (now - a->req_ts[b] > (u64)6 * t->freq) {
+                uint8_t actual_r = 0;
+                int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
+                a->req[b] = actual_r;
+                if (actual_r == 0 || healthy == 0)
+                    return b;
+            }
+            continue;
+        }
+
+        // Critical piece or Endgame: Fast Request Stealing
+        // If the block was requested > DUP_REQ_SECS ago and has not arrived, hedge it!
         if (now - a->req_ts[b] <= (u64)DUP_REQ_SECS * t->freq) continue;
         if (r < max_dup) return b;
-        // Self-heal drifted req[b] or allow hedging when existing holders are stalled
-        uint8_t actual_r = 0;
-        int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
-        a->req[b] = actual_r;
-        if (actual_r < max_dup || healthy < 2)
-            return b;
+
+        // If r reached max_dup, check if existing holders are actually stalled (> 4s)
+        if (now - a->req_ts[b] > (u64)4 * t->freq) {
+            uint8_t actual_r = 0;
+            int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
+            a->req[b] = actual_r;
+            if (actual_r < max_dup || healthy < 2)
+                return b;
+        }
     }
     return -1;
 }
@@ -1607,18 +1689,16 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                     }
                 }
             } else {
+                if (t->n_active_aq >= t->n_aq) continue;
                 a = aq_alloc(t, i);
                 if (!a) {
-                    engine_log(ENGINE_LOG_DEBUG,
-                               "[claim] no aq buffer for piece %lld",
-                               (long long)i);
                     continue;
                 }
                 mutexLock(&t->lock);
                 t->status[i] = PIECE_ACTIVE;
                 mutexUnlock(&t->lock);
             }
-            int b = next_block_in(t, s, a, now);
+            int b = next_block_in(t, s, a, now, zone);
             if (b < 0) continue;
             *out_piece = i;
             *out_block = b;
@@ -1738,6 +1818,7 @@ static void piece_full(torrentfs *t, aq_entry *a) {
     t->wq_n++;                 // can't overflow: each job holds one aq buffer
     a->idx = -1;               // slot reset inside the lock: the writer picks
     a->buf = NULL;             // its return slot by these very fields
+    if (t->n_active_aq > 0) t->n_active_aq--;
     mutexUnlock(&t->lock);
 }
 
@@ -2527,28 +2608,26 @@ static void netloop_main(void *arg) {
                 // field (one live seed, handshake every ~30 s, zero blocks).
                 bool is_seed = peer_is_seed(t, s);
                 bool has_needed = peer_has_needed(t, s);
-                // Never rotate out full seeds, peers holding needed pieces, or any peer
-                // when swarm is small / starved. Seeds and peers run optimistic unchoke
-                // on 30s+ cycles and are often the only source for missing pieces.
-                // Note: do NOT `continue` here -- idle/stall checks, keep-alives, and PEX
-                // below must still run for every session!
-                bool exempt_rotate = (is_seed || has_needed || t->st_live < 8) &&
-                                     (few_peers || t->st_live < 24);
                 int eff_connecting = t->st_connecting > 0 ? t->st_connecting : 0;
+                // Only rotate out choked peers when swarm is established and pool has plenty of candidates.
+                bool pool_rich = (t->st_live >= 8 && t->peer_count > t->st_live + eff_connecting + 4);
                 bool can_rotate = false;
-                if (!exempt_rotate && !s->connecting && s->nb.handshaked && s->nb.choked &&
-                    t->peer_count > t->st_live + eff_connecting &&
-                    !is_seed && !has_needed) {
+                if (pool_rich && !s->connecting && s->nb.handshaked && s->nb.choked) {
                     if (s->rx_total == 0) {
-                        can_rotate = (now - s->started > (u64)CHOKED_ROTATE_SECS * t->freq);
+                        // Kept us choked without delivering any data for CHOKED_ROTATE_SECS
+                        int wait_secs = has_needed ? CHOKED_ROTATE_SECS : (CHOKED_ROTATE_SECS / 2);
+                        can_rotate = (now - s->started > (u64)wait_secs * t->freq);
                     } else if (s->choked_at != 0) {
-                        can_rotate = (now - s->choked_at > (u64)CHOKED_ROTATE_SECS * t->freq);
+                        // Choked us again after delivering and kept us choked for >60s
+                        can_rotate = (now - s->choked_at > (u64)60 * t->freq);
+                    } else if (s->timeout_strikes >= 3) {
+                        can_rotate = true;
                     }
                 }
                 if (can_rotate) {
                     engine_log(ENGINE_LOG_DEBUG,
-                               "[sess %d] rotate: peer choked us (rx_total=%lld) without needed pieces",
-                               i, (long long)s->rx_total);
+                               "[sess %d] rotate: peer choked us (rx_total=%lld, seed=%d)",
+                               i, (long long)s->rx_total, is_seed);
                     // A rotate-out is a normal choke cycle, not a dead
                     // address: minimal backoff, so we catch the next
                     // optimistic-unchoke window.
@@ -2676,11 +2755,13 @@ static void netloop_main(void *arg) {
             t->st_connecting = connecting;
             t->st_live = live;
             if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
-            // Starvation recovery: if we have almost no live peers, stop wasting
-            // connection slots on ВµTP and retry peers that failed earlier. DHT
+            // Starvation recovery: if we have almost no live peers and progress is stalled,
+            // stop wasting connection slots on uTP and retry peers that failed earlier. DHT
             // swarms are often full of dead/NAT'd addresses; without this the pool
             // can exhaust its backoff budget and stall the stream.
-            if (few_peers) {
+            bool progress_stalled = (now - t->last_progress_tick > (u64)5 * t->freq);
+            bool starving = (t->st_live == 0) || (few_peers && progress_stalled);
+            if (starving) {
                 u64 pause_ticks = (t->starve_round <= 1) ? (u64)5 * t->freq :
                                   (t->starve_round == 2)  ? (u64)15 * t->freq :
                                   (t->starve_round == 3)  ? (u64)30 * t->freq :
@@ -2753,10 +2834,18 @@ static void netloop_main(void *arg) {
             }
 
             // DIAL_BUDGET_PER_TICK new dials per 250 ms upkeep (~8-12/s max):
-            // a SYN storm of failed connects fills the home router's NAT table
-            // with half-open entries, which then drops healthy traffic too.
+            // Keep dialing up to MAX_SESS if unchoked uploaders are scarce
+            int active_unchoked = 0;
+            for (int s = 0; s < MAX_SESS; s++) {
+                if (t->S[s].active && !t->S[s].connecting && t->S[s].nb.handshaked && !t->S[s].nb.choked) {
+                    active_unchoked++;
+                }
+            }
+            bool need_dial = (t->st_live < DIAL_STOP_LIVE) ||
+                             (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < MAX_SESS);
+
             while (!t->paused && dial_budget > 0 &&
-                   t->st_live < DIAL_STOP_LIVE && connecting < MAX_CONNECTING) {
+                   need_dial && connecting < MAX_CONNECTING) {
                 bool ok;
                 // µTP runs through a userspace stack and tops out well below
                 // plain TCP on the Switch; keep it as a rare NAT fallback
@@ -2772,6 +2861,8 @@ static void netloop_main(void *arg) {
                 if (!ok) break;
                 connecting++;
                 dial_budget--;
+                need_dial = (t->st_live < DIAL_STOP_LIVE) ||
+                            (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < MAX_SESS);
             }
 
             // Seek preemption: if the playhead has moved, a partially
@@ -2792,6 +2883,7 @@ static void netloop_main(void *arg) {
                 if (t->status[a->idx] == PIECE_ACTIVE) {
                     t->status[a->idx] = PIECE_NEEDED;  // discard partial, re-DL
                     a->idx = -1;                       // release slot + buffer
+                    if (t->n_active_aq > 0) t->n_active_aq--;
                 }
                 mutexUnlock(&t->lock);
             }
@@ -3221,6 +3313,7 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
                 tfs->status[old_idx] = PIECE_NEEDED;
             }
             tfs->aq[i].idx = -1;
+            if (tfs->n_active_aq > 0) tfs->n_active_aq--;
             tfs->aq[i].have_cnt = 0;
             tfs->aq[i].next_req = 0;
             if (tfs->aq[i].have) memset(tfs->aq[i].have, 0, (size_t)tfs->blocks_per_piece);

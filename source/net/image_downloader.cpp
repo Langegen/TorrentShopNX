@@ -174,6 +174,71 @@ void ImageDownloader::resume() {
     util::logLine("ImageDownloader: resumed");
 }
 
+std::string ImageDownloader::extractHost(const std::string& url) {
+    if (url.empty()) return "";
+    size_t start = 0;
+    if (url.rfind("http://", 0) == 0) start = 7;
+    else if (url.rfind("https://", 0) == 0) start = 8;
+    else return "";
+
+    size_t end = url.find('/', start);
+    size_t colon = url.find(':', start);
+    if (colon != std::string::npos && (end == std::string::npos || colon < end)) {
+        end = colon;
+    }
+    if (end == std::string::npos) return url.substr(start);
+    return url.substr(start, end - start);
+}
+
+bool ImageDownloader::isHostInCooldown(const std::string& host, bool& isHardCooldown, std::chrono::steady_clock::time_point& until) {
+    isHardCooldown = false;
+    if (host.empty()) return false;
+    std::lock_guard<std::mutex> lock(failedHostsMutex_);
+    auto it = failedHosts_.find(host);
+    if (it == failedHosts_.end()) return false;
+    auto now = std::chrono::steady_clock::now();
+    if (now < it->second.until) {
+        isHardCooldown = (it->second.consecutiveFails >= 3);
+        until = it->second.until;
+        return true;
+    }
+    // Cooldown expired
+    if (it->second.consecutiveFails < 3) {
+        failedHosts_.erase(it);
+    }
+    return false;
+}
+
+bool ImageDownloader::isHostInCooldown(const std::string& host) {
+    bool isHard = false;
+    std::chrono::steady_clock::time_point until;
+    return isHostInCooldown(host, isHard, until);
+}
+
+void ImageDownloader::markHostFailed(const std::string& host) {
+    if (host.empty()) return;
+    std::lock_guard<std::mutex> lock(failedHostsMutex_);
+    auto& entry = failedHosts_[host];
+    entry.consecutiveFails++;
+    // Transient failure: short cooldown 2s (or 3s on 2nd fail).
+    // Hard failure (3+ consecutive fails): host is confirmed dead/blocked (e.g. 90DNS), cooldown 30s.
+    int cooldownSec = 2;
+    if (entry.consecutiveFails == 2) {
+        cooldownSec = 3;
+    } else if (entry.consecutiveFails >= 3) {
+        cooldownSec = 30;
+    }
+    entry.until = std::chrono::steady_clock::now() + std::chrono::seconds(cooldownSec);
+    util::logLine("ImageDownloader: marked host " + host + " in cooldown for " +
+                  std::to_string(cooldownSec) + "s (consecutive fails=" + std::to_string(entry.consecutiveFails) + ")");
+}
+
+void ImageDownloader::markHostSuccess(const std::string& host) {
+    if (host.empty()) return;
+    std::lock_guard<std::mutex> lock(failedHostsMutex_);
+    failedHosts_.erase(host);
+}
+
 int ImageDownloader::calculatePriority(const ImageTask& task) const {
     if (task.priorityOverride > 0) {
         return task.priorityOverride;
@@ -285,25 +350,87 @@ void ImageDownloader::workerLoop() {
 
     while (running_.load() && !g_appExiting.load()) {
         ImageTask task;
+        bool hasTask = false;
         {
             std::unique_lock<std::mutex> lock(queueMutex_);
-            cv_.wait(lock, [this]() {
-                return !running_.load() || g_appExiting.load() ||
-                       (!paused_.load() && !tasks_.empty());
-            });
+            while (running_.load() && !g_appExiting.load()) {
+                if (paused_.load() || tasks_.empty()) {
+                    cv_.wait(lock, [this]() {
+                        return !running_.load() || g_appExiting.load() ||
+                               (!paused_.load() && !tasks_.empty());
+                    });
+                    if (!running_.load() || g_appExiting.load()) break;
+                    if (paused_.load() || tasks_.empty()) continue;
+                }
 
-            if (!running_.load() || g_appExiting.load()) {
-                break;
+                if (needsSort_.exchange(false, std::memory_order_acq_rel)) {
+                    reprioritizeQueueLocked();
+                }
+
+                auto earliestCooldown = std::chrono::steady_clock::time_point::max();
+                bool foundExecutableTask = false;
+
+                for (auto it = tasks_.begin(); it != tasks_.end(); ) {
+                    if (it->token && !*it->token) {
+                        it = tasks_.erase(it);
+                        continue;
+                    }
+
+                    std::string host = extractHost(it->url);
+                    bool isHard = false;
+                    std::chrono::steady_clock::time_point until;
+                    if (!host.empty() && isHostInCooldown(host, isHard, until)) {
+                        if (isHard) {
+                            // Host is confirmed dead/blocked (3+ consecutive fails, e.g. 90DNS).
+                            // Discard with placeholder immediately so we don't stall the queue.
+                            util::logLine("ImageDownloader: host " + host + " in hard cooldown, discarding " + it->url);
+                            ImageTask deadTask = std::move(*it);
+                            it = tasks_.erase(it);
+                            if (!deadTask.placeholder.empty() && deadTask.img) {
+                                brls::sync([img = deadTask.img, token = deadTask.token, placeholder = deadTask.placeholder]() {
+                                    if (g_appExiting.load()) return;
+                                    if (token && !*token) return;
+                                    if (img) {
+                                        img->setImageFromFile(placeholder);
+                                        img->setFreeTexture(false);
+                                    }
+                                });
+                            }
+                            continue;
+                        }
+
+                        // Soft cooldown (transient backoff, 2-3s).
+                        // Keep this task in the queue and record when to wake up!
+                        if (until < earliestCooldown) {
+                            earliestCooldown = until;
+                        }
+                        ++it;
+                        continue;
+                    }
+
+                    // Host is ready to fetch!
+                    task = std::move(*it);
+                    tasks_.erase(it);
+                    foundExecutableTask = true;
+                    break;
+                }
+
+                if (foundExecutableTask) {
+                    hasTask = true;
+                    break;
+                }
+
+                // If all remaining tasks in queue are in soft cooldown, wait until earliest cooldown expires or a new task arrives
+                if (!tasks_.empty() && earliestCooldown != std::chrono::steady_clock::time_point::max()) {
+                    cv_.wait_until(lock, earliestCooldown);
+                } else if (tasks_.empty()) {
+                    continue;
+                }
             }
+        }
 
-            if (paused_.load() || tasks_.empty()) continue;
-
-            if (needsSort_.exchange(false, std::memory_order_acq_rel)) {
-                reprioritizeQueueLocked();
-            }
-
-            task = tasks_.front();
-            tasks_.pop_front();
+        if (!hasTask || !running_.load() || g_appExiting.load()) {
+            break;
         }
 
         if (task.token && !*task.token) {
@@ -368,8 +495,40 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
         }
     }
 
+    std::string host = extractHost(task.url);
+    bool isHard = false;
+    std::chrono::steady_clock::time_point until;
+    if (!host.empty() && isHostInCooldown(host, isHard, until)) {
+        if (!isHard) {
+            // Soft cooldown active: re-queue task so it is preserved and retried when cooldown passes!
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                tasks_.push_back(task);
+                needsSort_.store(true, std::memory_order_release);
+            }
+            cv_.notify_one();
+            return;
+        }
+        util::logLine("ImageDownloader: host " + host + " in hard cooldown, skipping network fetch for " + task.url);
+        std::string fbHost = extractHost(task.fallbackUrl);
+        if (!task.fallbackUrl.empty() && fbHost != host && !isHostInCooldown(fbHost)) {
+            if (task.token && !*task.token) return;
+            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+        } else if (!task.placeholder.empty()) {
+            brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
+                if (g_appExiting.load()) return;
+                if (token && !*token) return;
+                if (img) {
+                    img->setImageFromFile(placeholder);
+                    img->setFreeTexture(false);
+                }
+            });
+        }
+        return;
+    }
+
     bool dlActive = isDownloadActive();
-    int timeoutSec = dlActive ? 12 : 5;
+    int timeoutSec = dlActive ? 8 : 6;
     if (dlActive) {
         std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }
@@ -381,6 +540,9 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
 
     if (res.status_code == 200 && !res.body.empty()) {
         util::logLine("ImageDownloader: HTTP 200 OK for url=" + task.url + " (size=" + std::to_string(res.body.size()) + ")");
+        if (!host.empty()) {
+            markHostSuccess(host);
+        }
         
         std::string bodyToDisplay = std::move(res.body);
 
@@ -527,7 +689,31 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
     } else {
         util::logLine("ImageDownloader: HTTP fetch failed, code=" + std::to_string(res.status_code) +
                       " (" + res.body + ") url=" + task.url);
-        if (!task.fallbackUrl.empty()) {
+        if (res.status_code == 0 && !host.empty()) {
+            markHostFailed(host);
+        }
+
+        // If it was a network timeout / connection error (code == 0) and we haven't exhausted retries,
+        // retry the task instead of giving up immediately and setting a placeholder
+        if (res.status_code == 0 && task.retryCount < 2) {
+            ImageTask retryTask = task;
+            retryTask.retryCount++;
+            util::logLine("ImageDownloader: transient error for " + task.url + ", will retry (attempt " +
+                          std::to_string(retryTask.retryCount) + "/2)");
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                tasks_.push_back(retryTask);
+                needsSort_.store(true, std::memory_order_release);
+            }
+            cv_.notify_one();
+            return;
+        }
+
+        std::string fbHost = extractHost(task.fallbackUrl);
+        bool canTryFallback = !task.fallbackUrl.empty() &&
+                              (res.status_code != 0 || fbHost != host) &&
+                              !isHostInCooldown(fbHost);
+        if (canTryFallback) {
             if (task.token && !*task.token) return;
             enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
         } else if (!task.placeholder.empty()) {
@@ -540,6 +726,10 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 }
             });
         }
+    }
+
+    if (dlActive) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }
 }
 

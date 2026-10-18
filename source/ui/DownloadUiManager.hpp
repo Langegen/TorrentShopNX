@@ -23,7 +23,8 @@ public:
 
     // Adds a download to the queue and instantly saves the state to downloads.json
     void addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id = "",
-                     const std::string& group_id = "", const std::string& group_title = "", const std::string& component_label = "", const std::string& component_name = "", int component_type = 0);
+                     const std::string& group_id = "", const std::string& group_title = "", const std::string& component_label = "", const std::string& component_name = "", int component_type = 0,
+                     unsigned long long initial_file_size = 0);
     
     // Adds a homebrew port automatic installation to the queue
     void addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index);

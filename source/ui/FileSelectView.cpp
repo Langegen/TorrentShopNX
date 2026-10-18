@@ -1666,14 +1666,17 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             Game singleGame = game_;
             singleGame.title = itemTitle;
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
+            unsigned long long fileSize = (files_[i].size > 0) ? static_cast<unsigned long long>(files_[i].size) : 0;
             ui::DownloadManager::instance().addDownload(
                 singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), "Файл", filenameOnly, 4);
+                game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize);
         } else if (!chosen.empty()) {
             std::vector<int> bundleSelected;
             bundleSelected.reserve(chosen.size());
+            unsigned long long bundleTotalBytes = 0;
             for (size_t i : chosen) {
                 bundleSelected.push_back(files_[i].index);
+                if (files_[i].size > 0) bundleTotalBytes += static_cast<unsigned long long>(files_[i].size);
             }
             std::string countStr = std::to_string(chosen.size());
             std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
@@ -1684,7 +1687,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             std::string firstName = files_[chosen[0]].name;
             ui::DownloadManager::instance().addDownload(
                 bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), "Бандл", brls::getStr("app/fileselect/bundle_files", countStr), 4);
+                game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes);
         }
     } else {
         std::vector<size_t> packages;
@@ -1722,17 +1725,20 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
 
             auto comp = util::classifyDownloadComponent(files_[idx].name, game_.title);
+            unsigned long long pkgSize = (files_[idx].size > 0) ? static_cast<unsigned long long>(files_[idx].size) : 0;
             ui::DownloadManager::instance().addDownload(
                 singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type);
+                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize);
         }
 
         // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
         if (!extraFiles.empty()) {
             std::vector<int> extraIndices;
             extraIndices.reserve(extraFiles.size());
+            unsigned long long extraTotalBytes = 0;
             for (size_t idx : extraFiles) {
                 extraIndices.push_back(files_[idx].index);
+                if (files_[idx].size > 0) extraTotalBytes += static_cast<unsigned long long>(files_[idx].size);
             }
 
             auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
@@ -1749,7 +1755,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
 
             ui::DownloadManager::instance().addDownload(
                 extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type);
+                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes);
         }
     }
 

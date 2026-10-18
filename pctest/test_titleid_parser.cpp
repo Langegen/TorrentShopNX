@@ -3,6 +3,7 @@
 #include <string>
 #include <iomanip>
 #include "../source/utils/switch_utils.h"
+#include "../source/utils/string_utils.h"
 
 int main() {
     std::cout << "Testing Title ID and Version Parser..." << std::endl;
@@ -88,6 +89,29 @@ int main() {
         assert(ver == 65536);
     }
 
-    std::cout << "\nALL 9 TESTS PASSED SUCCESSFULLY!" << std::endl;
+    // Test 10: Component Classification (v0 Base, Patch, DLC, Other)
+    {
+        auto c1 = util::classifyDownloadComponent("Super Game [0100FE701475A000][v0].nsp");
+        std::cout << "Test 10a (Base A000 v0): label=" << c1.label << " name=" << c1.cleanName << std::endl;
+        assert(c1.type == 0);
+        assert(c1.label == "MAIN");
+
+        auto c2 = util::classifyDownloadComponent("Super Game [0100FE701475A800][v65536].nsp");
+        std::cout << "Test 10b (Patch A800): label=" << c2.label << " name=" << c2.cleanName << std::endl;
+        assert(c2.type == 1);
+        assert(c2.label == "UPD");
+
+        auto c3 = util::classifyDownloadComponent("Super Game [0100FE701475A001][v0].nsp");
+        std::cout << "Test 10c (DLC A001): label=" << c3.label << " name=" << c3.cleanName << std::endl;
+        assert(c3.type == 2);
+        assert(c3.label == "DLC");
+
+        auto c4 = util::classifyDownloadComponent("Game/Russian Voice Mod/atmosphere/contents/0100FE701475A000/romfs/sound.pck");
+        std::cout << "Test 10d (Mod/Extra): label=" << c4.label << " name=" << c4.cleanName << std::endl;
+        assert(c4.type == 3);
+        assert(c4.label == "OTH");
+    }
+
+    std::cout << "\nALL 10 TESTS PASSED SUCCESSFULLY!" << std::endl;
     return 0;
 }

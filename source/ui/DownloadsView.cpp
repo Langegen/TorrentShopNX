@@ -237,7 +237,7 @@ void DownloadsView::toggleBacklight() {
 
 
 static std::string formatKbps(float speed_kbps, bool is_download) {
-    std::string prefix = is_download ? "↓ " : "↑ ";
+    std::string prefix = is_download ? "↓ " : "";
     if (speed_kbps >= 1024.0f) {
         float mbps = speed_kbps / 1024.0f;
         char buf[32];
@@ -248,6 +248,15 @@ static std::string formatKbps(float speed_kbps, bool is_download) {
         std::snprintf(buf, sizeof(buf), "%s%.1f KB/s", prefix.c_str(), speed_kbps);
         return std::string(buf);
     }
+}
+
+static std::string formatFileCount(int n) {
+    int n10 = n % 10;
+    int n100 = n % 100;
+    if (n100 >= 11 && n100 <= 19) return std::to_string(n) + " файлов";
+    if (n10 == 1) return std::to_string(n) + " файл";
+    if (n10 >= 2 && n10 <= 4) return std::to_string(n) + " файла";
+    return std::to_string(n) + " файлов";
 }
 
 static std::string formatEta(float speed_kbps, unsigned long long remaining_bytes) {
@@ -326,6 +335,10 @@ static int64_t getItemElapsedSeconds(const download::DownloadItem& itm) {
 
 
 static std::string formatProgressBytes(unsigned long long written, unsigned long long total) {
+    if (total == 0) {
+        if (written == 0) return "0 B";
+        return formatBytes(written);
+    }
     return formatBytes(written) + " / " + formatBytes(total);
 }
 
@@ -586,13 +599,13 @@ static ComponentBadgeStyle getComponentBadgeStyle(int component_type, bool isLig
     switch (component_type) {
         case 0: // Base Game
             return {
-                "Игра",
+                "MAIN",
                 isLight ? nvgRGBA(46, 125, 50, 40) : nvgRGBA(76, 175, 80, 50),
                 isLight ? nvgRGB(46, 125, 50) : nvgRGB(129, 199, 132)
             };
         case 1: // Update
             return {
-                "Обновление",
+                "UPD",
                 isLight ? nvgRGBA(25, 118, 210, 40) : nvgRGBA(33, 150, 243, 50),
                 isLight ? nvgRGB(25, 118, 210) : nvgRGB(100, 181, 246)
             };
@@ -603,9 +616,10 @@ static ComponentBadgeStyle getComponentBadgeStyle(int component_type, bool isLig
                 isLight ? nvgRGB(142, 36, 170) : nvgRGB(225, 190, 231)
             };
         case 3: // Mod / Translation
+        case 4: // File / Port / Other
         default:
             return {
-                "Русификатор",
+                "OTH",
                 isLight ? nvgRGBA(216, 67, 21, 40) : nvgRGBA(255, 112, 67, 50),
                 isLight ? nvgRGB(191, 54, 12) : nvgRGB(255, 171, 145)
             };
@@ -703,28 +717,58 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
             }
             group_total_elapsed += getItemElapsedSeconds(itm);
 
+            if (itm.is_port_auto_install) {
+                g.has_port_install = true;
+            }
+
             // Download bytes
             unsigned long long item_dl_w = 0;
             unsigned long long item_dl_t = 0;
             if (itm.hybrid_installer) {
                 item_dl_w = itm.hybrid_installer->bytesDownloaded();
                 item_dl_t = itm.hybrid_installer->downloadTotalBytes();
+                if (item_dl_t == 0) item_dl_t = itm.download_total_bytes;
+            } else if (itm.is_port_auto_install && itm.port_install_state) {
+                item_dl_w = itm.port_install_state->dl_written.load();
+                item_dl_t = itm.port_install_state->dl_total.load();
+                if (item_dl_t == 0) item_dl_t = itm.download_total_bytes;
+                if (item_dl_w == 0 && itm.state == download::DownloadState::Completed) {
+                    item_dl_w = item_dl_t;
+                }
             } else if (itm.file_dl_state) {
                 item_dl_w = itm.file_dl_state->written.load();
                 item_dl_t = itm.file_dl_state->total.load();
                 if (item_dl_t == 0) item_dl_t = itm.file_dl_state->size;
+                if (item_dl_t == 0) item_dl_t = itm.download_total_bytes;
             } else {
-                item_dl_t = itm.install_total;
-                item_dl_w = (item_dl_t > 0) ? (unsigned long long)((double)item_dl_t * itm.progress) : 0;
+                item_dl_t = itm.download_total_bytes > 0 ? itm.download_total_bytes : itm.install_total;
+                if (itm.state == download::DownloadState::Completed) {
+                    item_dl_w = item_dl_t;
+                } else if (itm.bytes_downloaded > 0) {
+                    item_dl_w = itm.bytes_downloaded;
+                } else {
+                    float norm_prog = std::clamp(itm.progress, 0.0f, 1.0f);
+                    item_dl_w = (item_dl_t > 0) ? static_cast<unsigned long long>(static_cast<double>(item_dl_t) * norm_prog) : 0;
+                }
             }
             g.dl_written += item_dl_w;
             g.dl_total += item_dl_t;
 
             // Install bytes
-            unsigned long long item_inst_w = itm.install_written;
-            unsigned long long item_inst_t = itm.install_total;
-            if (item_inst_t == 0 && itm.hybrid_installer) {
+            unsigned long long item_inst_w = 0;
+            unsigned long long item_inst_t = 0;
+            if (itm.hybrid_installer) {
+                item_inst_w = itm.hybrid_installer->bytesInstalled();
                 item_inst_t = itm.hybrid_installer->totalBytes();
+            } else if (itm.is_port_auto_install && itm.port_install_state) {
+                item_inst_w = itm.port_install_state->inst_written.load();
+                item_inst_t = itm.port_install_state->inst_total.load();
+            } else {
+                item_inst_w = itm.install_written;
+                item_inst_t = itm.install_total;
+            }
+            if (itm.state == download::DownloadState::Completed) {
+                if (item_inst_t > 0) item_inst_w = item_inst_t;
             }
             g.inst_written += item_inst_w;
             g.inst_total += item_inst_t;
@@ -812,8 +856,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
     // Count badge
     if (group.total_count > 1) {
-        std::string badgeStr = "(" + std::to_string(group.completed_count) + " / " + std::to_string(group.total_count) + " готово)";
+        std::string badgeStr = brls::getStr("app/downloads/count_badge", std::to_string(group.completed_count), std::to_string(group.total_count));
         cell->countBadge->setText(badgeStr);
+        cell->countBadge->setTextColor(secondaryText);
         cell->countBadge->setVisibility(brls::Visibility::VISIBLE);
     } else {
         cell->countBadge->setVisibility(brls::Visibility::GONE);
@@ -853,15 +898,16 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     cell->progressText->setText(progressStr);
 
     // Overall Install Progress
-    const bool showsInstall = (group.inst_total > 0 &&
+    const bool showsInstall = ((group.inst_total > 0 || group.has_port_install) &&
                                (group.state == download::DownloadState::StreamPreparing || 
                                 group.state == download::DownloadState::StreamInstalling || 
                                 group.state == download::DownloadState::Installing ||
-                                group.state == download::DownloadState::Completed));
+                                group.state == download::DownloadState::Completed ||
+                                (group.has_port_install && group.state != download::DownloadState::Queued)));
     
     if (showsInstall) {
         cell->installProgressRow->setVisibility(brls::Visibility::VISIBLE);
-        float instProgress = std::clamp(static_cast<float>(static_cast<double>(group.inst_written) / static_cast<double>(group.inst_total)), 0.0f, 1.0f);
+        float instProgress = (group.inst_total > 0) ? std::clamp(static_cast<float>(static_cast<double>(group.inst_written) / static_cast<double>(group.inst_total)), 0.0f, 1.0f) : 0.0f;
         cell->installBar->setWidth(instProgress * 275.0f);
 
         char instBuf[32];
@@ -869,8 +915,13 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         std::string instStr = instBuf;
 
         if (group.state == download::DownloadState::StreamInstalling ||
-            group.state == download::DownloadState::Installing) {
-            instStr += "  (" + formatKbps(group.inst_speed_kbps, false) + ", " + formatProgressBytes(group.inst_written, group.inst_total) + ")";
+            group.state == download::DownloadState::Installing ||
+            (group.has_port_install && group.inst_written > 0 && group.state != download::DownloadState::Completed)) {
+            if (group.inst_speed_kbps > 0.0f) {
+                instStr += "  (" + formatKbps(group.inst_speed_kbps, false) + ", " + formatProgressBytes(group.inst_written, group.inst_total) + ")";
+            } else {
+                instStr += "  (" + formatProgressBytes(group.inst_written, group.inst_total) + ")";
+            }
         } else {
             instStr += "  (" + formatProgressBytes(group.inst_written, group.inst_total) + ")";
         }
@@ -887,8 +938,27 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     cell->statusText->setText(statusStr);
     cell->statusText->setTextColor(getDownloadStateColor(group.state, isLight));
 
-    // Stats text (ETA, etc.)
-    if (group.state == download::DownloadState::Downloading || 
+    // Stats text (ETA, stage label, etc.)
+    std::string stageMsg;
+    if (group.active_item_idx >= 0 && static_cast<size_t>(group.active_item_idx) < queue.size()) {
+        const auto& act = queue[group.active_item_idx];
+        if (!act.install_stage_label.empty()) {
+            stageMsg = act.install_stage_label;
+        }
+    }
+
+    if (!stageMsg.empty() && group.state != download::DownloadState::Completed && group.state != download::DownloadState::Failed) {
+        if (group.state == download::DownloadState::Downloading || 
+            group.state == download::DownloadState::StreamInstalling) {
+            unsigned long long remaining_dl = (group.dl_total >= group.dl_written) ? (group.dl_total - group.dl_written) : 0;
+            std::string eta = formatEta(group.dl_speed_kbps, remaining_dl);
+            if (!eta.empty()) {
+                stageMsg += " · " + eta;
+            }
+        }
+        cell->statsText->setText(stageMsg);
+        cell->statsText->setVisibility(brls::Visibility::VISIBLE);
+    } else if (group.state == download::DownloadState::Downloading || 
         group.state == download::DownloadState::StreamInstalling) {
         unsigned long long remaining_dl = (group.dl_total >= group.dl_written) ? (group.dl_total - group.dl_written) : 0;
         cell->statsText->setText(formatEta(group.dl_speed_kbps, remaining_dl));
@@ -941,7 +1011,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
     // Expand hint toggle label
     if (group.total_count > 1) {
-        cell->expandHint->setText(group.is_expanded ? "[▲ Свернуть]" : ("[▼ " + std::to_string(group.total_count) + " файла]"));
+        cell->expandHint->setText(group.is_expanded ? "▲ Свернуть" : ("▼ " + formatFileCount(group.total_count)));
         cell->expandHint->setTextColor(isLight ? nvgRGB(0, 140, 225) : nvgRGB(0, 200, 245));
         cell->expandHint->setVisibility(brls::Visibility::VISIBLE);
     } else {
@@ -972,7 +1042,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 cell->sdkConsoleLabel->setTextColor(secondaryText);
             }
             if (cell->sdkGameLabel) {
-                cell->sdkGameLabel->setText("SDK: " + gSdk.toString());
+                cell->sdkGameLabel->setText("\uE002 SDK: " + gSdk.toString());
                 cell->sdkGameLabel->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(255, 112, 67));
             }
         } else {
@@ -992,7 +1062,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         if (!needsRebuild) {
             for (auto* ch : cell->componentsBox->getChildren()) {
                 auto* rb = dynamic_cast<brls::Box*>(ch);
-                if (!rb || rb->getChildren().size() != 6) {
+                if (!rb || rb->getChildren().size() != 3) {
                     needsRebuild = true;
                     break;
                 }
@@ -1010,42 +1080,66 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 rowBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
                 rowBox->setMarginBottom(4.0f);
 
-                // 0. Badge Box
+                // 0. Left Info Box (fixed width 290px): [Badge] [Name] [SDK pill]
+                auto* infoBox = new brls::Box();
+                infoBox->setAxis(brls::Axis::ROW);
+                infoBox->setAlignItems(brls::AlignItems::CENTER);
+                infoBox->setWidth(290.0f);
+                infoBox->setMarginRight(10.0f);
+
+                // Badge Box
                 auto* bBox = new brls::Box();
+                bBox->setWidth(48.0f);
+                bBox->setHeight(22.0f);
+                bBox->setJustifyContent(brls::JustifyContent::CENTER);
+                bBox->setAlignItems(brls::AlignItems::CENTER);
                 bBox->setCornerRadius(4.0f);
-                bBox->setPadding(2.0f, 6.0f, 2.0f, 6.0f);
                 bBox->setMarginRight(8.0f);
                 auto* bLabel = new brls::Label();
                 bLabel->setFontSize(11.0f);
+                bLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
                 bLabel->setSingleLine(true);
                 bBox->addView(bLabel);
-                rowBox->addView(bBox);
+                infoBox->addView(bBox);
 
-                // 1. Name Label
+                // Name Label
                 auto* nameLabel = new brls::Label();
                 nameLabel->setFontSize(13.0f);
                 nameLabel->setSingleLine(true);
-                nameLabel->setWidth(200.0f);
-                nameLabel->setMarginRight(8.0f);
-                rowBox->addView(nameLabel);
+                nameLabel->setGrow(1.0f);
+                nameLabel->setShrink(1.0f);
+                nameLabel->setMarginRight(6.0f);
+                infoBox->addView(nameLabel);
 
-                // 2. SDK Warning Pill
+                // SDK Warning Pill
                 auto* sdkPill = new brls::Box();
                 sdkPill->setCornerRadius(4.0f);
                 sdkPill->setPadding(2.0f, 5.0f, 2.0f, 5.0f);
-                sdkPill->setMarginRight(8.0f);
                 sdkPill->setVisibility(brls::Visibility::GONE);
                 auto* sdkPillLabel = new brls::Label();
                 sdkPillLabel->setFontSize(10.0f);
                 sdkPillLabel->setSingleLine(true);
                 sdkPill->addView(sdkPillLabel);
-                rowBox->addView(sdkPill);
+                infoBox->addView(sdkPill);
 
-                // 3. Progress Column (two thin bars)
+                rowBox->addView(infoBox);
+
+                                // 1. Middle Progress Column (grow 1.0)
                 auto* progCol = new brls::Box();
                 progCol->setAxis(brls::Axis::COLUMN);
+                progCol->setJustifyContent(brls::JustifyContent::CENTER);
                 progCol->setGrow(1.0f);
                 progCol->setMarginRight(12.0f);
+
+                // Summary row (for queued / completed / idle states)
+                auto* summaryRow = new brls::Box();
+                summaryRow->setAxis(brls::Axis::ROW);
+                summaryRow->setAlignItems(brls::AlignItems::CENTER);
+                auto* summaryTxt = new brls::Label();
+                summaryTxt->setFontSize(12.0f);
+                summaryTxt->setSingleLine(true);
+                summaryRow->addView(summaryTxt);
+                progCol->addView(summaryRow);
 
                 // Download mini-bar row
                 auto* dlRow = new brls::Box();
@@ -1053,11 +1147,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 dlRow->setAlignItems(brls::AlignItems::CENTER);
                 dlRow->setMarginBottom(2.0f);
                 auto* dlLbl = new brls::Label();
-                dlLbl->setText("Загрузка:");
+                dlLbl->setText("app/downloads/download_label"_i18n);
                 dlLbl->setFontSize(10.0f);
-                dlLbl->setWidth(65.0f);
+                dlLbl->setWidth(70.0f);
                 auto* dlBarBg = new brls::Box();
-                dlBarBg->setWidth(130.0f);
+                dlBarBg->setWidth(110.0f);
                 dlBarBg->setHeight(6.0f);
                 dlBarBg->setCornerRadius(3.0f);
                 dlBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
@@ -1070,7 +1164,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 auto* dlTxt = new brls::Label();
                 dlTxt->setFontSize(10.0f);
                 dlTxt->setMarginLeft(8.0f);
-                dlTxt->setWidth(120.0f);
+                dlTxt->setWidth(165.0f);
                 dlTxt->setSingleLine(true);
                 dlRow->addView(dlLbl);
                 dlRow->addView(dlBarBg);
@@ -1082,11 +1176,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 instRow->setAxis(brls::Axis::ROW);
                 instRow->setAlignItems(brls::AlignItems::CENTER);
                 auto* instLbl = new brls::Label();
-                instLbl->setText("Установка:");
+                instLbl->setText("app/downloads/install_label"_i18n);
                 instLbl->setFontSize(10.0f);
-                instLbl->setWidth(65.0f);
+                instLbl->setWidth(70.0f);
                 auto* instBarBg = new brls::Box();
-                instBarBg->setWidth(130.0f);
+                instBarBg->setWidth(110.0f);
                 instBarBg->setHeight(6.0f);
                 instBarBg->setCornerRadius(3.0f);
                 instBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
@@ -1094,12 +1188,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 instBar->setWidth(0.0f);
                 instBar->setHeight(6.0f);
                 instBar->setCornerRadius(3.0f);
-                instBar->setBackgroundColor(nvgRGB(33, 150, 243));
                 instBarBg->addView(instBar);
                 auto* instTxt = new brls::Label();
                 instTxt->setFontSize(10.0f);
                 instTxt->setMarginLeft(8.0f);
-                instTxt->setWidth(120.0f);
+                instTxt->setWidth(165.0f);
                 instTxt->setSingleLine(true);
                 instRow->addView(instLbl);
                 instRow->addView(instBarBg);
@@ -1108,22 +1201,29 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
                 rowBox->addView(progCol);
 
-                // 4. Component Elapsed Time Label
-                auto* compTimeLabel = new brls::Label();
-                compTimeLabel->setFontSize(12.0f);
-                compTimeLabel->setWidth(65.0f);
-                compTimeLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
-                compTimeLabel->setMarginRight(12.0f);
-                compTimeLabel->setSingleLine(true);
-                rowBox->addView(compTimeLabel);
+                // 2. Right Status & Time Column (fixed 155px, vertical stack)
+                auto* statusCol = new brls::Box();
+                statusCol->setAxis(brls::Axis::COLUMN);
+                statusCol->setAlignItems(brls::AlignItems::FLEX_END);
+                statusCol->setJustifyContent(brls::JustifyContent::CENTER);
+                statusCol->setWidth(155.0f);
 
-                // 5. Status Label
+                // Status Label
                 auto* compStatusLabel = new brls::Label();
                 compStatusLabel->setFontSize(12.0f);
-                compStatusLabel->setWidth(125.0f);
                 compStatusLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 compStatusLabel->setSingleLine(true);
-                rowBox->addView(compStatusLabel);
+                statusCol->addView(compStatusLabel);
+
+                // Elapsed Time Label
+                auto* compTimeLabel = new brls::Label();
+                compTimeLabel->setFontSize(10.0f);
+                compTimeLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
+                compTimeLabel->setSingleLine(true);
+                compTimeLabel->setMarginTop(2.0f);
+                statusCol->addView(compTimeLabel);
+
+                rowBox->addView(statusCol);
 
                 cell->componentsBox->addView(rowBox);
             }
@@ -1135,7 +1235,12 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             if (qidx >= queue.size()) continue;
             const auto& itm = queue[qidx];
             auto* rowBox = dynamic_cast<brls::Box*>(cell->componentsBox->getChildren()[i]);
-            if (!rowBox || rowBox->getChildren().size() < 6) continue;
+            if (!rowBox || rowBox->getChildren().size() < 3) continue;
+
+            auto* infoBox = dynamic_cast<brls::Box*>(rowBox->getChildren()[0]);
+            auto* progCol = dynamic_cast<brls::Box*>(rowBox->getChildren()[1]);
+            auto* statusCol = dynamic_cast<brls::Box*>(rowBox->getChildren()[2]);
+            if (!infoBox || !progCol || !statusCol) continue;
 
             bool isFailed = (itm.state == download::DownloadState::Failed || itm.state == download::DownloadState::Cancelled);
 
@@ -1149,18 +1254,26 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 rowBox->setBorderColor(compBorder);
             }
 
-            // 0. Badge
-            auto* bBox = dynamic_cast<brls::Box*>(rowBox->getChildren()[0]);
+            // 0. Info Box: Badge
+            auto* bBox = dynamic_cast<brls::Box*>(infoBox->getChildren()[0]);
             auto* bLabel = bBox ? dynamic_cast<brls::Label*>(bBox->getChildren()[0]) : nullptr;
             auto bStyle = getComponentBadgeStyle(itm.component_type, isLight);
             if (bBox && bLabel) {
                 bBox->setBackgroundColor(bStyle.bg);
-                bLabel->setText(!itm.component_label.empty() ? itm.component_label : bStyle.text);
+                std::string badgeText = itm.component_label;
+                if (badgeText.empty() || badgeText == "Игра" || badgeText == "Базовая игра") badgeText = "MAIN";
+                else if (badgeText == "Обновление" || badgeText == "Патч") badgeText = "UPD";
+                else if (badgeText == "DLC" || badgeText == "Дополнение") badgeText = "DLC";
+                else if (badgeText == "Русификатор" || badgeText == "Порт" || badgeText == "Файл" || badgeText == "Бандл") badgeText = "OTH";
+                else if (badgeText != "MAIN" && badgeText != "UPD" && badgeText != "DLC" && badgeText != "OTH") {
+                    badgeText = bStyle.text;
+                }
+                bLabel->setText(badgeText);
                 bLabel->setTextColor(bStyle.textCol);
             }
 
-            // 1. Name
-            auto* nameLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[1]);
+            // 0. Info Box: Name
+            auto* nameLabel = dynamic_cast<brls::Label*>(infoBox->getChildren()[1]);
             if (nameLabel) {
                 std::string cname = itm.component_name;
                 if (cname.empty()) {
@@ -1170,8 +1283,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 nameLabel->setTextColor(primaryText);
             }
 
-            // 2. SDK Warning Pill
-            auto* sdkPill = dynamic_cast<brls::Box*>(rowBox->getChildren()[2]);
+            // 0. Info Box: SDK Warning Pill
+            auto* sdkPill = dynamic_cast<brls::Box*>(infoBox->getChildren()[2]);
             if (sdkPill) {
                 if (itm.sdk_mismatch && itm.game_sdk.valid) {
                     sdkPill->setVisibility(brls::Visibility::VISIBLE);
@@ -1188,11 +1301,92 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 }
             }
 
-            // 3. Progress Col
-            auto* progCol = dynamic_cast<brls::Box*>(rowBox->getChildren()[3]);
-            if (progCol) {
-                auto* dlRow = dynamic_cast<brls::Box*>(progCol->getChildren()[0]);
-                auto* instRow = dynamic_cast<brls::Box*>(progCol->getChildren()[1]);
+            // Calculate component sizes
+            unsigned long long itm_dl_w = 0;
+            unsigned long long itm_dl_t = 0;
+            if (itm.hybrid_installer) {
+                itm_dl_w = itm.hybrid_installer->bytesDownloaded();
+                itm_dl_t = itm.hybrid_installer->downloadTotalBytes();
+                if (itm_dl_t == 0) itm_dl_t = itm.download_total_bytes;
+            } else if (itm.is_port_auto_install && itm.port_install_state) {
+                itm_dl_w = itm.port_install_state->dl_written.load();
+                itm_dl_t = itm.port_install_state->dl_total.load();
+                if (itm_dl_t == 0) itm_dl_t = itm.download_total_bytes;
+                if (itm_dl_w == 0 && itm.state == download::DownloadState::Completed) {
+                    itm_dl_w = itm_dl_t;
+                }
+            } else if (itm.file_dl_state) {
+                itm_dl_w = itm.file_dl_state->written.load();
+                itm_dl_t = itm.file_dl_state->total.load();
+                if (itm_dl_t == 0) itm_dl_t = itm.file_dl_state->size;
+                if (itm_dl_t == 0) itm_dl_t = itm.download_total_bytes;
+            } else {
+                itm_dl_t = itm.download_total_bytes > 0 ? itm.download_total_bytes : itm.install_total;
+                if (itm.state == download::DownloadState::Completed) {
+                    itm_dl_w = itm_dl_t;
+                } else if (itm.bytes_downloaded > 0) {
+                    itm_dl_w = itm.bytes_downloaded;
+                } else {
+                    float norm_prog = std::clamp(itm.progress, 0.0f, 1.0f);
+                    itm_dl_w = (itm_dl_t > 0) ? static_cast<unsigned long long>(static_cast<double>(itm_dl_t) * norm_prog) : 0;
+                }
+            }
+
+            unsigned long long itm_inst_w = 0;
+            unsigned long long itm_inst_t = 0;
+            if (itm.hybrid_installer) {
+                itm_inst_w = itm.hybrid_installer->bytesInstalled();
+                itm_inst_t = itm.hybrid_installer->totalBytes();
+            } else if (itm.is_port_auto_install && itm.port_install_state) {
+                itm_inst_w = itm.port_install_state->inst_written.load();
+                itm_inst_t = itm.port_install_state->inst_total.load();
+            } else {
+                itm_inst_w = itm.install_written;
+                itm_inst_t = itm.install_total;
+            }
+            if (itm.state == download::DownloadState::Completed && itm_inst_t > 0) {
+                itm_inst_w = itm_inst_t;
+            }
+
+            // 1. Progress Col
+            bool isActive = (itm.state == download::DownloadState::Downloading ||
+                             itm.state == download::DownloadState::StreamPreparing ||
+                             itm.state == download::DownloadState::StreamInstalling ||
+                             itm.state == download::DownloadState::Installing);
+
+            auto* summaryRow = dynamic_cast<brls::Box*>(progCol->getChildren()[0]);
+            auto* summaryTxt = summaryRow ? dynamic_cast<brls::Label*>(summaryRow->getChildren()[0]) : nullptr;
+            auto* dlRow = dynamic_cast<brls::Box*>(progCol->getChildren()[1]);
+            auto* instRow = dynamic_cast<brls::Box*>(progCol->getChildren()[2]);
+
+            if (!isActive) {
+                if (summaryRow) summaryRow->setVisibility(brls::Visibility::VISIBLE);
+                if (dlRow) dlRow->setVisibility(brls::Visibility::GONE);
+                if (instRow) instRow->setVisibility(brls::Visibility::GONE);
+
+                if (summaryTxt) {
+                    if (itm.state == download::DownloadState::Completed) {
+                        unsigned long long displaySize = (itm_inst_t > 0) ? itm_inst_t : itm_dl_t;
+                        summaryTxt->setText(displaySize > 0 ? formatBytes(displaySize) : "");
+                        summaryTxt->setTextColor(isLight ? nvgRGB(46, 125, 50) : nvgRGB(129, 199, 132));
+                    } else if (itm.state == download::DownloadState::Queued) {
+                        unsigned long long displaySize = (itm_dl_t > 0) ? itm_dl_t : itm_inst_t;
+                        summaryTxt->setText("app/downloads/state_queued"_i18n + (displaySize > 0 ? (" · " + formatBytes(displaySize)) : ""));
+                        summaryTxt->setTextColor(secondaryText);
+                    } else if (itm.state == download::DownloadState::Paused) {
+                        summaryTxt->setText("app/downloads/state_paused"_i18n + (itm_dl_t > 0 ? (" · " + formatProgressBytes(itm_dl_w, itm_dl_t)) : ""));
+                        summaryTxt->setTextColor(secondaryText);
+                    } else if (isFailed) {
+                        summaryTxt->setText(itm.error_message.empty() ? "app/downloads/state_failed"_i18n : itm.error_message);
+                        summaryTxt->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(244, 67, 54));
+                    } else {
+                        summaryTxt->setText(getStatusString(itm.state));
+                        summaryTxt->setTextColor(secondaryText);
+                    }
+                }
+            } else {
+                if (summaryRow) summaryRow->setVisibility(brls::Visibility::GONE);
+                if (dlRow) dlRow->setVisibility(brls::Visibility::VISIBLE);
 
                 // Download bar
                 if (dlRow) {
@@ -1201,24 +1395,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     auto* dlTxt = dynamic_cast<brls::Label*>(dlRow->getChildren()[2]);
 
                     float dl_prog = std::clamp(itm.progress, 0.0f, 1.0f);
-                    if (dlBar) dlBar->setWidth(dl_prog * 130.0f);
-
-                    unsigned long long itm_dl_w = 0;
-                    unsigned long long itm_dl_t = 0;
-                    if (itm.hybrid_installer) {
-                        itm_dl_w = itm.hybrid_installer->bytesDownloaded();
-                        itm_dl_t = itm.hybrid_installer->downloadTotalBytes();
-                    } else if (itm.file_dl_state) {
-                        itm_dl_w = itm.file_dl_state->written.load();
-                        itm_dl_t = itm.file_dl_state->total.load();
-                        if (itm_dl_t == 0) itm_dl_t = itm.file_dl_state->size;
-                    } else {
-                        itm_dl_t = itm.install_total;
-                        itm_dl_w = (itm_dl_t > 0) ? static_cast<unsigned long long>(static_cast<double>(itm_dl_t) * itm.progress) : 0;
-                    }
+                    if (dlBar) dlBar->setWidth(dl_prog * 110.0f);
 
                     char buf[64];
-                    std::snprintf(buf, sizeof(buf), "%d%% (%s)", static_cast<int>(dl_prog * 100.0f), formatBytes(itm_dl_w).c_str());
+                    if (itm_dl_t > 0) {
+                        std::snprintf(buf, sizeof(buf), "%d%% (%s)", static_cast<int>(dl_prog * 100.0f), formatProgressBytes(itm_dl_w, itm_dl_t).c_str());
+                    } else {
+                        std::snprintf(buf, sizeof(buf), "%d%% (%s)", static_cast<int>(dl_prog * 100.0f), formatBytes(itm_dl_w).c_str());
+                    }
                     if (dlTxt) {
                         dlTxt->setText(buf);
                         dlTxt->setTextColor(secondaryText);
@@ -1230,9 +1414,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     bool canInstall = (itm.state == download::DownloadState::StreamPreparing ||
                                        itm.state == download::DownloadState::StreamInstalling ||
                                        itm.state == download::DownloadState::Installing ||
-                                       itm.state == download::DownloadState::Completed ||
                                        (itm.is_port_auto_install && itm.install_total > 0));
-                    instRow->setVisibility(canInstall ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE);
+                    instRow->setVisibility(canInstall ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
                     if (canInstall) {
                         auto* instBarBg = dynamic_cast<brls::Box*>(instRow->getChildren()[1]);
@@ -1240,16 +1423,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                         auto* instTxt = dynamic_cast<brls::Label*>(instRow->getChildren()[2]);
 
                         float inst_prog = std::clamp(itm.install_progress, 0.0f, 1.0f);
-                        if (instBar) instBar->setWidth(inst_prog * 130.0f);
-
-                        unsigned long long itm_inst_w = itm.install_written;
-                        unsigned long long itm_inst_t = itm.install_total;
-                        if (itm_inst_t == 0 && itm.hybrid_installer) {
-                            itm_inst_t = itm.hybrid_installer->totalBytes();
-                        }
+                        if (instBar) instBar->setWidth(inst_prog * 110.0f);
 
                         char buf[64];
-                        std::snprintf(buf, sizeof(buf), "%d%% (%s)", static_cast<int>(inst_prog * 100.0f), formatBytes(itm_inst_w).c_str());
+                        if (itm_inst_t > 0) {
+                            std::snprintf(buf, sizeof(buf), "%d%% (%s)", static_cast<int>(inst_prog * 100.0f), formatProgressBytes(itm_inst_w, itm_inst_t).c_str());
+                        } else {
+                            std::snprintf(buf, sizeof(buf), "%d%% (%s)", static_cast<int>(inst_prog * 100.0f), formatBytes(itm_inst_w).c_str());
+                        }
                         if (instTxt) {
                             instTxt->setText(buf);
                             instTxt->setTextColor(secondaryText);
@@ -1258,35 +1439,25 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 }
             }
 
-            // 4. Component Elapsed Time Label
-            auto* compTimeLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[4]);
+            // 2. Right Status Col
+            auto* compStatusLabel = dynamic_cast<brls::Label*>(statusCol->getChildren()[0]);
+            if (compStatusLabel) {
+                std::string stStr = getStatusString(itm.state);
+                compStatusLabel->setText(stStr);
+                compStatusLabel->setTextColor(getDownloadStateColor(itm.state, isLight));
+            }
+
+            auto* compTimeLabel = dynamic_cast<brls::Label*>(statusCol->getChildren()[1]);
             if (compTimeLabel) {
                 int64_t itemSec = getItemElapsedSeconds(itm);
-                if (itemSec > 0) {
+                if (itemSec > 0 && itm.state != download::DownloadState::Queued) {
                     compTimeLabel->setText(formatElapsedSeconds(itemSec));
                     compTimeLabel->setTextColor(secondaryText);
                     compTimeLabel->setVisibility(brls::Visibility::VISIBLE);
                 } else {
                     compTimeLabel->setText("");
-                    compTimeLabel->setVisibility(brls::Visibility::INVISIBLE);
+                    compTimeLabel->setVisibility(brls::Visibility::GONE);
                 }
-            }
-
-            // 5. Status Label
-            auto* compStatusLabel = dynamic_cast<brls::Label*>(rowBox->getChildren()[5]);
-            if (compStatusLabel) {
-                std::string stStr = getStatusString(itm.state);
-                if (itm.state == download::DownloadState::Downloading) {
-                    char pbuf[16];
-                    std::snprintf(pbuf, sizeof(pbuf), " (%d%%)", static_cast<int>(itm.progress * 100.0f));
-                    stStr += pbuf;
-                } else if (itm.state == download::DownloadState::Installing || itm.state == download::DownloadState::StreamInstalling) {
-                    char pbuf[16];
-                    std::snprintf(pbuf, sizeof(pbuf), " (%d%%)", static_cast<int>(itm.install_progress * 100.0f));
-                    stStr += pbuf;
-                }
-                compStatusLabel->setText(stStr);
-                compStatusLabel->setTextColor(getDownloadStateColor(itm.state, isLight));
             }
         }
     } else {

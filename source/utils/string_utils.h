@@ -113,8 +113,8 @@ namespace util {
     }
 
     struct ComponentClassification {
-        int type = 0;              // 0: Base, 1: Update, 2: DLC, 3: Mod/Extra, 4: Other
-        std::string label;         // "Игра", "Обновление", "DLC", "Русификатор", "Мод"
+        int type = 0;              // 0: Base (MAIN), 1: Update (UPD), 2: DLC (DLC), 3: Mod/Extra (OTH)
+        std::string label;         // "MAIN", "UPD", "DLC", "OTH"
         std::string cleanName;     // Clean, human-readable name without repeating the game title or Atmosphere paths
     };
 
@@ -135,17 +135,7 @@ namespace util {
 
         if (!is_package) {
             res.type = 3;
-            if (lower.find("rus") != std::string::npos || lower.find("русиф") != std::string::npos ||
-                lower.find("русс") != std::string::npos || lower.find("voice") != std::string::npos ||
-                lower.find("sound") != std::string::npos || lower.find("озвуч") != std::string::npos ||
-                lower.find("перевод") != std::string::npos) {
-                res.label = "Русификатор";
-            } else if (lower.find("mod") != std::string::npos || lower.find("atmosphere") != std::string::npos ||
-                       lower.find("romfs") != std::string::npos || lower.find("exefs") != std::string::npos) {
-                res.label = "Мод";
-            } else {
-                res.label = "Доп. файлы";
-            }
+            res.label = "OTH";
 
             // Find best human-readable directory or file name
             // e.g. "TMNT/Russian Text + Voice Mod (27.11.2024)/atmosphere/..."
@@ -174,67 +164,144 @@ namespace util {
             return res;
         }
 
-        // Package parsing
-        // Check for DLC
-        size_t dlc_pos = filename.find("[DLC");
-        if (dlc_pos == std::string::npos) dlc_pos = filename.find("(DLC");
-        if (dlc_pos != std::string::npos) {
-            res.type = 2;
-            res.label = "DLC";
-            size_t close_bracket = filename.find_first_of("])", dlc_pos);
-            if (close_bracket != std::string::npos) {
-                std::string dlc_str = filename.substr(dlc_pos + 1, close_bracket - dlc_pos - 1);
-                if (dlc_str.find("DLC") == 0) {
-                    dlc_str = dlc_str.substr(3);
-                    while (!dlc_str.empty() && (dlc_str.front() == ' ' || dlc_str.front() == ':' || dlc_str.front() == '-')) {
-                        dlc_str.erase(dlc_str.begin());
+        // --- Package (.nsp, .nsz, .xci, .xcz) classification ---
+
+        // 1. Check for 16-character hexadecimal Title ID in filename
+        uint64_t tid = 0;
+        for (size_t i = 0; i < filename.size(); ++i) {
+            if (filename[i] == '[' || filename[i] == '(') {
+                size_t closePos = filename.find(filename[i] == '[' ? ']' : ')', i + 1);
+                if (closePos != std::string::npos && (closePos - i - 1 == 16)) {
+                    std::string hexStr = filename.substr(i + 1, 16);
+                    bool isHex = true;
+                    for (char c : hexStr) {
+                        if (!std::isxdigit(static_cast<unsigned char>(c))) { isHex = false; break; }
+                    }
+                    if (isHex) {
+                        try {
+                            tid = std::stoull(hexStr, nullptr, 16);
+                            break;
+                        } catch (...) {}
                     }
                 }
-                res.cleanName = dlc_str.empty() ? filename : dlc_str;
+            }
+        }
+
+        // 2. Check explicit base game markers (v0, Base, v1.0.0)
+        bool is_explicit_base = (
+            lower.find("[v0]") != std::string::npos ||
+            lower.find("(v0)") != std::string::npos ||
+            lower.find("[v0.") != std::string::npos ||
+            lower.find("(v0.") != std::string::npos ||
+            lower.find("_v0.") != std::string::npos ||
+            lower.find("_v0_") != std::string::npos ||
+            lower.find(" v0 ") != std::string::npos ||
+            lower.find(" v0.") != std::string::npos ||
+            lower.find(" v0]") != std::string::npos ||
+            lower.find("[base]") != std::string::npos ||
+            lower.find("(base)") != std::string::npos ||
+            lower.find("_base_") != std::string::npos ||
+            lower.find("[base game]") != std::string::npos ||
+            lower.find("(base game)") != std::string::npos ||
+            lower.find("[v1.0.0]") != std::string::npos ||
+            lower.find("(v1.0.0)") != std::string::npos ||
+            lower.find("[v1.0]") != std::string::npos
+        );
+
+        // 3. Nintendo Switch Title ID type mask:
+        //    (tid & 0xFFF) == 0      -> Application (Base game)
+        //    (tid & 0xFFF) == 0x800  -> Patch (Update)
+        //    Otherwise               -> AddOnContent (DLC)
+        bool is_base_tid = (tid != 0 && (tid & 0xFFFULL) == 0);
+        bool is_patch_tid = (tid != 0 && (tid & 0xFFFULL) == 0x800ULL);
+        bool is_dlc_tid = (tid != 0 && !is_base_tid && !is_patch_tid);
+
+        // Explicit DLC checks by name
+        bool is_dlc_name = (lower.find("[dlc") != std::string::npos ||
+                            lower.find("(dlc") != std::string::npos ||
+                            lower.find(" dlc ") != std::string::npos ||
+                            lower.find("[addon") != std::string::npos);
+
+        // Priority 1: DLC (by Title ID or explicit DLC in name)
+        // Switch DLC Title IDs have (tid & 0xFFF) != 0 and != 0x800. Even if DLC is v0, it is DLC.
+        if (is_dlc_name || is_dlc_tid) {
+            res.type = 2;
+            res.label = "DLC";
+            size_t dlc_pos = filename.find("[DLC");
+            if (dlc_pos == std::string::npos) dlc_pos = filename.find("(DLC");
+            if (dlc_pos == std::string::npos) dlc_pos = filename.find("[dlc");
+            if (dlc_pos == std::string::npos) dlc_pos = filename.find("(dlc");
+
+            if (dlc_pos != std::string::npos) {
+                size_t close_bracket = filename.find_first_of("])", dlc_pos);
+                if (close_bracket != std::string::npos) {
+                    std::string dlc_str = filename.substr(dlc_pos + 1, close_bracket - dlc_pos - 1);
+                    if (toLowerUtf8(dlc_str).find("dlc") == 0) {
+                        dlc_str = dlc_str.substr(3);
+                        while (!dlc_str.empty() && (dlc_str.front() == ' ' || dlc_str.front() == ':' || dlc_str.front() == '-')) {
+                            dlc_str.erase(dlc_str.begin());
+                        }
+                    }
+                    res.cleanName = dlc_str.empty() ? filename : dlc_str;
+                } else {
+                    res.cleanName = filename;
+                }
+            } else if (tid != 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "DLC %016llX", (unsigned long long)tid);
+                res.cleanName = buf;
             } else {
                 res.cleanName = filename;
             }
             return res;
         }
 
-        // Check for Update / Patch
+        // Priority 2: Patch / Update by Title ID (ends in 0x800)
+        if (is_patch_tid) {
+            res.type = 1;
+            res.label = "UPD";
+            res.cleanName = "Патч";
+            return res;
+        }
+
+        // Priority 3: Base Game
+        // Either explicit base marker (e.g. [v0]) or Base Title ID (ends in 0x000)
+        if (is_base_tid || is_explicit_base) {
+            res.type = 0;
+            res.label = "MAIN";
+            res.cleanName = "Базовая игра [v0]";
+            return res;
+        }
+
+        // Check for Update / Patch (v > 0)
         size_t v_pos = filename.find("[v");
         if (v_pos == std::string::npos) v_pos = filename.find("(v");
+        if (v_pos == std::string::npos) v_pos = filename.find("[V");
+        if (v_pos == std::string::npos) v_pos = filename.find("(V");
+
         if (v_pos != std::string::npos) {
             size_t close_bracket = filename.find_first_of("])", v_pos);
             std::string v_str = (close_bracket != std::string::npos) ? filename.substr(v_pos + 1, close_bracket - v_pos - 1) : "";
-            if (v_str != "v0" && v_str != "v0.0") {
+            std::string lower_v = toLowerUtf8(v_str);
+            if (lower_v != "v0" && lower_v != "v0.0" && lower_v != "v1.0.0" && lower_v != "v1.0") {
                 res.type = 1;
-                res.label = "Обновление";
+                res.label = "UPD";
                 res.cleanName = "Патч " + v_str;
                 return res;
             }
         }
 
-        // Check title ID if available
-        size_t tid_pos = filename.find("[0100");
-        if (tid_pos != std::string::npos && tid_pos + 20 < filename.size()) {
-            std::string tid_str = filename.substr(tid_pos + 1, 16);
-            if (tid_str.size() == 16) {
-                std::string end_tid = tid_str.substr(12, 4);
-                std::string lp = toLowerCopy(end_tid);
-                if (lp == "0800") {
-                    res.type = 1;
-                    res.label = "Обновление";
-                    res.cleanName = "Патч";
-                    return res;
-                } else if (lp != "0000") {
-                    res.type = 2;
-                    res.label = "DLC";
-                    res.cleanName = "Дополнение " + tid_str;
-                    return res;
-                }
-            }
+        if (is_patch_tid || lower.find("[upd") != std::string::npos || lower.find("(upd") != std::string::npos ||
+            lower.find("[patch") != std::string::npos || lower.find("(patch") != std::string::npos) {
+            res.type = 1;
+            res.label = "UPD";
+            res.cleanName = "Патч";
+            return res;
         }
 
         // Default: Base Game
         res.type = 0;
-        res.label = "Игра";
+        res.label = "MAIN";
         res.cleanName = "Базовая игра [v0]";
         return res;
     }

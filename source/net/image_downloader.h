@@ -10,6 +10,8 @@
 #include <atomic>
 #include <memory>
 #include <unordered_set>
+#include <unordered_map>
+#include <chrono>
 
 namespace net {
 
@@ -24,6 +26,7 @@ struct ImageTask {
     int row = -1;
     int col = -1;
     int priorityOverride = 0;
+    int retryCount = 0;
 };
 
 /// Синглтон очереди скачивания изображений с ограничением параллелизма.
@@ -87,6 +90,17 @@ private:
                          int col,
                          int priorityOverride);
 
+    struct HostCooldownInfo {
+        std::chrono::steady_clock::time_point until;
+        int consecutiveFails = 0;
+    };
+
+    bool isHostInCooldown(const std::string& host, bool& isHardCooldown, std::chrono::steady_clock::time_point& until);
+    bool isHostInCooldown(const std::string& host);
+    void markHostFailed(const std::string& host);
+    void markHostSuccess(const std::string& host);
+    static std::string extractHost(const std::string& url);
+
     std::vector<std::thread> workers_;
     std::deque<ImageTask> tasks_;
     std::mutex queueMutex_;
@@ -97,6 +111,9 @@ private:
     std::atomic<int> currentFocusedCol_{-1};
     std::atomic<bool> needsSort_{false};
     ActiveCheckFn activeCheck_;
+
+    std::mutex failedHostsMutex_;
+    std::unordered_map<std::string, HostCooldownInfo> failedHosts_;
 };
 
 } // namespace net

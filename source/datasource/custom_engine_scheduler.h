@@ -66,16 +66,22 @@ public:
             cfg.normal_pieces      = 6;
         } else if (piece_size >= 8 * 1024 * 1024) {
             cfg.critical_pieces    = 1;
-            cfg.urgent_pieces      = 1;
-            cfg.prefetch_pieces    = 3;
+            cfg.urgent_pieces      = 2;
+            cfg.prefetch_pieces    = 4;
             cfg.speculative_pieces = 4;
             cfg.normal_pieces      = 8;
+        } else if (piece_size >= 4 * 1024 * 1024) {
+            cfg.critical_pieces    = 1;
+            cfg.urgent_pieces      = 2;
+            cfg.prefetch_pieces    = 8;
+            cfg.speculative_pieces = 8;
+            cfg.normal_pieces      = 14;
         } else {
             cfg.critical_pieces    = 1;
-            cfg.urgent_pieces      = 1;
-            cfg.prefetch_pieces    = 4;
-            cfg.speculative_pieces = 5;
-            cfg.normal_pieces      = 14;
+            cfg.urgent_pieces      = 2;
+            cfg.prefetch_pieces    = 10;
+            cfg.speculative_pieces = 10;
+            cfg.normal_pieces      = 16;
         }
         return cfg;
     }

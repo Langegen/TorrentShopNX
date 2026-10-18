@@ -17,6 +17,7 @@
 #include "listen.h"
 #include "upnp.h"
 #include "engine_log.h"
+#include "magnet.h"
 #include "../utils/app_paths.h"
 
 #define MAX_TORRENTS 8
@@ -295,6 +296,28 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
     eng = active_engine(eng);
     if (!eng || !magnet_uri || !out_hash || out_hash_len < TSNX_MAX_HASH_LEN + 1)
         return false;
+
+    // Fast-path: check if this magnet hash is already registered in the engine
+    magnet_info minfo;
+    if (magnet_parse(magnet_uri, &minfo, err, sizeof(err)) == 0) {
+        char parsed_hex[TSNX_MAX_HASH_LEN + 1];
+        bin_to_hex(minfo.info_hash, parsed_hex, 40);
+        magnet_free(&minfo);
+        tsnx_torrent *existing = find_by_hash(eng, parsed_hex);
+        if (existing) {
+            snprintf(out_hash, out_hash_len, "%s", existing->hash);
+            if (!meta_only && !existing->fs) {
+                existing->cancel = cancel;
+                existing->file_index = file_index;
+                existing->fs = torrentfs_open_file_cancel(magnet_uri,
+                                                          TSNX_TORRENTFS_CACHE,
+                                                          file_index, cancel, err, sizeof(err));
+                if (!existing->fs) return false;
+            }
+            return true;
+        }
+    }
+
     slot = find_slot(eng);
     if (!slot) return false;
     if (torrent_load_magnet_cancel(&slot->meta, magnet_uri, cancel,

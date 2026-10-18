@@ -52,12 +52,23 @@ struct PortInstallProgressState {
     std::atomic<unsigned long long> written{0};
     std::atomic<unsigned long long> total{0};
     std::atomic<float> progress{0.0f};
+
+    // Отдельный трекинг загрузки и распаковки/установки для портов
+    std::atomic<unsigned long long> dl_written{0};
+    std::atomic<unsigned long long> dl_total{0};
+    std::atomic<float> dl_progress{0.0f};
+
+    std::atomic<unsigned long long> inst_written{0};
+    std::atomic<unsigned long long> inst_total{0};
+    std::atomic<float> inst_progress{0.0f};
+
     std::atomic<bool> done{false};
     std::atomic<bool> failed{false};
     std::mutex msg_mutex;
     std::string error;
     std::string stage_label;
     std::string current_file;
+    std::shared_ptr<installer::PortInstallPlan> resolved_plan;
 };
 
 struct DownloadItem {
@@ -78,6 +89,10 @@ struct DownloadItem {
     int peers = 0;
     int known_peers = 0;
     int dht = 0;
+
+    // Сохранение точных размеров загрузки и установки
+    unsigned long long download_total_bytes = 0;
+    unsigned long long bytes_downloaded = 0;
 
     // Гибридный инсталлятор (новый режим)
     std::shared_ptr<installer::HybridNspInstaller> hybrid_installer;
