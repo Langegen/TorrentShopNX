@@ -174,6 +174,12 @@ void ImageDownloader::resume() {
     util::logLine("ImageDownloader: resumed");
 }
 
+static bool isKnownBlockedHost(const std::string& host) {
+    if (host.empty()) return false;
+    return (host.find(".nintendo.net") != std::string::npos ||
+            host.find(".nintendo.com") != std::string::npos);
+}
+
 std::string ImageDownloader::extractHost(const std::string& url) {
     if (url.empty()) return "";
     size_t start = 0;
@@ -193,6 +199,11 @@ std::string ImageDownloader::extractHost(const std::string& url) {
 bool ImageDownloader::isHostInCooldown(const std::string& host, bool& isHardCooldown, std::chrono::steady_clock::time_point& until) {
     isHardCooldown = false;
     if (host.empty()) return false;
+    if (isKnownBlockedHost(host)) {
+        isHardCooldown = true;
+        until = std::chrono::steady_clock::now() + std::chrono::hours(24);
+        return true;
+    }
     std::lock_guard<std::mutex> lock(failedHostsMutex_);
     auto it = failedHosts_.find(host);
     if (it == failedHosts_.end()) return false;
@@ -221,12 +232,12 @@ void ImageDownloader::markHostFailed(const std::string& host) {
     auto& entry = failedHosts_[host];
     entry.consecutiveFails++;
     // Transient failure: short cooldown 2s (or 3s on 2nd fail).
-    // Hard failure (3+ consecutive fails): host is confirmed dead/blocked (e.g. 90DNS), cooldown 30s.
+    // Hard failure (3+ consecutive fails): host is confirmed dead/blocked (e.g. 90DNS), cooldown 1 hour.
     int cooldownSec = 2;
     if (entry.consecutiveFails == 2) {
         cooldownSec = 3;
     } else if (entry.consecutiveFails >= 3) {
-        cooldownSec = 30;
+        cooldownSec = 3600;
     }
     entry.until = std::chrono::steady_clock::now() + std::chrono::seconds(cooldownSec);
     util::logLine("ImageDownloader: marked host " + host + " in cooldown for " +
@@ -694,8 +705,8 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
         }
 
         // If it was a network timeout / connection error (code == 0) and we haven't exhausted retries,
-        // retry the task instead of giving up immediately and setting a placeholder
-        if (res.status_code == 0 && task.retryCount < 2) {
+        // retry the task instead of giving up immediately and setting a placeholder (skip retrying known blocked hosts)
+        if (res.status_code == 0 && !isKnownBlockedHost(host) && task.retryCount < 2) {
             ImageTask retryTask = task;
             retryTask.retryCount++;
             util::logLine("ImageDownloader: transient error for " + task.url + ", will retry (attempt " +

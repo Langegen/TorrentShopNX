@@ -61,27 +61,27 @@ public:
         if (piece_size >= 16 * 1024 * 1024) {
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 1;
-            cfg.prefetch_pieces    = 3;
-            cfg.speculative_pieces = 3;
-            cfg.normal_pieces      = 6;
+            cfg.prefetch_pieces    = 2;
+            cfg.speculative_pieces = 1;
+            cfg.normal_pieces      = 0;
         } else if (piece_size >= 8 * 1024 * 1024) {
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 2;
-            cfg.prefetch_pieces    = 4;
-            cfg.speculative_pieces = 4;
-            cfg.normal_pieces      = 8;
+            cfg.prefetch_pieces    = 3;
+            cfg.speculative_pieces = 1;
+            cfg.normal_pieces      = 0;
         } else if (piece_size >= 4 * 1024 * 1024) {
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 2;
-            cfg.prefetch_pieces    = 8;
-            cfg.speculative_pieces = 8;
-            cfg.normal_pieces      = 14;
+            cfg.prefetch_pieces    = 4;
+            cfg.speculative_pieces = 2;
+            cfg.normal_pieces      = 0;
         } else {
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 2;
-            cfg.prefetch_pieces    = 10;
-            cfg.speculative_pieces = 10;
-            cfg.normal_pieces      = 16;
+            cfg.prefetch_pieces    = 6;
+            cfg.speculative_pieces = 3;
+            cfg.normal_pieces      = 0;
         }
         return cfg;
     }

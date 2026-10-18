@@ -336,6 +336,7 @@ struct torrentfs {
     Mutex lock;
     uint8_t *status;
     uint8_t *piece_zone;       // scheduler-assigned zone per piece (0 = none)
+    bool has_custom_zones;     // true when an external scheduler has configured piece zones
     int64_t pieces_done;       // currently resident (RAM window) / on disk (SD)
     int64_t pieces_ever;       // distinct pieces ever completed: monotonic, for UI
     uint8_t *ever;             // one bit per piece, already counted in pieces_ever
@@ -1561,6 +1562,11 @@ static int piece_priority(torrentfs *t, int64_t idx) {
     }
     int z = t->piece_zone[idx];
     if (z != 0) return z;
+    if (t->has_custom_zones) {
+        // When an external scheduler has defined the active window, any unzoned
+        // piece outside that window is NOT wanted right now (prevents out-of-order downloads).
+        return 0;
+    }
     if (is_critical(t, idx))
         return idx < t->file_first_piece + t->crit_head ? 1 : 2;
     int64_t d = idx - ph;
@@ -1581,7 +1587,8 @@ static int piece_priority(torrentfs *t, int64_t idx) {
 // so fast peers are never bottlenecked by static initial floors.
 static int nominal_depth(torrentfs *t, sess *s) {
     if (s->nb.choked) return REQ_MIN;
-    if (s->timeout_strikes >= 3) return REQ_MIN;
+    bool is_seed = peer_is_seed(t, s);
+    if (!is_seed && s->timeout_strikes >= 3) return REQ_MIN;
     if (s->expect_ticks <= t->freq) return (t->st_live <= 2) ? 48 : REQ_INITIAL;
 
     double rate_bps = (s->rate > 0) ? (s->rate / (double)BLOCK_LEN) : 0.0;
@@ -1596,7 +1603,10 @@ static int nominal_depth(torrentfs *t, sess *s) {
     // Bandwidth-Delay Product: target ~2.0s of throughput buffer (up to 256 blocks = 4 MB)
     int d = (int)(blocks_per_sec * 2.0);
     int floor_d;
-    if (s->timeout_strikes == 2) {
+    if (is_seed) {
+        // Full seeds have 100% data: never choke floor below REQ_INITIAL
+        floor_d = REQ_INITIAL;
+    } else if (s->timeout_strikes == 2) {
         floor_d = REQ_MIN * 2;
     } else if (s->timeout_strikes == 1 || stalling) {
         floor_d = REQ_INITIAL / 2;
@@ -1636,11 +1646,14 @@ static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
     for (int i = 0; i < MAX_SESS; i++) {
         const sess *os = &t->S[i];
         if (!os->active || os->connecting || !os->nb.handshaked) continue;
-        if (sess_has_req(os, (int)piece_idx, b)) {
-            total++;
-            if (os->timeout_strikes == 0 &&
-                (os->last_block == 0 || now - os->last_block <= (u64)4 * t->freq)) {
-                healthy++;
+        for (int k = 0; k < os->req_n; k++) {
+            if (os->req_piece[k] == (int)piece_idx && os->req_block[k] == b) {
+                total++;
+                if (os->timeout_strikes == 0 &&
+                    (os->req_time[k] == 0 || now - os->req_time[k] <= (u64)2500 * (t->freq / 1000))) {
+                    healthy++;
+                }
+                break;
             }
         }
     }
@@ -1650,7 +1663,7 @@ static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
 
 // Find the next block of piece idx this session may request.
 // Critical stream-head pieces (current playback head and next piece, or read_blocked)
-// and endgame pieces use aggressive Adaptive Hedging (up to 2-4 duplicate requests)
+// and endgame pieces use aggressive Adaptive Hedging (up to 4 duplicate requests)
 // with short hedge timeouts so slow peers never stall the installer.
 static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int zone) {
     bool is_critical = (zone <= 2) || (t->read_blocked_piece == a->idx) ||
@@ -1661,14 +1674,13 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
                        (is_critical && remaining_blocks > 0 && remaining_blocks <= 64);
 
     int max_dup = 1; // Default for background readahead pieces: 1 request
-    if (is_endgame) {
-        max_dup = 4;
-    } else if (is_critical) {
-        max_dup = 2; // Critical stream-head piece: hedge with 2 copies
+    if (is_endgame || is_critical) {
+        max_dup = 4; // Critical stream-head piece or endgame: hedge with up to 4 copies
     }
 
     // Adaptive hedge timeout: 500ms in endgame/tail of head piece, 1000ms for critical stream head
-    u64 hedge_timeout_ticks = is_endgame ? (t->freq / 2) : ((u64)DUP_REQ_SECS * t->freq);
+    u64 hedge_timeout_ticks = (is_endgame || (is_critical && remaining_blocks <= 64))
+                              ? (t->freq / 2) : ((u64)DUP_REQ_SECS * t->freq);
 
     for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
@@ -1680,12 +1692,12 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
 
         // If duplicate requests are disabled for this piece tier:
         if (max_dup <= 1) {
-            // For background pieces, steal if the existing request has stalled > 2.5s
+            // For background pieces, steal/hedge if the existing request has stalled > 2.5s
             if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000)) {
                 uint8_t actual_r = 0;
                 int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
                 a->req[b] = actual_r;
-                if (actual_r == 0 || healthy == 0)
+                if (actual_r < 2 || healthy == 0)
                     return b;
             }
             continue;
@@ -1695,8 +1707,8 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
         if (now - a->req_ts[b] <= hedge_timeout_ticks) continue;
         if (r < max_dup) return b;
 
-        // If r reached max_dup, check if existing holders are actually stalled (> 2.5s)
-        if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000)) {
+        // If r reached max_dup, check if existing holders are actually stalled (> 2.0s)
+        if (now - a->req_ts[b] > (u64)2000 * (t->freq / 1000)) {
             uint8_t actual_r = 0;
             int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
             a->req[b] = actual_r;
@@ -1771,8 +1783,10 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
 static void request_scan(torrentfs *t, sess *s, u64 now) {
     if (!s->nb.handshaked || s->connecting || s->nb.choked) return;
     if (t->paused) return;
-    // Prune any stale requests for pieces that already finished or blocks already held
+    // Prune any stale requests for pieces that already finished or blocks already held,
+    // or requests that timed out (> 4.0s)
     int kept = 0;
+    u64 req_timeout_ticks = (u64)4000 * (t->freq / 1000);
     for (int i = 0; i < s->req_n; i++) {
         int ep = s->req_piece[i];
         int eb = s->req_block[i];
@@ -1780,8 +1794,15 @@ static void request_scan(torrentfs *t, sess *s, u64 now) {
                       t->status[ep] == PIECE_DONE || t->status[ep] == PIECE_WRITING);
         if (!stale) {
             aq_entry *ea = aq_find(t, ep);
-            if (!ea || eb < 0 || eb >= ea->nblocks || ea->have[eb])
+            if (!ea || eb < 0 || eb >= ea->nblocks || ea->have[eb]) {
                 stale = true;
+            } else if (s->req_time[i] > 0 && (now - s->req_time[i] > req_timeout_ticks)) {
+                // Individual block request timed out (> 4.0s): release lock on block
+                if (ea->req[eb] > 0 && ea->req[eb] < 255)
+                    ea->req[eb]--;
+                send_cancel_one(t, s, ep, eb);
+                stale = true;
+            }
         }
         if (!stale) {
             if (kept != i) {
@@ -2211,9 +2232,8 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 break;
             }
             if (matched == 0 && a->req[b] == 0) {
-                // Ghost-block rejection: never accept unsolicited blocks when no request was pending
+                // Late arrival of an expired request: accept it since piece is actively assembling and block is needed
                 t->st_dup_noring += dlen;
-                break;
             }
             memcpy(a->buf + begin, pl + 8, dlen);
             if (a->peer_from && b < a->nblocks) {
@@ -2708,10 +2728,11 @@ static void netloop_main(void *arg) {
                 }
                 bool scarce_swarm = (t->st_live <= 2 || t->peer_count <= 2);
                 if (!s->connecting && age > (u64)IDLE_SECS * t->freq) {
-                    if (scarce_swarm || (is_seed && s->timeout_strikes < 4)) {
+                    if (scarce_swarm || is_seed) {
                         // Do not close unique seeds or peers on starved swarms on idle
                         s->last_rx = now;
-                        if (s->timeout_strikes < 255) s->timeout_strikes++;
+                        if (s->timeout_strikes < 2) s->timeout_strikes++;
+                        else s->timeout_strikes = 1;
                         sess_drop_requests(t, s);
                         peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
                         engine_log(ENGINE_LOG_DEBUG, "[sess %d] idle on scarce swarm / seed: renew interested", i);
@@ -2733,11 +2754,16 @@ static void netloop_main(void *arg) {
                     bool urgent_or_endgame = (t->read_blocked_piece >= 0) ||
                                             (t->file_last_piece - t->playhead_piece <= 4) ||
                                             (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
-                    if (scarce_swarm || (is_seed && s->timeout_strikes < 4)) {
-                        // On a scarce swarm or with a full seed (up to 4 strikes), keep connection alive,
-                        // record strike so nominal_depth throttles to REQ_MIN until a block lands,
-                        // and drop held requests so healthy peers can fetch the missing blocks.
-                        if (s->timeout_strikes < 255) s->timeout_strikes++;
+                    if (scarce_swarm || is_seed) {
+                        // On a scarce swarm or with a full seed, NEVER disconnect on strikes!
+                        // A seed holds 100% of the torrent data; dropping the TCP connection only forces
+                        // expensive re-connects. Drop pending requests so blocks can be fetched elsewhere,
+                        // clamp strikes so nominal_depth stays responsive, and refresh INTERESTED.
+                        if (s->timeout_strikes < 2) {
+                            s->timeout_strikes++;
+                        } else {
+                            s->timeout_strikes = 1;
+                        }
                         s->last_block = now;
                         sess_drop_requests(t, s);
                         peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
@@ -3808,6 +3834,7 @@ bool torrentfs_set_piece_zone(torrentfs *tfs, int64_t first_piece,
     mutexLock(&tfs->lock);
     for (int64_t i = 0; i < piece_count; i++)
         tfs->piece_zone[first_piece + i] = (uint8_t)zone;
+    if (zone > 0) tfs->has_custom_zones = true;
     mutexUnlock(&tfs->lock);
     engine_log(ENGINE_LOG_DEBUG, "[zone] set first=%lld count=%lld zone=%d",
                (long long)first_piece, (long long)piece_count, zone);
@@ -3818,6 +3845,7 @@ bool torrentfs_clear_piece_zones(torrentfs *tfs) {
     if (!tfs->piece_zone) return false;
     mutexLock(&tfs->lock);
     memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
+    tfs->has_custom_zones = false;
     mutexUnlock(&tfs->lock);
     return true;
 }
