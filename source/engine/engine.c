@@ -566,7 +566,10 @@ bool tsnx_engine_prepare_stream(tsnx_engine *eng, const char *hash,
     t = find_by_hash(eng, hash);
     if (!t) return false;
     if (file_index < 0 || file_index >= t->meta.file_count) return false;
-    if (t->file_index == file_index && t->fs) return true;
+    if (t->file_index == file_index && t->fs) {
+        torrentfs_resume_reader(t->fs);
+        return true;
+    }
 
     /* If stream is already open for this torrent, switch files seamlessly without dropping peers. */
     if (t->fs && torrentfs_select_file(t->fs, file_index)) {
@@ -606,6 +609,13 @@ void tsnx_engine_cancel_read(tsnx_engine *eng, const char *hash) {
     (void)eng;
     tsnx_torrent *t = find_by_hash(eng, hash);
     if (t && t->fs) torrentfs_cancel_reader(t->fs);
+}
+
+void tsnx_engine_resume_reader(tsnx_engine *eng, const char *hash) {
+    eng = active_engine(eng);
+    (void)eng;
+    tsnx_torrent *t = find_by_hash(eng, hash);
+    if (t && t->fs) torrentfs_resume_reader(t->fs);
 }
 
 void tsnx_engine_set_min_keep_offset(tsnx_engine *eng, const char *hash,

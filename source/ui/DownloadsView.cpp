@@ -1239,6 +1239,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 instBar->setWidth(0.0f);
                 instBar->setHeight(6.0f);
                 instBar->setCornerRadius(3.0f);
+                instBar->setBackgroundColor(isLight ? nvgRGB(25, 118, 210) : nvgRGB(33, 150, 243));
                 instBarBg->addView(instBar);
                 auto* instTxt = new brls::Label();
                 instTxt->setFontSize(10.0f);
