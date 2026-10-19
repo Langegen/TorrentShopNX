@@ -33,6 +33,7 @@ static const std::string FONT_CHINESE_TRADITIONAL    = "zh-Hant"; // Traditional
 static const std::string FONT_MATERIAL_ICONS         = "material"; // Material icons font
 static const std::string FONT_SWITCH_ICONS           = "switch"; // Switch icons font (see the HOS shared symbols font for an example)
 static const std::string FONT_EMOJI                  = "emoji";
+static const std::string FONT_ARABIC                 = "arabic"; // Arabic font
 
 typedef std::unordered_map<std::string, int> FontStash;
 
@@ -42,6 +43,7 @@ class FontLoader
   public:
     inline static std::string USER_FONT_PATH = BRLS_ASSET("font/font.ttf");
     inline static std::string USER_ICON_PATH = BRLS_ASSET("font/icon.ttf");
+    inline static std::string USER_ARABIC_FONT_PATH = BRLS_ASSET("font/arabic_font.ttf");
     inline static std::string USER_EMOJI_PATH;
 
     virtual ~FontLoader() { }

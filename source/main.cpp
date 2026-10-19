@@ -16,6 +16,7 @@
 #include <fstream>
 #include <vector>
 #include <borealis.hpp>
+#include <nanovg.h>
 
 #if __has_include(<curl/curl.h>)
 #include <curl/curl.h>
@@ -428,6 +429,7 @@ int main(int argc, char** argv) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
     }
+
     // Snappy focus highlight and smooth scrolling transitions (down from sluggish 200ms default)
     brls::getStyle().addMetric("brls/animations/highlight", 100.0f);
 
@@ -443,6 +445,55 @@ int main(int argc, char** argv) {
     });
 
     brls::Application::createWindow("TorrentShopNX");
+
+    // Ensure Arabic fallback font is registered with NVG (requires window and NVG context to exist)
+    {
+        NVGcontext* vg = brls::Application::getNVGContext();
+        int baseFont = brls::Application::getFont(brls::FONT_REGULAR);
+        int arFont = brls::Application::getFont("arabic");
+
+        if (vg && baseFont != brls::FONT_INVALID) {
+            if (arFont == brls::FONT_INVALID) {
+                std::vector<std::string> candidateArabicPaths = {
+                    "sdmc:/switch/TorrentShopNX/font/arabic.ttf",
+                    "sdmc:/switch/TorrentShopNX/arabic.ttf",
+#ifdef __SWITCH__
+                    "romfs:/font/arabic_font.ttf"
+#else
+                    "resources/font/arabic_font.ttf",
+                    "build_pc/resources/font/arabic_font.ttf"
+#endif
+                };
+
+#if defined(_WIN32)
+                const char* winDir = getenv("SystemRoot");
+                std::string winFonts = (winDir ? std::string(winDir) : "C:\\Windows") + "\\Fonts\\";
+                candidateArabicPaths.push_back(winFonts + "tahoma.ttf");
+                candidateArabicPaths.push_back(winFonts + "arial.ttf");
+                candidateArabicPaths.push_back(winFonts + "seguiui.ttf");
+#endif
+
+                for (const auto& path : candidateArabicPaths) {
+                    if (access(path.c_str(), F_OK) != -1) {
+                        if (brls::Application::loadFontFromFile("arabic", path)) {
+                            arFont = brls::Application::getFont("arabic");
+                            if (arFont != brls::FONT_INVALID) {
+                                util::logLine("main: loaded Arabic font from: " + path);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (arFont != brls::FONT_INVALID) {
+                nvgAddFallbackFontId(vg, baseFont, arFont);
+                util::logLine("main: registered Arabic fallback font");
+            } else {
+                util::logLine("main: warning - no Arabic fallback font available");
+            }
+        }
+    }
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::LIGHT);
     brls::Application::setGlobalQuit(false);
     ui::ThemeManager::instance().init();
