@@ -1637,7 +1637,6 @@ size_t DownloadManager::addToQueue(const std::string& title,
     item.is_homebrew = is_homebrew;
     item.retro_console_id = retro_console_id;
     item.state = DownloadState::Queued;
-    item.installer = installer::StreamInstaller(64 * 1024 * 1024);
     if (isLocalBackend()) {
         std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
         if (!local_hash.empty()) {
@@ -1665,7 +1664,6 @@ size_t DownloadManager::addPortInstall(const std::string& title,
     }
     item.state = DownloadState::Queued;
     item.install_stage_label = "В очереди";
-    item.installer = installer::StreamInstaller(64 * 1024 * 1024);
     if (isLocalBackend()) {
         std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
         if (!local_hash.empty()) {
@@ -3032,6 +3030,7 @@ void DownloadManager::trackProgress() {
                         }
                     }
                     if (item.installer.isComplete()) {
+                        item.installer.closeStream();
                         item.stream_done = true;
                         item.state = DownloadState::Installing;
                     }
@@ -3510,6 +3509,7 @@ bool DownloadManager::cancelDownload(size_t index) {
         stopStreamConsumer(item.torrent_id);
         item.stream_consumer_started = false;
     }
+    item.installer.closeStream();
 
     if (item.torrent_id >= 0 && torrent_) {
         torrent_->cancelTorrent(item.torrent_id);
