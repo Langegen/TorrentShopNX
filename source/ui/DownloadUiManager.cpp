@@ -195,6 +195,9 @@ bool DownloadManager::cancelDownload(const std::string& topic_id) {
             bool ok = impl_.cancelDownload(i);
             if (ok) {
                 util::logLine("download_ui: cancelled topic_id=" + topic_id);
+                if (!impl_.hasActiveTransfers()) {
+                    impl_.startNextDownload();
+                }
                 saveDownloads();
                 triggerCallback();
             }

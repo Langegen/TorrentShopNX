@@ -86,6 +86,134 @@ DownloadCell::~DownloadCell() {
     if (imageToken) *imageToken = false;
 }
 
+brls::View* DownloadCell::getDefaultFocus() {
+    if (headerBox && headerBox->isFocusable() && headerBox->getVisibility() == brls::Visibility::VISIBLE) {
+        return headerBox;
+    }
+    return brls::RecyclerCell::getDefaultFocus();
+}
+
+brls::View* DownloadCell::getNextCellFocus(brls::FocusDirection direction) {
+    auto* contentBox = dynamic_cast<brls::Box*>(this->getParent());
+    if (!contentBox) return nullptr;
+
+    auto* recycler = dynamic_cast<brls::RecyclerFrame*>(contentBox->getParent());
+
+    int currentRow = this->getIndexPath().row;
+    int targetRow = (direction == brls::FocusDirection::DOWN) ? (currentRow + 1) : (currentRow - 1);
+
+    if (targetRow < 0) return nullptr;
+    if (recycler && recycler->getDataSource() &&
+        targetRow >= recycler->getDataSource()->numberOfRows(recycler, 0)) {
+        return nullptr;
+    }
+
+    DownloadCell* targetCell = nullptr;
+    for (auto* child : contentBox->getChildren()) {
+        auto* cell = dynamic_cast<DownloadCell*>(child);
+        if (cell && cell->getIndexPath().row == targetRow) {
+            targetCell = cell;
+            break;
+        }
+    }
+
+    if (!targetCell && recycler) {
+        recycler->selectRowAt(brls::IndexPath(0, targetRow), false);
+        for (auto* child : contentBox->getChildren()) {
+            auto* cell = dynamic_cast<DownloadCell*>(child);
+            if (cell && cell->getIndexPath().row == targetRow) {
+                targetCell = cell;
+                break;
+            }
+        }
+    }
+
+    if (!targetCell) return nullptr;
+
+    if (direction == brls::FocusDirection::DOWN) {
+        if (targetCell->headerBox && targetCell->headerBox->isFocusable() &&
+            targetCell->headerBox->getVisibility() == brls::Visibility::VISIBLE) {
+            return targetCell->headerBox;
+        }
+        return targetCell->getDefaultFocus();
+    } else {
+        if (targetCell->componentsBox &&
+            targetCell->componentsBox->getVisibility() == brls::Visibility::VISIBLE &&
+            !targetCell->componentsBox->getChildren().empty()) {
+            for (int k = static_cast<int>(targetCell->componentsBox->getChildren().size()) - 1; k >= 0; --k) {
+                auto* rowChild = targetCell->componentsBox->getChildren()[k];
+                if (rowChild->isFocusable() && rowChild->getVisibility() == brls::Visibility::VISIBLE) {
+                    return rowChild;
+                }
+            }
+        }
+        if (targetCell->headerBox && targetCell->headerBox->isFocusable() &&
+            targetCell->headerBox->getVisibility() == brls::Visibility::VISIBLE) {
+            return targetCell->headerBox;
+        }
+        return targetCell->getDefaultFocus();
+    }
+}
+
+brls::View* DownloadCell::getNextFocus(brls::FocusDirection direction, brls::View* currentView) {
+    if (direction == brls::FocusDirection::DOWN) {
+        if (currentView == headerBox) {
+            if (componentsBox && componentsBox->getVisibility() == brls::Visibility::VISIBLE &&
+                !componentsBox->getChildren().empty()) {
+                for (auto* child : componentsBox->getChildren()) {
+                    if (child->isFocusable() && child->getVisibility() == brls::Visibility::VISIBLE) {
+                        return child;
+                    }
+                }
+            }
+            return getNextCellFocus(brls::FocusDirection::DOWN);
+        }
+
+        if (componentsBox && componentsBox->getVisibility() == brls::Visibility::VISIBLE) {
+            const auto& children = componentsBox->getChildren();
+            for (size_t i = 0; i < children.size(); ++i) {
+                if (children[i] == currentView) {
+                    for (size_t j = i + 1; j < children.size(); ++j) {
+                        if (children[j]->isFocusable() && children[j]->getVisibility() == brls::Visibility::VISIBLE) {
+                            return children[j];
+                        }
+                    }
+                    return getNextCellFocus(brls::FocusDirection::DOWN);
+                }
+            }
+        }
+
+        return getNextCellFocus(brls::FocusDirection::DOWN);
+    }
+
+    if (direction == brls::FocusDirection::UP) {
+        if (componentsBox && componentsBox->getVisibility() == brls::Visibility::VISIBLE) {
+            const auto& children = componentsBox->getChildren();
+            for (size_t i = 0; i < children.size(); ++i) {
+                if (children[i] == currentView) {
+                    for (int j = static_cast<int>(i) - 1; j >= 0; --j) {
+                        if (children[j]->isFocusable() && children[j]->getVisibility() == brls::Visibility::VISIBLE) {
+                            return children[j];
+                        }
+                    }
+                    if (headerBox && headerBox->isFocusable() && headerBox->getVisibility() == brls::Visibility::VISIBLE) {
+                        return headerBox;
+                    }
+                    return getNextCellFocus(brls::FocusDirection::UP);
+                }
+            }
+        }
+
+        if (currentView == headerBox) {
+            return getNextCellFocus(brls::FocusDirection::UP);
+        }
+
+        return getNextCellFocus(brls::FocusDirection::UP);
+    }
+
+    return brls::RecyclerCell::getNextFocus(direction, currentView);
+}
+
 // DOWNLOADSVIEW IMPLEMENTATION
 DownloadsView::DownloadsView() {
 }
@@ -1142,6 +1270,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 rowBox->setCornerRadius(6.0f);
                 rowBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
                 rowBox->setMarginBottom(4.0f);
+                rowBox->setFocusable(true);
 
                 // 0. Left Info Box (fixed width 290px): [Badge] [Name] [SDK pill]
                 auto* infoBox = new brls::Box();
@@ -1340,7 +1469,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             auto* nameLabel = dynamic_cast<brls::Label*>(infoBox->getChildren()[1]);
             if (nameLabel) {
                 std::string cname = itm.component_name;
-                if (cname.empty() || cname == "Патч") {
+                if (cname.empty() || cname == "Патч" || cname.rfind("Патч v", 0) == 0) {
                     std::string fname = getDownloadFileName(itm);
                     auto comp = util::classifyDownloadComponent(fname, itm.title);
                     if (!comp.cleanName.empty()) {
@@ -1529,128 +1658,210 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     compTimeLabel->setVisibility(brls::Visibility::GONE);
                 }
             }
+
+            // Configure actions on individual component row
+            rowBox->setFocusable(true);
+            while (!rowBox->getActions().empty()) {
+                rowBox->unregisterAction(rowBox->getActions().front()->getIdentifier());
+            }
+
+            bool isItemFailedOrCancelled = (itm.state == download::DownloadState::Failed || itm.state == download::DownloadState::Cancelled);
+
+            if (isItemFailedOrCancelled) {
+                rowBox->registerAction("app/downloads/action_retry"_i18n, brls::ControllerButton::BUTTON_A, [topic_id = itm.topic_id](brls::View* view) {
+                    ui::DownloadManager::instance().retryDownload(topic_id);
+                    return true;
+                }, false, false, brls::SOUND_CLICK);
+
+                rowBox->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [topic_id = itm.topic_id](brls::View* view) {
+                    ui::DownloadManager::instance().deleteDownload(topic_id);
+                    return true;
+                });
+            } else if (itm.state == download::DownloadState::Completed) {
+                rowBox->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [topic_id = itm.topic_id](brls::View* view) {
+                    ui::DownloadManager::instance().deleteDownload(topic_id);
+                    return true;
+                });
+
+                if (isFileDownloadItem(itm)) {
+                    rowBox->registerAction("app/downloads/action_open_folder"_i18n, brls::ControllerButton::BUTTON_A, [itm](brls::View* view) {
+                        openDownloadsFolderForItem(itm);
+                        return true;
+                    }, false, false, brls::SOUND_CLICK);
+                }
+            } else {
+                // Cancel ONLY this specific file
+                rowBox->registerAction("app/downloads/action_cancel"_i18n, brls::ControllerButton::BUTTON_Y, [topic_id = itm.topic_id](brls::View* view) {
+                    ui::DownloadManager::instance().cancelDownload(topic_id);
+                    return true;
+                });
+            }
+
+            // Pause / Resume entire torrent
+            bool isPaused = (group.state == download::DownloadState::Paused);
+            rowBox->registerAction(isPaused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n,
+                                   brls::ControllerButton::BUTTON_X, [group, isPaused](brls::View* view) {
+                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+                const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                for (size_t qidx : group.item_indices) {
+                    if (qidx < q.size()) {
+                        if (isPaused) {
+                            ui::DownloadManager::instance().resumeDownload(q[qidx].topic_id);
+                        } else {
+                            ui::DownloadManager::instance().pauseDownload(q[qidx].topic_id);
+                        }
+                    }
+                }
+                return true;
+            });
+
+            rowBox->registerAction("", brls::ControllerButton::BUTTON_LB, [itm](brls::View* view) {
+                showPeerInspector(itm);
+                return true;
+            }, true /* hidden */, false, brls::SOUND_CLICK);
+
+            rowBox->getFocusEvent()->subscribe([this, row](bool focused) {
+                if (focused) {
+                    this->focusedRow_ = row;
+                }
+            });
+
+            if (brls::Application::getCurrentFocus() == rowBox) {
+                brls::Application::getGlobalHintsUpdateEvent()->fire();
+            }
         }
     } else {
         cell->componentsBox->setVisibility(brls::Visibility::GONE);
     }
 
-    // Configure Gamepad Controls on Cell Focus
+    // Configure Gamepad Controls on Header Box Focus
     cell->clearRegisteredActions();
+    if (cell->headerBox) {
+        while (!cell->headerBox->getActions().empty()) {
+            cell->headerBox->unregisterAction(cell->headerBox->getActions().front()->getIdentifier());
+        }
 
-    if (group.state == download::DownloadState::Completed) {
-        cell->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
-            std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-            const auto& q = ui::DownloadManager::instance().getImpl().queue();
-            for (size_t qidx : group.item_indices) {
-                if (qidx < q.size()) {
-                    ui::DownloadManager::instance().deleteDownload(q[qidx].topic_id);
-                }
+        cell->headerBox->getFocusEvent()->subscribe([this, row](bool focused) {
+            if (focused) {
+                this->focusedRow_ = row;
             }
-            return true;
         });
 
-        if (group.total_count > 1) {
-            cell->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
-                if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
-                    groups_[row].has_manual_toggle = true;
-                    groups_[row].is_expanded = !groups_[row].is_expanded;
-                    recycler->reloadData();
+        if (group.state == download::DownloadState::Completed) {
+            cell->headerBox->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
+                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+                const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                for (size_t qidx : group.item_indices) {
+                    if (qidx < q.size()) {
+                        ui::DownloadManager::instance().deleteDownload(q[qidx].topic_id);
+                    }
+                }
+                return true;
+            });
+
+            if (group.total_count > 1) {
+                cell->headerBox->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
+                    if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
+                        groups_[row].has_manual_toggle = true;
+                        groups_[row].is_expanded = !groups_[row].is_expanded;
+                        recycler->reloadData();
+                    }
+                    return true;
+                }, false, false, brls::SOUND_CLICK);
+            } else if (!group.item_indices.empty()) {
+                size_t qidx = group.item_indices.front();
+                if (qidx < queue.size() && isFileDownloadItem(queue[qidx])) {
+                    cell->headerBox->registerAction("app/downloads/action_open_folder"_i18n, brls::ControllerButton::BUTTON_A, [item = queue[qidx]](brls::View* view) {
+                        openDownloadsFolderForItem(item);
+                        return true;
+                    }, false, false, brls::SOUND_CLICK);
+                }
+            }
+        } else if (group.state == download::DownloadState::Failed || group.failed_item_idx >= 0) {
+            cell->headerBox->registerAction("app/downloads/action_retry"_i18n, brls::ControllerButton::BUTTON_A, [group](brls::View* view) {
+                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+                const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                if (group.failed_item_idx >= 0 && static_cast<size_t>(group.failed_item_idx) < q.size()) {
+                    ui::DownloadManager::instance().retryDownload(q[group.failed_item_idx].topic_id);
                 }
                 return true;
             }, false, false, brls::SOUND_CLICK);
-        } else if (!group.item_indices.empty()) {
-            size_t qidx = group.item_indices.front();
-            if (qidx < queue.size() && isFileDownloadItem(queue[qidx])) {
-                cell->registerAction("app/downloads/action_open_folder"_i18n, brls::ControllerButton::BUTTON_A, [item = queue[qidx]](brls::View* view) {
-                    openDownloadsFolderForItem(item);
+
+            cell->headerBox->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
+                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+                const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                if (group.failed_item_idx >= 0 && static_cast<size_t>(group.failed_item_idx) < q.size()) {
+                    ui::DownloadManager::instance().deleteDownload(q[group.failed_item_idx].topic_id);
+                }
+                return true;
+            });
+
+            if (group.total_count > 1) {
+                cell->headerBox->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_X, [this, row](brls::View* view) {
+                    if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
+                        groups_[row].has_manual_toggle = true;
+                        groups_[row].is_expanded = !groups_[row].is_expanded;
+                        recycler->reloadData();
+                    }
+                    return true;
+                }, false, false, brls::SOUND_CLICK);
+            }
+        } else {
+            bool isPaused = (group.state == download::DownloadState::Paused);
+            cell->headerBox->registerAction(isPaused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n,
+                                 brls::ControllerButton::BUTTON_X, [group, isPaused](brls::View* view) {
+                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+                const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                for (size_t qidx : group.item_indices) {
+                    if (qidx < q.size()) {
+                        if (isPaused) {
+                            ui::DownloadManager::instance().resumeDownload(q[qidx].topic_id);
+                        } else {
+                            ui::DownloadManager::instance().pauseDownload(q[qidx].topic_id);
+                        }
+                    }
+                }
+                return true;
+            });
+
+            // On header: CANCEL ENTIRE TORRENT
+            cell->headerBox->registerAction("app/downloads/action_cancel"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
+                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+                const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                for (size_t qidx : group.item_indices) {
+                    if (qidx < q.size()) {
+                        ui::DownloadManager::instance().cancelDownload(q[qidx].topic_id);
+                    }
+                }
+                return true;
+            });
+
+            if (group.total_count > 1) {
+                cell->headerBox->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
+                    if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
+                        groups_[row].has_manual_toggle = true;
+                        groups_[row].is_expanded = !groups_[row].is_expanded;
+                        recycler->reloadData();
+                    }
                     return true;
                 }, false, false, brls::SOUND_CLICK);
             }
         }
-    } else if (group.state == download::DownloadState::Failed || group.failed_item_idx >= 0) {
-        // Hybrid Error Handling: [A] retries the specific failed item
-        cell->registerAction("app/downloads/action_retry"_i18n, brls::ControllerButton::BUTTON_A, [group](brls::View* view) {
-            std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-            const auto& q = ui::DownloadManager::instance().getImpl().queue();
-            if (group.failed_item_idx >= 0 && static_cast<size_t>(group.failed_item_idx) < q.size()) {
-                ui::DownloadManager::instance().retryDownload(q[group.failed_item_idx].topic_id);
-            }
-            return true;
-        }, false, false, brls::SOUND_CLICK);
 
-        cell->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
-            std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-            const auto& q = ui::DownloadManager::instance().getImpl().queue();
-            if (group.failed_item_idx >= 0 && static_cast<size_t>(group.failed_item_idx) < q.size()) {
-                ui::DownloadManager::instance().deleteDownload(q[group.failed_item_idx].topic_id);
+        // Swarm inspector action on header
+        if (!group.item_indices.empty()) {
+            size_t inspect_idx = (group.active_item_idx >= 0) ? static_cast<size_t>(group.active_item_idx) : group.item_indices.front();
+            if (inspect_idx < queue.size()) {
+                cell->headerBox->registerAction("", brls::ControllerButton::BUTTON_LB, [item = queue[inspect_idx]](brls::View* view) {
+                    showPeerInspector(item);
+                    return true;
+                }, true /* hidden */, false, brls::SOUND_CLICK);
             }
-            return true;
-        });
-
-        if (group.total_count > 1) {
-            cell->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_X, [this, row](brls::View* view) {
-                if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
-                    groups_[row].has_manual_toggle = true;
-                    groups_[row].is_expanded = !groups_[row].is_expanded;
-                    recycler->reloadData();
-                }
-                return true;
-            }, false, false, brls::SOUND_CLICK);
         }
-    } else {
-        bool isPaused = (group.state == download::DownloadState::Paused);
-        cell->registerAction(isPaused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n,
-                             brls::ControllerButton::BUTTON_X, [group, isPaused](brls::View* view) {
-            std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-            const auto& q = ui::DownloadManager::instance().getImpl().queue();
-            for (size_t qidx : group.item_indices) {
-                if (qidx < q.size()) {
-                    if (isPaused) {
-                        ui::DownloadManager::instance().resumeDownload(q[qidx].topic_id);
-                    } else {
-                        ui::DownloadManager::instance().pauseDownload(q[qidx].topic_id);
-                    }
-                }
-            }
-            return true;
-        });
 
-        cell->registerAction("app/downloads/action_cancel"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
-            std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-            const auto& q = ui::DownloadManager::instance().getImpl().queue();
-            for (size_t qidx : group.item_indices) {
-                if (qidx < q.size()) {
-                    ui::DownloadManager::instance().cancelDownload(q[qidx].topic_id);
-                }
-            }
-            return true;
-        });
-
-        if (group.total_count > 1) {
-            cell->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
-                if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
-                    groups_[row].has_manual_toggle = true;
-                    groups_[row].is_expanded = !groups_[row].is_expanded;
-                    recycler->reloadData();
-                }
-                return true;
-            }, false, false, brls::SOUND_CLICK);
+        if (brls::Application::getCurrentFocus() == cell->headerBox) {
+            brls::Application::getGlobalHintsUpdateEvent()->fire();
         }
-    }
-
-    // Swarm inspector action
-    if (!group.item_indices.empty()) {
-        size_t inspect_idx = (group.active_item_idx >= 0) ? static_cast<size_t>(group.active_item_idx) : group.item_indices.front();
-        if (inspect_idx < queue.size()) {
-            cell->registerAction("", brls::ControllerButton::BUTTON_LB, [item = queue[inspect_idx]](brls::View* view) {
-                showPeerInspector(item);
-                return true;
-            }, true /* hidden */, false, brls::SOUND_CLICK);
-        }
-    }
-
-    if (brls::Application::getCurrentFocus() == cell) {
-        brls::Application::getGlobalHintsUpdateEvent()->fire();
     }
 }
 
@@ -1677,6 +1888,13 @@ brls::RecyclerCell* DownloadsView::DownloadsDataSource::cellForRow(brls::Recycle
                 parent_->focusedRow_ = cell->getIndexPath().row;
             }
         });
+        if (cell->headerBox) {
+            cell->headerBox->getFocusEvent()->subscribe([this, cell](bool focused) {
+                if (focused) {
+                    parent_->focusedRow_ = cell->getIndexPath().row;
+                }
+            });
+        }
     }
 
     return cell;

@@ -23,6 +23,11 @@ public:
         }
     }
 
+    brls::View* getDefaultFocus() override;
+    brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
+    brls::View* getNextCellFocus(brls::FocusDirection direction);
+
+    BRLS_BIND(brls::Box, headerBox, "headerBox");
     BRLS_BIND(brls::Image, cover, "cover");
     BRLS_BIND(brls::Label, title, "title");
     BRLS_BIND(brls::Label, countBadge, "countBadge");
