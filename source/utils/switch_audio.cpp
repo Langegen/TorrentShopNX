@@ -65,9 +65,7 @@ SwitchAudioPlayer::SwitchAudioPlayer()
     this->init = true;
 #endif
 
-    for (int i = 1; i < (int)_SOUND_MAX; i++) {
-        this->load((enum Sound)i);
-    }
+    // Sound effects are loaded lazily on demand in play() to speed up app boot
 }
 
 bool SwitchAudioPlayer::load(enum Sound sound)

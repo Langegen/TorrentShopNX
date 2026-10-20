@@ -16,7 +16,7 @@ GameStatsManager& GameStatsManager::instance() {
 }
 
 GameStatsManager::GameStatsManager() {
-    loadFromDisk();
+    // Stats are loaded asynchronously in background or lazily upon first access (ensureLoaded)
 }
 
 std::string GameStatsManager::getSwitchStatsCachePath() {
@@ -94,9 +94,35 @@ bool GameStatsManager::parseStatsJson(const std::string& json_str, std::unordere
     }
 }
 
+void GameStatsManager::ensureLoaded() const {
+    if (loaded_from_disk_.load(std::memory_order_acquire)) return;
+    std::unique_lock<std::shared_mutex> lock(mutex_);
+    if (loaded_from_disk_.load(std::memory_order_relaxed)) return;
+    const_cast<GameStatsManager*>(this)->loadFromDiskInternal();
+}
+
 void GameStatsManager::loadFromDisk() {
     std::unique_lock<std::shared_mutex> lock(mutex_);
-    
+    loadFromDiskInternal();
+}
+
+void GameStatsManager::loadFromDiskAsync() {
+    if (loaded_from_disk_.load(std::memory_order_acquire)) return;
+    bool expected = false;
+    if (!loading_.compare_exchange_strong(expected, true)) return;
+
+    brls::async([this]() {
+        {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            if (!loaded_from_disk_.load(std::memory_order_relaxed)) {
+                loadFromDiskInternal();
+            }
+        }
+        loading_.store(false, std::memory_order_release);
+    });
+}
+
+void GameStatsManager::loadFromDiskInternal() {
     // Load switch stats cache
     std::string switchPath = getSwitchStatsCachePath();
     std::string switchBody;
@@ -119,11 +145,12 @@ void GameStatsManager::loadFromDisk() {
         }
     }
 
-    loaded_from_disk_ = true;
+    loaded_from_disk_.store(true, std::memory_order_release);
 }
 
 const GameStats* GameStatsManager::getSwitchStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
+    ensureLoaded();
     std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = switch_stats_.find(topic_id);
     if (it != switch_stats_.end()) return &it->second;
@@ -132,6 +159,7 @@ const GameStats* GameStatsManager::getSwitchStats(const std::string& topic_id) c
 
 const GameStats* GameStatsManager::getConsoleStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
+    ensureLoaded();
     std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = console_stats_.find(topic_id);
     if (it != console_stats_.end()) return &it->second;
@@ -140,6 +168,7 @@ const GameStats* GameStatsManager::getConsoleStats(const std::string& topic_id) 
 
 const GameStats* GameStatsManager::getAnyStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
+    ensureLoaded();
     std::shared_lock<std::shared_mutex> lock(mutex_);
     auto it = switch_stats_.find(topic_id);
     if (it != switch_stats_.end()) return &it->second;
@@ -165,6 +194,7 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                 {
                     std::unique_lock<std::shared_mutex> lock(mutex_);
                     switch_stats_ = std::move(newMap);
+                    loaded_from_disk_.store(true, std::memory_order_release);
                 }
                 anySuccess = true;
                 util::logLine("GameStatsManager: successfully updated switch stats (" +
@@ -185,6 +215,7 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                 {
                     std::unique_lock<std::shared_mutex> lock(mutex_);
                     console_stats_ = std::move(newMap);
+                    loaded_from_disk_.store(true, std::memory_order_release);
                 }
                 anySuccess = true;
                 util::logLine("GameStatsManager: successfully updated console stats (" +

@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <shared_mutex>
+#include <atomic>
 #include <functional>
 #include <cstdint>
 
@@ -28,6 +29,8 @@ public:
 
     // Load cached stats from SD / disk
     void loadFromDisk();
+    void loadFromDiskAsync();
+    void ensureLoaded() const;
 
     // Background update from GitHub
     void updateStatsInBackground(std::function<void(bool success)> onDone = nullptr);
@@ -46,12 +49,14 @@ private:
     GameStatsManager();
     ~GameStatsManager() = default;
 
+    void loadFromDiskInternal();
     bool parseStatsJson(const std::string& json_str, std::unordered_map<std::string, GameStats>& out_map);
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, GameStats> switch_stats_;
     std::unordered_map<std::string, GameStats> console_stats_;
-    bool loaded_from_disk_ = false;
+    std::atomic<bool> loaded_from_disk_{false};
+    std::atomic<bool> loading_{false};
 };
 
 } // namespace catalog

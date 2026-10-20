@@ -20,6 +20,7 @@
 #include "../catalog/catalog_manager.h"
 #include "../catalog/catalog_updater.h"
 #include "../catalog/IgnoredUpdatesManager.hpp"
+#include "../catalog/game_stats_manager.h"
 #include "../net/http_client.h"
 #include <borealis/views/hint.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
@@ -657,6 +658,9 @@ void MainMenu::onContentAvailable() {
         return true;
     });
 
+    // Asynchronously preload game stats from disk in background
+    catalog::GameStatsManager::instance().loadFromDiskAsync();
+
     // Trigger scheduled catalog update (48h full or 4h diff)
     catalog::CatalogUpdater::instance().checkAndRunScheduledUpdate();
 
@@ -721,16 +725,21 @@ void MainMenu::onContentAvailable() {
         });
     }
 
-    // Delete renamed cache folders iteratively
-    if (!g_pathsToDelete.empty()) {
-        g_cleanupRunning = true;
-        brls::async([]() {
+    // Background cache cleanup (iterative folder deletion and stale cache sweep)
+    g_cleanupRunning = true;
+    brls::async([]() {
+        if (!g_pathsToDelete.empty()) {
             for (const auto& path : g_pathsToDelete) {
                 if (g_cleanupCancelled.load()) break;
                 deleteDirectoryIterative(path);
             }
             g_pathsToDelete.clear();
-            g_cleanupRunning = false;
-        });
-    }
+        }
+
+        if (!g_cleanupCancelled.load()) {
+            sweepStaleCaches();
+        }
+
+        g_cleanupRunning = false;
+    });
 }

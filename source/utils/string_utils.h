@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cstdlib>
 #include <algorithm>
@@ -36,7 +37,7 @@ namespace util {
     }
 
     // UTF-8 lowercase helper handling both ASCII and Cyrillic (CP1251 / UTF-8)
-    inline std::string toLowerUtf8(const std::string& s) {
+    inline std::string toLowerUtf8(std::string_view s) {
         std::string out;
         out.reserve(s.size());
         for (size_t i = 0; i < s.size(); ) {

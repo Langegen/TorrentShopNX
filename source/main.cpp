@@ -446,51 +446,44 @@ int main(int argc, char** argv) {
 
     brls::Application::createWindow("TorrentShopNX");
 
-    // Ensure Arabic fallback font is registered with NVG (requires window and NVG context to exist)
+    // Ensure Arabic fallback font is registered with NVG if not already registered by font loader
     {
         NVGcontext* vg = brls::Application::getNVGContext();
         int baseFont = brls::Application::getFont(brls::FONT_REGULAR);
         int arFont = brls::Application::getFont("arabic");
 
-        if (vg && baseFont != brls::FONT_INVALID) {
-            if (arFont == brls::FONT_INVALID) {
-                std::vector<std::string> candidateArabicPaths = {
-                    "sdmc:/switch/TorrentShopNX/font/arabic.ttf",
-                    "sdmc:/switch/TorrentShopNX/arabic.ttf",
+        if (vg && baseFont != brls::FONT_INVALID && arFont == brls::FONT_INVALID) {
+            std::vector<std::string> candidateArabicPaths = {
+                "sdmc:/switch/TorrentShopNX/font/arabic.ttf",
+                "sdmc:/switch/TorrentShopNX/arabic.ttf",
 #ifdef __SWITCH__
-                    "romfs:/font/arabic_font.ttf"
+                "romfs:/font/arabic_font.ttf"
 #else
-                    "resources/font/arabic_font.ttf",
-                    "build_pc/resources/font/arabic_font.ttf"
+                "resources/font/arabic_font.ttf",
+                "build_pc/resources/font/arabic_font.ttf"
 #endif
-                };
+            };
 
 #if defined(_WIN32)
-                const char* winDir = getenv("SystemRoot");
-                std::string winFonts = (winDir ? std::string(winDir) : "C:\\Windows") + "\\Fonts\\";
-                candidateArabicPaths.push_back(winFonts + "tahoma.ttf");
-                candidateArabicPaths.push_back(winFonts + "arial.ttf");
-                candidateArabicPaths.push_back(winFonts + "seguiui.ttf");
+            const char* winDir = getenv("SystemRoot");
+            std::string winFonts = (winDir ? std::string(winDir) : "C:\\Windows") + "\\Fonts\\";
+            candidateArabicPaths.push_back(winFonts + "tahoma.ttf");
+            candidateArabicPaths.push_back(winFonts + "arial.ttf");
+            candidateArabicPaths.push_back(winFonts + "seguiui.ttf");
 #endif
 
-                for (const auto& path : candidateArabicPaths) {
-                    if (access(path.c_str(), F_OK) != -1) {
-                        if (brls::Application::loadFontFromFile("arabic", path)) {
-                            arFont = brls::Application::getFont("arabic");
-                            if (arFont != brls::FONT_INVALID) {
-                                util::logLine("main: loaded Arabic font from: " + path);
-                                break;
-                            }
+            for (const auto& path : candidateArabicPaths) {
+                if (access(path.c_str(), F_OK) != -1) {
+                    if (brls::Application::loadFontFromFile("arabic", path)) {
+                        arFont = brls::Application::getFont("arabic");
+                        if (arFont != brls::FONT_INVALID) {
+                            util::logLine("main: loaded Arabic font from: " + path);
+                            nvgAddFallbackFontId(vg, baseFont, arFont);
+                            util::logLine("main: registered Arabic fallback font");
+                            break;
                         }
                     }
                 }
-            }
-
-            if (arFont != brls::FONT_INVALID) {
-                nvgAddFallbackFontId(vg, baseFont, arFont);
-                util::logLine("main: registered Arabic fallback font");
-            } else {
-                util::logLine("main: warning - no Arabic fallback font available");
             }
         }
     }
@@ -529,7 +522,6 @@ int main(int argc, char** argv) {
         // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
         catalog::IgnoredUpdatesManager::instance().init(TSNX_IGNORED_UPDATES_PATH);
-        catalog::GameStatsManager::instance().loadFromDisk();
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.
