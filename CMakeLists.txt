@@ -97,6 +97,7 @@ target_link_libraries(TorrentShopNX PRIVATE
     acl
     crypto
     crypt32
+    winmm
     iconv
     z
     pthread
