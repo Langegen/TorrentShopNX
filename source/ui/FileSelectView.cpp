@@ -1,3 +1,4 @@
+#include "RetroTargetPrompt.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
@@ -1552,9 +1553,17 @@ void FileSelectView::toggleAllSelection() {
 
 void FileSelectView::startDownloadAndGoToDownloads() {
     if (files_.empty()) {
-        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-        brls::Application::notify(brls::getStr("app/downloads/state_queued"));
-        brls::Application::popActivity();
+        if (!retro_console_id_.empty()) {
+            promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
+                ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, target_mode);
+                brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+                brls::Application::popActivity();
+            });
+        } else {
+            ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+            brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+            brls::Application::popActivity();
+        }
         return;
     }
 
@@ -1604,13 +1613,13 @@ void FileSelectView::startDownloadAndGoToDownloads() {
             std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", formatBytes(totalNeededSize), formatBytes(freeSpace));
             brls::Dialog* dialog = new brls::Dialog(msg);
             dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName]() {
-                this->executeDownloads(selectedIndices, forcedIndex, forcedName);
+                this->promptAndExecuteDownloads(selectedIndices, forcedIndex, forcedName);
             });
             dialog->addButton("app/common/cancel"_i18n, []() {});
             dialog->open();
             return;
         }
-        executeDownloads(selectedIndices, forcedIndex, forcedName);
+        promptAndExecuteDownloads(selectedIndices, forcedIndex, forcedName);
         return;
     }
 
@@ -1668,7 +1677,17 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     executeDownloads(selectedIndices, forcedIndex, forcedName);
 }
 
-void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
+void FileSelectView::promptAndExecuteDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
+    if (!retro_console_id_.empty()) {
+        promptRetroTargetSelection(retro_console_id_, [this, selectedIndices, forcedIndex, forcedName](const std::string& target_mode) {
+            this->executeDownloads(selectedIndices, forcedIndex, forcedName, target_mode);
+        });
+    } else {
+        executeDownloads(selectedIndices, forcedIndex, forcedName, "");
+    }
+}
+
+void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName, const std::string& retro_target_mode) {
     (void)forcedIndex;
     (void)forcedName;
 
@@ -1692,7 +1711,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 unsigned long long fileSize = (files_[i].size > 0) ? static_cast<unsigned long long>(files_[i].size) : 0;
                 ui::DownloadManager::instance().addDownload(
                     singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize);
+                    game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize, retro_target_mode);
             } else if (!chosen.empty()) {
                 std::vector<int> bundleSelected;
                 bundleSelected.reserve(chosen.size());
@@ -1710,7 +1729,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 std::string firstName = files_[chosen[0]].name;
                 ui::DownloadManager::instance().addDownload(
                     bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes);
+                    game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes, retro_target_mode);
             }
         } else {
             std::vector<size_t> packages;
@@ -1751,7 +1770,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 unsigned long long pkgSize = (files_[idx].size > 0) ? static_cast<unsigned long long>(files_[idx].size) : 0;
                 ui::DownloadManager::instance().addDownload(
                     singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize);
+                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize, retro_target_mode);
             }
 
             // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
@@ -1778,7 +1797,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
 
                 ui::DownloadManager::instance().addDownload(
                     extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes);
+                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes, retro_target_mode);
             }
         }
     } catch (const std::exception& e) {

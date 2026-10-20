@@ -750,6 +750,10 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
             if (g.cover_url.empty() && !itm.cover_url.empty()) {
                 g.cover_url = itm.cover_url;
             }
+            if (g.retro_console_id.empty() && !itm.retro_console_id.empty()) {
+                g.retro_console_id = itm.retro_console_id;
+                g.retro_target_mode = itm.retro_target_mode;
+            }
             if (itm.start_time.time_since_epoch().count() > 0) {
                 if (g.start_time.time_since_epoch().count() == 0 || itm.start_time < g.start_time) {
                     g.start_time = itm.start_time;
@@ -1015,7 +1019,15 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         cell->statsText->setText(formatEta(group.dl_speed_kbps, remaining_dl));
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (group.state == download::DownloadState::Completed) {
-        cell->statsText->setText("app/downloads/installed"_i18n);
+        if (!group.retro_console_id.empty()) {
+            if (group.retro_target_mode == "tico" || (group.retro_target_mode.empty() && config::ConfigManager::instance().isTicoMode())) {
+                cell->statsText->setText("app/retro/ready_in_tico"_i18n);
+            } else {
+                cell->statsText->setText("app/retro/ready_to_play"_i18n);
+            }
+        } else {
+            cell->statsText->setText("app/downloads/installed"_i18n);
+        }
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (group.state == download::DownloadState::Failed) {
         cell->statsText->setText(group.failed_error.empty() ? "app/downloads/unknown_error"_i18n : group.failed_error);

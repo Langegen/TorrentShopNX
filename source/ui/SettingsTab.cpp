@@ -848,14 +848,18 @@ brls::View* SettingsTab::buildRetroTab() {
 
     // 1. Base ROMs folder selection
     std::vector<std::string> folderOptions = {
+        "app/settings/retro_folder_prompt"_i18n,
+        "app/settings/retro_folder_tico"_i18n,
         "app/settings/retro_folder_retroarch"_i18n,
         "app/settings/retro_folder_downloads"_i18n,
         "app/settings/retro_folder_custom"_i18n
     };
     int initialFolderIdx = 0;
     std::string currentMode = cfg.getRetroRomsMode();
-    if (currentMode == "downloads") initialFolderIdx = 1;
-    else if (currentMode == "custom") initialFolderIdx = 2;
+    if (currentMode == "tico") initialFolderIdx = 1;
+    else if (currentMode == "retroarch") initialFolderIdx = 2;
+    else if (currentMode == "downloads") initialFolderIdx = 3;
+    else if (currentMode == "custom") initialFolderIdx = 4;
     else initialFolderIdx = 0;
 
     auto* customFolderCell = new brls::DetailCell();
@@ -891,20 +895,28 @@ brls::View* SettingsTab::buildRetroTab() {
     auto* folderCell = new brls::SelectorCell();
     folderCell->init("app/settings/retro_roms_folder"_i18n, folderOptions, initialFolderIdx, [](int selected) {}, [&cfg, customFolderCell](int selected) {
         if (selected == 1) {
+            cfg.setRetroRomsMode("tico");
+            customFolderCell->setVisibility(brls::Visibility::GONE);
+            tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
+            tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+        } else if (selected == 2) {
+            cfg.setRetroRomsMode("retroarch");
+            customFolderCell->setVisibility(brls::Visibility::GONE);
+        } else if (selected == 3) {
             cfg.setRetroRomsMode("downloads");
             customFolderCell->setVisibility(brls::Visibility::GONE);
-        } else if (selected == 2) {
+        } else if (selected == 4) {
             cfg.setRetroRomsMode("custom");
             customFolderCell->setVisibility(brls::Visibility::VISIBLE);
         } else {
-            cfg.setRetroRomsMode("retroarch");
+            cfg.setRetroRomsMode("prompt");
             customFolderCell->setVisibility(brls::Visibility::GONE);
         }
         cfg.save();
     });
     box->addView(folderCell);
 
-    customFolderCell->setVisibility((initialFolderIdx == 2) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    customFolderCell->setVisibility((initialFolderIdx == 4) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     box->addView(customFolderCell);
 
     // 2. Auto-extract toggle

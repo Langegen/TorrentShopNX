@@ -153,6 +153,7 @@ struct DownloadItem {
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
     bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
     std::string retro_console_id;
+    std::string retro_target_mode;
 
     // Автоматическая установка портов хоумбрю
     bool is_port_auto_install = false;
@@ -184,7 +185,8 @@ public:
                       int forced_file_index = -1,
                       const std::string& forced_stream_name = "",
                       bool is_homebrew = false,
-                      const std::string& retro_console_id = "");
+                      const std::string& retro_console_id = "",
+                      const std::string& retro_target_mode = "");
     size_t addPortInstall(const std::string& title,
                           const std::string& magnet,
                           std::shared_ptr<installer::PortInstallPlan> plan,

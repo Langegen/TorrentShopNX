@@ -27,61 +27,71 @@ void RetroCatalogManager::initConsoles() {
             "nes", "nes_games.json", "NES / Famicom", "Nintendo", "1983",
             "nes", "pNES", "pnes",
             {".nes", ".fds", ".zip", ".7z"},
-            nvgRGBA(230, 0, 18, 255)
+            nvgRGBA(230, 0, 18, 255),
+            "nes", true, "FCEUmm"
         },
         {
             "snes", "snes_games.json", "Super Nintendo", "Nintendo", "1990",
             "snes", "pSNES", "psnes",
             {".smc", ".sfc", ".fig", ".zip", ".7z"},
-            nvgRGBA(124, 77, 255, 255)
+            nvgRGBA(124, 77, 255, 255),
+            "snes", true, "Snes9x"
         },
         {
             "n64", "n64_games.json", "Nintendo 64", "Nintendo", "1996",
             "n64", "Mupen64Plus-Next", "mupen64plus_next",
             {".z64", ".n64", ".v64", ".zip", ".7z"},
-            nvgRGBA(0, 160, 75, 255)
+            nvgRGBA(0, 160, 75, 255),
+            "n64", true, "Mupen64Plus"
         },
         {
             "gbc", "gbc_games.json", "Game Boy / Color", "Nintendo", "1998",
             "gbc", "mGBA", "mgba",
             {".gb", ".gbc", ".zip", ".7z"},
-            nvgRGBA(156, 39, 176, 255)
+            nvgRGBA(156, 39, 176, 255),
+            "gbc", true, "Gambatte"
         },
         {
             "gba", "gba_games.json", "Game Boy Advance", "Nintendo", "2001",
             "gba", "mGBA / pGBA", "mgba",
             {".gba", ".zip", ".7z"},
-            nvgRGBA(63, 81, 181, 255)
+            nvgRGBA(63, 81, 181, 255),
+            "gba", true, "mGBA"
         },
         {
             "nds", "nds_games.json", "Nintendo DS", "Nintendo", "2004",
             "nds", "DraStic DS", "drasticds",
             {".nds", ".zip", ".7z"},
-            nvgRGBA(0, 188, 212, 255)
+            nvgRGBA(0, 188, 212, 255),
+            "nds", true, "DraStic DS"
         },
         {
             "3ds", "3ds_games.json", "Nintendo 3DS", "Nintendo", "2011",
             "3ds", "Dekopon (Citra)", "dekopon",
             {".3ds", ".cia", ".cxi", ".zip"},
-            nvgRGBA(244, 67, 54, 255)
+            nvgRGBA(244, 67, 54, 255),
+            "3ds", true, "Azahar (Citra)"
         },
         {
             "gamecube", "gamecube_games.json", "Nintendo GameCube", "Nintendo", "2001",
             "gamecube", "Dolphin", "dolphin",
             {".iso", ".gcm", ".rvz", ".ciso"},
-            nvgRGBA(103, 58, 183, 255)
+            nvgRGBA(103, 58, 183, 255),
+            "gc", true, "Dolphin"
         },
         {
             "wii", "wii_games.json", "Nintendo Wii", "Nintendo", "2006",
             "wii", "Dolphin", "dolphin",
             {".wbfs", ".iso", ".rvz"},
-            nvgRGBA(33, 150, 243, 255)
+            nvgRGBA(33, 150, 243, 255),
+            "wii", true, "Dolphin"
         },
         {
             "wiiu", "wiiu_games.json", "Nintendo Wii U", "Nintendo", "2012",
             "wiiu", "Cemu", "cemu",
             {".wup", ".rpx", ".zip"},
-            nvgRGBA(0, 172, 237, 255)
+            nvgRGBA(0, 172, 237, 255),
+            "wiiu", false, ""
         },
 
         // Sony PlayStation Family
@@ -89,25 +99,29 @@ void RetroCatalogManager::initConsoles() {
             "ps1", "ps1_games.json", "PlayStation 1", "Sony", "1994",
             "psx", "DuckStation", "duckstation",
             {".chd", ".bin", ".cue", ".pbp", ".iso", ".img"},
-            nvgRGBA(0, 55, 145, 255)
+            nvgRGBA(0, 55, 145, 255),
+            "psx", true, "DuckStation"
         },
         {
             "ps2", "ps2_games.json", "PlayStation 2", "Sony", "2000",
             "ps2", "NetherSX2", "nethersx2",
             {".iso", ".chd", ".bin", ".cso"},
-            nvgRGBA(0, 36, 100, 255)
+            nvgRGBA(0, 36, 100, 255),
+            "ps2", false, ""
         },
         {
             "psp", "psp_games.json", "PlayStation Portable", "Sony", "2004",
             "psp", "PPSSPP", "ppsspp",
             {".iso", ".cso", ".pbp"},
-            nvgRGBA(30, 136, 229, 255)
+            nvgRGBA(30, 136, 229, 255),
+            "psp", true, "PPSSPP"
         },
         {
             "psvita", "psvita_games.json", "PlayStation Vita", "Sony", "2011",
             "psvita", "Vita3K", "vita3k",
             {".vpk", ".zip"},
-            nvgRGBA(0, 150, 214, 255)
+            nvgRGBA(0, 150, 214, 255),
+            "psvita", false, ""
         },
 
         // Sega Ecosystem
@@ -115,37 +129,43 @@ void RetroCatalogManager::initConsoles() {
             "sega_ms", "sega_ms_games.json", "Master System", "Sega", "1985",
             "mastersystem", "pGEN", "pgen",
             {".sms", ".zip", ".7z"},
-            nvgRGBA(233, 30, 99, 255)
+            nvgRGBA(233, 30, 99, 255),
+            "sms", true, "Genesis Plus GX"
         },
         {
             "sega_gg", "sega_gg_games.json", "Game Gear", "Sega", "1990",
             "gamegear", "pGEN", "pgen",
             {".gg", ".zip", ".7z"},
-            nvgRGBA(0, 150, 136, 255)
+            nvgRGBA(0, 150, 136, 255),
+            "gg", true, "Genesis Plus GX"
         },
         {
             "sega_md", "sega_md_games.json", "Mega Drive / Genesis", "Sega", "1988",
             "megadrive", "pGEN", "pgen",
             {".md", ".bin", ".gen", ".smd", ".zip", ".7z"},
-            nvgRGBA(55, 71, 79, 255)
+            nvgRGBA(55, 71, 79, 255),
+            "megadrive", true, "Genesis Plus GX"
         },
         {
             "sega_cd", "sega_cd_games.json", "Sega CD / Mega CD", "Sega", "1991",
             "segacd", "pGEN", "pgen",
             {".bin", ".cue", ".chd", ".iso"},
-            nvgRGBA(76, 175, 80, 255)
+            nvgRGBA(76, 175, 80, 255),
+            "segacd", true, "Genesis Plus GX"
         },
         {
             "sega_32x", "sega_32x_games.json", "Sega 32X", "Sega", "1994",
             "32x", "Picodrive", "picodrive",
             {".32x", ".bin", ".zip", ".7z"},
-            nvgRGBA(255, 152, 0, 255)
+            nvgRGBA(255, 152, 0, 255),
+            "32x", true, "Picodrive"
         },
         {
             "dreamcast", "dreamcast_games.json", "Sega Dreamcast", "Sega", "1998",
             "dreamcast", "Flycast", "flycast",
             {".cdi", ".gdi", ".chd"},
-            nvgRGBA(255, 87, 34, 255)
+            nvgRGBA(255, 87, 34, 255),
+            "dc", true, "Flycast"
         }
     };
 }
@@ -155,6 +175,75 @@ const RetroConsoleInfo* RetroCatalogManager::findConsole(const std::string& id) 
         if (c.id == id) return &c;
     }
     return nullptr;
+}
+
+std::string RetroCatalogManager::getEffectiveConsoleSubfolder(const std::string& console_id, bool is_tico_mode) const {
+    const auto* info = findConsole(console_id);
+    if (!info) return console_id;
+    if (is_tico_mode && info->is_tico_supported && !info->tico_slug.empty()) {
+        return info->tico_slug;
+    }
+    return info->default_rom_subfolder.empty() ? console_id : info->default_rom_subfolder;
+}
+
+bool RetroCatalogManager::isTicoSupported(const std::string& console_id) const {
+    const auto* info = findConsole(console_id);
+    return info ? info->is_tico_supported : false;
+}
+
+std::string RetroCatalogManager::getTicoSlug(const std::string& console_id) const {
+    const auto* info = findConsole(console_id);
+    if (info && !info->tico_slug.empty()) return info->tico_slug;
+    return console_id;
+}
+
+std::string RetroCatalogManager::getTicoCoreName(const std::string& console_id) const {
+    const auto* info = findConsole(console_id);
+    if (info && !info->tico_recommended_core.empty()) return info->tico_recommended_core;
+    if (info && !info->recommended_emulator.empty()) return info->recommended_emulator;
+    return "";
+}
+
+bool RetroCatalogManager::isDiscOrComplexConsole(const std::string& console_id) const {
+    return (console_id == "gamecube" || console_id == "wii" ||
+            console_id == "ps1" || console_id == "psp" ||
+            console_id == "dreamcast" || console_id == "sega_cd" ||
+            console_id == "3ds");
+}
+
+bool RetroCatalogManager::isGameFilePresent(const std::string& console_id, const std::string& filename) const {
+    if (console_id.empty() || filename.empty()) return false;
+    const auto* info = findConsole(console_id);
+    if (!info) return false;
+
+    std::string stem = std::filesystem::path(filename).stem().string();
+
+    std::vector<std::string> searchDirs;
+    if (info->is_tico_supported && !info->tico_slug.empty()) {
+        searchDirs.push_back(std::string(TSNX_TICO_ROMS_DIR) + "/" + info->tico_slug);
+    }
+    if (!info->default_rom_subfolder.empty()) {
+        searchDirs.push_back(std::string(TSNX_ROMS_BASE_DIR) + "/" + info->default_rom_subfolder);
+    }
+    if (!info->default_rom_subfolder.empty()) {
+        searchDirs.push_back(std::string(TSNX_DOWNLOADS_DIR) + "/retro/" + info->default_rom_subfolder);
+    }
+
+    std::error_code ec;
+    for (const auto& dir : searchDirs) {
+        if (!std::filesystem::exists(dir, ec)) continue;
+        std::string directPath = dir + "/" + filename;
+        if (std::filesystem::exists(directPath, ec)) return true;
+
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (entry.is_regular_file(ec)) {
+                if (entry.path().stem().string() == stem) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 std::string RetroCatalogManager::getConsoleJsonPath(const std::string& console_id) const {

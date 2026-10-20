@@ -94,8 +94,10 @@ public:
     void setLanguage(const std::string& lang);
 
     // Retro Games settings
-    const std::string& getRetroRomsMode() const; // "retroarch" (default), "downloads", "custom"
+    const std::string& getRetroRomsMode() const; // "prompt" (default), "tico", "retroarch", "downloads", "custom"
     void setRetroRomsMode(const std::string& mode);
+    bool isTicoMode() const;
+    bool isPromptMode() const;
 
     const std::string& getRetroCustomPath() const;
     void setRetroCustomPath(const std::string& path);

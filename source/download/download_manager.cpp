@@ -484,6 +484,85 @@ static bool resolveAtmosphereModDest(const std::string& rel_path,
     return false;
 }
 
+// Очистка каталога Tico от мусорных файлов (.nfo, .txt, .url, .diz, .sfv, .md5)
+static void sanitizeTicoRomsDir(const std::filesystem::path& dir) {
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec)) return;
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (ext == ".nfo" || ext == ".txt" || ext == ".url" || ext == ".diz" || ext == ".sfv" || ext == ".md5") {
+            std::filesystem::remove(entry.path(), ec);
+            util::logLine("Tico Sanitizer: removed trash file " + entry.path().filename().string());
+        }
+    }
+}
+
+// Автогенерация плейлиста .m3u для многодисковых игр в Tico
+static std::string createM3uPlaylistIfNeeded(const std::filesystem::path& dir,
+                                             const std::string& release_title,
+                                             const std::vector<int>& target_indices,
+                                             const std::vector<tsnx_file_info>& files) {
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec)) return "";
+
+    std::vector<std::string> disc_files;
+    for (int idx : target_indices) {
+        if (idx < 0 || idx >= static_cast<int>(files.size())) continue;
+        std::string fn = std::filesystem::path(files[idx].path).filename().string();
+        std::string fn_lower = fn;
+        std::transform(fn_lower.begin(), fn_lower.end(), fn_lower.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (fn_lower.find("disc") != std::string::npos || fn_lower.find("cd1") != std::string::npos ||
+            fn_lower.find("cd2") != std::string::npos || fn_lower.find("cd3") != std::string::npos ||
+            fn_lower.find("cd4") != std::string::npos || fn_lower.find("disk") != std::string::npos) {
+            std::string ext = std::filesystem::path(fn).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+            if (ext == ".chd" || ext == ".iso" || ext == ".cue" || ext == ".gdi" || ext == ".pbp" || ext == ".rvz") {
+                disc_files.push_back(fn);
+            }
+        }
+    }
+
+    if (disc_files.size() > 1) {
+        std::sort(disc_files.begin(), disc_files.end());
+        std::string cleanName = sanitizePathComponent(cleanTitle(release_title));
+        std::filesystem::path m3uPath = dir / (cleanName + ".m3u");
+        std::ofstream out(m3uPath);
+        if (out.is_open()) {
+            for (const auto& df : disc_files) {
+                out << df << "\n";
+            }
+            out.close();
+            util::logLine("Tico M3U: created playlist " + m3uPath.string() + " with " + std::to_string(disc_files.size()) + " discs");
+            return cleanName;
+        }
+    }
+    return "";
+}
+
+// Автоматическая загрузка обложки для Tico (sdmc:/tico/assets/covers/<slug>/<clean_game_name>.png)
+static void downloadTicoCoverArt(const std::string& tico_slug, const std::string& clean_game_name, const std::string& cover_url) {
+    if (tico_slug.empty() || clean_game_name.empty() || cover_url.empty()) return;
+    std::string coverDir = std::string(TSNX_TICO_COVERS_DIR) + "/" + tico_slug;
+    tsnx_ensure_dir(coverDir.c_str());
+    std::string coverPath = coverDir + "/" + clean_game_name + ".png";
+
+    std::error_code ec;
+    if (std::filesystem::exists(coverPath, ec)) return;
+
+    util::logLine("Tico Cover: downloading cover for " + clean_game_name + " to " + coverPath);
+    net::HttpClient client;
+    client.setTimeout(15);
+    bool ok = client.downloadToFile(cover_url, coverPath);
+    if (ok) {
+        util::logLine("Tico Cover: successfully saved " + coverPath);
+    } else {
+        util::logLine("Tico Cover: failed to download cover from " + cover_url);
+    }
+}
+
 // Фоновое копирование не-игровых файлов, модов/русификаторов и Homebrew/портов.
 // Моды и русификаторы Nintendo Switch устанавливаются напрямую в atmosphere/contents/<title_id>/;
 // остальные файлы сохраняются в downloads/<имя_раздачи>/ с контролем длины пути.
@@ -492,10 +571,12 @@ static void fileCopyWorker(datasource::IDataSource* source,
                            const std::string& magnet,
                            const std::string& release_title,
                            const std::string& title_id,
+                           const std::string& cover_url,
                            int file_index,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
                            const std::string& retro_console_id,
+                           const std::string& retro_target_mode,
                            const std::shared_ptr<std::atomic<bool>>& cancel,
                            const std::shared_ptr<std::atomic<bool>>& pause,
                            const std::shared_ptr<FileDownloadState>& st) {
@@ -540,13 +621,31 @@ static void fileCopyWorker(datasource::IDataSource* source,
     // Папка конкретной раздачи (для ретро-игр - целевая папка РОМов; для PS Vita создаём подпапку с именем раздачи)
     std::filesystem::path release_base;
     std::string release_folder;
+    bool isTicoMode = false;
+    if (retro_target_mode == "tico") {
+        isTicoMode = true;
+    } else if (retro_target_mode == "standalone" || retro_target_mode == "retroarch") {
+        isTicoMode = false;
+    } else {
+        isTicoMode = config::ConfigManager::instance().isTicoMode();
+    }
     if (!retro_console_id.empty()) {
-        std::string subfolder = retro_console_id;
-        const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id);
-        if (cInfo && !cInfo->default_rom_subfolder.empty()) {
-            subfolder = cInfo->default_rom_subfolder;
+        bool isTicoSupported = catalog::RetroCatalogManager::instance().isTicoSupported(retro_console_id);
+        std::string subfolder = catalog::RetroCatalogManager::instance().getEffectiveConsoleSubfolder(retro_console_id, isTicoMode && isTicoSupported);
+        std::string destDir;
+        if (isTicoMode) {
+            if (isTicoSupported) {
+                destDir = std::string(TSNX_TICO_ROMS_DIR) + "/" + subfolder;
+            } else {
+                destDir = std::string(TSNX_ROMS_BASE_DIR) + "/" + subfolder;
+            }
+        } else {
+            if (retro_target_mode == "standalone" || retro_target_mode == "retroarch") {
+                destDir = std::string(TSNX_ROMS_BASE_DIR) + "/" + subfolder;
+            } else {
+                destDir = config::ConfigManager::instance().getEffectiveRetroRomsDir(subfolder);
+            }
         }
-        std::string destDir = config::ConfigManager::instance().getEffectiveRetroRomsDir(subfolder);
         release_base = std::filesystem::path(destDir);
         if (retro_console_id == "psvita") {
             release_folder = extractReleaseFolderName(release_title);
@@ -578,8 +677,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
     }
 
     auto resolveDestRel = [&](const std::string& rel_path) -> std::filesystem::path {
-        if (!retro_console_id.empty() && retro_console_id != "psvita" && target_indices.size() == 1) {
-            return std::filesystem::path(sanitizePathComponent(std::filesystem::path(rel_path).filename().string()));
+        if (!retro_console_id.empty() && retro_console_id != "psvita") {
+            if (isTicoMode || target_indices.size() == 1) {
+                return std::filesystem::path(sanitizePathComponent(std::filesystem::path(rel_path).filename().string()));
+            }
         }
         std::filesystem::path p = sanitizeTorrentPath(rel_path);
         if (!release_folder.empty()) {
@@ -921,7 +1022,11 @@ static void fileCopyWorker(datasource::IDataSource* source,
         }
 
         // 2. Автораспаковка ретро-ромов
-        if (!retro_console_id.empty() && config::ConfigManager::instance().getRetroAutoExtract()) {
+        bool isDiscOrComplex = catalog::RetroCatalogManager::instance().isDiscOrComplexConsole(retro_console_id);
+        bool shouldExtractRetro = (!retro_console_id.empty() && 
+            (config::ConfigManager::instance().getRetroAutoExtract() || (isTicoMode && isDiscOrComplex)));
+
+        if (shouldExtractRetro) {
             for (int idx : target_indices) {
                 if (cancel->load() || g_appExiting.load()) break;
                 if (idx < 0 || idx >= n) continue;
@@ -932,8 +1037,19 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 if (util::isArchiveFile(file_dest)) {
                     std::string outErr;
                     std::string targetDir = std::filesystem::path(file_dest).parent_path().string();
+                    std::string archiveName = std::filesystem::path(file_dest).filename().string();
                     util::logLine("download: auto-extracting retro archive: " + file_dest + " -> " + targetDir);
-                    bool extractOk = util::extractArchive(file_dest, targetDir, nullptr, cancel, outErr);
+
+                    auto extractProgressCb = [&](const util::ArchiveProgress& prog) {
+                        int pct = static_cast<int>(std::clamp(prog.percentage, 0.0f, 100.0f));
+                        std::lock_guard<std::mutex> lk(st->msg_mutex);
+                        st->stage_label = brls::getStr("app/retro/stage_extracting", archiveName, std::to_string(pct));
+                    };
+                    {
+                        std::lock_guard<std::mutex> lk(st->msg_mutex);
+                        st->stage_label = brls::getStr("app/retro/stage_extracting", archiveName, "0");
+                    }
+                    bool extractOk = util::extractArchive(file_dest, targetDir, extractProgressCb, cancel, outErr);
                     if (extractOk) {
                         util::logLine("download: auto-extract succeeded for " + file_dest);
                         std::error_code ec;
@@ -942,6 +1058,48 @@ static void fileCopyWorker(datasource::IDataSource* source,
                         util::logLine("download: auto-extract failed: " + outErr);
                     }
                 }
+            }
+        }
+
+        // 3. Tico Pipeline: Sanitization, Multi-disc M3U & Cover Art
+        if (!retro_console_id.empty() && isTicoMode && catalog::RetroCatalogManager::instance().isTicoSupported(retro_console_id)) {
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = "app/retro/stage_cleanup"_i18n;
+            }
+            sanitizeTicoRomsDir(release_base);
+
+            std::string ticoSlug = catalog::RetroCatalogManager::instance().getTicoSlug(retro_console_id);
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = "app/retro/stage_m3u"_i18n;
+            }
+            std::string m3uName = createM3uPlaylistIfNeeded(release_base, release_title, target_indices, files);
+
+            std::string targetCoverName = m3uName;
+            if (targetCoverName.empty()) {
+                if (target_indices.size() == 1) {
+                    std::string singleFn = std::filesystem::path(files[target_indices[0]].path).stem().string();
+                    targetCoverName = singleFn;
+                } else {
+                    targetCoverName = sanitizePathComponent(cleanTitle(release_title));
+                }
+            }
+            if (!cover_url.empty() && !targetCoverName.empty()) {
+                {
+                    std::lock_guard<std::mutex> lk(st->msg_mutex);
+                    st->stage_label = "app/retro/stage_cover"_i18n;
+                }
+                downloadTicoCoverArt(ticoSlug, targetCoverName, cover_url);
+            }
+        }
+
+        if (!retro_console_id.empty()) {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            if (isTicoMode) {
+                st->stage_label = "app/retro/ready_in_tico"_i18n;
+            } else {
+                st->stage_label = "app/retro/ready_to_play"_i18n;
             }
         }
 
@@ -1627,7 +1785,8 @@ size_t DownloadManager::addToQueue(const std::string& title,
                                    int forced_file_index,
                                    const std::string& forced_stream_name,
                                    bool is_homebrew,
-                                   const std::string& retro_console_id) {
+                                   const std::string& retro_console_id,
+                                   const std::string& retro_target_mode) {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     DownloadItem item;
     item.title = title;
@@ -1636,6 +1795,7 @@ size_t DownloadManager::addToQueue(const std::string& title,
     item.forced_stream_name = forced_stream_name;
     item.is_homebrew = is_homebrew;
     item.retro_console_id = retro_console_id;
+    item.retro_target_mode = retro_target_mode;
     item.state = DownloadState::Queued;
     if (isLocalBackend()) {
         std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
@@ -2334,11 +2494,13 @@ void DownloadManager::handleFileDownload(size_t index,
         const auto sel_files = item.selected_files;
         const bool is_hb = item.is_homebrew;
         const std::string retro_cid = item.retro_console_id;
+        const std::string retro_mode = item.retro_target_mode;
         const std::string title_id = item.title_id;
+        const std::string cover_url = item.cover_url;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, title_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
-                fileCopyWorker(source, hash, magnet, title, title_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
+            std::async(std::launch::async, [source, hash, magnet, title, title_id, cover_url, idx, sel_files, is_hb, retro_cid, retro_mode, cancel, pause, st]() {
+                fileCopyWorker(source, hash, magnet, title, title_id, cover_url, idx, sel_files, is_hb, retro_cid, retro_mode, cancel, pause, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +

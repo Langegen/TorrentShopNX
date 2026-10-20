@@ -21,6 +21,9 @@ struct RetroConsoleInfo {
     std::string recommended_emulator_id;
     std::vector<std::string> known_extensions;
     NVGcolor color;
+    std::string tico_slug;
+    bool is_tico_supported = true;
+    std::string tico_recommended_core;
 };
 
 class RetroCatalogManager {
@@ -30,6 +33,13 @@ public:
     const std::vector<RetroConsoleInfo>& consoles() const { return consoles_; }
     const RetroConsoleInfo* findConsole(const std::string& id) const;
     const RetroConsoleInfo* getConsole(const std::string& id) const { return findConsole(id); }
+
+    std::string getEffectiveConsoleSubfolder(const std::string& console_id, bool is_tico_mode) const;
+    bool isTicoSupported(const std::string& console_id) const;
+    std::string getTicoSlug(const std::string& console_id) const;
+    std::string getTicoCoreName(const std::string& console_id) const;
+    bool isDiscOrComplexConsole(const std::string& console_id) const;
+    bool isGameFilePresent(const std::string& console_id, const std::string& filename) const;
 
     std::string getConsoleJsonPath(const std::string& console_id) const;
     std::string getConsoleBinPath(const std::string& console_id) const;

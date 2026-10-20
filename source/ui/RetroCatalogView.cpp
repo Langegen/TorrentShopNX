@@ -7,6 +7,7 @@
 #include "RetroEmulatorsView.hpp"
 #include "../catalog/retro_emulator_manager.h"
 #include "../catalog/game_stats_manager.h"
+#include "../config/config.h"
 #include "../utils/log.h"
 #include <algorithm>
 
@@ -140,7 +141,38 @@ RetroCatalogView::~RetroCatalogView() {
 }
 
 void RetroCatalogView::updateEmulatorBadge() {
-    if (consoleInfo_.recommended_emulator_id.empty() || !emuBadge || !emuBadgeText) return;
+    if (!emuBadge || !emuBadgeText) return;
+
+    bool isTicoMode = config::ConfigManager::instance().isTicoMode();
+    if (isTicoMode && consoleInfo_.is_tico_supported) {
+        bool ticoInstalled = catalog::RetroEmulatorManager::instance().isInstalled("tico");
+        emuBadge->setVisibility(brls::Visibility::VISIBLE);
+        bool isLight = ThemeManager::instance().isCurrentThemeLight();
+        std::string coreName = consoleInfo_.tico_recommended_core.empty() ? "Core" : consoleInfo_.tico_recommended_core;
+
+        if (ticoInstalled) {
+            if (isLight) {
+                emuBadge->setBackgroundColor(nvgRGBA(124, 77, 255, 35));
+                emuBadgeText->setTextColor(nvgRGB(100, 50, 220));
+            } else {
+                emuBadge->setBackgroundColor(nvgRGBA(124, 77, 255, 45));
+                emuBadgeText->setTextColor(nvgRGB(180, 150, 255));
+            }
+            emuBadgeText->setText("Tico • " + coreName + "app/retro/emu_ready_badge"_i18n);
+        } else {
+            if (isLight) {
+                emuBadge->setBackgroundColor(nvgRGBA(234, 88, 12, 35));
+                emuBadgeText->setTextColor(nvgRGB(194, 65, 12));
+            } else {
+                emuBadge->setBackgroundColor(nvgRGBA(255, 152, 0, 40));
+                emuBadgeText->setTextColor(nvgRGB(255, 183, 77));
+            }
+            emuBadgeText->setText("Tico • " + coreName + "app/retro/emu_not_installed_badge"_i18n);
+        }
+        return;
+    }
+
+    if (consoleInfo_.recommended_emulator_id.empty()) return;
 
     const auto* emuPkg = catalog::RetroEmulatorManager::instance().findPackage(consoleInfo_.recommended_emulator_id);
     if (!emuPkg) return;
@@ -172,6 +204,25 @@ void RetroCatalogView::updateEmulatorBadge() {
 }
 
 void RetroCatalogView::triggerEmulatorAction() {
+    bool isTicoMode = config::ConfigManager::instance().isTicoMode();
+    if (isTicoMode && consoleInfo_.is_tico_supported) {
+        const auto* ticoPkg = catalog::RetroEmulatorManager::instance().findPackage("tico");
+        if (ticoPkg) {
+            bool ticoInstalled = catalog::RetroEmulatorManager::instance().isInstalled("tico");
+            if (ticoInstalled) {
+                brls::Application::pushActivity(new RetroEmulatorsView());
+            } else {
+                showEmulatorInstallDialog(*ticoPkg, [this, ticoPkg](bool ok) {
+                    if (ok) {
+                        brls::Application::notify("app/retro/emu_ready_notify"_i18n);
+                        updateEmulatorBadge();
+                    }
+                });
+            }
+            return;
+        }
+    }
+
     if (consoleInfo_.recommended_emulator_id.empty()) return;
     const auto* emuPkg = catalog::RetroEmulatorManager::instance().findPackage(consoleInfo_.recommended_emulator_id);
     if (!emuPkg) return;

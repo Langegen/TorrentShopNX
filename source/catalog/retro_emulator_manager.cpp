@@ -3,6 +3,7 @@
 #include "../utils/file_ops.h"
 #include "../utils/log.h"
 #include "../net/http_client.h"
+#include "../config/config.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <sys/stat.h>
 #include <filesystem>
@@ -37,6 +38,24 @@ RetroEmulatorManager::RetroEmulatorManager() {
 
 void RetroEmulatorManager::initPackages() {
     packages_ = {
+        // --- 0. Tico Emulation Frontend ---
+        {
+            "tico",
+            "Tico Frontend",
+            "ticohq",
+            "0.7.2",
+            "Современный контроллер-ориентированный ретро-фронтенд для Nintendo Switch",
+            "frontend",
+            "https://github.com/ticohq/tico/releases/latest/download/tico.nro",
+            "tico.nro",
+            "sdmc:/switch/tico/tico.nro",
+            "",
+            false,
+            25 * 1024 * 1024,
+            {"nes", "snes", "n64", "gbc", "gba", "nds", "3ds", "gamecube", "wii", "ps1", "psp", "sega_ms", "sega_gg", "sega_md", "sega_cd", "sega_32x", "dreamcast"},
+            nvgRGBA(124, 77, 255, 255)
+        },
+
         // --- 1. Nintendo 3DS ---
         {
             "dekopon",
@@ -668,6 +687,15 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
 void RetroEmulatorManager::recordInstalledVersion(const std::string& emu_id, const std::string& version) {
     installed_versions_[emu_id] = version;
     saveInstalledVersions();
+    if (emu_id == "tico") {
+        tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
+        tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+        if (config::ConfigManager::instance().getRetroRomsMode() == "retroarch") {
+            config::ConfigManager::instance().setRetroRomsMode("tico");
+            config::ConfigManager::instance().save();
+            util::logLine("RetroEmulatorManager: Tico installed, automatically switched retro_roms_mode to 'tico'");
+        }
+    }
 }
 
 void RetroEmulatorManager::loadInstalledVersions() {
@@ -1095,6 +1123,19 @@ void RetroEmulatorManager::healInstalledEmulators() {
         std::string upperNro = resolvePlatformPath("sdmc:/switch/mGBA/mGBA.nro");
         if (std::filesystem::exists(lowerNro, ec) && !std::filesystem::exists(upperNro, ec)) {
             std::filesystem::rename(lowerNro, upperNro, ec);
+        }
+    }
+
+    // 4. Tico: ensure base directories exist if tico is present
+    std::string ticoPath1 = resolvePlatformPath("sdmc:/switch/tico/tico.nro");
+    std::string ticoPath2 = resolvePlatformPath("sdmc:/switch/tico.nro");
+    std::string ticoDir = resolvePlatformPath(TSNX_TICO_BASE_DIR);
+    if (std::filesystem::exists(ticoPath1, ec) || std::filesystem::exists(ticoPath2, ec) || std::filesystem::exists(ticoDir, ec)) {
+        tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
+        tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+        if (installed_versions_.find("tico") == installed_versions_.end()) {
+            installed_versions_["tico"] = "0.7.2";
+            saveInstalledVersions();
         }
     }
 }

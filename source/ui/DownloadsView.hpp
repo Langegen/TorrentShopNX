@@ -74,6 +74,8 @@ struct DownloadGroup {
     std::string failed_name;
     std::string failed_error;
     bool has_port_install = false;
+    std::string retro_console_id;
+    std::string retro_target_mode;
 };
 
 class DownloadsView : public brls::Activity {

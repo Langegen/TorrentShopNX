@@ -46,9 +46,17 @@
 
 #ifdef __SWITCH__
 #define TSNX_ROMS_BASE_DIR       "sdmc:/roms"
+#define TSNX_TICO_BASE_DIR       "sdmc:/tico"
+#define TSNX_TICO_NRO_PATH       "sdmc:/switch/tico/tico.nro"
 #else
 #define TSNX_ROMS_BASE_DIR       "./roms"
+#define TSNX_TICO_BASE_DIR       "./tico"
+#define TSNX_TICO_NRO_PATH       "./switch/tico/tico.nro"
 #endif
+
+#define TSNX_TICO_ROMS_DIR       TSNX_TICO_BASE_DIR "/roms"
+#define TSNX_TICO_ASSETS_DIR     TSNX_TICO_BASE_DIR "/assets"
+#define TSNX_TICO_COVERS_DIR     TSNX_TICO_ASSETS_DIR "/covers"
 
 #define TSNX_RETRO_DATA_DIR      TSNX_DATA_DIR "/retro"
 

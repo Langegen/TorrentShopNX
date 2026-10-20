@@ -25,7 +25,8 @@ public:
     void toggleAllSelection();
     void updateTotalSize();
     void startDownloadAndGoToDownloads();
-    void executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName);
+    void promptAndExecuteDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName);
+    void executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName, const std::string& retro_target_mode = "");
 
 private:
     Game game_;
