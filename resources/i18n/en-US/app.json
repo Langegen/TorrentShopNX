@@ -517,7 +517,7 @@
         "force_app_update_confirm": "Download and force reinstall the app ({0})?",
         "force_app_update_fetch": "Fetching latest release info...",
         "cache_thumbnails": "Cache cover thumbnails",
-        "sound_effects": "Sound Effects",
+        "sound_effects": "Interface Sounds",
         "joycon_rumble": "Joy-Con Rumble",
         "keep_awake": "Prevent sleep during downloads",
         "backlight_timeout": "Turn off backlight during download",
@@ -706,7 +706,14 @@
         "retro_update_catalogs_cached": "Cache: {0} games (A - update)",
         "retro_update_catalogs_empty": "Press A to update",
         "lang_ar": "العربية",
-        "retro_folder_prompt": "Ask before download"
+        "retro_folder_prompt": "Ask before download",
+        "cat_updates": "Updates",
+        "sec_language": "Language",
+        "sec_feedback": "Controls & Feedback",
+        "sec_app_update": "Application",
+        "sec_catalog_update": "Game Catalog",
+        "sec_retro_update": "Retro Catalogs",
+        "sound_effects_desc": "Button clicks, navigation sounds and alerts"
     },
     "applet": {
         "title": "Applet Mode Not Supported",

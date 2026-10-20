@@ -1,5 +1,7 @@
 #include "StorageTabView.hpp"
 #include "DownloadUiManager.hpp"
+#include "ThemeManager.hpp"
+#include "../config/config.h"
 #include "../utils/storage_utils.h"
 #include "../utils/switch_utils.h"
 #include "../utils/app_paths.h"
@@ -41,6 +43,16 @@ StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
 
     // ---- Кэш ----
     addSectionHeader(this, "app/settings/cache_section"_i18n);
+
+    // Тумблер кеширования миниатюр
+    auto& cfg = config::ConfigManager::instance();
+    auto* cacheThumbnailsCell = new brls::BooleanCell();
+    cacheThumbnailsCell->init("app/settings/cache_thumbnails"_i18n, cfg.getCacheCoverThumbnails(), [&cfg](bool value) {
+        cfg.setCacheCoverThumbnails(value);
+        cfg.save();
+    });
+    this->addView(cacheThumbnailsCell);
+
     addCacheRow("app/settings/storage_cache_thumbnails"_i18n, TSNX_CACHE_THUMBNAILS, false);
     addCacheRow("app/settings/cache_catalog"_i18n, TSNX_CACHE_CATALOG, false);
     addCacheRow("app/settings/cache_meta"_i18n, TSNX_CACHE_META, false);
@@ -106,7 +118,7 @@ void StorageTabView::addSectionHeader(brls::Box* parent, const std::string& titl
     auto* header = new brls::Label();
     header->setFontSize(18);
     header->setText(title);
-    header->setTextColor(nvgRGBA(255, 255, 255, 150));
+    header->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     header->setMarginTop(25);
     header->setMarginBottom(10);
     parent->addView(header);
@@ -132,8 +144,9 @@ void StorageTabView::addStorageRow(brls::Box* parent, const std::string& title,
     track->setHeight(kBarHeight);
     track->setCornerRadius(kBarHeight / 2.0f);
     track->setBorderThickness(1.0f);
-    track->setBorderColor(nvgRGBA(255, 255, 255, 70));
-    track->setBackgroundColor(nvgRGBA(255, 255, 255, 28));
+    bool isLight = ThemeManager::instance().isCurrentThemeLight();
+    track->setBorderColor(isLight ? nvgRGBA(0, 0, 0, 70) : nvgRGBA(255, 255, 255, 70));
+    track->setBackgroundColor(isLight ? nvgRGBA(0, 0, 0, 25) : nvgRGBA(255, 255, 255, 28));
     track->setMarginRight(15.0f);
     row->addView(track);
 

@@ -516,7 +516,7 @@
         "force_app_update_confirm": "هل تريد فرض إعادة تنزيل الإصدار الحالي؟",
         "force_app_update_fetch": "جارٍ جلب حزمة التحديث...",
         "cache_thumbnails": "تخزين الصور المصغرة مؤقتاً",
-        "sound_effects": "المؤثرات الصوتية",
+        "sound_effects": "أصوات الواجهة",
         "joycon_rumble": "اهتزاز Joy-Con",
         "keep_awake": "منع سكون الجهاز أثناء التنزيل",
         "backlight_timeout": "إيقاف إضاءة الشاشة تلقائياً",
@@ -703,7 +703,14 @@
         "version_str": "الإصدار: {0}",
         "retro_update_catalogs_cached": "تم تحديث الكتالوجات من النسخة المحفوظة",
         "retro_update_catalogs_empty": "لا توجد كتالوجات للتحديث",
-        "lang_ar": "العربية"
+        "lang_ar": "العربية",
+        "cat_updates": "التحديثات",
+        "sec_language": "اللغة",
+        "sec_feedback": "التحكم والتغذية الراجعة",
+        "sec_app_update": "التطبيق",
+        "sec_catalog_update": "دليل الألعاب",
+        "sec_retro_update": "أدلة الألعاب الكلاسيكية",
+        "sound_effects_desc": "أصوات الأزرار والتنقل والتنبيهات"
     },
     "applet": {
         "title": "وضع التطبيق المصغر غير مدعوم",

@@ -19,12 +19,12 @@ private:
     BRLS_BIND(brls::TabFrame, tabFrame, "tabFrame");
 
     brls::View* buildGeneralTab();
+    brls::View* buildUpdatesTab();
     brls::View* buildAppearanceTab();
     brls::View* buildDownloadsTab();
     brls::View* buildRetroTab();
     brls::View* buildStorageTab();
     brls::View* buildAboutTab();
-    void showCommunityDialog();
 };
 
 } // namespace ui

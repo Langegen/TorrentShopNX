@@ -678,8 +678,15 @@
         "update_catalog_up_to_date": "Le catalogue est déjà à jour",
         "cat_appearance": "Apparence",
         "joycon_rumble": "Vibration Joy-Con",
-        "sound_effects": "Effets sonores",
-        "lang_ar": "العربية"
+        "sound_effects": "Sons de l'interface",
+        "lang_ar": "العربية",
+        "cat_updates": "Mises à jour",
+        "sec_language": "Langue",
+        "sec_feedback": "Commandes et retour",
+        "sec_app_update": "Application",
+        "sec_catalog_update": "Catalogue de jeux",
+        "sec_retro_update": "Catalogues rétro",
+        "sound_effects_desc": "Sons des boutons, navigation et alertes"
     },
     "applet": {
         "title": "Mode Applet détecté",

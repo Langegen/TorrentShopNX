@@ -678,8 +678,15 @@
         "update_catalog_up_to_date": "目录已是最新",
         "cat_appearance": "外观",
         "joycon_rumble": "Joy-Con 震动",
-        "sound_effects": "音效",
-        "lang_ar": "العربية"
+        "sound_effects": "界面音效",
+        "lang_ar": "العربية",
+        "cat_updates": "更新",
+        "sec_language": "语言",
+        "sec_feedback": "控制与反馈",
+        "sec_app_update": "应用程序",
+        "sec_catalog_update": "游戏目录",
+        "sec_retro_update": "复古目录",
+        "sound_effects_desc": "按键、菜单导航和提示音效"
     },
     "applet": {
         "title": "当前运行在 Applet 模式",

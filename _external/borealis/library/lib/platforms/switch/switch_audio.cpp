@@ -1,167 +1,174 @@
-/*
-    Copyright 2021 natinusala
-    Copyright 2020-2021 p-sam
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-*/
-
 #include <borealis/core/logger.hpp>
+#include <borealis/core/application.hpp>
 #include <borealis/platforms/switch/switch_audio.hpp>
+#include "../../../../../source/config/config.h"
+
+#ifdef __SWITCH__
+#include <SDL2/SDL.h>
+#else
+#include <windows.h>
+#include <mmsystem.h>
+#endif
 
 namespace brls
 {
 
-#define QLAUNCH_PID 0x0100000000001000
-#define QLAUNCH_MOUNT_POINT "qlaunch"
-#define ROMFS_MOUNT_POINT "romfs"
-#define BFSAR_PATH "/sound/qlaunch.bfsar"
-
-const std::string SOUNDS_MAP[_SOUND_MAX] = {
-    "", // SOUND_NONE
-    "SeBtnFocus", // SOUND_FOCUS_CHANGE
-    "SeKeyErrorCursor", // SOUND_FOCUS_ERROR
-    "SeBtnDecide", // SOUND_CLICK
-    "SeFooterDecideFinish", // SOUND_BACK
-    "SeNaviFocus", // SOUND_FOCUS_SIDEBAR
-    "SeKeyError", // SOUND_CLICK_ERROR
-    "SeUnlockKeyZR", // SOUND_HONK
-    "SeNaviDecide", // SOUND_CLICK_SIDEBAR
-    "SeTouchUnfocus", // SOUND_TOUCH_UNFOCUS
-    "SeTouch", // SOUND_TOUCH
-    "SeSliderTickOver", // SOUND_SLIDER_TICK
-    "SeSliderRelease" // SOUND_SLIDER_RELEASE
-};
+static const char* getSoundFilename(enum Sound sound) {
+    switch (sound) {
+        case SOUND_FOCUS_CHANGE:
+        case SOUND_FOCUS_SIDEBAR:
+        case SOUND_TOUCH:
+        case SOUND_TOUCH_UNFOCUS:
+        case SOUND_SLIDER_TICK:
+            return "focus.wav";
+        case SOUND_CLICK:
+        case SOUND_CLICK_SIDEBAR:
+        case SOUND_HONK:
+        case SOUND_SLIDER_RELEASE:
+            return "click.wav";
+        case SOUND_BACK:
+            return "back.wav";
+        case SOUND_FOCUS_ERROR:
+        case SOUND_CLICK_ERROR:
+            return "error.wav";
+        default:
+            return nullptr;
+    }
+}
 
 SwitchAudioPlayer::SwitchAudioPlayer()
 {
-    // Init the sounds array
-    for (size_t sound = 0; sound < _SOUND_MAX; sound++)
-        this->sounds[sound] = PLSR_PLAYER_INVALID_SOUND;
+#ifdef __SWITCH__
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        Logger::error("SDL_InitSubSystem(SDL_INIT_AUDIO) failed: {}", SDL_GetError());
+        return;
+    }
 
-    // Init pulsar player
-//    PLSR_RC rc = plsrPlayerInit();
-//    if (PLSR_RC_FAILED(rc))
-//    {
-//        Logger::error("Unable to init Pulsar player: {:#x}", rc);
-//        return;
-//    }
-//
-//    // Check if the program running is qlaunch
-//    char bfsarPath[29];
-//    u64 programId = 0;
-//    svcGetInfo(&programId, InfoType_ProgramId, CUR_PROCESS_HANDLE, 0);
-//    if (programId != QLAUNCH_PID)
-//    {
-//        // Mount qlaunch ROMFS for the BFSAR
-//        Result result = romfsMountDataStorageFromProgram(QLAUNCH_PID, QLAUNCH_MOUNT_POINT);
-//        if (!R_SUCCEEDED(result))
-//        {
-//            Logger::error("Unable to mount qlaunch ROMFS: {:#x}", result);
-//
-//            plsrPlayerExit();
-//            return;
-//        }
-//
-//        sprintf(bfsarPath, "%s:%s", QLAUNCH_MOUNT_POINT, BFSAR_PATH);
-//    }
-//    else
-//        sprintf(bfsarPath, "%s:%s", ROMFS_MOUNT_POINT, BFSAR_PATH);
-//
-//    // Open qlaunch BFSAR
-//    rc = plsrBFSAROpen(bfsarPath, &this->qlaunchBfsar);
-//    if (PLSR_RC_FAILED(rc))
-//    {
-//        Logger::error("Unable to open qlaunch BFSAR: {:#x}", rc);
-//
-//        plsrPlayerExit();
-//        return;
-//    }
-//
-//    // Good to go~
-//    this->init = true;
+    SDL_AudioSpec want, have;
+    SDL_zero(want);
+    want.freq = 44100;
+    want.format = AUDIO_S16SYS;
+    want.channels = 1;
+    want.samples = 1024;
+    want.callback = nullptr;
+
+    deviceId = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
+    if (deviceId == 0) {
+        Logger::error("SDL_OpenAudioDevice failed: {}", SDL_GetError());
+        return;
+    }
+
+    SDL_PauseAudioDevice(deviceId, 0);
+    this->init = true;
+    Logger::info("SwitchAudioPlayer: initialized SDL2 audio device {}", deviceId);
+#else
+    this->init = true;
+#endif
+
+    for (int i = 1; i < (int)_SOUND_MAX; i++) {
+        this->load((enum Sound)i);
+    }
 }
 
 bool SwitchAudioPlayer::load(enum Sound sound)
 {
-    if (!this->init)
+    if (!this->init || sound <= SOUND_NONE || sound >= _SOUND_MAX)
         return false;
 
-    if (sound == SOUND_NONE)
+    if (this->sounds[sound].loaded)
         return true;
 
-    if (this->sounds[sound] != PLSR_PLAYER_INVALID_SOUND)
-        return true;
+    const char* filename = getSoundFilename(sound);
+    if (!filename)
+        return false;
 
-    std::string soundName = SOUNDS_MAP[sound];
+    std::string path = std::string("romfs:/sound/") + filename;
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) {
+        path = std::string("resources/sound/") + filename;
+        f = fopen(path.c_str(), "rb");
+    }
 
-    if (soundName.empty())
-        return false; // unimplemented sound
-
-    Logger::debug("Loading sound {}: {}", (int)sound, soundName);
-
-    PLSR_RC rc = plsrPlayerLoadSoundByName(&this->qlaunchBfsar, soundName.c_str(), &this->sounds[sound]);
-    if (PLSR_RC_FAILED(rc))
-    {
-        Logger::warning("Unable to load sound {}: {:#x}", soundName, rc);
-        this->sounds[sound] = PLSR_PLAYER_INVALID_SOUND;
+    if (f) {
+        fclose(f);
+    } else {
+        Logger::warning("SwitchAudioPlayer: sound file not found: {}", filename);
         return false;
     }
 
+#ifdef __SWITCH__
+    SDL_AudioSpec wavSpec;
+    Uint8* wavBuffer = nullptr;
+    Uint32 wavLength = 0;
+    if (SDL_LoadWAV(path.c_str(), &wavSpec, &wavBuffer, &wavLength) == nullptr) {
+        Logger::error("SwitchAudioPlayer: SDL_LoadWAV failed for {}: {}", path, SDL_GetError());
+        return false;
+    }
+
+    SDL_AudioCVT cvt;
+    if (SDL_BuildAudioCVT(&cvt, wavSpec.format, wavSpec.channels, wavSpec.freq,
+                          AUDIO_S16SYS, 1, 44100) > 0) {
+        cvt.buf = (Uint8*)malloc(wavLength * cvt.len_mult);
+        if (cvt.buf) {
+            memcpy(cvt.buf, wavBuffer, wavLength);
+            cvt.len = wavLength;
+            SDL_ConvertAudio(&cvt);
+            this->sounds[sound].data.assign(cvt.buf, cvt.buf + cvt.len_cvt);
+            free(cvt.buf);
+        }
+    } else {
+        this->sounds[sound].data.assign(wavBuffer, wavBuffer + wavLength);
+    }
+
+    SDL_FreeWAV(wavBuffer);
+    this->sounds[sound].loaded = true;
+    this->sounds[sound].path = path;
     return true;
+#else
+    this->sounds[sound].loaded = true;
+    this->sounds[sound].path = path;
+    return true;
+#endif
 }
 
 bool SwitchAudioPlayer::play(enum Sound sound, float pitch)
 {
-    if (!this->init)
+    if (!this->init || sound <= SOUND_NONE || sound >= _SOUND_MAX)
         return false;
 
-    if (sound == SOUND_NONE)
+    if (!config::ConfigManager::instance().getSoundEffectsEnabled())
+        return false;
+
+    if (!this->sounds[sound].loaded) {
+        if (!this->load(sound))
+            return false;
+    }
+
+#ifdef __SWITCH__
+    if (this->deviceId != 0 && !this->sounds[sound].data.empty()) {
+        SDL_ClearQueuedAudio(this->deviceId);
+        SDL_QueueAudio(this->deviceId, this->sounds[sound].data.data(), this->sounds[sound].data.size());
         return true;
-
-//    // Load the sound if needed
-//    if (this->sounds[sound] == PLSR_PLAYER_INVALID_SOUND)
-//    {
-//        if (!this->load(sound))
-//            return false;
-//    }
-//
-//    // Play the sound
-//    plsrPlayerSetPitch(this->sounds[sound], pitch);
-//    PLSR_RC rc = plsrPlayerPlay(this->sounds[sound]);
-//    if (PLSR_RC_FAILED(rc))
-//    {
-//        Logger::error("Unable to play sound {}: {:#x}", sound, rc);
-//        return false;
-//    }
-
-    return true;
+    }
+#else
+    if (!this->sounds[sound].path.empty()) {
+        PlaySoundA(this->sounds[sound].path.c_str(), NULL, SND_ASYNC | SND_FILENAME | SND_NODEFAULT);
+        return true;
+    }
+#endif
+    return false;
 }
 
 SwitchAudioPlayer::~SwitchAudioPlayer()
 {
-    if (!this->init)
-        return;
-
-    // Unload all sounds
-    for (size_t sound = 0; sound < _SOUND_MAX; sound++)
-    {
-        if (this->sounds[sound] != PLSR_PLAYER_INVALID_SOUND)
-            plsrPlayerFree(this->sounds[sound]);
+#ifdef __SWITCH__
+    if (this->deviceId != 0) {
+        SDL_CloseAudioDevice(this->deviceId);
+        this->deviceId = 0;
     }
-
-    // Close the archive and exit player
-    plsrBFSARClose(&this->qlaunchBfsar);
-    plsrPlayerExit();
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+#endif
+    this->init = false;
 }
 
 } // namespace brls

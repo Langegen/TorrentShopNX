@@ -678,8 +678,15 @@
         "update_catalog_up_to_date": "カタログはすでに最新です",
         "cat_appearance": "外観",
         "joycon_rumble": "Joy-Conの振動",
-        "sound_effects": "効果音",
-        "lang_ar": "العربية"
+        "sound_effects": "インターフェース音",
+        "lang_ar": "العربية",
+        "cat_updates": "アップデート",
+        "sec_language": "言語",
+        "sec_feedback": "操作とフィードバック",
+        "sec_app_update": "アプリ",
+        "sec_catalog_update": "ゲームカタログ",
+        "sec_retro_update": "レトロカタログ",
+        "sound_effects_desc": "ボタン、メニュー操作および通知の効果音"
     },
     "applet": {
         "title": "アプレットモードを検出しました",
