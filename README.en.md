@@ -30,7 +30,7 @@
 ## 📸 Screenshots
 
 <div align="center">
-  <img src="docs/screenshots/dashboard.jpg" alt="TorrentShopNX v2.16 Main Menu & Dashboard" width="95%"/>
+  <img src="docs/screenshots/dashboard.jpg" alt="TorrentShopNX v2.17 Main Menu & Dashboard" width="95%"/>
   <p><em>Main Menu & Dashboard: Quick access to the game catalog, retro platforms, game manager, downloads, and storage stats</em></p>
   <br/>
 
