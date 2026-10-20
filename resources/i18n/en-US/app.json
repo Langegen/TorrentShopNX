@@ -977,7 +977,7 @@
         "prompt_install_bios_msg": "For {0} to function properly, {1} is required/recommended. Install BIOS now?",
         "btn_install_bios": "Install BIOS",
         "downloading_comp_file": "Downloading file {0} ({1} of {2})...",
-        "target_dialog_title": "Download Destination",
+        "target_dialog_title": "Where to save game?",
         "target_dialog_desc": "Choose target directory to save the game:\n\n1. Tico:\n   {0}\n\n2. Standalone:\n   {1}",
         "target_dialog_desc_unsupported": "This platform is not supported by Tico cores.\n\n1. Tico:\n   {0}\n\n2. Standalone (recommended):\n   {1}",
         "target_btn_tico": "Tico",
@@ -987,7 +987,14 @@
         "stage_cleanup": "Cleaning up extra files...",
         "stage_cover": "Downloading Tico cover art...",
         "ready_in_tico": "Ready in Tico",
-        "ready_to_play": "Ready to play"
+        "ready_to_play": "Ready to play",
+        "target_dialog_subtitle": "Choose target folder for emulator:",
+        "tico_badge_ready": "Ready to play",
+        "tico_badge_unsupported": "No native core",
+        "tico_card_hint": "Automatic disc extraction and boxart caching",
+        "tico_card_hint_unsupported": "Tico cores do not support this console yet",
+        "standalone_badge_recommended": "Recommended",
+        "standalone_card_hint": "Standard folder for standalone emulators and RetroArch"
     },
     "dashboard": {
         "catalog_title": "NEW & POPULAR GAMES",

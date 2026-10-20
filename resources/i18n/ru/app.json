@@ -977,7 +977,7 @@
         "prompt_install_bios_msg": "Для полноценной работы {0} рекомендуется установить {1}. Установить BIOS сейчас?",
         "btn_install_bios": "Установить BIOS",
         "downloading_comp_file": "Загрузка файла {0} ({1} из {2})...",
-        "target_dialog_title": "Куда скачать?",
+        "target_dialog_title": "Куда сохранить игру?",
         "target_dialog_desc": "Выберите каталог для сохранения игры:\n\n1. Tico:\n   {0}\n\n2. Standalone:\n   {1}",
         "target_dialog_desc_unsupported": "Платформа не поддерживается ядром Tico.\n\n1. Tico:\n   {0}\n\n2. Standalone (рекомендуется):\n   {1}",
         "target_btn_tico": "Tico",
@@ -987,7 +987,14 @@
         "stage_cleanup": "Очистка временных файлов...",
         "stage_cover": "Загрузка обложки Tico...",
         "ready_in_tico": "Готово к запуску в Tico",
-        "ready_to_play": "Готово к запуску"
+        "ready_to_play": "Готово к запуску",
+        "target_dialog_subtitle": "Выберите целевой каталог для эмулятора:",
+        "tico_badge_ready": "Готово к игре",
+        "tico_badge_unsupported": "Нет нативного ядра",
+        "tico_card_hint": "Автоматическая распаковка образов и загрузка обложки в кэш",
+        "tico_card_hint_unsupported": "Ядро Tico пока не поддерживает запуск игр этой консоли",
+        "standalone_badge_recommended": "Рекомендуется",
+        "standalone_card_hint": "Стандартная папка для автономных эмуляторов и RetroArch"
     },
     "dashboard": {
         "catalog_title": "НОВИНКИ И ПОПУЛЯРНЫЕ ИГРЫ КАТАЛОГА",
