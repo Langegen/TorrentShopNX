@@ -475,7 +475,7 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
 
 void handlePostEmulatorInstallFlow(const catalog::EmulatorPackage& pkg,
                                    std::function<void()> onDone) {
-    if (pkg.category == "bios") {
+    if (pkg.category == "bios" || pkg.id == "tico_bios") {
         if (onDone) onDone();
         return;
     }

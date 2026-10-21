@@ -57,6 +57,7 @@
 #define TSNX_TICO_ROMS_DIR       TSNX_TICO_BASE_DIR "/roms"
 #define TSNX_TICO_ASSETS_DIR     TSNX_TICO_BASE_DIR "/assets"
 #define TSNX_TICO_COVERS_DIR     TSNX_TICO_ASSETS_DIR "/covers"
+#define TSNX_TICO_SYSTEM_DIR     TSNX_TICO_BASE_DIR "/system"
 
 #define TSNX_RETRO_DATA_DIR      TSNX_DATA_DIR "/retro"
 

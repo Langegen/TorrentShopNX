@@ -44,8 +44,8 @@ void RetroEmulatorManager::initPackages() {
             "Tico Frontend",
             "ticohq",
             "0.7.2",
-            "Современный контроллер-ориентированный ретро-фронтенд для Nintendo Switch",
-            "frontend",
+            "Современный ретро-лаунчер (17 платформ: NES, SNES, N64, GB, GBA, NDS, 3DS, GC, Wii, PS1, PSP, Sega, DC)",
+            "tico",
             "https://github.com/ticohq/tico/releases/latest/download/tico.nro",
             "tico.nro",
             "sdmc:/switch/tico/tico.nro",
@@ -53,7 +53,8 @@ void RetroEmulatorManager::initPackages() {
             false,
             25 * 1024 * 1024,
             {"nes", "snes", "n64", "gbc", "gba", "nds", "3ds", "gamecube", "wii", "ps1", "psp", "sega_ms", "sega_gg", "sega_md", "sega_cd", "sega_32x", "dreamcast"},
-            nvgRGBA(124, 77, 255, 255)
+            nvgRGBA(124, 77, 255, 255),
+            "tico_bios"
         },
 
         // --- 1. Nintendo 3DS ---
@@ -369,6 +370,44 @@ void RetroEmulatorManager::initPackages() {
 
 std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() const {
     return {
+        // --- 0. Tico BIOS & System Pack ---
+        {
+            "tico_bios",
+            "Tico BIOS & System Pack",
+            "Dump / Libretro",
+            "1.0",
+            "Комплект BIOS и системных файлов для нативных ядер Tico: DuckStation, Flycast, Genesis Plus GX, DraStic, mGBA, FCEUmm",
+            "tico",
+            "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
+            "scph5501.bin",
+            "sdmc:/tico/system/duckstation/scph5501.bin",
+            "sdmc:/tico/system",
+            false,
+            3452928,
+            {"ps1", "dreamcast", "sega_cd", "nds", "gba", "nes"},
+            nvgRGBA(124, 77, 255, 255),
+            "",
+            {
+                // DuckStation (PS1)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/tico/system/duckstation/scph5501.bin", 524288},
+                // Flycast (Dreamcast)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/tico/system/flycast/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/tico/system/flycast/flash.bin", 131072},
+                // Genesis Plus GX (Sega CD)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_J.bin", 131072},
+                // DraStic (Nintendo DS)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/tico/system/drastic/nds_bios_arm7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/tico/system/drastic/nds_bios_arm9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/tico/system/drastic/nds_firmware.bin", 262144},
+                // mGBA (GBA)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/gba_bios.bin", "sdmc:/tico/system/mgba/gba_bios.bin", 16384},
+                // FCEUmm (FDS)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192}
+            }
+        },
+
         // --- 1. PlayStation 2 BIOS (NetherSX2) ---
         {
             "ps2_bios",
@@ -564,7 +603,10 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
 
 void RetroEmulatorManager::applyPackageDefaults() {
     for (auto& p : packages_) {
-        if (p.id == "nethersx2") {
+        if (p.id == "tico") {
+            if (p.bios_id.empty()) p.bios_id = "tico_bios";
+            p.category = "tico";
+        } else if (p.id == "nethersx2") {
             if (p.bios_id.empty()) p.bios_id = "ps2_bios";
         } else if (p.id == "duckstation") {
             if (p.bios_id.empty()) p.bios_id = "ps1_bios";
@@ -672,7 +714,7 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
     if (!p) return EmulatorInstallStatus::INSTALLED;
 
     // BIOS packages are static dump files and do not have software updates
-    if (p->category == "bios") {
+    if (p->category == "bios" || p->id == "tico_bios") {
         return EmulatorInstallStatus::INSTALLED;
     }
 
@@ -690,11 +732,14 @@ void RetroEmulatorManager::recordInstalledVersion(const std::string& emu_id, con
     if (emu_id == "tico") {
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+        tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
         if (config::ConfigManager::instance().getRetroRomsMode() == "retroarch") {
             config::ConfigManager::instance().setRetroRomsMode("tico");
             config::ConfigManager::instance().save();
             util::logLine("RetroEmulatorManager: Tico installed, automatically switched retro_roms_mode to 'tico'");
         }
+    } else if (emu_id == "tico_bios") {
+        tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
     }
 }
 
@@ -987,9 +1032,9 @@ bool RetroEmulatorManager::loadLocalManifest() {
     std::string str = buffer.str();
     if (str.empty()) return false;
 
-    // Check if the cached manifest on disk is an obsolete pre-BIOS file or missing drastic_bios
-    if (str.find("\"bios\"") == std::string::npos || str.find("\"ps2_bios\"") == std::string::npos || str.find("\"drastic_bios\"") == std::string::npos) {
-        util::logLine("RetroEmulatorManager: detected obsolete local manifest without drastic_bios, updating cache to latest built-in definitions");
+    // Check if the cached manifest on disk is an obsolete pre-BIOS file or missing drastic_bios / tico_bios
+    if (str.find("\"bios\"") == std::string::npos || str.find("\"ps2_bios\"") == std::string::npos || str.find("\"drastic_bios\"") == std::string::npos || str.find("\"tico_bios\"") == std::string::npos) {
+        util::logLine("RetroEmulatorManager: detected obsolete local manifest without tico_bios, updating cache to latest built-in definitions");
         saveLocalManifest();
         return true;
     }
@@ -1133,8 +1178,19 @@ void RetroEmulatorManager::healInstalledEmulators() {
     if (std::filesystem::exists(ticoPath1, ec) || std::filesystem::exists(ticoPath2, ec) || std::filesystem::exists(ticoDir, ec)) {
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+        tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
         if (installed_versions_.find("tico") == installed_versions_.end()) {
             installed_versions_["tico"] = "0.7.2";
+            saveInstalledVersions();
+        }
+    }
+
+    // 5. Tico BIOS: check if key Tico system BIOS files exist
+    std::string ticoDuckstation = resolvePlatformPath("sdmc:/tico/system/duckstation/scph5501.bin");
+    std::string ticoFlycast = resolvePlatformPath("sdmc:/tico/system/flycast/dc_boot.bin");
+    if (std::filesystem::exists(ticoDuckstation, ec) || std::filesystem::exists(ticoFlycast, ec)) {
+        if (installed_versions_.find("tico_bios") == installed_versions_.end()) {
+            installed_versions_["tico_bios"] = "1.0";
             saveInstalledVersions();
         }
     }

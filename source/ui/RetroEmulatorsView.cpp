@@ -187,6 +187,7 @@ void RetroEmulatorsView::rebuildList() {
     bool isLight = ThemeManager::instance().isCurrentThemeLight();
 
     std::vector<SectionDef> sections = {
+        {"tico",      "app/retro/sec_emu_tico"_i18n,      isLight ? nvgRGB(100, 45, 220) : nvgRGBA(140, 95, 255, 255)},
         {"nintendo",  "app/retro/sec_emu_nintendo"_i18n,  isLight ? nvgRGB(210, 20, 20) : nvgRGBA(230, 0, 18, 255)},
         {"sony",      "app/retro/sec_emu_sony"_i18n,      nvgRGBA(0, 55, 145, 255)},
         {"sega",      "app/retro/sec_emu_sega"_i18n,      isLight ? nvgRGB(13, 148, 136) : nvgRGBA(0, 224, 165, 255)},
@@ -200,8 +201,18 @@ void RetroEmulatorsView::rebuildList() {
     for (const auto& sec : sections) {
         std::vector<const catalog::EmulatorPackage*> secPkgs;
         for (const auto& p : packages) {
-            if (p.category == sec.category) {
-                secPkgs.push_back(&p);
+            if (sec.category == "tico") {
+                if (p.category == "tico" || p.id == "tico" || p.id == "tico_bios") {
+                    secPkgs.push_back(&p);
+                }
+            } else if (sec.category == "bios") {
+                if (p.category == "bios" || p.id == "tico_bios") {
+                    secPkgs.push_back(&p);
+                }
+            } else {
+                if (p.category == sec.category) {
+                    secPkgs.push_back(&p);
+                }
             }
         }
         if (secPkgs.empty()) continue;
@@ -263,34 +274,63 @@ void RetroEmulatorsView::rebuildList() {
             titleRow->addView(colorDot);
 
             auto* nameLabel = new brls::Label();
-            nameLabel->setText(pkg.name);
+            if (pkg.id == "tico_bios") {
+                nameLabel->setText("app/retro/tico_bios_title"_i18n);
+            } else {
+                nameLabel->setText(pkg.name);
+            }
             nameLabel->setFontSize(16.0f);
             nameLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             nameLabel->setMarginRight(10.0f);
             titleRow->addView(nameLabel);
 
             // Console badges (explicitly show which consoles this emulator runs)
-            for (const auto& cid : pkg.supported_console_ids) {
+            if (pkg.supported_console_ids.size() > 3) {
+                // For multi-platform frontends like Tico, show a compact systems count badge
                 auto* cBadge = new brls::Box();
                 cBadge->setPadding(2.0f, 7.0f, 2.0f, 7.0f);
                 cBadge->setCornerRadius(4.0f);
+                std::string badgeText = brls::getStr("app/retro/tico_systems_badge_count", std::to_string(pkg.supported_console_ids.size()));
                 if (isLight) {
-                    cBadge->setBackgroundColor(nvgRGBA(0, 150, 214, 25));
+                    cBadge->setBackgroundColor(nvgRGBA(124, 77, 255, 30));
                     auto* cLbl = new brls::Label();
-                    cLbl->setText(getConsoleDisplayName(cid));
+                    cLbl->setText(badgeText);
                     cLbl->setFontSize(11.0f);
-                    cLbl->setTextColor(nvgRGB(2, 132, 199));
+                    cLbl->setTextColor(nvgRGB(100, 45, 220));
                     cBadge->addView(cLbl);
                 } else {
-                    cBadge->setBackgroundColor(nvgRGBA(0, 180, 216, 40));
+                    cBadge->setBackgroundColor(nvgRGBA(124, 77, 255, 45));
                     auto* cLbl = new brls::Label();
-                    cLbl->setText(getConsoleDisplayName(cid));
+                    cLbl->setText(badgeText);
                     cLbl->setFontSize(11.0f);
-                    cLbl->setTextColor(nvgRGB(56, 217, 245));
+                    cLbl->setTextColor(nvgRGB(180, 150, 255));
                     cBadge->addView(cLbl);
                 }
                 cBadge->setMarginRight(6.0f);
                 titleRow->addView(cBadge);
+            } else {
+                for (const auto& cid : pkg.supported_console_ids) {
+                    auto* cBadge = new brls::Box();
+                    cBadge->setPadding(2.0f, 7.0f, 2.0f, 7.0f);
+                    cBadge->setCornerRadius(4.0f);
+                    if (isLight) {
+                        cBadge->setBackgroundColor(nvgRGBA(0, 150, 214, 25));
+                        auto* cLbl = new brls::Label();
+                        cLbl->setText(getConsoleDisplayName(cid));
+                        cLbl->setFontSize(11.0f);
+                        cLbl->setTextColor(nvgRGB(2, 132, 199));
+                        cBadge->addView(cLbl);
+                    } else {
+                        cBadge->setBackgroundColor(nvgRGBA(0, 180, 216, 40));
+                        auto* cLbl = new brls::Label();
+                        cLbl->setText(getConsoleDisplayName(cid));
+                        cLbl->setFontSize(11.0f);
+                        cLbl->setTextColor(nvgRGB(56, 217, 245));
+                        cBadge->addView(cLbl);
+                    }
+                    cBadge->setMarginRight(6.0f);
+                    titleRow->addView(cBadge);
+                }
             }
 
             auto* verBadge = new brls::Box();
@@ -324,7 +364,13 @@ void RetroEmulatorsView::rebuildList() {
 
             // Description
             auto* descLabel = new brls::Label();
-            descLabel->setText(pkg.description);
+            if (pkg.id == "tico") {
+                descLabel->setText("app/retro/tico_emu_desc_platforms"_i18n);
+            } else if (pkg.id == "tico_bios") {
+                descLabel->setText("app/retro/tico_bios_desc"_i18n);
+            } else {
+                descLabel->setText(pkg.description);
+            }
             descLabel->setFontSize(12.0f);
             descLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             descLabel->setSingleLine(true);
