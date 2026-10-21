@@ -14,11 +14,13 @@ std::string FavoritesManager::getGameKey(const Game& g) const {
 }
 
 void FavoritesManager::init(const std::string& path) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     filepath_ = path;
     load();
 }
 
 bool FavoritesManager::load() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     favorite_games_.clear();
     legacy_topic_ids_.clear();
 
@@ -55,6 +57,7 @@ bool FavoritesManager::load() {
 }
 
 bool FavoritesManager::save() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::ofstream out(filepath_);
     if (!out.is_open()) {
         util::logLine("favorites: could not open file for writing: " + filepath_);
@@ -80,6 +83,7 @@ bool FavoritesManager::save() {
 }
 
 bool FavoritesManager::isFavorite(const std::string& key_or_topic_id) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (key_or_topic_id.empty()) return false;
     for (const auto& g : favorite_games_) {
         if (getGameKey(g) == key_or_topic_id || g.topic_id == key_or_topic_id || g.magnet == key_or_topic_id) {
@@ -90,11 +94,13 @@ bool FavoritesManager::isFavorite(const std::string& key_or_topic_id) const {
 }
 
 bool FavoritesManager::isFavorite(const Game& game) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string key = getGameKey(game);
     return isFavorite(key);
 }
 
 void FavoritesManager::addFavorite(const Game& game) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string key = getGameKey(game);
     if (key.empty()) return;
     if (isFavorite(key)) return;
@@ -105,12 +111,15 @@ void FavoritesManager::addFavorite(const Game& game) {
 }
 
 void FavoritesManager::addFavorite(const std::string& topic_id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (topic_id.empty()) return;
     auto catalog = getCatalogSnapshot();
-    for (const auto& g : *catalog) {
-        if (g.topic_id == topic_id || g.magnet == topic_id) {
-            addFavorite(g);
-            return;
+    if (catalog) {
+        for (const auto& g : *catalog) {
+            if (g.topic_id == topic_id || g.magnet == topic_id) {
+                addFavorite(g);
+                return;
+            }
         }
     }
     if (legacy_topic_ids_.insert(topic_id).second) {
@@ -119,6 +128,7 @@ void FavoritesManager::addFavorite(const std::string& topic_id) {
 }
 
 void FavoritesManager::removeFavorite(const std::string& key_or_topic_id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (key_or_topic_id.empty()) return;
     bool erased = false;
     for (auto it = favorite_games_.begin(); it != favorite_games_.end(); ) {
@@ -138,11 +148,13 @@ void FavoritesManager::removeFavorite(const std::string& key_or_topic_id) {
 }
 
 void FavoritesManager::removeFavorite(const Game& game) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string key = getGameKey(game);
     removeFavorite(key);
 }
 
 bool FavoritesManager::toggleFavorite(const Game& game) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (isFavorite(game)) {
         removeFavorite(game);
         return false;
@@ -153,6 +165,7 @@ bool FavoritesManager::toggleFavorite(const Game& game) {
 }
 
 bool FavoritesManager::toggleFavorite(const std::string& topic_id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (isFavorite(topic_id)) {
         removeFavorite(topic_id);
         return false;
@@ -163,6 +176,7 @@ bool FavoritesManager::toggleFavorite(const std::string& topic_id) {
 }
 
 void FavoritesManager::syncLegacyFavorites(const std::vector<Game>& catalog_games) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (legacy_topic_ids_.empty() || catalog_games.empty()) return;
 
     bool updated = false;
@@ -180,6 +194,16 @@ void FavoritesManager::syncLegacyFavorites(const std::vector<Game>& catalog_game
     if (updated) {
         save();
     }
+}
+
+std::vector<Game> FavoritesManager::getFavorites() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return favorite_games_;
+}
+
+size_t FavoritesManager::getFavoritesCount() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return favorite_games_.size();
 }
 
 } // namespace catalog

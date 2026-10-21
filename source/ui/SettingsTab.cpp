@@ -294,6 +294,7 @@ static brls::ScrollingFrame* makeTabBox(brls::Box** out_box) {
 } // namespace
 
 SettingsTab::SettingsTab() {
+    aliveToken_ = std::make_shared<bool>(true);
     // Компактный сайдбар категорий в виде стеклянной рамки дашборда
     brls::getStyle().addMetric("brls/tab_frame/sidebar_width", 260.0f);
     brls::getStyle().addMetric("brls/sidebar/padding_top", 16.0f);
@@ -303,6 +304,12 @@ SettingsTab::SettingsTab() {
     brls::getStyle().addMetric("brls/sidebar/item_height", 56.0f);
     brls::getStyle().addMetric("brls/sidebar/item_font_size", 19.0f);
     brls::getStyle().addMetric("brls/sidebar/item_accent_margin_sides", 10.0f);
+}
+
+SettingsTab::~SettingsTab() {
+    if (aliveToken_) {
+        *aliveToken_ = false;
+    }
 }
 
 void SettingsTab::onContentAvailable() {
@@ -498,7 +505,8 @@ brls::View* SettingsTab::buildUpdatesTab() {
     // URL каталога JSON
     auto* catalogUrlCell = new brls::DetailCell();
     catalogUrlCell->setText("app/settings/catalog_url"_i18n);
-    auto updateCatalogUrlDisplay = [catalogUrlCell, &cfg]() {
+    auto updateCatalogUrlDisplay = [catalogUrlCell, &cfg, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         std::string url = cfg.getCatalogSourceUrl();
         if (url.empty()) {
             url = cfg.getEffectiveCatalogSourceUrl();
@@ -509,9 +517,10 @@ brls::View* SettingsTab::buildUpdatesTab() {
         catalogUrlCell->setDetailText(url);
     };
     updateCatalogUrlDisplay();
-    catalogUrlCell->registerClickAction([updateCatalogUrlDisplay, &cfg](brls::View* view) {
+    catalogUrlCell->registerClickAction([updateCatalogUrlDisplay, &cfg, alive = aliveToken_](brls::View* view) {
         brls::Application::getImeManager()->openForText(
-            [updateCatalogUrlDisplay, &cfg](std::string text) {
+            [updateCatalogUrlDisplay, &cfg, alive](std::string text) {
+                if (!alive || !*alive) return;
                 if (!text.empty()) {
                     if (text == "default" || text == "reset") {
                         cfg.setCatalogSourceUrl("");
@@ -537,33 +546,38 @@ brls::View* SettingsTab::buildUpdatesTab() {
     // Обновление каталога игр (принудительное обновление)
     auto* catalogUpdateCell = new brls::DetailCell();
     catalogUpdateCell->setText("app/settings/update_catalog_btn"_i18n);
-    auto updateCatalogStatusDisplay = [catalogUpdateCell]() {
+    auto updateCatalogStatusDisplay = [catalogUpdateCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         auto snap = getCatalogSnapshot();
         size_t gameCount = snap ? snap->size() : 0;
         catalogUpdateCell->setDetailText(brls::getStr("app/catalog/games_count", std::to_string(gameCount)));
     };
     updateCatalogStatusDisplay();
-    catalogUpdateCell->registerClickAction([updateCatalogStatusDisplay](brls::View* view) {
+    catalogUpdateCell->registerClickAction([updateCatalogStatusDisplay, alive = aliveToken_](brls::View* view) {
         if (catalog::CatalogUpdater::instance().isUpdateRunning()) {
             brls::Application::notify("app/catalog/updating_db"_i18n);
             return true;
         }
 
         auto* dialog = new brls::Dialog("app/settings/update_catalog_dialog_msg"_i18n);
-        dialog->addButton("app/settings/update_catalog_fast_diff"_i18n, [updateCatalogStatusDisplay]() {
+        dialog->addButton("app/settings/update_catalog_fast_diff"_i18n, [updateCatalogStatusDisplay, alive]() {
             catalog::CatalogUpdater::instance().startUpdate(
                 catalog::CatalogUpdateMode::ForceDiff,
-                [updateCatalogStatusDisplay](const catalog::CatalogUpdateResult& res) {
-                    updateCatalogStatusDisplay();
+                [updateCatalogStatusDisplay, alive](const catalog::CatalogUpdateResult& res) {
+                    if (alive && *alive) {
+                        updateCatalogStatusDisplay();
+                    }
                 },
                 true
             );
         });
-        dialog->addButton("app/settings/update_catalog_full"_i18n, [updateCatalogStatusDisplay]() {
+        dialog->addButton("app/settings/update_catalog_full"_i18n, [updateCatalogStatusDisplay, alive]() {
             catalog::CatalogUpdater::instance().startUpdate(
                 catalog::CatalogUpdateMode::ForceFull,
-                [updateCatalogStatusDisplay](const catalog::CatalogUpdateResult& res) {
-                    updateCatalogStatusDisplay();
+                [updateCatalogStatusDisplay, alive](const catalog::CatalogUpdateResult& res) {
+                    if (alive && *alive) {
+                        updateCatalogStatusDisplay();
+                    }
                 },
                 true
             );
@@ -579,7 +593,8 @@ brls::View* SettingsTab::buildUpdatesTab() {
 
     auto* updateRetroCatalogsCell = new brls::DetailCell();
     updateRetroCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
-    auto updateRetroDetailText = [updateRetroCatalogsCell]() {
+    auto updateRetroDetailText = [updateRetroCatalogsCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
         if (count > 0) {
             updateRetroCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
@@ -588,9 +603,11 @@ brls::View* SettingsTab::buildUpdatesTab() {
         }
     };
     updateRetroDetailText();
-    updateRetroCatalogsCell->registerClickAction([updateRetroDetailText](brls::View* view) {
-        showRetroCatalogUpdateDialog([updateRetroDetailText](int updatedCount) {
-            updateRetroDetailText();
+    updateRetroCatalogsCell->registerClickAction([updateRetroDetailText, alive = aliveToken_](brls::View* view) {
+        showRetroCatalogUpdateDialog([updateRetroDetailText, alive](int updatedCount) {
+            if (alive && *alive) {
+                updateRetroDetailText();
+            }
         });
         return true;
     });
@@ -963,7 +980,8 @@ brls::View* SettingsTab::buildRetroTab() {
     auto* updateCatalogsCell = new brls::DetailCell();
     updateCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
 
-    auto updateDetailText = [updateCatalogsCell]() {
+    auto updateDetailText = [updateCatalogsCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
         if (count > 0) {
             updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
@@ -973,9 +991,11 @@ brls::View* SettingsTab::buildRetroTab() {
     };
     updateDetailText();
 
-    updateCatalogsCell->registerClickAction([updateDetailText](brls::View* view) {
-        showRetroCatalogUpdateDialog([updateDetailText](int updatedCount) {
-            updateDetailText();
+    updateCatalogsCell->registerClickAction([updateDetailText, alive = aliveToken_](brls::View* view) {
+        showRetroCatalogUpdateDialog([updateDetailText, alive](int updatedCount) {
+            if (alive && *alive) {
+                updateDetailText();
+            }
         });
         return true;
     });

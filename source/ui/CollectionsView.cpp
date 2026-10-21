@@ -162,7 +162,7 @@ void CollectionsView::rebuildGrid() {
 
     // 1.2 Избранное
     {
-        size_t favCount = catalog::FavoritesManager::instance().getFavorites().size();
+        size_t favCount = catalog::FavoritesManager::instance().getFavoritesCount();
         CollectionCard* cardFav = new CollectionCard(
             "favorites",
             "app/collections/favorites"_i18n,

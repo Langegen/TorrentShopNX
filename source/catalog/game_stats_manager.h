@@ -57,6 +57,7 @@ private:
     std::unordered_map<std::string, GameStats> console_stats_;
     std::atomic<bool> loaded_from_disk_{false};
     std::atomic<bool> loading_{false};
+    std::atomic<bool> updating_{false};
 };
 
 } // namespace catalog

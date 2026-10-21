@@ -16,7 +16,6 @@ GameStatsManager& GameStatsManager::instance() {
 }
 
 GameStatsManager::GameStatsManager() {
-    loadFromDisk();
 }
 
 std::string GameStatsManager::getSwitchStatsCachePath() {
@@ -61,20 +60,25 @@ bool GameStatsManager::parseStatsJson(const std::string& json_str, std::unordere
             if (!val.is_object()) continue;
 
             GameStats s;
-            if (val.contains("seeds") && val["seeds"].is_number()) {
-                s.seeds = val["seeds"].get<int32_t>();
+            auto itS = val.find("seeds");
+            if (itS != val.end() && itS->is_number()) {
+                s.seeds = itS->get<int32_t>();
             }
-            if (val.contains("leeches") && val["leeches"].is_number()) {
-                s.leeches = val["leeches"].get<int32_t>();
+            auto itL = val.find("leeches");
+            if (itL != val.end() && itL->is_number()) {
+                s.leeches = itL->get<int32_t>();
             }
-            if (val.contains("downloads") && val["downloads"].is_number()) {
-                s.downloads = val["downloads"].get<int64_t>();
+            auto itD = val.find("downloads");
+            if (itD != val.end() && itD->is_number()) {
+                s.downloads = itD->get<int64_t>();
             }
-            if (val.contains("registered_at") && val["registered_at"].is_string()) {
-                s.registered_at = val["registered_at"].get<std::string>();
+            auto itR = val.find("registered_at");
+            if (itR != val.end() && itR->is_string()) {
+                s.registered_at = itR->get<std::string>();
             }
-            if (val.contains("updated_at") && val["updated_at"].is_string()) {
-                s.updated_at = val["updated_at"].get<std::string>();
+            auto itU = val.find("updated_at");
+            if (itU != val.end() && itU->is_string()) {
+                s.updated_at = itU->get<std::string>();
             }
 
             // On Rutracker, registered_at corresponds to when the release was registered
@@ -102,7 +106,9 @@ void GameStatsManager::ensureLoaded() const {
 }
 
 void GameStatsManager::loadFromDisk() {
+    if (loaded_from_disk_.load(std::memory_order_acquire)) return;
     std::lock_guard<std::mutex> lock(mutex_);
+    if (loaded_from_disk_.load(std::memory_order_relaxed)) return;
     loadFromDiskInternal();
 }
 
@@ -194,6 +200,14 @@ const GameStats* GameStatsManager::getAnyStats(const std::string& topic_id) cons
 }
 
 void GameStatsManager::updateStatsInBackground(std::function<void(bool success)> onDone) {
+    bool expected = false;
+    if (!updating_.compare_exchange_strong(expected, true)) {
+        if (onDone) {
+            brls::sync([onDone]() { onDone(false); });
+        }
+        return;
+    }
+
     brls::async([this, onDone]() {
         try {
             net::HttpClient client;
@@ -208,14 +222,16 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                 std::unordered_map<std::string, GameStats> newMap;
                 if (parseStatsJson(switchRes.body, newMap)) {
                     writeTextFile(getSwitchStatsCachePath(), switchRes.body);
+                    size_t switchCount = 0;
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
                         switch_stats_ = std::move(newMap);
+                        switchCount = switch_stats_.size();
                         loaded_from_disk_.store(true, std::memory_order_release);
                     }
                     anySuccess = true;
                     util::logLine("GameStatsManager: successfully updated switch stats (" +
-                                  std::to_string(switch_stats_.size()) + " entries)");
+                                  std::to_string(switchCount) + " entries)");
                 }
             } else {
                 util::logLine("GameStatsManager: switch stats fetch failed with status " +
@@ -229,14 +245,16 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                 std::unordered_map<std::string, GameStats> newMap;
                 if (parseStatsJson(consoleRes.body, newMap)) {
                     writeTextFile(getConsoleStatsCachePath(), consoleRes.body);
+                    size_t consoleCount = 0;
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
                         console_stats_ = std::move(newMap);
+                        consoleCount = console_stats_.size();
                         loaded_from_disk_.store(true, std::memory_order_release);
                     }
                     anySuccess = true;
                     util::logLine("GameStatsManager: successfully updated console stats (" +
-                                  std::to_string(console_stats_.size()) + " entries)");
+                                  std::to_string(consoleCount) + " entries)");
                 }
             } else if (consoleRes.status_code == 404) {
                 util::logLine("GameStatsManager: console stats file not found on GitHub (404), keeping existing");
@@ -261,6 +279,7 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                 brls::sync([onDone]() { onDone(false); });
             }
         }
+        updating_.store(false, std::memory_order_release);
     });
 }
 

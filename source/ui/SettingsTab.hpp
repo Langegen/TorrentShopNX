@@ -11,11 +11,13 @@ public:
     CONTENT_FROM_XML_RES("tabs/settings.xml");
 
     SettingsTab();
+    ~SettingsTab() override;
     void onContentAvailable() override;
     void willAppear(bool resetState = false) override;
     void willDisappear(bool resetState = false) override;
 
 private:
+    std::shared_ptr<bool> aliveToken_;
     BRLS_BIND(brls::TabFrame, tabFrame, "tabFrame");
 
     brls::View* buildGeneralTab();

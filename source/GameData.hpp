@@ -612,6 +612,7 @@ inline std::vector<Game> parseGamesFromFileStream(const std::string& filePath) {
     }
 
     auto games = parseGamesFromJsonString(content);
+    std::string().swap(content); // Release 25MB file buffer immediately
     return games;
 }
 
@@ -650,7 +651,7 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
     return games;
 }
 
-// Save games vector to high-speed binary cache (buffered in RAM to prevent 300,000+ tiny stream writes)
+// Save games vector to high-speed binary cache directly streamed via 256KB I/O buffer (avoids 21MB RAM spike)
 inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<Game>& games) {
     if (games.empty()) return false;
     std::filesystem::path p(binPath);
@@ -659,27 +660,45 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         std::filesystem::create_directories(p.parent_path(), ec);
     }
 
-    // Pre-allocate buffer to hold the entire binary file in RAM (avoids 300,000+ tiny SD card writes)
-    // Average entry is ~2.7 KB, so 7,200 games is ~20 MB.
-    std::string buffer;
-    buffer.reserve(games.size() * 2800 + 1024);
+    FILE* f = fopen(binPath.c_str(), "wb");
+    if (!f) {
+        util::logLine("GameData: failed to open bin file for writing: " + binPath);
+        return false;
+    }
+
+    // 256 KB file buffer to eliminate small SD card writes without 20MB RAM allocation
+    std::vector<char> ioBuf(256 * 1024);
+    setvbuf(f, ioBuf.data(), _IOFBF, ioBuf.size());
+
+    size_t totalWritten = 0;
+    bool writeError = false;
+
+    auto writeRaw = [&f, &totalWritten, &writeError](const void* ptr, size_t size) {
+        if (writeError) return;
+        if (fwrite(ptr, 1, size, f) != size) {
+            writeError = true;
+        } else {
+            totalWritten += size;
+        }
+    };
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
-    buffer.append(magic, 8);
+    writeRaw(magic, 8);
     uint32_t version = 4;
-    buffer.append(reinterpret_cast<const char*>(&version), sizeof(version));
+    writeRaw(&version, sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
-    buffer.append(reinterpret_cast<const char*>(&count), sizeof(count));
+    writeRaw(&count, sizeof(count));
 
-    auto writeStr = [&buffer](const std::string& s) {
+    auto writeStr = [&writeRaw](const std::string& s) {
         uint16_t len = static_cast<uint16_t>(std::min<size_t>(s.size(), 65535));
-        buffer.append(reinterpret_cast<const char*>(&len), sizeof(len));
+        writeRaw(&len, sizeof(len));
         if (len > 0) {
-            buffer.append(s.data(), len);
+            writeRaw(s.data(), len);
         }
     };
 
     for (const auto& g : games) {
+        if (writeError) break;
         writeStr(g.title);
         writeStr(g.title_id);
         writeStr(g.size);
@@ -696,7 +715,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.cover);
 
         uint16_t scCount = static_cast<uint16_t>(std::min<size_t>(g.screenshots.size(), 65535));
-        buffer.append(reinterpret_cast<const char*>(&scCount), sizeof(scCount));
+        writeRaw(&scCount, sizeof(scCount));
         for (size_t i = 0; i < scCount; ++i) {
             writeStr(g.screenshots[i]);
         }
@@ -705,27 +724,17 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.multiplayer);
 
         uint8_t is_rom = g.is_romset ? 1 : 0;
-        buffer.append(reinterpret_cast<const char*>(&is_rom), sizeof(is_rom));
+        writeRaw(&is_rom, sizeof(is_rom));
         writeStr(g.content_type);
         writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
     }
 
-    FILE* f = fopen(binPath.c_str(), "wb");
-    if (!f) {
-        util::logLine("GameData: failed to open bin file for writing: " + binPath);
-        return false;
-    }
-
-    std::vector<char> ioBuf(256 * 1024);
-    setvbuf(f, ioBuf.data(), _IOFBF, ioBuf.size());
-
-    size_t written = fwrite(buffer.data(), 1, buffer.size(), f);
     fflush(f);
     fclose(f);
 
-    bool ok = (written == buffer.size());
+    bool ok = !writeError;
     util::logLine("GameData: saved binary cache to " + binPath + " count=" + std::to_string(games.size()) +
-                  " size=" + std::to_string(buffer.size()) + " bytes ok=" + std::to_string(ok));
+                  " size=" + std::to_string(totalWritten) + " bytes ok=" + std::to_string(ok));
     return ok;
 }
 
@@ -822,10 +831,6 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
             if (!readStr(g.content_type)) return false;
         } else {
             g.is_romset = isRomsetGame(g);
-        }
-
-        if (!g.is_romset && isRomsetGame(g)) {
-            g.is_romset = true;
         }
 
         if (version >= 4) {
@@ -1212,6 +1217,11 @@ inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_second
 // the cache/<type> + data/ layout and prunes stale cache entries by age.
 inline void migrateStorageLayout() {
     ensureAppDirs();
+    const std::string marker = std::string(TSNX_DATA_DIR) + "/.migrated_v2";
+    std::error_code ecMarker;
+    if (std::filesystem::exists(marker, ecMarker)) {
+        return;
+    }
     util::logLine("GameData: storage layout migration start");
 
     // Files -> data/
@@ -1251,6 +1261,9 @@ inline void migrateStorageLayout() {
     // Obsolete download-state file
     std::error_code ecObsolete;
     std::filesystem::remove(TSNX_BASE_DIR "/downloads.json", ecObsolete);
+
+    FILE* mf = fopen(marker.c_str(), "wb");
+    if (mf) fclose(mf);
 
     util::logLine("GameData: storage layout migration done");
 }

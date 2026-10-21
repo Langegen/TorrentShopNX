@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
+#include <mutex>
 #include "../GameData.hpp"
 
 namespace catalog {
@@ -32,13 +33,15 @@ public:
 
     void syncLegacyFavorites(const std::vector<Game>& catalog_games);
 
-    const std::vector<Game>& getFavorites() const { return favorite_games_; }
+    std::vector<Game> getFavorites() const;
+    size_t getFavoritesCount() const;
 
 private:
     FavoritesManager() = default;
 
     std::string getGameKey(const Game& g) const;
 
+    mutable std::recursive_mutex mutex_;
     std::string filepath_;
     std::vector<Game> favorite_games_;
     std::unordered_set<std::string> legacy_topic_ids_;

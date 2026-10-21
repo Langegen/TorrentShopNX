@@ -398,6 +398,12 @@ int main(int argc, char** argv) {
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
                   " mem_size=" + std::to_string(g_socket_mem_size_used) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
+    bool startupBoostActive = false;
+    if (!checkAppletMode()) {
+        util::cpuBoostBegin();
+        startupBoostActive = true;
+        util::logLine("main: startup CPU boost enabled (1785 MHz)");
+    }
 #endif
     migrateStorageLayout();
     clearCaches();
@@ -470,11 +476,12 @@ int main(int argc, char** argv) {
 
         if (vg && baseFont != brls::FONT_INVALID && arFont == brls::FONT_INVALID) {
             std::vector<std::string> candidateArabicPaths = {
+#ifdef __SWITCH__
+                "romfs:/font/arabic_font.ttf",
+#endif
                 "sdmc:/switch/TorrentShopNX/font/arabic.ttf",
                 "sdmc:/switch/TorrentShopNX/arabic.ttf",
-#ifdef __SWITCH__
-                "romfs:/font/arabic_font.ttf"
-#else
+#ifndef __SWITCH__
                 "resources/font/arabic_font.ttf",
                 "build_pc/resources/font/arabic_font.ttf"
 #endif
@@ -538,7 +545,7 @@ int main(int argc, char** argv) {
         // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
         catalog::IgnoredUpdatesManager::instance().init(TSNX_IGNORED_UPDATES_PATH);
-        catalog::GameStatsManager::instance().loadFromDisk();
+        catalog::GameStatsManager::instance().loadFromDiskAsync();
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.
@@ -613,13 +620,38 @@ int main(int argc, char** argv) {
                 util::logLine("main: mainLoop frame=" + std::to_string(frameCount));
                 if (frameCount == 60) {
                     util::logLine("main: initial startup stabilized (frame 60)");
+#ifdef __SWITCH__
+                    if (startupBoostActive) {
+                        util::cpuBoostEnd();
+                        startupBoostActive = false;
+                        util::logLine("main: startup CPU boost returned to normal (1020 MHz)");
+                    }
+#endif
                 }
             }
         }
+#ifdef __SWITCH__
+        if (startupBoostActive) {
+            util::cpuBoostEnd();
+            startupBoostActive = false;
+        }
+#endif
         util::logLine("main: mainLoop exited normally after " + std::to_string(frameCount) + " frames");
     } catch (const std::exception& e) {
+#ifdef __SWITCH__
+        if (startupBoostActive) {
+            util::cpuBoostEnd();
+            startupBoostActive = false;
+        }
+#endif
         util::logLine(std::string("main: EXCEPTION in mainLoop: ") + e.what());
     } catch (...) {
+#ifdef __SWITCH__
+        if (startupBoostActive) {
+            util::cpuBoostEnd();
+            startupBoostActive = false;
+        }
+#endif
         util::logLine("main: UNKNOWN EXCEPTION in mainLoop");
     }
 

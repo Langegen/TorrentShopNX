@@ -26,6 +26,7 @@
 #include <borealis/extern/nlohmann/json.hpp>
 #include <algorithm>
 #include <chrono>
+#include <thread>
 #include <ctime>
 #include <filesystem>
 
@@ -666,9 +667,6 @@ void MainMenu::onContentAvailable() {
         return true;
     });
 
-    // Ensure game stats are preloaded from disk
-    catalog::GameStatsManager::instance().ensureLoaded();
-
     // Trigger scheduled catalog update (48h full or 4h diff)
     catalog::CatalogUpdater::instance().checkAndRunScheduledUpdate();
 
@@ -743,6 +741,12 @@ void MainMenu::onContentAvailable() {
                     deleteDirectoryIterative(path);
                 }
                 g_pathsToDelete.clear();
+            }
+
+            // Delay stale cache sweep by 15s to allow smooth initial UI & thumbnail loading without SD contention
+            for (int s = 0; s < 30; ++s) {
+                if (g_cleanupCancelled.load()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
             }
 
             if (!g_cleanupCancelled.load()) {

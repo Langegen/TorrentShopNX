@@ -205,7 +205,7 @@ void CollectionGamesView::loadAndShow() {
 
         if (!flag->load()) return;
 
-        brls::sync([this, flag, ok, entries = std::move(entries),
+        brls::sync([this, flag, ok, catalog, entries = std::move(entries),
                     matchedGames = std::move(matchedGames),
                     matchIndex = std::move(matchIndex), from_cache]() mutable {
             if (!flag->load()) return;
@@ -218,6 +218,7 @@ void CollectionGamesView::loadAndShow() {
                 return;
             }
 
+            catalogSnapshot_ = catalog;
             entries_ = std::move(entries);
             matchedGames_ = std::move(matchedGames);
             matchedComputed_.assign(entries_.size(), true);
