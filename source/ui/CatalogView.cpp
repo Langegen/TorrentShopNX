@@ -80,9 +80,6 @@ void GameRowCell::prepareForReuse() {
         if (cards[i]) {
             if (cards[i]->isFocused()) {
                 cards[i]->onFocusLost();
-                if (brls::Application::getCurrentFocus() == cards[i]) {
-                    brls::Application::giveFocus(nullptr);
-                }
             }
             cards[i]->setHighlighted(false);
             cards[i]->setHighlightProgress(0.0f);
@@ -290,7 +287,10 @@ void CatalogView::filterCatalog() {
         recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
         recycler->resetScrollToTop();
         recycler->reloadData();
-        brls::Application::giveFocus(this->recycler);
+        const auto& stack = brls::Application::getActivitiesStack();
+        if (!stack.empty() && stack.back() == this) {
+            brls::Application::giveFocus(this->recycler);
+        }
     }
 }
 
@@ -586,6 +586,11 @@ void CatalogView::onResume() {
     brls::Activity::onResume();
     g_activeCatalogView = this;
     g_catalogViewAliveToken = std::make_shared<bool>(true);
+    if (catalogSnapshot_ != getCatalogSnapshot()) {
+        filterCatalog();
+    } else if (recycler && brls::Application::getCurrentFocus() == nullptr) {
+        brls::Application::giveFocus(this->recycler);
+    }
 }
 
 

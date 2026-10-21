@@ -72,9 +72,6 @@ void CollectionGameRowCell::prepareForReuse() {
         if (cards[i]) {
             if (cards[i]->isFocused()) {
                 cards[i]->onFocusLost();
-                if (brls::Application::getCurrentFocus() == cards[i]) {
-                    brls::Application::giveFocus(nullptr);
-                }
             }
             cards[i]->setHighlighted(false);
             cards[i]->setHighlightProgress(0.0f);

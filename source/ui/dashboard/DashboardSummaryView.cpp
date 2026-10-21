@@ -589,6 +589,12 @@ void DashboardSummaryView::rebuildContent() {
         case 4: buildToolsSection(); break;
         default: buildCatalogSection(); break;
     }
+
+    if (focusInSummary && brls::Application::getCurrentFocus() == nullptr) {
+        if (on_defocus_) {
+            on_defocus_();
+        }
+    }
 }
 
 // -------------------------------------------------------------

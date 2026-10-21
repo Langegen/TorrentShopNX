@@ -587,6 +587,19 @@ int main(int argc, char** argv) {
 #endif
     }
 
+    // Global safety guard: ensure gamepad focus is automatically recovered whenever it drops to null
+    brls::Application::getRunLoopEvent()->subscribe([]() {
+        if (brls::Application::getCurrentFocus() == nullptr) {
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (!stack.empty() && stack.back()) {
+                brls::View* defFocus = stack.back()->getDefaultFocus();
+                if (defFocus) {
+                    brls::Application::giveFocus(defFocus);
+                }
+            }
+        }
+    });
+
     util::logLine("main: initializing ScreenSleepManager");
     util::ScreenSleepManager::instance().init();
 

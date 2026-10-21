@@ -75,8 +75,6 @@ void FavoritesView::willAppear(bool resetState) {
 void FavoritesView::willDisappear(bool resetState) {
     util::logLine("FavoritesView: willDisappear resetState=" + std::to_string(resetState));
     brls::Activity::willDisappear(resetState);
-    util::logLine("FavoritesView: clearing focus");
-    brls::Application::giveFocus(nullptr);
 }
 
 void FavoritesView::resetFilters() {

@@ -701,7 +701,6 @@ void LibraryView::willAppear(bool resetState) {
 
 void LibraryView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    brls::Application::giveFocus(nullptr);
 }
 
 void LibraryView::rebuildSections(int targetSection, int targetRow) {

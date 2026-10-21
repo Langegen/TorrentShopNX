@@ -400,26 +400,6 @@ brls::View* SettingsTab::buildGeneralTab() {
     // ── Секция Управление и отклик ──────────────────────────────────
     addSettingsSectionHeader(box, "app/settings/sec_feedback"_i18n);
 
-    // Звуки интерфейса
-    auto* soundEffectsCell = new brls::BooleanCell();
-    soundEffectsCell->init("app/settings/sound_effects"_i18n, cfg.getSoundEffectsEnabled(), [&cfg](bool value) {
-        cfg.setSoundEffectsEnabled(value);
-        cfg.save();
-        if (value) {
-            brls::Application::getAudioPlayer()->play(brls::SOUND_CLICK);
-        }
-        util::triggerHapticFeedback(1);
-    });
-    box->addView(soundEffectsCell);
-
-    auto* soundDesc = new brls::Label();
-    soundDesc->setFontSize(13.0f);
-    soundDesc->setTextColor(ThemeManager::instance().getTextSecondaryColor());
-    soundDesc->setText("app/settings/sound_effects_desc"_i18n);
-    soundDesc->setMarginLeft(16.0f);
-    soundDesc->setMarginBottom(12.0f);
-    box->addView(soundDesc);
-
     // Вибрация Joy-Con / контроллеров
     auto* rumbleCell = new brls::BooleanCell();
     rumbleCell->init("app/settings/joycon_rumble"_i18n, cfg.getRumbleEnabled(), [&cfg](bool value) {
@@ -1167,7 +1147,6 @@ void SettingsTab::willAppear(bool resetState) {
 
 void SettingsTab::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    brls::Application::giveFocus(nullptr);
 }
 
 } // namespace ui

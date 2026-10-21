@@ -474,7 +474,6 @@ void GameDetailView::willAppear(bool resetState) {
 
 void GameDetailView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    brls::Application::giveFocus(nullptr);
 }
 
 } // namespace ui

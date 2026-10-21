@@ -313,6 +313,14 @@ void MainMenu::onResume() {
         if (tile) tile->refreshTheme();
     }
     if (header_) header_->refreshTheme();
+
+    if (brls::Application::getCurrentFocus() == nullptr) {
+        int idx = (current_focused_index_ >= 0 && current_focused_index_ < static_cast<int>(tiles_.size()))
+            ? current_focused_index_ : 0;
+        if (idx < static_cast<int>(tiles_.size()) && tiles_[idx]) {
+            brls::Application::giveFocus(tiles_[idx]);
+        }
+    }
 }
 
 static int s_cachedInstalledCount = 0;

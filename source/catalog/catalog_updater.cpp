@@ -398,7 +398,10 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     brls::sync([newSnapshot, viewToken]() {
         setCatalogSnapshot(newSnapshot);
         if (viewToken && *viewToken && ui::g_activeCatalogView) {
-            ui::g_activeCatalogView->filterCatalog();
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (!stack.empty() && stack.back() == ui::g_activeCatalogView) {
+                ui::g_activeCatalogView->filterCatalog();
+            }
         }
     });
 
@@ -585,7 +588,10 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         brls::sync([newSnapshot, viewToken]() {
             setCatalogSnapshot(newSnapshot);
             if (viewToken && *viewToken && ui::g_activeCatalogView) {
-                ui::g_activeCatalogView->filterCatalog();
+                const auto& stack = brls::Application::getActivitiesStack();
+                if (!stack.empty() && stack.back() == ui::g_activeCatalogView) {
+                    ui::g_activeCatalogView->filterCatalog();
+                }
             }
         });
 
