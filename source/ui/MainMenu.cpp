@@ -658,8 +658,8 @@ void MainMenu::onContentAvailable() {
         return true;
     });
 
-    // Asynchronously preload game stats from disk in background
-    catalog::GameStatsManager::instance().loadFromDiskAsync();
+    // Ensure game stats are preloaded from disk
+    catalog::GameStatsManager::instance().ensureLoaded();
 
     // Trigger scheduled catalog update (48h full or 4h diff)
     catalog::CatalogUpdater::instance().checkAndRunScheduledUpdate();
@@ -728,18 +728,23 @@ void MainMenu::onContentAvailable() {
     // Background cache cleanup (iterative folder deletion and stale cache sweep)
     g_cleanupRunning = true;
     brls::async([]() {
-        if (!g_pathsToDelete.empty()) {
-            for (const auto& path : g_pathsToDelete) {
-                if (g_cleanupCancelled.load()) break;
-                deleteDirectoryIterative(path);
+        try {
+            if (!g_pathsToDelete.empty()) {
+                for (const auto& path : g_pathsToDelete) {
+                    if (g_cleanupCancelled.load()) break;
+                    deleteDirectoryIterative(path);
+                }
+                g_pathsToDelete.clear();
             }
-            g_pathsToDelete.clear();
-        }
 
-        if (!g_cleanupCancelled.load()) {
-            sweepStaleCaches();
+            if (!g_cleanupCancelled.load()) {
+                sweepStaleCaches();
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("MainMenu: exception in background cleanup: ") + e.what());
+        } catch (...) {
+            util::logLine("MainMenu: unknown exception in background cleanup");
         }
-
         g_cleanupRunning = false;
     });
 }

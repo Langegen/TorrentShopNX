@@ -356,6 +356,22 @@ static bool checkAndApplyPendingUpdate() {
 }
 
 int main(int argc, char** argv) {
+    std::set_terminate([]() {
+        std::string err = "std::terminate called!";
+        std::exception_ptr ex = std::current_exception();
+        if (ex) {
+            try {
+                std::rethrow_exception(ex);
+            } catch (const std::exception& e) {
+                err += " Exception: " + std::string(e.what());
+            } catch (...) {
+                err += " Unknown exception";
+            }
+        }
+        util::logLine("FATAL: " + err);
+        std::abort();
+    });
+
 #if defined(_WIN32)
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -522,6 +538,7 @@ int main(int argc, char** argv) {
         // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
         catalog::IgnoredUpdatesManager::instance().init(TSNX_IGNORED_UPDATES_PATH);
+        catalog::GameStatsManager::instance().loadFromDisk();
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.
@@ -579,8 +596,11 @@ int main(int argc, char** argv) {
         int frameCount = 0;
         while (brls::Application::mainLoop()) {
             frameCount++;
-            if (frameCount <= 3) {
+            if (frameCount <= 3 || frameCount == 10 || frameCount == 30 || frameCount == 60) {
                 util::logLine("main: mainLoop frame=" + std::to_string(frameCount));
+                if (frameCount == 60) {
+                    util::logLine("main: initial startup stabilized (frame 60)");
+                }
             }
         }
         util::logLine("main: mainLoop exited normally after " + std::to_string(frameCount) + " frames");

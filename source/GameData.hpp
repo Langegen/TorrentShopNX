@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <shared_mutex>
+#include <mutex>
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -26,21 +26,21 @@ struct Game;
 extern std::vector<Game> g_games;
 
 inline std::shared_ptr<const std::vector<Game>> g_catalogSnapshot = std::make_shared<const std::vector<Game>>();
-inline std::shared_mutex g_catalogMutex;
+inline std::mutex g_catalogMutex;
 
 inline std::shared_ptr<const std::vector<Game>> getCatalogSnapshot() {
-    std::shared_lock<std::shared_mutex> lock(g_catalogMutex);
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
     return g_catalogSnapshot;
 }
 
 inline void setCatalogSnapshot(std::shared_ptr<const std::vector<Game>> snapshot) {
-    std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
     g_catalogSnapshot = snapshot ? snapshot : std::make_shared<const std::vector<Game>>();
 }
 
 inline void setCatalogSnapshot(std::vector<Game> games) {
     auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(games));
-    std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
     g_catalogSnapshot = newSnapshot;
 }
 
@@ -1180,25 +1180,31 @@ inline void migrateFlatCatalogCache() {
 
 // Deletes regular files in `dir` older than max_age_seconds (stale cache sweep).
 inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_seconds) {
-    std::error_code ec;
-    std::time_t now = std::time(nullptr);
-    if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
-    int removed = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(
-             dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
-        if (g_cleanupCancelled.load()) break;
-        std::error_code ec2;
-        if (!entry.is_regular_file(ec2)) continue;
-        struct stat st;
-        if (stat(entry.path().string().c_str(), &st) != 0) continue;
-        if ((now - st.st_mtime) > max_age_seconds) {
-            std::filesystem::remove(entry.path(), ec2);
-            if (!ec2) ++removed;
+    try {
+        std::error_code ec;
+        std::time_t now = std::time(nullptr);
+        if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
+        int removed = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(
+                 dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
+            if (g_cleanupCancelled.load()) break;
+            std::error_code ec2;
+            if (!entry.is_regular_file(ec2)) continue;
+            struct stat st;
+            if (stat(entry.path().string().c_str(), &st) != 0) continue;
+            if ((now - st.st_mtime) > max_age_seconds) {
+                std::filesystem::remove(entry.path(), ec2);
+                if (!ec2) ++removed;
+            }
         }
-    }
-    if (removed > 0) {
-        util::logLine("GameData: swept " + dir + ": removed " + std::to_string(removed) +
-                      " stale cache file(s)");
+        if (removed > 0) {
+            util::logLine("GameData: swept " + dir + ": removed " + std::to_string(removed) +
+                          " stale cache file(s)");
+        }
+    } catch (const std::exception& e) {
+        util::logLine("GameData: exception in sweepExpiredFiles(" + dir + "): " + e.what());
+    } catch (...) {
+        util::logLine("GameData: unknown exception in sweepExpiredFiles(" + dir + ")");
     }
 }
 
