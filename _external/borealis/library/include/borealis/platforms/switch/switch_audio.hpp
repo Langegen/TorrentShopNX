@@ -1,8 +1,6 @@
 #pragma once
 
 #include <borealis/core/audio.hpp>
-#include <vector>
-#include <string>
 #include <cstdint>
 
 namespace brls
@@ -18,16 +16,7 @@ class SwitchAudioPlayer : public AudioPlayer
     bool play(enum Sound sound, float pitch = 1.0f) override;
 
   private:
-    bool init = false;
-    uint32_t deviceId = 0;
-
-    struct SoundBuffer {
-        std::vector<uint8_t> data;
-        std::string path;
-        bool loaded = false;
-    };
-
-    SoundBuffer sounds[_SOUND_MAX];
+    uint8_t dummy[216] = {};
 };
 
 } // namespace brls
