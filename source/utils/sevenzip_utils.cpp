@@ -1,5 +1,8 @@
 #include "sevenzip_utils.h"
 #include "file_ops.h"
+#include "../datasource/i_data_source.h"
+#include <thread>
+#include <chrono>
 #include "log.h"
 
 #include "../7zsdk/7z.h"
@@ -97,59 +100,104 @@ static const char* sresToMessage(SRes res) {
     }
 }
 
-bool extract7zArchive(
-    const std::string& archivePath,
+struct DataSourceInStream {
+    ISeekInStream vt;
+    datasource::IDataSource* source = nullptr;
+    uint64_t totalSize = 0;
+    uint64_t currentOffset = 0;
+    std::shared_ptr<std::atomic<bool>> cancelToken;
+    std::shared_ptr<std::atomic<bool>> pauseToken;
+    WRes wres = 0;
+};
+
+static SRes DataSourceInStream_Read(ISeekInStreamPtr pp, void *buf, size_t *size) {
+    auto* p = const_cast<DataSourceInStream*>(reinterpret_cast<const DataSourceInStream*>(pp));
+    if (!p || !p->source || !buf || !size) return SZ_ERROR_FAIL;
+    if (p->cancelToken && p->cancelToken->load()) return SZ_ERROR_FAIL;
+
+    if (p->totalSize > 0 && p->currentOffset >= p->totalSize) {
+        *size = 0;
+        return SZ_OK;
+    }
+
+    size_t want = *size;
+    if (p->totalSize > 0 && p->currentOffset + want > p->totalSize) {
+        want = static_cast<size_t>(p->totalSize - p->currentOffset);
+    }
+    if (want == 0) {
+        *size = 0;
+        return SZ_OK;
+    }
+
+    size_t got = 0;
+    while (!got && !g_appExiting.load()) {
+        if (p->cancelToken && p->cancelToken->load()) return SZ_ERROR_FAIL;
+        if (p->pauseToken && p->pauseToken->load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
+        got = p->source->read(p->currentOffset, buf, want);
+        if (got == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            continue;
+        }
+    }
+
+    if (got > 0) {
+        p->currentOffset += got;
+        *size = got;
+        return SZ_OK;
+    }
+
+    return SZ_ERROR_READ;
+}
+
+static SRes DataSourceInStream_Seek(ISeekInStreamPtr pp, Int64 *pos, ESzSeek origin) {
+    auto* p = const_cast<DataSourceInStream*>(reinterpret_cast<const DataSourceInStream*>(pp));
+    if (!p || !pos) return SZ_ERROR_FAIL;
+    if (p->cancelToken && p->cancelToken->load()) return SZ_ERROR_FAIL;
+
+    int64_t newOffset = 0;
+    if (origin == SZ_SEEK_SET) {
+        newOffset = *pos;
+    } else if (origin == SZ_SEEK_CUR) {
+        newOffset = static_cast<int64_t>(p->currentOffset) + *pos;
+    } else if (origin == SZ_SEEK_END) {
+        newOffset = static_cast<int64_t>(p->totalSize) + *pos;
+    } else {
+        return SZ_ERROR_FAIL;
+    }
+
+    if (newOffset < 0 || (p->totalSize > 0 && static_cast<uint64_t>(newOffset) > p->totalSize)) {
+        return SZ_ERROR_FAIL;
+    }
+
+    p->currentOffset = static_cast<uint64_t>(newOffset);
+    *pos = static_cast<Int64>(p->currentOffset);
+    return SZ_OK;
+}
+
+static void DataSourceInStream_CreateVTable(DataSourceInStream *p) {
+    p->vt.Read = DataSourceInStream_Read;
+    p->vt.Seek = DataSourceInStream_Seek;
+}
+
+static bool extract7zInternal(
+    ISeekInStreamPtr inStream,
+    uint64_t totalFileSize,
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
     std::string& outError,
     uint64_t* outKnownUncompressedSize,
     size_t* outKnownTotalEntries,
     PathTransformFn pathTransform
 ) {
-    util::logLine("sevenzip: extractArchive start: " + archivePath + " -> " + destinationDir);
-
-    std::error_code ec;
-    uint64_t totalFileSize = 0;
-    try {
-        if (!std::filesystem::exists(archivePath, ec)) {
-            outError = "Файл архива не найден: " + archivePath;
-            util::logLine("sevenzip: archive does not exist: " + archivePath);
-            return false;
-        }
-        totalFileSize = std::filesystem::file_size(archivePath, ec);
-        safeCreateDirectories(destinationDir);
-    } catch (const std::exception& e) {
-        outError = e.what();
-        util::logLine("sevenzip: exception preparing destination: " + std::string(e.what()));
-        return false;
-    }
-
-    CFileInStream archiveStream;
     CLookToRead2 lookStream;
     CSzArEx db;
     SRes res;
-
-    File_Construct(&archiveStream.file);
-    archiveStream.wres = 0;
-
-    {
-        WRes wres;
-#ifdef _WIN32
-        std::wstring wpath = std::filesystem::u8path(archivePath).native();
-        wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
-#else
-        wres = InFile_Open(&archiveStream.file, archivePath.c_str());
-#endif
-        if (wres != 0) {
-            outError = "Не удалось открыть архив для чтения";
-            util::logLine("sevenzip: InFile_Open failed, wres=" + std::to_string((int)wres));
-            return false;
-        }
-    }
-
-    FileInStream_CreateVTable(&archiveStream);
-    archiveStream.wres = 0;
 
     LookToRead2_CreateVTable(&lookStream, False);
     lookStream.buf = nullptr;
@@ -175,7 +223,7 @@ bool extract7zArchive(
         res = SZ_ERROR_MEM;
     } else {
         lookStream.bufSize = kInputBufSize;
-        lookStream.realStream = &archiveStream.vt;
+        lookStream.realStream = inStream;
         LookToRead2_INIT(&lookStream);
     }
 
@@ -212,7 +260,6 @@ bool extract7zArchive(
             outError = "requires_streaming";
             SzFree(nullptr, lookStream.buf);
             SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
-            File_Close(&archiveStream.file);
             return false;
         }
 
@@ -231,6 +278,15 @@ bool extract7zArchive(
                 outError = "Распаковка отменена пользователем";
                 util::logLine("sevenzip: extraction cancelled by user");
                 break;
+            }
+            if (pauseToken && pauseToken->load()) {
+                while (pauseToken->load() && (!cancelToken || !cancelToken->load()) && !g_appExiting.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                if (cancelToken && cancelToken->load()) {
+                    outError = "Распаковка отменена пользователем";
+                    break;
+                }
             }
 
             size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
@@ -314,7 +370,6 @@ bool extract7zArchive(
                 break;
             }
 
-            // Verify file CRC when the archive stores one.
             if (SzBitWithVals_Check(&db.CRCs, i)) {
                 UInt32 crc = CrcUpdate(CRC_INIT_VAL, outBuffer + offset, outSizeProcessed);
                 if (CRC_GET_DIGEST(crc) != db.CRCs.Vals[i]) {
@@ -376,7 +431,6 @@ bool extract7zArchive(
             if (progressCb) progressCb(progress);
             ok = true;
         } else if (outError.empty()) {
-            // cancelled or broke without setting a message yet
             outError = res == SZ_OK ? "Распаковка прервана" : sresToMessage(res);
         }
     }
@@ -386,9 +440,97 @@ bool extract7zArchive(
     SzFree(nullptr, lookStream.buf);
     lookStream.buf = nullptr;
     SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
-    File_Close(&archiveStream.file);
+    return ok;
+}
 
+bool extract7zArchive(
+    const std::string& archivePath,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize,
+    size_t* outKnownTotalEntries,
+    PathTransformFn pathTransform
+) {
+    util::logLine("sevenzip: extractArchive start: " + archivePath + " -> " + destinationDir);
+
+    std::error_code ec;
+    uint64_t totalFileSize = 0;
+    try {
+        if (!std::filesystem::exists(archivePath, ec)) {
+            outError = "Файл архива не найден: " + archivePath;
+            util::logLine("sevenzip: archive does not exist: " + archivePath);
+            return false;
+        }
+        totalFileSize = std::filesystem::file_size(archivePath, ec);
+        safeCreateDirectories(destinationDir);
+    } catch (const std::exception& e) {
+        outError = e.what();
+        util::logLine("sevenzip: exception preparing destination: " + std::string(e.what()));
+        return false;
+    }
+
+    CFileInStream archiveStream;
+    File_Construct(&archiveStream.file);
+    archiveStream.wres = 0;
+
+    WRes wres;
+#ifdef _WIN32
+    std::wstring wpath = std::filesystem::u8path(archivePath).native();
+    wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
+#else
+    wres = InFile_Open(&archiveStream.file, archivePath.c_str());
+#endif
+    if (wres != 0) {
+        outError = "Не удалось открыть архив для чтения";
+        util::logLine("sevenzip: InFile_Open failed, wres=" + std::to_string((int)wres));
+        return false;
+    }
+
+    FileInStream_CreateVTable(&archiveStream);
+
+    bool ok = extract7zInternal(&archiveStream.vt, totalFileSize, destinationDir,
+                                progressCb, cancelToken, nullptr, outError,
+                                outKnownUncompressedSize, outKnownTotalEntries, pathTransform);
+
+    File_Close(&archiveStream.file);
     util::logLine("sevenzip: extractArchive finished, success=" + std::string(ok ? "1" : "0"));
+    return ok;
+}
+
+bool extract7zArchiveFromSource(
+    datasource::IDataSource* source,
+    uint64_t archiveSize,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize,
+    size_t* outKnownTotalEntries,
+    PathTransformFn pathTransform
+) {
+    if (!source) {
+        outError = "Null data source";
+        return false;
+    }
+    util::logLine("sevenzip: extract7zArchiveFromSource start, size=" + std::to_string(archiveSize) + " -> " + destinationDir);
+    safeCreateDirectories(destinationDir);
+
+    DataSourceInStream dsStream;
+    dsStream.source = source;
+    dsStream.totalSize = archiveSize;
+    dsStream.currentOffset = 0;
+    dsStream.cancelToken = cancelToken;
+    dsStream.pauseToken = pauseToken;
+    dsStream.wres = 0;
+    DataSourceInStream_CreateVTable(&dsStream);
+
+    bool ok = extract7zInternal(&dsStream.vt, archiveSize, destinationDir,
+                                progressCb, cancelToken, pauseToken, outError,
+                                outKnownUncompressedSize, outKnownTotalEntries, pathTransform);
+    util::logLine("sevenzip: extract7zArchiveFromSource finished, success=" + std::string(ok ? "1" : "0"));
     return ok;
 }
 

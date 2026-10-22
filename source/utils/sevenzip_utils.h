@@ -2,6 +2,10 @@
 
 #include "archive_utils.h"
 
+namespace datasource {
+class IDataSource;
+}
+
 namespace util {
 
 // Returns true if the path ends with .7z (case-insensitive)
@@ -17,6 +21,20 @@ bool extract7zArchive(
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize = nullptr,
+    size_t* outKnownTotalEntries = nullptr,
+    PathTransformFn pathTransform = nullptr
+);
+
+// Extracts a .7z archive directly from an IDataSource stream.
+bool extract7zArchiveFromSource(
+    datasource::IDataSource* source,
+    uint64_t archiveSize,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
     std::string& outError,
     uint64_t* outKnownUncompressedSize = nullptr,
     size_t* outKnownTotalEntries = nullptr,

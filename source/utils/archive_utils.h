@@ -7,6 +7,10 @@
 #include <cstdint>
 #include "file_ops.h"
 
+namespace datasource {
+class IDataSource;
+}
+
 namespace util {
 
 struct ArchiveProgress {
@@ -73,6 +77,19 @@ bool extractArchive(
     PathTransformFn pathTransform = nullptr
 );
 
+// Extracts an archive directly from a data source stream on the fly.
+// Does NOT save the intermediate archive to disk (bypasses FAT32 4GB limit).
+bool extractArchiveFromSource(
+    datasource::IDataSource* source,
+    uint64_t archiveSize,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
+    std::string& outError,
+    PathTransformFn pathTransform = nullptr
+);
+
 // Extracts a single file entry from an archive to destination directory.
 bool extractSingleFileFromArchive(
     const std::string& archivePath,
@@ -97,4 +114,3 @@ bool createZipArchive(
 );
 
 } // namespace util
-

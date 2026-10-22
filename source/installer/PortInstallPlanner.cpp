@@ -392,17 +392,27 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
         std::string norm = normalizePath(f.name);
         std::string lower = toLower(norm);
 
-        // Check if file is an archive
-        if (endsWith(lower, ".7z") || endsWith(lower, ".zip") || endsWith(lower, ".rar")) {
+        // Check if file is an archive (including first volume of multi-part archives)
+        if (endsWith(lower, ".7z") || endsWith(lower, ".zip") || endsWith(lower, ".rar") ||
+            endsWith(lower, ".7z.001") || endsWith(lower, ".zip.001") ||
+            endsWith(lower, ".part1.rar") || endsWith(lower, ".part01.rar")) {
             PortArchiveTask at;
             at.file_index = f.index;
             at.archive_torrent_path = norm;
             at.compressed_size = f.size;
             at.extract_dest_dir = "sdmc:/"; // Default extract root for switch.7z/sdcard.zip
 
-            std::string fn = std::filesystem::path(norm).filename().string();
-            plan.file_destinations[f.index] = std::string(TSNX_CACHE_TMP) + "/" + fn;
+            plan.file_destinations[f.index] = at.extract_dest_dir;
             plan.archives_to_extract.push_back(at);
+            continue;
+        }
+
+        // Multi-part volume parts beyond part 1 (if any)
+        if (endsWith(lower, ".7z.002") || endsWith(lower, ".7z.003") || endsWith(lower, ".7z.004") ||
+            endsWith(lower, ".zip.002") || endsWith(lower, ".zip.003") ||
+            endsWith(lower, ".part2.rar") || endsWith(lower, ".part02.rar") ||
+            endsWith(lower, ".part3.rar") || endsWith(lower, ".part03.rar")) {
+            plan.file_destinations[f.index] = "sdmc:/";
             continue;
         }
 

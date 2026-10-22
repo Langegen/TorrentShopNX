@@ -3,6 +3,8 @@
 #include "log.h"
 #include "sevenzip_utils.h"
 #include "switch_utils.h"
+#include "../datasource/i_data_source.h"
+#include <thread>
 #include <archive.h>
 #include <archive_entry.h>
 #include <filesystem>
@@ -33,7 +35,8 @@ bool isArchiveFile(const std::string& path) {
            endsWith(".tar") ||
            endsWith(".gz")  ||
            endsWith(".bz2") ||
-           endsWith(".xz");
+           endsWith(".xz")  ||
+           endsWith(".001");
 }
 
 bool parseArchiveVirtualPath(
@@ -377,37 +380,144 @@ bool iterateArchiveEntries(
     return true;
 }
 
+struct ArchiveStreamReader {
+    datasource::IDataSource* source = nullptr;
+    uint64_t totalSize = 0;
+    uint64_t currentOffset = 0;
+    std::shared_ptr<std::atomic<bool>> cancelToken;
+    std::shared_ptr<std::atomic<bool>> pauseToken;
+    std::vector<uint8_t> buffer;
+    uint64_t totalBytesReadFromStream = 0;
+};
+
+static la_ssize_t streamArchiveRead(struct archive* /*a*/, void* client_data, const void** buff) {
+    auto* reader = static_cast<ArchiveStreamReader*>(client_data);
+    if (!reader || !reader->source) return ARCHIVE_FATAL;
+    if (reader->cancelToken && reader->cancelToken->load()) return ARCHIVE_FATAL;
+
+    if (reader->totalSize > 0 && reader->currentOffset >= reader->totalSize) {
+        *buff = nullptr;
+        return 0; // EOF
+    }
+
+    size_t want = reader->buffer.size();
+    if (reader->totalSize > 0 && reader->currentOffset + want > reader->totalSize) {
+        want = static_cast<size_t>(reader->totalSize - reader->currentOffset);
+    }
+    if (want == 0) {
+        *buff = nullptr;
+        return 0;
+    }
+
+    size_t got = 0;
+    while (!got && !g_appExiting.load()) {
+        if (reader->cancelToken && reader->cancelToken->load()) return ARCHIVE_FATAL;
+        if (reader->pauseToken && reader->pauseToken->load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
+        got = reader->source->read(reader->currentOffset, reader->buffer.data(), want);
+        if (got == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            continue;
+        }
+    }
+
+    if (got > 0) {
+        reader->currentOffset += got;
+        reader->totalBytesReadFromStream += got;
+        *buff = reader->buffer.data();
+        return static_cast<la_ssize_t>(got);
+    }
+
+    return ARCHIVE_FATAL;
+}
+
+static la_int64_t streamArchiveSeek(struct archive* /*a*/, void* client_data, la_int64_t request, int whence) {
+    auto* reader = static_cast<ArchiveStreamReader*>(client_data);
+    if (!reader) return ARCHIVE_FATAL;
+    if (reader->cancelToken && reader->cancelToken->load()) return ARCHIVE_FATAL;
+
+    int64_t newOffset = 0;
+    if (whence == SEEK_SET) {
+        newOffset = request;
+    } else if (whence == SEEK_CUR) {
+        newOffset = static_cast<int64_t>(reader->currentOffset) + request;
+    } else if (whence == SEEK_END) {
+        newOffset = static_cast<int64_t>(reader->totalSize) + request;
+    } else {
+        return ARCHIVE_FATAL;
+    }
+
+    if (newOffset < 0 || (reader->totalSize > 0 && static_cast<uint64_t>(newOffset) > reader->totalSize)) {
+        return ARCHIVE_FATAL;
+    }
+
+    reader->currentOffset = static_cast<uint64_t>(newOffset);
+    return static_cast<la_int64_t>(reader->currentOffset);
+}
+
+static la_int64_t streamArchiveSkip(struct archive* /*a*/, void* client_data, la_int64_t request) {
+    auto* reader = static_cast<ArchiveStreamReader*>(client_data);
+    if (!reader) return 0;
+    if (reader->cancelToken && reader->cancelToken->load()) return 0;
+
+    if (reader->totalSize > 0) {
+        la_int64_t remaining = static_cast<la_int64_t>(reader->totalSize - reader->currentOffset);
+        if (request > remaining) request = remaining;
+    }
+    if (request < 0) request = 0;
+    reader->currentOffset += static_cast<uint64_t>(request);
+    return request;
+}
+
+static int streamArchiveClose(struct archive* /*a*/, void* /*client_data*/) {
+    return ARCHIVE_OK;
+}
+
 static bool extractLibarchiveInternal(
     const std::string& archivePath,
+    datasource::IDataSource* source,
+    uint64_t streamArchiveSize,
     const std::string& destinationDir,
     const std::string& singleEntryFilter,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
     std::string& outError,
     uint64_t knownUncompressedSize = 0,
     size_t knownTotalEntries = 0,
     PathTransformFn pathTransform = nullptr
 ) {
-    util::logLine("archive_utils: extractLibarchiveInternal start: " + archivePath + " -> " + destinationDir);
-
-    std::error_code ec;
-    uint64_t totalFileSize = 0;
-    try {
-        if (!std::filesystem::exists(archivePath, ec)) {
-            outError = "Файл архива не найден: " + archivePath;
-            util::logLine("archive_utils: archive does not exist: " + archivePath);
-            return false;
-        }
-        totalFileSize = std::filesystem::file_size(archivePath, ec);
-        safeCreateDirectories(destinationDir);
-    } catch (const std::exception& e) {
-        outError = e.what();
-        util::logLine("archive_utils: exception preparing destination: " + std::string(e.what()));
-        return false;
+    if (source) {
+        util::logLine("archive_utils: extractLibarchiveInternal stream start, size=" + std::to_string(streamArchiveSize) + " -> " + destinationDir);
+    } else {
+        util::logLine("archive_utils: extractLibarchiveInternal start: " + archivePath + " -> " + destinationDir);
     }
 
-    if (knownUncompressedSize == 0 && knownTotalEntries == 0 && singleEntryFilter.empty()) {
-        getArchiveTotals(archivePath, knownUncompressedSize, knownTotalEntries);
+    uint64_t totalFileSize = streamArchiveSize;
+    if (!source) {
+        std::error_code ec;
+        try {
+            if (!std::filesystem::exists(archivePath, ec)) {
+                outError = "Файл архива не найден: " + archivePath;
+                util::logLine("archive_utils: archive does not exist: " + archivePath);
+                return false;
+            }
+            totalFileSize = std::filesystem::file_size(archivePath, ec);
+            safeCreateDirectories(destinationDir);
+        } catch (const std::exception& e) {
+            outError = e.what();
+            util::logLine("archive_utils: exception preparing destination: " + std::string(e.what()));
+            return false;
+        }
+
+        if (knownUncompressedSize == 0 && knownTotalEntries == 0 && singleEntryFilter.empty()) {
+            getArchiveTotals(archivePath, knownUncompressedSize, knownTotalEntries);
+        }
+    } else {
+        safeCreateDirectories(destinationDir);
     }
 
     struct archive* a = archive_read_new();
@@ -420,10 +530,29 @@ static bool extractLibarchiveInternal(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    ArchiveStreamReader streamReader;
+    int r = ARCHIVE_OK;
+    if (source) {
+        streamReader.source = source;
+        streamReader.totalSize = streamArchiveSize;
+        streamReader.currentOffset = 0;
+        streamReader.cancelToken = cancelToken;
+        streamReader.pauseToken = pauseToken;
+        streamReader.buffer.resize(65536);
+
+        archive_read_set_callback_data(a, &streamReader);
+        archive_read_set_read_callback(a, streamArchiveRead);
+        archive_read_set_seek_callback(a, streamArchiveSeek);
+        archive_read_set_skip_callback(a, streamArchiveSkip);
+        archive_read_set_close_callback(a, streamArchiveClose);
+        r = archive_read_open1(a);
+    } else {
+        r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    }
+
     if (r != ARCHIVE_OK) {
         const char* err = archive_error_string(a);
-        outError = err ? err : "Failed to open archive file";
+        outError = err ? err : "Failed to open archive";
         util::logLine("archive_utils: failed to open archive: " + outError);
         archive_read_free(a);
         return false;
@@ -474,6 +603,16 @@ static bool extractLibarchiveInternal(
             util::logLine("archive_utils: extraction cancelled by user");
             success = false;
             break;
+        }
+        if (pauseToken && pauseToken->load()) {
+            while (pauseToken->load() && (!cancelToken || !cancelToken->load()) && !g_appExiting.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            if (cancelToken && cancelToken->load()) {
+                outError = "Распаковка отменена пользователем";
+                success = false;
+                break;
+            }
         }
 
         const char* currentEntryName = archive_entry_pathname_utf8(entry);
@@ -574,6 +713,16 @@ static bool extractLibarchiveInternal(
                     success = false;
                     break;
                 }
+                if (pauseToken && pauseToken->load()) {
+                    while (pauseToken->load() && (!cancelToken || !cancelToken->load()) && !g_appExiting.load()) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    }
+                    if (cancelToken && cancelToken->load()) {
+                        outError = "Распаковка отменена пользователем";
+                        success = false;
+                        break;
+                    }
+                }
 
                 if (size > 0 && buff != nullptr) {
 #if defined(_WIN32)
@@ -618,9 +767,7 @@ static bool extractLibarchiveInternal(
                 } else {
                     outError = errStr;
                     util::logLine("archive_utils: archive_read_data_block error: " + outError +
-                                  " for entry=" + cleanName +
-                                  " format=" + std::string(archive_format_name(a) ? archive_format_name(a) : "unknown") +
-                                  " code=" + std::to_string(archive_errno(a)));
+                                  " while extracting " + cleanName + " (code=" + std::to_string(r) + ")");
                     success = false;
                     break;
                 }
@@ -633,14 +780,14 @@ static bool extractLibarchiveInternal(
         }
     }
 
-    if (success && r != ARCHIVE_EOF && r < ARCHIVE_WARN) {
+    if (r < ARCHIVE_OK && r != ARCHIVE_EOF && success) {
         const char* err = archive_error_string(a);
-        outError = err ? err : "Ошибка чтения заголовка архива";
+        outError = err ? err : "Ошибка чтения архива";
         util::logLine("archive_utils: archive header error: " + outError);
         success = false;
     }
 
-    if (success) {
+    if (success && outError.empty()) {
         progress.percentage = 100.0f;
         if (progress.totalUncompressedSize > 0) {
             progress.bytesExtracted = progress.totalUncompressedSize;
@@ -682,7 +829,7 @@ bool extractArchive(
         // seamlessly fall back to streaming libarchive which streams 64KB blocks directly to disk!
         util::logLine("archive_utils: 7zsdk returned '" + outError + "', falling back to streaming libarchive");
         std::string fallbackErr;
-        if (extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, fallbackErr, knownUncompressed, knownEntries, pathTransform)) {
+        if (extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, "", progressCb, cancelToken, nullptr, fallbackErr, knownUncompressed, knownEntries, pathTransform)) {
             util::logLine("archive_utils: streaming libarchive fallback succeeded for 7z archive!");
             outError.clear();
             return true;
@@ -693,7 +840,45 @@ bool extractArchive(
         return false;
     }
 
-    return extractLibarchiveInternal(archivePath, destinationDir, "", progressCb, cancelToken, outError, 0, 0, pathTransform);
+    return extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, "", progressCb, cancelToken, nullptr, outError, 0, 0, pathTransform);
+}
+
+bool extractArchiveFromSource(
+    datasource::IDataSource* source,
+    uint64_t archiveSize,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
+    std::string& outError,
+    PathTransformFn pathTransform
+) {
+    if (!source) {
+        outError = "Null data source";
+        return false;
+    }
+
+    ScopedCpuBoost boostGuard; // raises CPU to 1785 MHz and prevents auto-sleep!
+
+    uint64_t knownUncompressed = 0;
+    size_t knownEntries = 0;
+    bool ok = extract7zArchiveFromSource(source, archiveSize, destinationDir, progressCb,
+                                         cancelToken, pauseToken, outError,
+                                         &knownUncompressed, &knownEntries, pathTransform);
+    if (ok) return true;
+    if (cancelToken && cancelToken->load()) return false;
+
+    util::logLine("archive_utils: extractArchiveFromSource 7zsdk returned '" + outError + "', falling back to streaming libarchive");
+    std::string fallbackErr;
+    if (extractLibarchiveInternal("", source, archiveSize, destinationDir, "", progressCb, cancelToken, pauseToken, fallbackErr, knownUncompressed, knownEntries, pathTransform)) {
+        util::logLine("archive_utils: streaming libarchive fallback succeeded for stream archive!");
+        outError.clear();
+        return true;
+    }
+    if (outError.empty() || outError == "requires_streaming") {
+        outError = fallbackErr.empty() ? "Ошибка распаковки потокового архива" : fallbackErr;
+    }
+    return false;
 }
 
 bool extractSingleFileFromArchive(
@@ -705,7 +890,7 @@ bool extractSingleFileFromArchive(
     std::string& outError
 ) {
     ScopedCpuBoost boostGuard;
-    return extractLibarchiveInternal(archivePath, destinationDir, innerFilePath, progressCb, cancelToken, outError, 0, 0);
+    return extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, innerFilePath, progressCb, cancelToken, nullptr, outError, 0, 0);
 }
 
 bool createZipArchive(

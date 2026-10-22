@@ -1280,9 +1280,11 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
     }
 
-    int total_stages = 1;
-    if (!archives.empty()) total_stages++;
+    int total_stages = 0;
+    if (!archives.empty()) total_stages += static_cast<int>(archives.size());
+    if (!loose_indices.empty()) total_stages++;
     if (forwarder_nsp_idx >= 0) total_stages++;
+    if (total_stages == 0) total_stages = 1;
     int stage_num = 1;
 
     uint64_t overall_dl_written = 0;
@@ -1406,46 +1408,31 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
     };
 
-    // ── ЭТАП 1 & 2: СКАЧИВАНИЕ И РАСПАКОВКА АРХИВОВ ──
+    // ── ЭТАП 1: ПОТОКОВАЯ РАСПАКОВКА И УСТАНОВКА АРХИВОВ НА ЛЕТУ ──
     if (!archives.empty()) {
         for (const auto& a : archives) {
             if (cancel->load()) break;
 
-            // 1. Скачивание архива
             std::string arch_filename = std::filesystem::path(a.archive_torrent_path).filename().string();
             {
                 std::lock_guard<std::mutex> lk(st->msg_mutex);
-                st->stage_label = "Загрузка архива (" + std::to_string(stage_num) + "/" + std::to_string(total_stages) + ")";
+                st->stage_label = "Установка " + arch_filename + " (" + std::to_string(stage_num) + "/" + std::to_string(total_stages) + ")";
                 st->current_file = arch_filename;
             }
+            uint64_t arch_file_size = (a.file_index >= 0 && a.file_index < n) ? static_cast<uint64_t>(files[a.file_index].size) : 0;
             st->total.store(total_dl_bytes);
-            std::string arch_dest = plan->file_destinations[a.file_index];
-            if (arch_dest.empty()) {
-                arch_dest = std::string(TSNX_CACHE_TMP) + "/" + arch_filename;
-            }
+            st->dl_total.store(total_dl_bytes);
 
-            if (!streamDownloadFile(a.file_index, arch_dest, overall_dl_written, total_dl_bytes)) {
-                st->failed = true;
-                return;
-            }
-
-            // 2. Распаковка архива
-            int extract_stage = stage_num + 1;
-            {
-                std::lock_guard<std::mutex> lk(st->msg_mutex);
-                st->stage_label = "Распаковка " + arch_filename + " (" + std::to_string(extract_stage) + "/" + std::to_string(total_stages) + ")";
-                st->current_file = arch_filename;
-            }
-            st->written.store(0);
-            st->total.store(0);
-            st->progress.store(0.0f);
-            st->inst_written.store(0);
-            st->inst_total.store(0);
-            st->inst_progress.store(0.0f);
-
-            std::string resolved_arch = resolvePlatformPath(arch_dest);
             std::string resolved_extract_dir = resolvePlatformPath(a.extract_dest_dir);
             util::safeCreateDirectories(resolved_extract_dir);
+
+            source->setSchedulerEnabled(true);
+            source->setCancelFlag(cancel.get());
+            if (cancel->load() || !source->open(hash, a.file_index)) {
+                st->failed = true;
+                st->error = "Failed to open torrent stream for " + std::string(files[a.file_index].path);
+                return;
+            }
 
             auto extractProgressCb = [&](const util::ArchiveProgress& prog) {
                 if (cancel->load()) return;
@@ -1463,26 +1450,41 @@ static void portInstallWorker(datasource::IDataSource* source,
                 st->inst_written.store(prog.bytesExtracted);
                 st->inst_total.store(prog.totalUncompressedSize);
                 st->inst_progress.store(norm_pct);
+
+                if (arch_file_size > 0 && prog.totalArchiveSize > 0) {
+                    uint64_t cur_arch_read = static_cast<uint64_t>((static_cast<double>(prog.percentage) / 100.0) * arch_file_size);
+                    st->dl_written.store(overall_dl_written + cur_arch_read);
+                    if (total_dl_bytes > 0) {
+                        st->dl_progress.store(std::clamp(static_cast<float>((double)(overall_dl_written + cur_arch_read) / (double)total_dl_bytes), 0.0f, 1.0f));
+                    }
+                }
             };
 
             std::string extractErr;
-            util::logLine("port_installer: extracting " + resolved_arch + " -> " + resolved_extract_dir);
-            bool extractOk = util::extractArchive(resolved_arch, resolved_extract_dir, extractProgressCb, cancel, extractErr);
+            util::logLine("port_installer: streaming extraction " + arch_filename + " (" +
+                          std::to_string(arch_file_size) + " bytes) -> " + resolved_extract_dir);
+
+            bool extractOk = util::extractArchiveFromSource(
+                source, arch_file_size, resolved_extract_dir,
+                extractProgressCb, cancel, pause, extractErr
+            );
+
+            source->notifyStreamingComplete(extractOk);
+
             if (!extractOk) {
                 st->failed = true;
-                st->error = "Archive extraction failed: " + extractErr;
+                st->error = "Archive streaming extraction failed: " + extractErr;
                 util::logLine("port_installer: " + st->error);
-                std::error_code ec;
-                std::filesystem::remove(resolved_arch, ec);
                 return;
             }
 
-            // Освобождаем память на SD карте
-            std::error_code ec;
-            std::filesystem::remove(resolved_arch, ec);
-            util::logLine("port_installer: cleaned up archive: " + resolved_arch);
+            overall_dl_written += arch_file_size;
+            st->dl_written.store(overall_dl_written);
+            if (total_dl_bytes > 0) {
+                st->dl_progress.store(std::clamp(static_cast<float>((double)overall_dl_written / (double)total_dl_bytes), 0.0f, 1.0f));
+            }
+            stage_num++;
         }
-        stage_num += 2;
     }
 
     if (cancel->load()) {
@@ -1520,7 +1522,7 @@ static void portInstallWorker(datasource::IDataSource* source,
 
     // ── ЭТАП 4: СКАЧИВАНИЕ И УСТАНОВКА ЯРЛЫКА FORWARDER NSP ──
     if (forwarder_nsp_idx >= 0 && !cancel->load()) {
-        uint64_t nsp_size = static_cast<uint64_t>(files[forwarder_nsp_idx].size);
+        // forwarder nsp size tracked in total_dl_bytes
 
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
