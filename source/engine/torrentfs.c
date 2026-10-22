@@ -3379,6 +3379,7 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
     if (tfs->piece_zone) {
         memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
     }
+    tfs->has_custom_zones = false;
 
     // Drop only in-flight requests that are outside the new file range and allowed lookahead window.
     // Retaining valid in-flight requests prevents peer stall during multi-file transitions.
@@ -3675,6 +3676,11 @@ void torrentfs_cancel(torrentfs *tfs) {
 void torrentfs_cancel_reader(torrentfs *tfs) {
     if (!tfs) return;
     tfs->cancel_reader = true;
+}
+
+void torrentfs_resume_reader(torrentfs *tfs) {
+    if (!tfs) return;
+    tfs->cancel_reader = false;
 }
 
 void torrentfs_set_strict_verify(torrentfs *tfs, int on) {

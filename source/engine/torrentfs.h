@@ -65,6 +65,9 @@ void torrentfs_cancel(torrentfs *tfs);
 // Unblock any currently blocked reader thread without stopping the network loops.
 void torrentfs_cancel_reader(torrentfs *tfs);
 
+// Resume reader thread after cancellation so subsequent reads succeed.
+void torrentfs_resume_reader(torrentfs *tfs);
+
 // Strict piece verification mode (1 = wait for full SHA-1 verified pieces).
 void torrentfs_set_strict_verify(torrentfs *tfs, int on);
 

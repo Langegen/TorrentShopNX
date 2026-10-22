@@ -53,7 +53,8 @@ void SwitchFontLoader::loadFonts()
     if (access(USER_FONT_PATH.c_str(), F_OK) != -1)
     {
         brls::Logger::info("Load custom font: {}", USER_FONT_PATH);
-        this->loadFontFromFile(FONT_CHINESE_SIMPLIFIED, USER_FONT_PATH);
+        if (this->loadFontFromFile(FONT_CHINESE_SIMPLIFIED, USER_FONT_PATH))
+            nvgAddFallbackFontId(vg, Application::getFont(FONT_REGULAR), Application::getFont(FONT_CHINESE_SIMPLIFIED));
     }
     else
     {
@@ -111,6 +112,20 @@ void SwitchFontLoader::loadFonts()
         else
         {
             brls::Logger::warning("Cannot find custom emoji, (Searched at: {})", USER_EMOJI_PATH);
+        }
+    }
+
+    // Arabic font
+    std::string arabicPath = USER_ARABIC_FONT_PATH;
+    if (access("sdmc:/switch/TorrentShopNX/font/arabic.ttf", F_OK) != -1)
+        arabicPath = "sdmc:/switch/TorrentShopNX/font/arabic.ttf";
+
+    if (access(arabicPath.c_str(), F_OK) != -1)
+    {
+        if (this->loadFontFromFile(FONT_ARABIC, arabicPath))
+        {
+            nvgAddFallbackFontId(vg, Application::getFont(FONT_REGULAR), Application::getFont(FONT_ARABIC));
+            brls::Logger::info("Load Arabic font: {}", arabicPath);
         }
     }
 }

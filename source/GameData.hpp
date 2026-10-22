@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <shared_mutex>
+#include <mutex>
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -26,21 +26,21 @@ struct Game;
 extern std::vector<Game> g_games;
 
 inline std::shared_ptr<const std::vector<Game>> g_catalogSnapshot = std::make_shared<const std::vector<Game>>();
-inline std::shared_mutex g_catalogMutex;
+inline std::mutex g_catalogMutex;
 
 inline std::shared_ptr<const std::vector<Game>> getCatalogSnapshot() {
-    std::shared_lock<std::shared_mutex> lock(g_catalogMutex);
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
     return g_catalogSnapshot;
 }
 
 inline void setCatalogSnapshot(std::shared_ptr<const std::vector<Game>> snapshot) {
-    std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
     g_catalogSnapshot = snapshot ? snapshot : std::make_shared<const std::vector<Game>>();
 }
 
 inline void setCatalogSnapshot(std::vector<Game> games) {
     auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(games));
-    std::unique_lock<std::shared_mutex> lock(g_catalogMutex);
+    std::lock_guard<std::mutex> lock(g_catalogMutex);
     g_catalogSnapshot = newSnapshot;
 }
 
@@ -120,8 +120,16 @@ inline std::string cleanTitle(const std::string& title) {
 }
 
 // Normalize title for sorting by skipping leading punctuation and symbols
-inline std::string normalizeTitleForSort(const std::string& title) {
-    std::string s = cleanTitle(title);
+inline std::string_view normalizeTitleForSortView(std::string_view title) {
+    std::string_view s = title;
+    size_t pos = title.find('[');
+    if (pos != std::string_view::npos && pos > 0) {
+        s = title.substr(0, pos);
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+            s.remove_suffix(1);
+        }
+        if (s.empty()) s = title;
+    }
     size_t i = 0;
     while (i < s.size()) {
         unsigned char c = static_cast<unsigned char>(s[i]);
@@ -135,11 +143,15 @@ inline std::string normalizeTitleForSort(const std::string& title) {
             break;
         }
     }
-    return i > 0 ? s.substr(i) : s;
+    return (i > 0) ? s.substr(i) : s;
+}
+
+inline std::string normalizeTitleForSort(const std::string& title) {
+    return std::string(normalizeTitleForSortView(title));
 }
 
 inline std::string computeSortKey(const std::string& title) {
-    return util::toLowerUtf8(normalizeTitleForSort(title));
+    return util::toLowerUtf8(normalizeTitleForSortView(title));
 }
 
 struct Game {
@@ -408,18 +420,32 @@ inline std::string extractLangBadge(const std::string& interface_lang) {
 
 // Fast file reading into a preallocated std::string buffer
 inline bool readFileFast(const std::string& path, std::string& out) {
-    std::ifstream in(path, std::ios::binary | std::ios::ate);
-    if (!in.is_open()) return false;
-    std::streamsize size = in.tellg();
-    if (size < 0) return false;
-    in.seekg(0, std::ios::beg);
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return false;
+    }
+    long size = ftell(f);
+    if (size < 0) {
+        fclose(f);
+        return false;
+    }
+    fseek(f, 0, SEEK_SET);
+
     out.resize(static_cast<size_t>(size));
     if (size > 0) {
-        in.read(&out[0], size);
-        if (!in && in.gcount() != size) {
-            out.resize(static_cast<size_t>(in.gcount()));
+        // Use a 256 KB I/O buffer for fast block reads from Switch SD card
+        std::vector<char> ioBuf(256 * 1024);
+        setvbuf(f, ioBuf.data(), _IOFBF, ioBuf.size());
+
+        size_t readBytes = fread(&out[0], 1, static_cast<size_t>(size), f);
+        if (readBytes != static_cast<size_t>(size)) {
+            out.resize(readBytes);
         }
     }
+    fclose(f);
     return true;
 }
 
@@ -574,22 +600,19 @@ private:
     }
 };
 
+inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent);
+
 // Fast streaming JSON parser directly from file (avoids buffering 25MB string & 250MB AST in RAM)
 inline std::vector<Game> parseGamesFromFileStream(const std::string& filePath) {
-    util::logLine("GameData: parsing games streaming from file: " + filePath);
-    std::ifstream in(filePath, std::ios::binary);
-    if (!in.is_open()) {
-        util::logLine("GameData: failed to open file for streaming parse: " + filePath);
+    util::logLine("GameData: parsing games from file: " + filePath);
+    std::string content;
+    if (!readFileFast(filePath, content) || content.empty()) {
+        util::logLine("GameData: failed to read file for parsing: " + filePath);
         return {};
     }
 
-    std::vector<Game> games;
-    games.reserve(8000);
-
-    GameSaxConsumer consumer(games);
-    bool ok = nlohmann::json::sax_parse(in, &consumer);
-    util::logLine("GameData: stream parsed " + std::to_string(games.size()) + " games (ok=" + std::to_string(ok) + ")");
-
+    auto games = parseGamesFromJsonString(content);
+    std::string().swap(content); // Release 25MB file buffer immediately
     return games;
 }
 
@@ -628,7 +651,7 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
     return games;
 }
 
-// Save games vector to high-speed binary cache
+// Save games vector to high-speed binary cache directly streamed via 256KB I/O buffer (avoids 21MB RAM spike)
 inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<Game>& games) {
     if (games.empty()) return false;
     std::filesystem::path p(binPath);
@@ -636,28 +659,46 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         std::error_code ec;
         std::filesystem::create_directories(p.parent_path(), ec);
     }
-    std::ofstream out(binPath, std::ios::binary | std::ios::trunc);
-    if (!out.is_open()) {
+
+    FILE* f = fopen(binPath.c_str(), "wb");
+    if (!f) {
         util::logLine("GameData: failed to open bin file for writing: " + binPath);
         return false;
     }
 
-    const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
-    out.write(magic, 8);
-    uint32_t version = 4;
-    out.write(reinterpret_cast<const char*>(&version), sizeof(version));
-    uint32_t count = static_cast<uint32_t>(games.size());
-    out.write(reinterpret_cast<const char*>(&count), sizeof(count));
+    // 256 KB file buffer to eliminate small SD card writes without 20MB RAM allocation
+    std::vector<char> ioBuf(256 * 1024);
+    setvbuf(f, ioBuf.data(), _IOFBF, ioBuf.size());
 
-    auto writeStr = [&out](const std::string& s) {
+    size_t totalWritten = 0;
+    bool writeError = false;
+
+    auto writeRaw = [&f, &totalWritten, &writeError](const void* ptr, size_t size) {
+        if (writeError) return;
+        if (fwrite(ptr, 1, size, f) != size) {
+            writeError = true;
+        } else {
+            totalWritten += size;
+        }
+    };
+
+    const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
+    writeRaw(magic, 8);
+    uint32_t version = 4;
+    writeRaw(&version, sizeof(version));
+    uint32_t count = static_cast<uint32_t>(games.size());
+    writeRaw(&count, sizeof(count));
+
+    auto writeStr = [&writeRaw](const std::string& s) {
         uint16_t len = static_cast<uint16_t>(std::min<size_t>(s.size(), 65535));
-        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        writeRaw(&len, sizeof(len));
         if (len > 0) {
-            out.write(s.data(), len);
+            writeRaw(s.data(), len);
         }
     };
 
     for (const auto& g : games) {
+        if (writeError) break;
         writeStr(g.title);
         writeStr(g.title_id);
         writeStr(g.size);
@@ -674,7 +715,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.cover);
 
         uint16_t scCount = static_cast<uint16_t>(std::min<size_t>(g.screenshots.size(), 65535));
-        out.write(reinterpret_cast<const char*>(&scCount), sizeof(scCount));
+        writeRaw(&scCount, sizeof(scCount));
         for (size_t i = 0; i < scCount; ++i) {
             writeStr(g.screenshots[i]);
         }
@@ -683,19 +724,22 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.multiplayer);
 
         uint8_t is_rom = g.is_romset ? 1 : 0;
-        out.write(reinterpret_cast<const char*>(&is_rom), sizeof(is_rom));
+        writeRaw(&is_rom, sizeof(is_rom));
         writeStr(g.content_type);
         writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
     }
 
-    out.flush();
-    bool ok = out.good();
-    util::logLine("GameData: saved binary cache to " + binPath + " count=" + std::to_string(games.size()) + " ok=" + std::to_string(ok));
+    fflush(f);
+    fclose(f);
+
+    bool ok = !writeError;
+    util::logLine("GameData: saved binary cache to " + binPath + " count=" + std::to_string(games.size()) +
+                  " size=" + std::to_string(totalWritten) + " bytes ok=" + std::to_string(ok));
     return ok;
 }
 
 // Load games vector from high-speed binary cache (<50ms for 7000+ games)
-inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game>& games) {
+inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game>& games, bool* out_needs_upgrade = nullptr) {
     std::string buffer;
     if (!readFileFast(binPath, buffer)) {
         return false;
@@ -721,6 +765,9 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     if (version != 1 && version != 2 && version != 3 && version != 4) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
+    }
+    if (out_needs_upgrade) {
+        *out_needs_upgrade = (version < 4);
     }
 
     uint32_t count = 0;
@@ -784,10 +831,6 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
             if (!readStr(g.content_type)) return false;
         } else {
             g.is_romset = isRomsetGame(g);
-        }
-
-        if (!g.is_romset && isRomsetGame(g)) {
-            g.is_romset = true;
         }
 
         if (version >= 4) {
@@ -890,7 +933,12 @@ inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std:
 
     if (hasBin && (!hasJson || stBin.st_mtime >= stJson.st_mtime)) {
         std::vector<Game> games;
-        if (loadGamesFromBinaryFile(binPath, games) && !games.empty()) {
+        bool needsUpgrade = false;
+        if (loadGamesFromBinaryFile(binPath, games, &needsUpgrade) && !games.empty()) {
+            if (needsUpgrade) {
+                util::logLine("GameData: upgrading binary cache to version 4 with precomputed sort keys");
+                saveGamesToBinaryFile(binPath, games);
+            }
             return games;
         }
         util::logLine("GameData: binary cache invalid or empty, falling back to JSON");
@@ -1137,25 +1185,31 @@ inline void migrateFlatCatalogCache() {
 
 // Deletes regular files in `dir` older than max_age_seconds (stale cache sweep).
 inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_seconds) {
-    std::error_code ec;
-    std::time_t now = std::time(nullptr);
-    if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
-    int removed = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(
-             dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
-        if (g_cleanupCancelled.load()) break;
-        std::error_code ec2;
-        if (!entry.is_regular_file(ec2)) continue;
-        struct stat st;
-        if (stat(entry.path().string().c_str(), &st) != 0) continue;
-        if ((now - st.st_mtime) > max_age_seconds) {
-            std::filesystem::remove(entry.path(), ec2);
-            if (!ec2) ++removed;
+    try {
+        std::error_code ec;
+        std::time_t now = std::time(nullptr);
+        if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
+        int removed = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(
+                 dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
+            if (g_cleanupCancelled.load()) break;
+            std::error_code ec2;
+            if (!entry.is_regular_file(ec2)) continue;
+            struct stat st;
+            if (stat(entry.path().string().c_str(), &st) != 0) continue;
+            if ((now - st.st_mtime) > max_age_seconds) {
+                std::filesystem::remove(entry.path(), ec2);
+                if (!ec2) ++removed;
+            }
         }
-    }
-    if (removed > 0) {
-        util::logLine("GameData: swept " + dir + ": removed " + std::to_string(removed) +
-                      " stale cache file(s)");
+        if (removed > 0) {
+            util::logLine("GameData: swept " + dir + ": removed " + std::to_string(removed) +
+                          " stale cache file(s)");
+        }
+    } catch (const std::exception& e) {
+        util::logLine("GameData: exception in sweepExpiredFiles(" + dir + "): " + e.what());
+    } catch (...) {
+        util::logLine("GameData: unknown exception in sweepExpiredFiles(" + dir + ")");
     }
 }
 
@@ -1163,6 +1217,11 @@ inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_second
 // the cache/<type> + data/ layout and prunes stale cache entries by age.
 inline void migrateStorageLayout() {
     ensureAppDirs();
+    const std::string marker = std::string(TSNX_DATA_DIR) + "/.migrated_v2";
+    std::error_code ecMarker;
+    if (std::filesystem::exists(marker, ecMarker)) {
+        return;
+    }
     util::logLine("GameData: storage layout migration start");
 
     // Files -> data/
@@ -1203,14 +1262,25 @@ inline void migrateStorageLayout() {
     std::error_code ecObsolete;
     std::filesystem::remove(TSNX_BASE_DIR "/downloads.json", ecObsolete);
 
-    // Age-based stale-cache sweep
-    sweepExpiredFiles(TSNX_CACHE_CATALOG, 1800);           // catalog bodies (match read TTL: 30 min)
-    sweepExpiredFiles(TSNX_CACHE_COLLECTIONS, 7 * 86400);  // collections: 7 days
-    sweepExpiredFiles(TSNX_CACHE_THUMBNAILS, 30 * 86400);  // cover thumbnails: 30 days
-    sweepExpiredFiles(TSNX_CACHE_META, 30 * 86400);        // torrent metadata: 30 days
-    sweepExpiredFiles(TSNX_CACHE_ICONS, 90 * 86400);       // NACP icons: 90 days
+    FILE* mf = fopen(marker.c_str(), "wb");
+    if (mf) fclose(mf);
 
     util::logLine("GameData: storage layout migration done");
+}
+
+// Age-based stale-cache sweep executed asynchronously in background to ensure instant startup
+inline void sweepStaleCaches() {
+    util::logLine("GameData: background stale cache sweep start");
+    sweepExpiredFiles(TSNX_CACHE_CATALOG, 1800);           // catalog bodies (match read TTL: 30 min)
+    if (g_cleanupCancelled.load()) return;
+    sweepExpiredFiles(TSNX_CACHE_COLLECTIONS, 7 * 86400);  // collections: 7 days
+    if (g_cleanupCancelled.load()) return;
+    sweepExpiredFiles(TSNX_CACHE_META, 30 * 86400);        // torrent metadata: 30 days
+    if (g_cleanupCancelled.load()) return;
+    sweepExpiredFiles(TSNX_CACHE_ICONS, 90 * 86400);       // NACP icons: 90 days
+    if (g_cleanupCancelled.load()) return;
+    sweepExpiredFiles(TSNX_CACHE_THUMBNAILS, 30 * 86400);  // cover thumbnails: 30 days
+    util::logLine("GameData: background stale cache sweep done");
 }
 
 // Helper to normalize image URLs (e.g. FastPic migrated fastpic.ru to fastpic.org and storage servers fail on HTTPS)

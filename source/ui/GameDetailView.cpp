@@ -1,3 +1,4 @@
+#include "RetroTargetPrompt.hpp"
 #include "GameDetailView.hpp"
 #include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
@@ -159,6 +160,32 @@ void GameDetailView::onContentAvailable() {
 
         badgesBox->addView(cBadge);
 
+        bool isTico = config::ConfigManager::instance().isTicoMode();
+        std::string emuText;
+        if (isTico && cInfo && cInfo->is_tico_supported) {
+            std::string core = catalog::RetroCatalogManager::instance().getTicoCoreName(retro_console_id_);
+            emuText = "Tico • " + core;
+        } else if (cInfo && !cInfo->recommended_emulator.empty()) {
+            emuText = cInfo->recommended_emulator;
+        }
+
+        if (!emuText.empty()) {
+            brls::Box* emuBadge = new brls::Box();
+            emuBadge->setPadding(5, 10, 5, 10);
+            emuBadge->setMarginRight(10);
+            emuBadge->setMarginBottom(10);
+            emuBadge->setBackgroundColor(isTico ? nvgRGB(124, 77, 255) : nvgRGB(50, 120, 200));
+            emuBadge->setCornerRadius(6);
+
+            brls::Label* emuLabel = new brls::Label();
+            emuLabel->setText(emuText);
+            emuLabel->setFontSize(14);
+            emuLabel->setTextColor(nvgRGB(255, 255, 255));
+            emuBadge->addView(emuLabel);
+
+            badgesBox->addView(emuBadge);
+        }
+
         if (isRomsetGame(game_)) {
             brls::Box* setBadge = new brls::Box();
             setBadge->setPadding(5, 10, 5, 10);
@@ -298,43 +325,69 @@ void GameDetailView::onContentAvailable() {
     // Buttons Actions
     btnDownload->registerClickAction([this](brls::View* view) {
         if (!retro_console_id_.empty() || isHomebrewGame(game_) || isHomebrewPort(game_)) {
-            auto* dialog = new brls::Dialog(cleanTitle(game_.title));
-            dialog->setCancelable(true);
+            auto openOptionsDialog = [this]() {
+                auto* dialog = new brls::Dialog(cleanTitle(game_.title));
+                dialog->setCancelable(true);
 
-            // 1. Автоматическая установка (только для хоумбрю / портов)
-            if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
-                dialog->addButton("app/detail/auto_install_btn"_i18n, [this]() {
-                    // Instantly enqueue with analysis deferred to when download starts.
-                    // This allows queueing multiple ports without UI freezes, network competition,
-                    // or socket exhaustion.
-                    ui::DownloadManager::instance().addPortInstall(game_, nullptr, 0);
-                    brls::sync([]() {
-                        brls::Application::pushActivity(new ui::DownloadsView());
+                // 1. Автоматическая установка (только для хоумбрю / портов)
+                if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
+                    dialog->addButton("app/detail/auto_install_btn"_i18n, [this]() {
+                        ui::DownloadManager::instance().addPortInstall(game_, nullptr, 0);
+                        brls::sync([]() {
+                            brls::Application::pushActivity(new ui::DownloadsView());
+                        });
                     });
+                }
+
+                // 2. Скачать полностью
+                dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
+                    if (!retro_console_id_.empty()) {
+                        promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
+                            ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, target_mode);
+                            brls::sync([]() {
+                                brls::Application::pushActivity(new ui::DownloadsView());
+                            });
+                        });
+                    } else {
+                        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+                        brls::sync([]() {
+                            brls::Application::pushActivity(new ui::DownloadsView());
+                        });
+                    }
                 });
+
+                // 3. Выбрать файлы
+                dialog->addButton("app/detail/select_files_btn"_i18n, [this]() {
+                    brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
+                });
+
+                // 4. Отмена
+                dialog->addButton("app/common/cancel"_i18n, []() {});
+
+                dialog->open();
+            };
+
+            // Предупреждение для платформ, не поддерживаемых Tico нативно (PS2, PS Vita, Wii U)
+            if (!retro_console_id_.empty() && config::ConfigManager::instance().isTicoMode() &&
+                !catalog::RetroCatalogManager::instance().isTicoSupported(retro_console_id_)) {
+                const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
+                std::string cName = cInfo ? cInfo->name : retro_console_id_;
+                std::string emuName = cInfo ? cInfo->recommended_emulator : "Standalone";
+
+                std::string warnMsg = "app/retro/tico_unsupported_title"_i18n + "\n\n" +
+                                      brls::getStr("app/retro/tico_unsupported_desc", cName, emuName);
+                auto* warnDialog = new brls::Dialog(warnMsg);
+                warnDialog->setCancelable(true);
+
+                warnDialog->addButton("app/retro/tico_save_standalone"_i18n, [openOptionsDialog]() {
+                    openOptionsDialog();
+                });
+                warnDialog->addButton("app/common/cancel"_i18n, []() {});
+                warnDialog->open();
+                return true;
             }
 
-            // 2. Скачать полностью
-            dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
-                if (!retro_console_id_.empty()) {
-                    ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
-                } else {
-                    ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-                }
-                brls::sync([]() {
-                    brls::Application::pushActivity(new ui::DownloadsView());
-                });
-            });
-
-            // 3. Выбрать файлы
-            dialog->addButton("app/detail/select_files_btn"_i18n, [this]() {
-                brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
-            });
-
-            // 4. Отмена
-            dialog->addButton("app/common/cancel"_i18n, []() {});
-
-            dialog->open();
+            openOptionsDialog();
             return true;
         }
 
@@ -421,7 +474,6 @@ void GameDetailView::willAppear(bool resetState) {
 
 void GameDetailView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    brls::Application::giveFocus(nullptr);
 }
 
 } // namespace ui

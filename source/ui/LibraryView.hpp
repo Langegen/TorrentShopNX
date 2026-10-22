@@ -4,6 +4,9 @@
 #include "../GameData.hpp"
 
 #include <atomic>
+#include <functional>
+#include <vector>
+#include <string>
 
 namespace ui {
 
@@ -14,17 +17,45 @@ enum class GameUpdateStatus {
     Unknown
 };
 
+struct InstalledComponent {
+    enum class Type {
+        BaseGame,
+        Patch,
+        Dlc,
+        Mods
+    };
+    Type type = Type::BaseGame;
+    uint64_t titleId = 0;
+    uint32_t version = 0;
+    uint64_t sizeBytes = 0;
+    std::string displayName;
+    uint8_t storageId = 0; // NcmStorageId
+    std::string extraInfo; // path for mods, etc.
+};
+
 struct LibraryItem {
     Game game;
     std::string currentVersion;
     std::string latestVersion;
-    GameUpdateStatus status;
-    uint64_t titleId;
+    GameUpdateStatus status = GameUpdateStatus::Unknown;
+    uint64_t titleId = 0;
     std::string rawName;
     bool hasMods = false;
     bool updateIgnored = false;
     std::string modDetails;
+    std::string modPath;
     std::string sdkVersion;
+
+    // Component and size info
+    uint64_t totalSizeBytes = 0;
+    uint64_t appSizeBytes = 0;
+    uint64_t patchSizeBytes = 0;
+    uint64_t dlcSizeBytes = 0;
+    uint64_t modsSizeBytes = 0;
+    bool hasPatch = false;
+    uint32_t installedPatchVersion = 0;
+    int dlcCount = 0;
+    std::vector<InstalledComponent> components;
 };
 
 struct LibrarySection {
@@ -41,6 +72,10 @@ public:
     BRLS_BIND(brls::Image, cover, "cover");
     BRLS_BIND(brls::Label, title, "title");
     BRLS_BIND(brls::Label, titleId, "titleId");
+    BRLS_BIND(brls::Box, patchBadgeBox, "patchBadgeBox");
+    BRLS_BIND(brls::Label, patchBadge, "patchBadge");
+    BRLS_BIND(brls::Box, dlcBadgeBox, "dlcBadgeBox");
+    BRLS_BIND(brls::Label, dlcBadge, "dlcBadge");
     BRLS_BIND(brls::Box, modBadgeBox, "modBadgeBox");
     BRLS_BIND(brls::Label, modBadge, "modBadge");
     BRLS_BIND(brls::Label, currentVersion, "currentVersion");
@@ -62,7 +97,9 @@ public:
     void willDisappear(bool resetState = false) override;
 
     void scanForUpdates();
-    void uninstallGame(uint64_t titleId, const std::string& displayName);
+    void showGameActionMenu(const LibraryItem& item, int currentSection, int currentRow);
+    void uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods = false);
+    void showComponentManager(const LibraryItem& item, int currentSection, int currentRow);
     void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection = -1, int currentRow = -1);
     void showModWarningDialog(const LibraryItem& item);
     void rebuildSections(int targetSection = -1, int targetRow = -1);

@@ -20,11 +20,13 @@
 #include "../catalog/catalog_manager.h"
 #include "../catalog/catalog_updater.h"
 #include "../catalog/IgnoredUpdatesManager.hpp"
+#include "../catalog/game_stats_manager.h"
 #include "../net/http_client.h"
 #include <borealis/views/hint.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 #include <algorithm>
 #include <chrono>
+#include <thread>
 #include <ctime>
 #include <filesystem>
 
@@ -312,6 +314,14 @@ void MainMenu::onResume() {
         if (tile) tile->refreshTheme();
     }
     if (header_) header_->refreshTheme();
+
+    if (brls::Application::getCurrentFocus() == nullptr) {
+        int idx = (current_focused_index_ >= 0 && current_focused_index_ < static_cast<int>(tiles_.size()))
+            ? current_focused_index_ : 0;
+        if (idx < static_cast<int>(tiles_.size()) && tiles_[idx]) {
+            brls::Application::giveFocus(tiles_[idx]);
+        }
+    }
 }
 
 static int s_cachedInstalledCount = 0;
@@ -721,16 +731,32 @@ void MainMenu::onContentAvailable() {
         });
     }
 
-    // Delete renamed cache folders iteratively
-    if (!g_pathsToDelete.empty()) {
-        g_cleanupRunning = true;
-        brls::async([]() {
-            for (const auto& path : g_pathsToDelete) {
-                if (g_cleanupCancelled.load()) break;
-                deleteDirectoryIterative(path);
+    // Background cache cleanup (iterative folder deletion and stale cache sweep)
+    g_cleanupRunning = true;
+    brls::async([]() {
+        try {
+            if (!g_pathsToDelete.empty()) {
+                for (const auto& path : g_pathsToDelete) {
+                    if (g_cleanupCancelled.load()) break;
+                    deleteDirectoryIterative(path);
+                }
+                g_pathsToDelete.clear();
             }
-            g_pathsToDelete.clear();
-            g_cleanupRunning = false;
-        });
-    }
+
+            // Delay stale cache sweep by 15s to allow smooth initial UI & thumbnail loading without SD contention
+            for (int s = 0; s < 30; ++s) {
+                if (g_cleanupCancelled.load()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+
+            if (!g_cleanupCancelled.load()) {
+                sweepStaleCaches();
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("MainMenu: exception in background cleanup: ") + e.what());
+        } catch (...) {
+            util::logLine("MainMenu: unknown exception in background cleanup");
+        }
+        g_cleanupRunning = false;
+    });
 }

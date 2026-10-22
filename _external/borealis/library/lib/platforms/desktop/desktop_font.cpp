@@ -173,6 +173,17 @@ void DesktopFontLoader::loadFonts()
     {
         Logger::error("switch: could not load Material icons font from resources");
     }
+
+    // Arabic font
+    std::vector<std::string> arabicFonts = {
+        USER_ARABIC_FONT_PATH,
+#if defined(_WIN32)
+        prefix + "tahoma",
+        prefix + "arial",
+        prefix + "seguiui",
+#endif
+    };
+    loadFontsExist(vg, arabicFonts, FONT_ARABIC, FONT_REGULAR);
 }
 
 } // namespace brls

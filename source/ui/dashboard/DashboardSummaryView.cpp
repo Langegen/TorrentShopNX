@@ -384,8 +384,14 @@ void DashboardSummaryView::updateDownloads(const std::vector<download::DownloadI
                 // In-place dynamic updates without tearing down the UI hierarchy or cancelling imageToken_
                 if (dl_titleLbl_) dl_titleLbl_->setText(truncateStr(cleanTitle(activeItem->title), 34));
 
-                std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
-                                     ? "app/dashboard/downloads_status_installing"_i18n : "app/dashboard/downloads_status_downloading"_i18n;
+                std::string stText;
+                if (!activeItem->install_stage_label.empty()) {
+                    stText = activeItem->install_stage_label;
+                } else if (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling) {
+                    stText = "app/dashboard/downloads_status_installing"_i18n;
+                } else {
+                    stText = "app/dashboard/downloads_status_downloading"_i18n;
+                }
                 if (dl_stLbl_) dl_stLbl_->setText(stText);
 
                 if (dl_barFill_) dl_barFill_->setWidthPercentage(std::max(2.0f, activeItem->progress * 100.0f));
@@ -582,6 +588,12 @@ void DashboardSummaryView::rebuildContent() {
         case 3: buildDownloadsSection(); break;
         case 4: buildToolsSection(); break;
         default: buildCatalogSection(); break;
+    }
+
+    if (focusInSummary && brls::Application::getCurrentFocus() == nullptr) {
+        if (on_defocus_) {
+            on_defocus_();
+        }
     }
 }
 
@@ -799,7 +811,9 @@ void DashboardSummaryView::buildRetroGamesSection() {
     auto& cfg = config::ConfigManager::instance();
     std::string romsMode = cfg.getRetroRomsMode();
     std::string modeTag = "RetroArch";
-    if (romsMode == "downloads") modeTag = "app/dashboard/retro_mode_downloads"_i18n;
+    if (romsMode == "tico") modeTag = "Tico";
+    else if (romsMode == "prompt") modeTag = "Tico / Standalone";
+    else if (romsMode == "downloads") modeTag = "app/dashboard/retro_mode_downloads"_i18n;
     else if (romsMode == "custom") modeTag = "app/dashboard/retro_mode_custom"_i18n;
 
     brls::Box* c3Top = new brls::Box();
@@ -1169,8 +1183,14 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_titleLbl_->setSingleLine(true);
         topRow->addView(dl_titleLbl_);
 
-        std::string stText = (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling)
-                             ? "app/dashboard/downloads_status_installing"_i18n : "app/dashboard/downloads_status_downloading"_i18n;
+        std::string stText;
+        if (!activeItem->install_stage_label.empty()) {
+            stText = activeItem->install_stage_label;
+        } else if (activeItem->state == download::DownloadState::Installing || activeItem->state == download::DownloadState::StreamInstalling) {
+            stText = "app/dashboard/downloads_status_installing"_i18n;
+        } else {
+            stText = "app/dashboard/downloads_status_downloading"_i18n;
+        }
         dl_stLbl_ = new brls::Label();
         dl_stLbl_->setText(stText);
         dl_stLbl_->setFontSize(12.0f);

@@ -1,3 +1,4 @@
+#include "RetroTargetPrompt.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
@@ -1552,9 +1553,17 @@ void FileSelectView::toggleAllSelection() {
 
 void FileSelectView::startDownloadAndGoToDownloads() {
     if (files_.empty()) {
-        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-        brls::Application::notify(brls::getStr("app/downloads/state_queued"));
-        brls::Application::popActivity();
+        if (!retro_console_id_.empty()) {
+            promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
+                ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, target_mode);
+                brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+                brls::Application::popActivity();
+            });
+        } else {
+            ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+            brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+            brls::Application::popActivity();
+        }
         return;
     }
 
@@ -1604,13 +1613,13 @@ void FileSelectView::startDownloadAndGoToDownloads() {
             std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", formatBytes(totalNeededSize), formatBytes(freeSpace));
             brls::Dialog* dialog = new brls::Dialog(msg);
             dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName]() {
-                this->executeDownloads(selectedIndices, forcedIndex, forcedName);
+                this->promptAndExecuteDownloads(selectedIndices, forcedIndex, forcedName);
             });
             dialog->addButton("app/common/cancel"_i18n, []() {});
             dialog->open();
             return;
         }
-        executeDownloads(selectedIndices, forcedIndex, forcedName);
+        promptAndExecuteDownloads(selectedIndices, forcedIndex, forcedName);
         return;
     }
 
@@ -1668,7 +1677,17 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     executeDownloads(selectedIndices, forcedIndex, forcedName);
 }
 
-void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
+void FileSelectView::promptAndExecuteDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
+    if (!retro_console_id_.empty()) {
+        promptRetroTargetSelection(retro_console_id_, [this, selectedIndices, forcedIndex, forcedName](const std::string& target_mode) {
+            this->executeDownloads(selectedIndices, forcedIndex, forcedName, target_mode);
+        });
+    } else {
+        executeDownloads(selectedIndices, forcedIndex, forcedName, "");
+    }
+}
+
+void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName, const std::string& retro_target_mode) {
     (void)forcedIndex;
     (void)forcedName;
 
@@ -1679,106 +1698,111 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         }
     }
 
-    if (isFolderHierarchyMode()) {
-        if (chosen.size() == 1) {
-            size_t i = chosen[0];
-            std::vector<int> singleSelected = { files_[i].index };
-            std::string filenameOnly = std::filesystem::path(files_[i].name).filename().string();
-            std::string itemTitle = cleanTitle(game_.title) + " (" + filenameOnly + ")";
-            Game singleGame = game_;
-            singleGame.title = itemTitle;
-            singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
-            unsigned long long fileSize = (files_[i].size > 0) ? static_cast<unsigned long long>(files_[i].size) : 0;
-            ui::DownloadManager::instance().addDownload(
-                singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize);
-        } else if (!chosen.empty()) {
-            std::vector<int> bundleSelected;
-            bundleSelected.reserve(chosen.size());
-            unsigned long long bundleTotalBytes = 0;
-            for (size_t i : chosen) {
-                bundleSelected.push_back(files_[i].index);
-                if (files_[i].size > 0) bundleTotalBytes += static_cast<unsigned long long>(files_[i].size);
+    try {
+        if (isFolderHierarchyMode()) {
+            if (chosen.size() == 1) {
+                size_t i = chosen[0];
+                std::vector<int> singleSelected = { files_[i].index };
+                std::string filenameOnly = std::filesystem::path(files_[i].name).filename().string();
+                std::string itemTitle = cleanTitle(game_.title) + " (" + filenameOnly + ")";
+                Game singleGame = game_;
+                singleGame.title = itemTitle;
+                singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[i].index);
+                unsigned long long fileSize = (files_[i].size > 0) ? static_cast<unsigned long long>(files_[i].size) : 0;
+                ui::DownloadManager::instance().addDownload(
+                    singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
+                    game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize, retro_target_mode);
+            } else if (!chosen.empty()) {
+                std::vector<int> bundleSelected;
+                bundleSelected.reserve(chosen.size());
+                unsigned long long bundleTotalBytes = 0;
+                for (size_t i : chosen) {
+                    bundleSelected.push_back(files_[i].index);
+                    if (files_[i].size > 0) bundleTotalBytes += static_cast<unsigned long long>(files_[i].size);
+                }
+                std::string countStr = std::to_string(chosen.size());
+                std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
+                Game bundleGame = game_;
+                bundleGame.title = bundleTitle;
+                bundleGame.topic_id = game_.topic_id + (retro_console_id_.empty() ? "_hb_bundle" : "_romset");
+                int firstIndex = files_[chosen[0]].index;
+                std::string firstName = files_[chosen[0]].name;
+                ui::DownloadManager::instance().addDownload(
+                    bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
+                    game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes, retro_target_mode);
             }
-            std::string countStr = std::to_string(chosen.size());
-            std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
-            Game bundleGame = game_;
-            bundleGame.title = bundleTitle;
-            bundleGame.topic_id = game_.topic_id + (retro_console_id_.empty() ? "_hb_bundle" : "_romset");
-            int firstIndex = files_[chosen[0]].index;
-            std::string firstName = files_[chosen[0]].name;
-            ui::DownloadManager::instance().addDownload(
-                bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes);
+        } else {
+            std::vector<size_t> packages;
+            std::vector<size_t> extraFiles;
+
+            for (size_t idx : chosen) {
+                if (isSwitchGameFile(files_[idx].name)) {
+                    packages.push_back(idx);
+                } else {
+                    extraFiles.push_back(idx);
+                }
+            }
+
+            // Сортируем выбранные установочные пакеты по приоритету установки:
+            // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
+            // Внутри одной известной категории (например, несколько DLC) сохраняем порядок файлов в торренте,
+            // чтобы чтение кусков шло строго последовательно и работала предвыборка LOOKAHEAD_PIECES.
+            std::stable_sort(packages.begin(), packages.end(), [this](size_t a, size_t b) {
+                int prio_a = download::installFilePriority(files_[a].name);
+                int prio_b = download::installFilePriority(files_[b].name);
+                if (prio_a != prio_b) {
+                    return prio_a > prio_b;
+                }
+                if (prio_a >= 150 && prio_a < 200) {
+                    return files_[a].size > files_[b].size;
+                }
+                return files_[a].index < files_[b].index;
+            });
+
+            // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
+            for (size_t idx : packages) {
+                std::vector<int> singleSelected = { files_[idx].index };
+                Game singleGame = game_;
+                singleGame.title = cleanTitle(game_.title);
+                singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
+
+                auto comp = util::classifyDownloadComponent(files_[idx].name, game_.title);
+                unsigned long long pkgSize = (files_[idx].size > 0) ? static_cast<unsigned long long>(files_[idx].size) : 0;
+                ui::DownloadManager::instance().addDownload(
+                    singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
+                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize, retro_target_mode);
+            }
+
+            // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
+            if (!extraFiles.empty()) {
+                std::vector<int> extraIndices;
+                extraIndices.reserve(extraFiles.size());
+                unsigned long long extraTotalBytes = 0;
+                for (size_t idx : extraFiles) {
+                    extraIndices.push_back(files_[idx].index);
+                    if (files_[idx].size > 0) extraTotalBytes += static_cast<unsigned long long>(files_[idx].size);
+                }
+
+                auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
+                if (extraFiles.size() > 1) {
+                    comp.cleanName += " (" + std::to_string(extraFiles.size()) + " ф.)";
+                }
+
+                std::string extraTitle = cleanTitle(game_.title);
+                Game extraGame = game_;
+                extraGame.title = extraTitle;
+                extraGame.topic_id = game_.topic_id + "_extras";
+                int firstIndex = files_[extraFiles[0]].index;
+                std::string forcedName = files_[extraFiles[0]].name;
+
+                ui::DownloadManager::instance().addDownload(
+                    extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
+                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes, retro_target_mode);
+            }
         }
-    } else {
-        std::vector<size_t> packages;
-        std::vector<size_t> extraFiles;
-
-        for (size_t idx : chosen) {
-            if (isSwitchGameFile(files_[idx].name)) {
-                packages.push_back(idx);
-            } else {
-                extraFiles.push_back(idx);
-            }
-        }
-
-        // Сортируем выбранные установочные пакеты по приоритету установки:
-        // Базовая игра (v0) ВСЕГДА ставится первой, затем обновления, затем DLC!
-        // Внутри одной известной категории (например, несколько DLC) сохраняем порядок файлов в торренте,
-        // чтобы чтение кусков шло строго последовательно и работала предвыборка LOOKAHEAD_PIECES.
-        std::stable_sort(packages.begin(), packages.end(), [this](size_t a, size_t b) {
-            int prio_a = download::installFilePriority(files_[a].name);
-            int prio_b = download::installFilePriority(files_[b].name);
-            if (prio_a != prio_b) {
-                return prio_a > prio_b;
-            }
-            if (prio_a >= 150 && prio_a < 200) {
-                return files_[a].size > files_[b].size;
-            }
-            return files_[a].index < files_[b].index;
-        });
-
-        // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
-        for (size_t idx : packages) {
-            std::vector<int> singleSelected = { files_[idx].index };
-            Game singleGame = game_;
-            singleGame.title = cleanTitle(game_.title);
-            singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
-
-            auto comp = util::classifyDownloadComponent(files_[idx].name, game_.title);
-            unsigned long long pkgSize = (files_[idx].size > 0) ? static_cast<unsigned long long>(files_[idx].size) : 0;
-            ui::DownloadManager::instance().addDownload(
-                singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize);
-        }
-
-        // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
-        if (!extraFiles.empty()) {
-            std::vector<int> extraIndices;
-            extraIndices.reserve(extraFiles.size());
-            unsigned long long extraTotalBytes = 0;
-            for (size_t idx : extraFiles) {
-                extraIndices.push_back(files_[idx].index);
-                if (files_[idx].size > 0) extraTotalBytes += static_cast<unsigned long long>(files_[idx].size);
-            }
-
-            auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
-            if (extraFiles.size() > 1) {
-                comp.cleanName += " (" + std::to_string(extraFiles.size()) + " ф.)";
-            }
-
-            std::string extraTitle = cleanTitle(game_.title);
-            Game extraGame = game_;
-            extraGame.title = extraTitle;
-            extraGame.topic_id = game_.topic_id + "_extras";
-            int firstIndex = files_[extraFiles[0]].index;
-            std::string forcedName = files_[extraFiles[0]].name;
-
-            ui::DownloadManager::instance().addDownload(
-                extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
-                game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes);
-        }
+    } catch (const std::exception& e) {
+        brls::Logger::error("FileSelectView: failed to queue downloads: {}", e.what());
+        brls::Application::notify("Ошибка добавления в очередь: " + std::string(e.what()));
     }
 
     brls::sync([]() {

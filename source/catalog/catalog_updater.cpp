@@ -398,7 +398,10 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     brls::sync([newSnapshot, viewToken]() {
         setCatalogSnapshot(newSnapshot);
         if (viewToken && *viewToken && ui::g_activeCatalogView) {
-            ui::g_activeCatalogView->filterCatalog();
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (!stack.empty() && stack.back() == ui::g_activeCatalogView) {
+                ui::g_activeCatalogView->filterCatalog();
+            }
         }
     });
 
@@ -490,12 +493,19 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         if (aliveToken && *aliveToken && notif) {
             brls::sync([notif, aliveToken]() {
                 if (aliveToken && *aliveToken && notif) {
-                    notif->updateProgress(85.0f, "app/catalog/processing"_i18n);
+                    notif->updateProgress(80.0f, "app/catalog/processing"_i18n);
                 }
             });
         }
 
         online_games = parseGamesFromFileStream(tempJsonPath);
+        if (aliveToken && *aliveToken && notif) {
+            brls::sync([notif, aliveToken]() {
+                if (aliveToken && *aliveToken && notif) {
+                    notif->updateProgress(92.0f, "app/catalog/processing"_i18n);
+                }
+            });
+        }
         if (!online_games.empty() && !g_appExiting.load()) {
             util::logLine("catalog_updater: parsed " + std::to_string(online_games.size()) + " games from stream");
 
@@ -578,7 +588,10 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         brls::sync([newSnapshot, viewToken]() {
             setCatalogSnapshot(newSnapshot);
             if (viewToken && *viewToken && ui::g_activeCatalogView) {
-                ui::g_activeCatalogView->filterCatalog();
+                const auto& stack = brls::Application::getActivitiesStack();
+                if (!stack.empty() && stack.back() == ui::g_activeCatalogView) {
+                    ui::g_activeCatalogView->filterCatalog();
+                }
             }
         });
 

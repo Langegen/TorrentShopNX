@@ -31,7 +31,7 @@
             fontSize="18"
             singleLine="true" />
 
-        <!-- Title ID & Mod Badge -->
+        <!-- Title ID & Badges -->
         <brls:Box width="auto" height="auto" axis="row" alignItems="center" marginTop="3">
             <brls:Label
                 id="titleId"
@@ -39,6 +39,40 @@
                 textColor="@theme/brls/header/subtitle"
                 marginRight="10"
                 singleLine="true" />
+
+            <brls:Box
+                id="patchBadgeBox"
+                paddingTop="2"
+                paddingBottom="2"
+                paddingLeft="6"
+                paddingRight="6"
+                cornerRadius="4"
+                backgroundColor="#0288D1"
+                marginRight="6"
+                visibility="gone">
+                <brls:Label
+                    id="patchBadge"
+                    text="UPD"
+                    fontSize="11"
+                    textColor="#FFFFFF" />
+            </brls:Box>
+
+            <brls:Box
+                id="dlcBadgeBox"
+                paddingTop="2"
+                paddingBottom="2"
+                paddingLeft="6"
+                paddingRight="6"
+                cornerRadius="4"
+                backgroundColor="#F57C00"
+                marginRight="6"
+                visibility="gone">
+                <brls:Label
+                    id="dlcBadge"
+                    text="DLC"
+                    fontSize="11"
+                    textColor="#FFFFFF" />
+            </brls:Box>
 
             <brls:Box
                 id="modBadgeBox"

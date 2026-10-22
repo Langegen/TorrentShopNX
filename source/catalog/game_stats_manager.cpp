@@ -16,7 +16,6 @@ GameStatsManager& GameStatsManager::instance() {
 }
 
 GameStatsManager::GameStatsManager() {
-    loadFromDisk();
 }
 
 std::string GameStatsManager::getSwitchStatsCachePath() {
@@ -61,20 +60,25 @@ bool GameStatsManager::parseStatsJson(const std::string& json_str, std::unordere
             if (!val.is_object()) continue;
 
             GameStats s;
-            if (val.contains("seeds") && val["seeds"].is_number()) {
-                s.seeds = val["seeds"].get<int32_t>();
+            auto itS = val.find("seeds");
+            if (itS != val.end() && itS->is_number()) {
+                s.seeds = itS->get<int32_t>();
             }
-            if (val.contains("leeches") && val["leeches"].is_number()) {
-                s.leeches = val["leeches"].get<int32_t>();
+            auto itL = val.find("leeches");
+            if (itL != val.end() && itL->is_number()) {
+                s.leeches = itL->get<int32_t>();
             }
-            if (val.contains("downloads") && val["downloads"].is_number()) {
-                s.downloads = val["downloads"].get<int64_t>();
+            auto itD = val.find("downloads");
+            if (itD != val.end() && itD->is_number()) {
+                s.downloads = itD->get<int64_t>();
             }
-            if (val.contains("registered_at") && val["registered_at"].is_string()) {
-                s.registered_at = val["registered_at"].get<std::string>();
+            auto itR = val.find("registered_at");
+            if (itR != val.end() && itR->is_string()) {
+                s.registered_at = itR->get<std::string>();
             }
-            if (val.contains("updated_at") && val["updated_at"].is_string()) {
-                s.updated_at = val["updated_at"].get<std::string>();
+            auto itU = val.find("updated_at");
+            if (itU != val.end() && itU->is_string()) {
+                s.updated_at = itU->get<std::string>();
             }
 
             // On Rutracker, registered_at corresponds to when the release was registered
@@ -94,37 +98,82 @@ bool GameStatsManager::parseStatsJson(const std::string& json_str, std::unordere
     }
 }
 
+void GameStatsManager::ensureLoaded() const {
+    if (loaded_from_disk_.load(std::memory_order_acquire)) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (loaded_from_disk_.load(std::memory_order_relaxed)) return;
+    const_cast<GameStatsManager*>(this)->loadFromDiskInternal();
+}
+
 void GameStatsManager::loadFromDisk() {
-    std::unique_lock<std::shared_mutex> lock(mutex_);
-    
-    // Load switch stats cache
-    std::string switchPath = getSwitchStatsCachePath();
-    std::string switchBody;
-    if (readFileFast(switchPath, switchBody) && !switchBody.empty()) {
-        std::unordered_map<std::string, GameStats> loaded;
-        if (parseStatsJson(switchBody, loaded)) {
-            switch_stats_ = std::move(loaded);
-            util::logLine("GameStatsManager: loaded " + std::to_string(switch_stats_.size()) + " switch stats from disk");
+    if (loaded_from_disk_.load(std::memory_order_acquire)) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (loaded_from_disk_.load(std::memory_order_relaxed)) return;
+    loadFromDiskInternal();
+}
+
+void GameStatsManager::loadFromDiskAsync() {
+    if (loaded_from_disk_.load(std::memory_order_acquire)) return;
+    bool expected = false;
+    if (!loading_.compare_exchange_strong(expected, true)) return;
+
+    brls::async([this]() {
+        try {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!loaded_from_disk_.load(std::memory_order_relaxed)) {
+                loadFromDiskInternal();
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("GameStatsManager: exception in loadFromDiskAsync: ") + e.what());
+        } catch (...) {
+            util::logLine("GameStatsManager: unknown exception in loadFromDiskAsync");
         }
+        loading_.store(false, std::memory_order_release);
+    });
+}
+
+void GameStatsManager::loadFromDiskInternal() {
+    try {
+        // Load switch stats cache
+        std::string switchPath = getSwitchStatsCachePath();
+        std::string switchBody;
+        if (readFileFast(switchPath, switchBody) && !switchBody.empty()) {
+            std::unordered_map<std::string, GameStats> loaded;
+            if (parseStatsJson(switchBody, loaded)) {
+                switch_stats_ = std::move(loaded);
+                util::logLine("GameStatsManager: loaded " + std::to_string(switch_stats_.size()) + " switch stats from disk");
+            }
+        }
+    } catch (const std::exception& e) {
+        util::logLine(std::string("GameStatsManager: exception loading switch stats: ") + e.what());
+    } catch (...) {
+        util::logLine("GameStatsManager: unknown exception loading switch stats");
     }
 
-    // Load console stats cache
-    std::string consolePath = getConsoleStatsCachePath();
-    std::string consoleBody;
-    if (readFileFast(consolePath, consoleBody) && !consoleBody.empty()) {
-        std::unordered_map<std::string, GameStats> loaded;
-        if (parseStatsJson(consoleBody, loaded)) {
-            console_stats_ = std::move(loaded);
-            util::logLine("GameStatsManager: loaded " + std::to_string(console_stats_.size()) + " console stats from disk");
+    try {
+        // Load console stats cache
+        std::string consolePath = getConsoleStatsCachePath();
+        std::string consoleBody;
+        if (readFileFast(consolePath, consoleBody) && !consoleBody.empty()) {
+            std::unordered_map<std::string, GameStats> loaded;
+            if (parseStatsJson(consoleBody, loaded)) {
+                console_stats_ = std::move(loaded);
+                util::logLine("GameStatsManager: loaded " + std::to_string(console_stats_.size()) + " console stats from disk");
+            }
         }
+    } catch (const std::exception& e) {
+        util::logLine(std::string("GameStatsManager: exception loading console stats: ") + e.what());
+    } catch (...) {
+        util::logLine("GameStatsManager: unknown exception loading console stats");
     }
 
-    loaded_from_disk_ = true;
+    loaded_from_disk_.store(true, std::memory_order_release);
 }
 
 const GameStats* GameStatsManager::getSwitchStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    ensureLoaded();
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = switch_stats_.find(topic_id);
     if (it != switch_stats_.end()) return &it->second;
     return nullptr;
@@ -132,7 +181,8 @@ const GameStats* GameStatsManager::getSwitchStats(const std::string& topic_id) c
 
 const GameStats* GameStatsManager::getConsoleStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    ensureLoaded();
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = console_stats_.find(topic_id);
     if (it != console_stats_.end()) return &it->second;
     return nullptr;
@@ -140,7 +190,8 @@ const GameStats* GameStatsManager::getConsoleStats(const std::string& topic_id) 
 
 const GameStats* GameStatsManager::getAnyStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
-    std::shared_lock<std::shared_mutex> lock(mutex_);
+    ensureLoaded();
+    std::lock_guard<std::mutex> lock(mutex_);
     auto it = switch_stats_.find(topic_id);
     if (it != switch_stats_.end()) return &it->second;
     auto itC = console_stats_.find(topic_id);
@@ -149,59 +200,86 @@ const GameStats* GameStatsManager::getAnyStats(const std::string& topic_id) cons
 }
 
 void GameStatsManager::updateStatsInBackground(std::function<void(bool success)> onDone) {
-    brls::async([this, onDone]() {
-        net::HttpClient client;
-        client.setTimeout(30);
-
-        bool anySuccess = false;
-
-        // 1. Download Switch stats
-        util::logLine("GameStatsManager: downloading switch stats from " + std::string(kSwitchStatsUrl));
-        auto switchRes = client.httpGet(kSwitchStatsUrl);
-        if (switchRes.status_code == 200 && !switchRes.body.empty()) {
-            std::unordered_map<std::string, GameStats> newMap;
-            if (parseStatsJson(switchRes.body, newMap)) {
-                writeTextFile(getSwitchStatsCachePath(), switchRes.body);
-                {
-                    std::unique_lock<std::shared_mutex> lock(mutex_);
-                    switch_stats_ = std::move(newMap);
-                }
-                anySuccess = true;
-                util::logLine("GameStatsManager: successfully updated switch stats (" +
-                              std::to_string(switch_stats_.size()) + " entries)");
-            }
-        } else {
-            util::logLine("GameStatsManager: switch stats fetch failed with status " +
-                          std::to_string(switchRes.status_code));
-        }
-
-        // 2. Download Console stats (gracefully handles 404)
-        util::logLine("GameStatsManager: downloading console stats from " + std::string(kConsoleStatsUrl));
-        auto consoleRes = client.httpGet(kConsoleStatsUrl);
-        if (consoleRes.status_code == 200 && !consoleRes.body.empty()) {
-            std::unordered_map<std::string, GameStats> newMap;
-            if (parseStatsJson(consoleRes.body, newMap)) {
-                writeTextFile(getConsoleStatsCachePath(), consoleRes.body);
-                {
-                    std::unique_lock<std::shared_mutex> lock(mutex_);
-                    console_stats_ = std::move(newMap);
-                }
-                anySuccess = true;
-                util::logLine("GameStatsManager: successfully updated console stats (" +
-                              std::to_string(console_stats_.size()) + " entries)");
-            }
-        } else if (consoleRes.status_code == 404) {
-            util::logLine("GameStatsManager: console stats file not found on GitHub (404), keeping existing");
-        } else {
-            util::logLine("GameStatsManager: console stats fetch failed with status " +
-                          std::to_string(consoleRes.status_code));
-        }
-
+    bool expected = false;
+    if (!updating_.compare_exchange_strong(expected, true)) {
         if (onDone) {
-            brls::sync([onDone, anySuccess]() {
-                onDone(anySuccess);
-            });
+            brls::sync([onDone]() { onDone(false); });
         }
+        return;
+    }
+
+    brls::async([this, onDone]() {
+        try {
+            net::HttpClient client;
+            client.setTimeout(30);
+
+            bool anySuccess = false;
+
+            // 1. Download Switch stats
+            util::logLine("GameStatsManager: downloading switch stats from " + std::string(kSwitchStatsUrl));
+            auto switchRes = client.httpGet(kSwitchStatsUrl);
+            if (switchRes.status_code == 200 && !switchRes.body.empty()) {
+                std::unordered_map<std::string, GameStats> newMap;
+                if (parseStatsJson(switchRes.body, newMap)) {
+                    writeTextFile(getSwitchStatsCachePath(), switchRes.body);
+                    size_t switchCount = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        switch_stats_ = std::move(newMap);
+                        switchCount = switch_stats_.size();
+                        loaded_from_disk_.store(true, std::memory_order_release);
+                    }
+                    anySuccess = true;
+                    util::logLine("GameStatsManager: successfully updated switch stats (" +
+                                  std::to_string(switchCount) + " entries)");
+                }
+            } else {
+                util::logLine("GameStatsManager: switch stats fetch failed with status " +
+                              std::to_string(switchRes.status_code));
+            }
+
+            // 2. Download Console stats (gracefully handles 404)
+            util::logLine("GameStatsManager: downloading console stats from " + std::string(kConsoleStatsUrl));
+            auto consoleRes = client.httpGet(kConsoleStatsUrl);
+            if (consoleRes.status_code == 200 && !consoleRes.body.empty()) {
+                std::unordered_map<std::string, GameStats> newMap;
+                if (parseStatsJson(consoleRes.body, newMap)) {
+                    writeTextFile(getConsoleStatsCachePath(), consoleRes.body);
+                    size_t consoleCount = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        console_stats_ = std::move(newMap);
+                        consoleCount = console_stats_.size();
+                        loaded_from_disk_.store(true, std::memory_order_release);
+                    }
+                    anySuccess = true;
+                    util::logLine("GameStatsManager: successfully updated console stats (" +
+                                  std::to_string(consoleCount) + " entries)");
+                }
+            } else if (consoleRes.status_code == 404) {
+                util::logLine("GameStatsManager: console stats file not found on GitHub (404), keeping existing");
+            } else {
+                util::logLine("GameStatsManager: console stats fetch failed with status " +
+                              std::to_string(consoleRes.status_code));
+            }
+
+            if (onDone) {
+                brls::sync([onDone, anySuccess]() {
+                    onDone(anySuccess);
+                });
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("GameStatsManager: exception in updateStatsInBackground: ") + e.what());
+            if (onDone) {
+                brls::sync([onDone]() { onDone(false); });
+            }
+        } catch (...) {
+            util::logLine("GameStatsManager: unknown exception in updateStatsInBackground");
+            if (onDone) {
+                brls::sync([onDone]() { onDone(false); });
+            }
+        }
+        updating_.store(false, std::memory_order_release);
     });
 }
 

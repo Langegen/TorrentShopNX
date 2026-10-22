@@ -6,6 +6,7 @@
 #include "../utils/switch_utils.h"
 #include "../utils/app_paths.h"
 #include "../utils/mod_utils.h"
+#include "../utils/file_ops.h"
 #include "../catalog/IgnoredUpdatesManager.hpp"
 #include "../installer/ncz_parser.h"
 #include <exception>
@@ -172,6 +173,206 @@ static void saveInstalledIcon(uint64_t tid, const NsApplicationControlData& ctrl
 extern std::vector<Game> g_games;
 
 namespace ui {
+
+struct GameComponentData {
+    uint64_t totalSize = 0;
+    uint64_t appSize = 0;
+    uint64_t patchSize = 0;
+    uint64_t dlcSize = 0;
+    int dlcCount = 0;
+    std::vector<InstalledComponent> components;
+};
+
+static uint64_t calculateDirectorySize(const std::string& path) {
+    uint64_t total = 0;
+    try {
+        if (!path.empty() && std::filesystem::exists(path)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(path, std::filesystem::directory_options::skip_permission_denied)) {
+                if (entry.is_regular_file()) {
+                    total += entry.file_size();
+                }
+            }
+        }
+    } catch (...) {}
+    return total;
+}
+
+static bool deleteGameMods(uint64_t titleId, const std::string& modPath) {
+    bool deletedAny = false;
+    std::string err;
+    if (!modPath.empty() && std::filesystem::exists(modPath)) {
+        if (util::deletePathRecursive(modPath, err)) {
+            deletedAny = true;
+        }
+    }
+    char tidUpper[32], tidLower[32];
+    std::snprintf(tidUpper, sizeof(tidUpper), "%016llX", (unsigned long long)titleId);
+    std::snprintf(tidLower, sizeof(tidLower), "%016llx", (unsigned long long)titleId);
+    std::vector<std::string> candidateDirs = {
+#ifdef __SWITCH__
+        std::string("sdmc:/atmosphere/contents/") + tidLower,
+        std::string("sdmc:/atmosphere/contents/") + tidUpper,
+        std::string("sdmc:/atmosphere/titles/") + tidLower,
+        std::string("sdmc:/atmosphere/titles/") + tidUpper,
+#else
+        std::string("atmosphere/contents/") + tidUpper,
+        std::string("atmosphere/contents/") + tidLower,
+        std::string("sdmc/atmosphere/contents/") + tidUpper,
+        std::string("sdmc/atmosphere/contents/") + tidLower,
+#endif
+    };
+    for (const auto& d : candidateDirs) {
+        if (std::filesystem::exists(d)) {
+            if (util::deletePathRecursive(d, err)) deletedAny = true;
+        }
+    }
+    return deletedAny;
+}
+
+#ifdef __SWITCH__
+static bool deleteNcmComponent(uint8_t storageId, const NcmContentMetaKey& metaKey) {
+    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+    Result rc = ncmInitialize();
+    if (R_FAILED(rc)) return false;
+
+    auto tryDeleteFromDb = [&](NcmStorageId stId) -> bool {
+        NcmContentMetaDatabase db = {};
+        if (R_FAILED(ncmOpenContentMetaDatabase(&db, stId))) return false;
+
+        bool hasMeta = false;
+        if (R_FAILED(ncmContentMetaDatabaseHas(&db, &hasMeta, &metaKey)) || !hasMeta) {
+            ncmContentMetaDatabaseClose(&db);
+            return false;
+        }
+
+        s32 entriesWritten = 0;
+        NcmContentInfo contentInfos[32] = {};
+        if (R_SUCCEEDED(ncmContentMetaDatabaseListContentInfo(&db, &entriesWritten, contentInfos, 32, &metaKey, 0))) {
+            NcmContentStorage cs = {};
+            if (R_SUCCEEDED(ncmOpenContentStorage(&cs, stId))) {
+                for (s32 i = 0; i < entriesWritten; ++i) {
+                    ncmContentStorageDelete(&cs, &contentInfos[i].content_id);
+                }
+                ncmContentStorageClose(&cs);
+            }
+        }
+
+        Result remRc = ncmContentMetaDatabaseRemove(&db, &metaKey);
+        if (R_SUCCEEDED(remRc)) {
+            ncmContentMetaDatabaseCommit(&db);
+        }
+        ncmContentMetaDatabaseClose(&db);
+        return R_SUCCEEDED(remRc);
+    };
+
+    bool ok = tryDeleteFromDb(static_cast<NcmStorageId>(storageId));
+    if (!ok) {
+        // Fallback to alternate storage
+        NcmStorageId altStorage = (storageId == NcmStorageId_SdCard) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
+        ok = tryDeleteFromDb(altStorage);
+    }
+    ncmExit();
+
+    Result nsRc = nsInitialize();
+    if (R_SUCCEEDED(nsRc)) {
+        nsDeleteRedundantApplicationEntity();
+        nsExit();
+    }
+    return ok;
+}
+
+static void getInstalledComponentsAndSizes(
+    const std::vector<uint64_t>& baseTids,
+    std::unordered_map<uint64_t, GameComponentData>& out_data) {
+    if (baseTids.empty()) return;
+
+    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+    Result nsRc = nsInitialize();
+    Result ncmRc = ncmInitialize();
+
+    NcmContentMetaDatabase dbSd = {}, dbNand = {};
+    bool hasSdDb = R_SUCCEEDED(ncmOpenContentMetaDatabase(&dbSd, NcmStorageId_SdCard));
+    bool hasNandDb = R_SUCCEEDED(ncmOpenContentMetaDatabase(&dbNand, NcmStorageId_BuiltInUser));
+
+    struct ApplicationOccupiedSizeEntity {
+        uint8_t storage_id;
+        uint8_t reserved[7];
+        uint64_t app_size;
+        uint64_t patch_size;
+        uint64_t aoc_size;
+    };
+
+    for (uint64_t tid : baseTids) {
+        GameComponentData gcd;
+        if (R_SUCCEEDED(nsRc)) {
+            NsApplicationOccupiedSize occSize = {};
+            if (R_SUCCEEDED(nsCalculateApplicationOccupiedSize(tid, &occSize))) {
+                const auto* entities = reinterpret_cast<const ApplicationOccupiedSizeEntity*>(&occSize);
+                for (int e = 0; e < 4; ++e) {
+                    gcd.appSize += entities[e].app_size;
+                    gcd.patchSize += entities[e].patch_size;
+                    gcd.dlcSize += entities[e].aoc_size;
+                }
+                gcd.totalSize = gcd.appSize + gcd.patchSize + gcd.dlcSize;
+            }
+
+            s32 metaCount = 0;
+            if (R_SUCCEEDED(nsCountApplicationContentMeta(tid, &metaCount)) && metaCount > 0) {
+                std::vector<NsApplicationContentMetaStatus> metaList(metaCount);
+                s32 outCount = 0;
+                if (R_SUCCEEDED(nsListApplicationContentMetaStatus(tid, 0, metaList.data(), metaCount, &outCount))) {
+                    metaList.resize(outCount);
+                    int dlcIdx = 1;
+                    for (const auto& cms : metaList) {
+                        InstalledComponent comp;
+                        comp.titleId = cms.application_id;
+                        comp.version = cms.version;
+                        comp.storageId = cms.storageID;
+
+                        NcmContentMetaDatabase* db = (cms.storageID == NcmStorageId_SdCard) ? &dbSd : &dbNand;
+                        bool dbValid = (cms.storageID == NcmStorageId_SdCard) ? hasSdDb : hasNandDb;
+                        if (dbValid) {
+                            NcmContentMetaKey key = {};
+                            key.id = cms.application_id;
+                            key.version = cms.version;
+                            key.type = static_cast<NcmContentMetaType>(cms.meta_type);
+                            key.install_type = NcmContentInstallType_Full;
+                            u64 cSize = 0;
+                            if (R_SUCCEEDED(ncmContentMetaDatabaseGetSize(db, &cSize, &key))) {
+                                comp.sizeBytes = cSize;
+                            }
+                        }
+
+                        if (cms.meta_type == NcmContentMetaType_Application) {
+                            comp.type = InstalledComponent::Type::BaseGame;
+                            comp.displayName = "app/library/comp_base_game"_i18n;
+                            if (comp.sizeBytes == 0) comp.sizeBytes = gcd.appSize;
+                            gcd.components.push_back(comp);
+                        } else if (cms.meta_type == NcmContentMetaType_Patch) {
+                            comp.type = InstalledComponent::Type::Patch;
+                            comp.displayName = brls::getStr("app/library/comp_patch", "v" + std::to_string(cms.version));
+                            if (comp.sizeBytes == 0) comp.sizeBytes = gcd.patchSize;
+                            gcd.components.push_back(comp);
+                        } else if (cms.meta_type == NcmContentMetaType_AddOnContent) {
+                            comp.type = InstalledComponent::Type::Dlc;
+                            comp.displayName = brls::getStr("app/library/comp_dlc", std::to_string(dlcIdx++));
+                            gcd.dlcCount++;
+                            gcd.components.push_back(comp);
+                        }
+                    }
+                }
+            }
+        }
+        out_data[tid] = std::move(gcd);
+    }
+
+    if (hasSdDb) ncmContentMetaDatabaseClose(&dbSd);
+    if (hasNandDb) ncmContentMetaDatabaseClose(&dbNand);
+    if (R_SUCCEEDED(ncmRc)) ncmExit();
+    if (R_SUCCEEDED(nsRc)) nsExit();
+}
+#endif
+
 
 static std::string formatBytes(unsigned long long bytes) {
     double size = static_cast<double>(bytes);
@@ -500,7 +701,6 @@ void LibraryView::willAppear(bool resetState) {
 
 void LibraryView::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    brls::Application::giveFocus(nullptr);
 }
 
 void LibraryView::rebuildSections(int targetSection, int targetRow) {
@@ -566,6 +766,7 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     }
 
     if (recycler) {
+        brls::IndexPath focusPath(0, 0);
         if (targetSection >= 0 && targetRow >= 0 && !sections_.empty()) {
             size_t sec = static_cast<size_t>(targetSection);
             if (sec >= sections_.size()) sec = sections_.size() - 1;
@@ -573,12 +774,15 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
             int r = targetRow;
             if (r > maxRow) r = maxRow;
             if (r < 0) r = 0;
-            recycler->setDefaultCellFocus(brls::IndexPath(sec, static_cast<size_t>(r)));
-        } else {
-            recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
+            focusPath = brls::IndexPath(sec, static_cast<size_t>(r));
         }
+        recycler->setDefaultCellFocus(focusPath);
         recycler->reloadData();
-        recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
+        if (!sections_.empty()) {
+            recycler->setDefaultCellFocus(focusPath);
+            recycler->selectRowAt(focusPath, false);
+            brls::Application::giveFocus(recycler);
+        }
     }
     updateStatsAndSpace();
 }
@@ -791,10 +995,13 @@ void LibraryView::scanForUpdates() {
             nsExit();
         }
 
-        // Query installed patch versions and running SDK versions in one ncm session
+        // Query installed patch versions, running SDK versions, occupied sizes and components
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
         std::unordered_map<uint64_t, std::string> installedSdkVersions;
         getInstalledTitleMetadata(baseTids, installedPatchVersions, installedSdkVersions);
+
+        std::unordered_map<uint64_t, GameComponentData> installedCompData;
+        getInstalledComponentsAndSizes(baseTids, installedCompData);
 #else
         // Mock data for PC testing
         installedList.push_back({0x0100000000010000ULL, "Super Mario Odyssey", "1.0.0"});
@@ -805,6 +1012,44 @@ void LibraryView::scanForUpdates() {
         installedSdkVersions[0x0100000000010000ULL] = "17.0.0";
         installedSdkVersions[0x01007ef00011e000ULL] = "18.1.0";
         installedSdkVersions[0x0100000000020000ULL] = "16.0.3";
+        installedPatchVersions[0x0100000000010000ULL] = 131072;
+        installedPatchVersions[0x01007ef00011e000ULL] = 655360;
+
+        std::unordered_map<uint64_t, GameComponentData> installedCompData;
+        {
+            // Mario
+            GameComponentData marioGcd;
+            marioGcd.appSize = 5700000000ULL;
+            marioGcd.patchSize = 350000000ULL;
+            marioGcd.dlcSize = 520000000ULL;
+            marioGcd.totalSize = marioGcd.appSize + marioGcd.patchSize + marioGcd.dlcSize;
+            marioGcd.dlcCount = 2;
+            marioGcd.components.push_back({InstalledComponent::Type::BaseGame, 0x0100000000010000ULL, 0, marioGcd.appSize, "app/library/comp_base_game"_i18n, 1, ""});
+            marioGcd.components.push_back({InstalledComponent::Type::Patch, 0x0100000000010800ULL, 131072, marioGcd.patchSize, "Обновление v131072", 1, ""});
+            marioGcd.components.push_back({InstalledComponent::Type::Dlc, 0x0100000000010001ULL, 0, 320000000ULL, "DLC #1", 1, ""});
+            marioGcd.components.push_back({InstalledComponent::Type::Dlc, 0x0100000000010002ULL, 0, 200000000ULL, "DLC #2", 1, ""});
+            installedCompData[0x0100000000010000ULL] = std::move(marioGcd);
+
+            // Zelda
+            GameComponentData zeldaGcd;
+            zeldaGcd.appSize = 14400000000ULL;
+            zeldaGcd.patchSize = 2500000000ULL;
+            zeldaGcd.dlcSize = 2300000000ULL;
+            zeldaGcd.totalSize = zeldaGcd.appSize + zeldaGcd.patchSize + zeldaGcd.dlcSize;
+            zeldaGcd.dlcCount = 2;
+            zeldaGcd.components.push_back({InstalledComponent::Type::BaseGame, 0x01007ef00011e000ULL, 0, zeldaGcd.appSize, "app/library/comp_base_game"_i18n, 1, ""});
+            zeldaGcd.components.push_back({InstalledComponent::Type::Patch, 0x01007ef00011e800ULL, 655360, zeldaGcd.patchSize, "Обновление v655360", 1, ""});
+            zeldaGcd.components.push_back({InstalledComponent::Type::Dlc, 0x01007ef00011e001ULL, 0, 800000000ULL, "DLC #1", 1, ""});
+            zeldaGcd.components.push_back({InstalledComponent::Type::Dlc, 0x01007ef00011e002ULL, 0, 1500000000ULL, "DLC #2", 1, ""});
+            installedCompData[0x01007ef00011e000ULL] = std::move(zeldaGcd);
+
+            // Dummy
+            GameComponentData dummyGcd;
+            dummyGcd.appSize = 1200000000ULL;
+            dummyGcd.totalSize = dummyGcd.appSize;
+            dummyGcd.components.push_back({InstalledComponent::Type::BaseGame, 0x0100000000020000ULL, 0, dummyGcd.appSize, "app/library/comp_base_game"_i18n, 1, ""});
+            installedCompData[0x0100000000020000ULL] = std::move(dummyGcd);
+        }
 #endif
 
         if (cancelToken && *cancelToken) return;
@@ -841,7 +1086,10 @@ void LibraryView::scanForUpdates() {
                            const std::string& latestVer, GameUpdateStatus status,
                            uint64_t baseTid, const std::string& rawName,
                            bool hasMods, bool updateIgnored, const std::string& modDetails,
-                           const std::string& sdkVersion) {
+                           const std::string& modPath,
+                           const std::string& sdkVersion,
+                           const GameComponentData& gcd,
+                           uint32_t installedPatchVer) {
             LibraryItem item;
             item.game = g;
             item.currentVersion = currentVer;
@@ -852,7 +1100,30 @@ void LibraryView::scanForUpdates() {
             item.hasMods = hasMods;
             item.updateIgnored = updateIgnored;
             item.modDetails = modDetails;
+            item.modPath = modPath;
             item.sdkVersion = sdkVersion;
+
+            item.totalSizeBytes = gcd.totalSize;
+            item.appSizeBytes = gcd.appSize;
+            item.patchSizeBytes = gcd.patchSize;
+            item.dlcSizeBytes = gcd.dlcSize;
+            item.dlcCount = gcd.dlcCount;
+            item.hasPatch = (installedPatchVer > 0 || gcd.patchSize > 0);
+            item.installedPatchVersion = installedPatchVer;
+            item.components = gcd.components;
+
+            if (item.hasMods) {
+                item.modsSizeBytes = calculateDirectorySize(item.modPath);
+                item.totalSizeBytes += item.modsSizeBytes;
+                InstalledComponent modComp;
+                modComp.type = InstalledComponent::Type::Mods;
+                modComp.titleId = baseTid;
+                modComp.sizeBytes = item.modsSizeBytes;
+                modComp.displayName = brls::getStr("app/library/comp_mods", item.modDetails.empty() ? "RomFS" : item.modDetails);
+                modComp.extraInfo = item.modPath;
+                item.components.push_back(modComp);
+            }
+
             return item;
         };
 
@@ -863,6 +1134,11 @@ void LibraryView::scanForUpdates() {
             if (cancelToken && *cancelToken) return;
 
             uint64_t baseTid = inst.titleId;
+            GameComponentData gcd;
+            {
+                auto gcit = installedCompData.find(baseTid);
+                if (gcit != installedCompData.end()) gcd = gcit->second;
+            }
             uint64_t patchTid = baseTid | 0x800ULL; // Patch ID
             
             std::string sdkVersion;
@@ -933,7 +1209,7 @@ void LibraryView::scanForUpdates() {
                 auto mit = catIndex.byTid.find(baseTid);
                 if (mit == catIndex.byTid.end()) mit = catIndex.byTid.find(patchTid);
                 if (mit != catIndex.byTid.end()) {
-                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
                     foundInCatalog = true;
                 }
             }
@@ -946,7 +1222,7 @@ void LibraryView::scanForUpdates() {
                     // 1. Try exact clean name match first
                     for (const auto& entry : catIndex.byCleanName) {
                         if (entry.first == instClean) {
-                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
                             foundInCatalog = true;
                             break;
                         }
@@ -955,7 +1231,7 @@ void LibraryView::scanForUpdates() {
                     if (!foundInCatalog && !instTokens.empty()) {
                         for (const auto& entry : catIndex.byTokens) {
                             if (tokensMatchGame(instTokens, entry.first)) {
-                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
                                 foundInCatalog = true;
                                 break;
                             }
@@ -966,7 +1242,7 @@ void LibraryView::scanForUpdates() {
                         for (const auto& entry : catIndex.byCleanName) {
                             const std::string& catClean = entry.first;
                             if (catClean.length() >= 4 && (catClean.find(instClean) != std::string::npos || (catClean.length() >= 8 && instClean.find(catClean) != std::string::npos))) {
-                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
                                 foundInCatalog = true;
                                 break;
                             }
@@ -981,7 +1257,7 @@ void LibraryView::scanForUpdates() {
                 dummy.title = inst.name.empty() ? ("Unknown Game") : inst.name;
                 dummy.cover = "";
                 dummy.size = "";
-                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, sdkVersion));
+                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
             }
         }
         
@@ -1004,67 +1280,403 @@ void LibraryView::scanForUpdates() {
     });
 }
 
-void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName) {
-    std::string msg = brls::getStr("app/library/uninstall_confirm", displayName.empty() ? "?" : displayName);
+void LibraryView::showGameActionMenu(const LibraryItem& item, int currentSection, int currentRow) {
+    std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
     
-    brls::Dialog* dialog = new brls::Dialog(msg);
-    dialog->addButton("app/common/yes"_i18n, [this, titleId, displayName]() {
-        auto cancelToken = cancelToken_;
-        brls::async([this, titleId, displayName, cancelToken]() {
-            try {
-                if (cancelToken && *cancelToken) return;
+    brls::Dialog* dialog = new brls::Dialog(brls::getStr("app/library/action_menu_title") + "\n«" + displayName + "»");
 
-                bool ok = false;
+    // 1. Manage Components
+    dialog->addButton("app/library/action_manage_components"_i18n, [this, item, currentSection, currentRow]() {
+        showComponentManager(item, currentSection, currentRow);
+    });
+
+    // 2. Delete completely
+    dialog->addButton("app/library/action_uninstall_all"_i18n, [this, item, displayName, currentSection, currentRow]() {
+        if (item.hasMods) {
+            std::string modMsg = brls::getStr("app/library/uninstall_with_mods_prompt", displayName, item.modDetails.empty() ? "RomFS" : item.modDetails);
+            brls::Dialog* modDialog = new brls::Dialog(modMsg);
+            
+            modDialog->addButton("app/library/uninstall_both_game_and_mods"_i18n, [this, item, displayName, currentSection, currentRow]() {
+                uninstallGame(item.titleId, displayName, currentSection, currentRow, true);
+            });
+
+            modDialog->addButton("app/library/uninstall_game_only"_i18n, [this, item, displayName, currentSection, currentRow]() {
+                uninstallGame(item.titleId, displayName, currentSection, currentRow, false);
+            });
+
+            modDialog->addButton("app/common/cancel"_i18n, []() {});
+            modDialog->open();
+        } else {
+            std::string msg = brls::getStr("app/library/uninstall_confirm", displayName);
+            brls::Dialog* confirmDialog = new brls::Dialog(msg);
+            confirmDialog->addButton("app/common/yes"_i18n, [this, item, displayName, currentSection, currentRow]() {
+                uninstallGame(item.titleId, displayName, currentSection, currentRow, false);
+            });
+            confirmDialog->addButton("app/common/no"_i18n, []() {});
+            confirmDialog->open();
+        }
+    });
+
+    dialog->addButton("app/common/cancel"_i18n, []() {});
+    dialog->open();
+}
+
+void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods) {
+    auto cancelToken = cancelToken_;
+    brls::async([this, titleId, displayName, currentSection, currentRow, deleteMods, cancelToken]() {
+        try {
+            if (cancelToken && *cancelToken) return;
+
+            bool ok = false;
 #ifdef __SWITCH__
-                {
-                    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
-                    Result rc = nsInitialize();
-                    if (R_SUCCEEDED(rc)) {
-                        rc = nsDeleteApplicationCompletely(titleId);
-                        nsExit();
-                        ok = R_SUCCEEDED(rc);
-                        util::logLine("library: nsDeleteApplicationCompletely tid=" + std::to_string(titleId) + " rc=" + std::to_string(rc));
-                    } else {
-                        util::logLine("library: nsInitialize failed rc=" + std::to_string(rc));
+            {
+                std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                Result rc = nsInitialize();
+                if (R_SUCCEEDED(rc)) {
+                    rc = nsDeleteApplicationCompletely(titleId);
+                    nsExit();
+                    ok = R_SUCCEEDED(rc);
+                    util::logLine("library: nsDeleteApplicationCompletely tid=" + std::to_string(titleId) + " rc=" + std::to_string(rc));
+                } else {
+                    util::logLine("library: nsInitialize failed rc=" + std::to_string(rc));
+                }
+            }
+#else
+            ok = true; // PC mock: allow uninstall
+#endif
+            if (ok && deleteMods) {
+                std::string modPath;
+                for (const auto& itm : rawItems_) {
+                    if (itm.titleId == titleId) {
+                        modPath = itm.modPath;
+                        break;
                     }
                 }
-#else
-                ok = true; // PC mock: allow uninstall
-#endif
-                brls::sync([this, titleId, displayName, ok, cancelToken]() {
-                    if (cancelToken && *cancelToken) return;
+                deleteGameMods(titleId, modPath);
+            }
 
-                    if (ok) {
-                        try {
-                            for (auto it = rawItems_.begin(); it != rawItems_.end(); ++it) {
-                                if (it->titleId == titleId) {
-                                    rawItems_.erase(it);
+            brls::sync([this, titleId, displayName, currentSection, currentRow, ok, cancelToken]() {
+                if (cancelToken && *cancelToken) return;
+
+                if (ok) {
+                    try {
+                        for (auto it = rawItems_.begin(); it != rawItems_.end(); ++it) {
+                            if (it->titleId == titleId) {
+                                rawItems_.erase(it);
+                                break;
+                            }
+                        }
+                        rebuildSections(currentSection, currentRow);
+                    } catch (const std::exception& e) {
+                        util::logLine(std::string("library: uninstall UI update exception: ") + e.what());
+                    }
+                    brls::Application::notify(brls::getStr("app/library/uninstall_success", displayName));
+                } else {
+                    brls::Dialog* errDialog = new brls::Dialog("app/library/uninstall_failed"_i18n);
+                    errDialog->addButton("app/common/ok"_i18n, []() {});
+                    errDialog->open();
+                }
+            });
+        } catch (const std::exception& e) {
+            util::logLine(std::string("library: uninstall async exception: ") + e.what());
+        } catch (...) {
+            util::logLine("library: uninstall async unknown exception");
+        }
+    });
+}
+
+void LibraryView::showComponentManager(const LibraryItem& item, int currentSection, int currentRow) {
+    std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+
+    LibraryItem currentItem = item;
+    for (const auto& itm : rawItems_) {
+        if (itm.titleId == item.titleId) {
+            currentItem = itm;
+            break;
+        }
+    }
+
+    auto* rootBox = new brls::Box();
+    rootBox->setAxis(brls::Axis::COLUMN);
+    rootBox->setWidth(680.0f);
+    rootBox->setPadding(20.0f);
+
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText(brls::getStr("app/library/comp_mgr_title", displayName));
+    titleLabel->setFontSize(20.0f);
+    titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+    titleLabel->setMarginBottom(4.0f);
+    rootBox->addView(titleLabel);
+
+    auto* subtitleLabel = new brls::Label();
+    std::string subText = "Общий размер: " + formatBytes(currentItem.totalSizeBytes);
+    if (currentItem.dlcCount > 0) {
+        subText += " • DLC: " + std::to_string(currentItem.dlcCount);
+    }
+    if (currentItem.hasMods) {
+        subText += " • Моды: " + (currentItem.modDetails.empty() ? "RomFS" : currentItem.modDetails);
+    }
+    subtitleLabel->setText(subText);
+    subtitleLabel->setFontSize(14.0f);
+    subtitleLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    subtitleLabel->setMarginBottom(16.0f);
+    rootBox->addView(subtitleLabel);
+
+    auto* scroll = new brls::ScrollingFrame();
+    scroll->setWidth(brls::View::AUTO);
+    scroll->setHeight(360.0f);
+    scroll->setFocusable(true);
+
+    auto* compListBox = new brls::Box();
+    compListBox->setAxis(brls::Axis::COLUMN);
+    compListBox->setWidth(brls::View::AUTO);
+
+    brls::Dialog* compDialog = new brls::Dialog(rootBox);
+
+    auto refreshOrClose = [this, compDialog, currentItem, currentSection, currentRow]() {
+        compDialog->close();
+        for (const auto& itm : rawItems_) {
+            if (itm.titleId == currentItem.titleId) {
+                showComponentManager(itm, currentSection, currentRow);
+                break;
+            }
+        }
+    };
+
+    if (currentItem.components.empty()) {
+        auto* emptyLabel = new brls::Label();
+        emptyLabel->setText("Компоненты не найдены");
+        emptyLabel->setFontSize(15.0f);
+        emptyLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+        emptyLabel->setMarginTop(20.0f);
+        compListBox->addView(emptyLabel);
+    } else {
+        for (size_t i = 0; i < currentItem.components.size(); ++i) {
+            const auto& comp = currentItem.components[i];
+            
+            auto* rowBox = new brls::Box();
+            rowBox->setAxis(brls::Axis::ROW);
+            rowBox->setAlignItems(brls::AlignItems::CENTER);
+            rowBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+            rowBox->setWidth(brls::View::AUTO);
+            rowBox->setHeight(52.0f);
+            rowBox->setPaddingLeft(12.0f);
+            rowBox->setPaddingRight(12.0f);
+            rowBox->setCornerRadius(6.0f);
+            rowBox->setMarginBottom(8.0f);
+            rowBox->setBackgroundColor(nvgRGBA(128, 128, 128, 25));
+
+            auto* leftBox = new brls::Box();
+            leftBox->setAxis(brls::Axis::ROW);
+            leftBox->setAlignItems(brls::AlignItems::CENTER);
+            leftBox->setGrow(1.0f);
+
+            auto* badgeBox = new brls::Box();
+            badgeBox->setPadding(2.0f, 6.0f, 2.0f, 6.0f);
+            badgeBox->setCornerRadius(4.0f);
+            badgeBox->setMarginRight(12.0f);
+
+            auto* badgeText = new brls::Label();
+            badgeText->setFontSize(11.0f);
+            badgeText->setTextColor(nvgRGB(255, 255, 255));
+
+            if (comp.type == InstalledComponent::Type::BaseGame) {
+                badgeBox->setBackgroundColor(nvgRGB(75, 85, 99)); // Slate
+                badgeText->setText("BASE");
+            } else if (comp.type == InstalledComponent::Type::Patch) {
+                badgeBox->setBackgroundColor(nvgRGB(2, 136, 209)); // Blue
+                badgeText->setText("UPD");
+            } else if (comp.type == InstalledComponent::Type::Dlc) {
+                badgeBox->setBackgroundColor(nvgRGB(245, 124, 0)); // Orange
+                badgeText->setText("DLC");
+            } else if (comp.type == InstalledComponent::Type::Mods) {
+                badgeBox->setBackgroundColor(nvgRGB(124, 77, 255)); // Purple
+                badgeText->setText("MODS");
+            }
+            badgeBox->addView(badgeText);
+            leftBox->addView(badgeBox);
+
+            auto* nameLabel = new brls::Label();
+            std::string nameStr = comp.displayName;
+            if (comp.sizeBytes > 0) {
+                nameStr += " • " + formatBytes(comp.sizeBytes);
+            }
+            nameLabel->setText(nameStr);
+            nameLabel->setFontSize(14.0f);
+            nameLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+            leftBox->addView(nameLabel);
+
+            rowBox->addView(leftBox);
+
+            auto* delBtn = new brls::Button();
+            delBtn->setText("app/library/comp_delete_btn"_i18n);
+            delBtn->setFontSize(13.0f);
+            delBtn->setWidth(120.0f);
+            delBtn->setHeight(34.0f);
+            delBtn->setTextColor(nvgRGB(255, 255, 255));
+            delBtn->setBackgroundColor(nvgRGB(211, 47, 47));
+
+            delBtn->registerClickAction([this, comp, currentItem, displayName, currentSection, currentRow, compDialog, refreshOrClose](brls::View* v) {
+                std::string confirmMsg;
+                if (comp.type == InstalledComponent::Type::BaseGame) {
+                    confirmMsg = "Удаление базовой игры полностью удалит игру из памяти.\nПродолжить?";
+                } else {
+                    confirmMsg = brls::getStr("app/library/comp_confirm_delete", comp.displayName);
+                }
+
+                brls::Dialog* confirmDlg = new brls::Dialog(confirmMsg);
+                confirmDlg->addButton("app/common/yes"_i18n, [this, comp, currentItem, displayName, currentSection, currentRow, compDialog, refreshOrClose]() {
+                    if (comp.type == InstalledComponent::Type::BaseGame) {
+                        compDialog->close();
+                        uninstallGame(currentItem.titleId, displayName, currentSection, currentRow, false);
+                    } else if (comp.type == InstalledComponent::Type::Patch) {
+                        bool ok = false;
+#ifdef __SWITCH__
+                        NcmContentMetaKey key = {};
+                        key.id = comp.titleId;
+                        key.version = comp.version;
+                        key.type = NcmContentMetaType_Patch;
+                        key.install_type = NcmContentInstallType_Full;
+                        ok = deleteNcmComponent(comp.storageId, key);
+#else
+                        ok = true;
+#endif
+                        if (ok) {
+                            for (auto& itm : rawItems_) {
+                                if (itm.titleId == currentItem.titleId) {
+                                    itm.hasPatch = false;
+                                    itm.installedPatchVersion = 0;
+                                    itm.currentVersion = "1.0.0";
+                                    if (itm.totalSizeBytes >= itm.patchSizeBytes) itm.totalSizeBytes -= itm.patchSizeBytes;
+                                    itm.patchSizeBytes = 0;
+                                    for (auto it = itm.components.begin(); it != itm.components.end(); ++it) {
+                                        if (it->type == InstalledComponent::Type::Patch) {
+                                            itm.components.erase(it);
+                                            break;
+                                        }
+                                    }
                                     break;
                                 }
                             }
-                            rebuildSections();
-                            if (recycler && !sections_.empty()) {
-                                brls::Application::giveFocus(recycler);
-                            }
-                        } catch (const std::exception& e) {
-                            util::logLine(std::string("library: uninstall UI update exception: ") + e.what());
+                            rebuildSections(currentSection, currentRow);
+                            brls::Application::notify(brls::getStr("app/library/comp_delete_success", comp.displayName));
+                            refreshOrClose();
+                        } else {
+                            brls::Application::notify(brls::getStr("app/library/comp_delete_failed", comp.displayName));
                         }
-                        brls::Application::notify(brls::getStr("app/library/uninstall_success", displayName));
-                    } else {
-                        brls::Dialog* errDialog = new brls::Dialog("app/library/uninstall_failed"_i18n);
-                        errDialog->addButton("app/common/ok"_i18n, []() {});
-                        errDialog->open();
+                    } else if (comp.type == InstalledComponent::Type::Dlc) {
+                        bool ok = false;
+#ifdef __SWITCH__
+                        NcmContentMetaKey key = {};
+                        key.id = comp.titleId;
+                        key.version = comp.version;
+                        key.type = NcmContentMetaType_AddOnContent;
+                        key.install_type = NcmContentInstallType_Full;
+                        ok = deleteNcmComponent(comp.storageId, key);
+#else
+                        ok = true;
+#endif
+                        if (ok) {
+                            for (auto& itm : rawItems_) {
+                                if (itm.titleId == currentItem.titleId) {
+                                    if (itm.dlcCount > 0) itm.dlcCount--;
+                                    if (itm.dlcSizeBytes >= comp.sizeBytes) itm.dlcSizeBytes -= comp.sizeBytes;
+                                    else itm.dlcSizeBytes = 0;
+                                    if (itm.totalSizeBytes >= comp.sizeBytes) itm.totalSizeBytes -= comp.sizeBytes;
+                                    for (auto it = itm.components.begin(); it != itm.components.end(); ++it) {
+                                        if (it->type == InstalledComponent::Type::Dlc && it->titleId == comp.titleId) {
+                                            itm.components.erase(it);
+                                            break;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                            rebuildSections(currentSection, currentRow);
+                            brls::Application::notify(brls::getStr("app/library/comp_delete_success", comp.displayName));
+                            refreshOrClose();
+                        } else {
+                            brls::Application::notify(brls::getStr("app/library/comp_delete_failed", comp.displayName));
+                        }
+                    } else if (comp.type == InstalledComponent::Type::Mods) {
+                        deleteGameMods(currentItem.titleId, comp.extraInfo);
+                        for (auto& itm : rawItems_) {
+                            if (itm.titleId == currentItem.titleId) {
+                                itm.hasMods = false;
+                                itm.modDetails = "";
+                                if (itm.totalSizeBytes >= itm.modsSizeBytes) itm.totalSizeBytes -= itm.modsSizeBytes;
+                                itm.modsSizeBytes = 0;
+                                for (auto it = itm.components.begin(); it != itm.components.end(); ++it) {
+                                    if (it->type == InstalledComponent::Type::Mods) {
+                                        itm.components.erase(it);
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        rebuildSections(currentSection, currentRow);
+                        brls::Application::notify(brls::getStr("app/library/comp_delete_mods_success", displayName));
+                        refreshOrClose();
                     }
                 });
-            } catch (const std::exception& e) {
-                util::logLine(std::string("library: uninstall async exception: ") + e.what());
-            } catch (...) {
-                util::logLine("library: uninstall async unknown exception");
-            }
+                confirmDlg->addButton("app/common/no"_i18n, []() {});
+                confirmDlg->open();
+                return true;
+            });
+
+            rowBox->addView(delBtn);
+            compListBox->addView(rowBox);
+        }
+    }
+
+    scroll->setContentView(compListBox);
+    rootBox->addView(scroll);
+
+    if (currentItem.dlcCount > 1) {
+        compDialog->addButton("app/library/comp_delete_all_dlc"_i18n, [this, currentItem, displayName, currentSection, currentRow, compDialog, refreshOrClose]() {
+            std::string confirmMsg = brls::getStr("app/library/comp_delete_all_dlc_confirm", std::to_string(currentItem.dlcCount), displayName);
+            brls::Dialog* confirmDlg = new brls::Dialog(confirmMsg);
+            confirmDlg->addButton("app/common/yes"_i18n, [this, currentItem, displayName, currentSection, currentRow, compDialog, refreshOrClose]() {
+#ifdef __SWITCH__
+                for (const auto& comp : currentItem.components) {
+                    if (comp.type == InstalledComponent::Type::Dlc) {
+                        NcmContentMetaKey key = {};
+                        key.id = comp.titleId;
+                        key.version = comp.version;
+                        key.type = NcmContentMetaType_AddOnContent;
+                        key.install_type = NcmContentInstallType_Full;
+                        deleteNcmComponent(comp.storageId, key);
+                    }
+                }
+#endif
+                for (auto& itm : rawItems_) {
+                    if (itm.titleId == currentItem.titleId) {
+                        if (itm.totalSizeBytes >= itm.dlcSizeBytes) itm.totalSizeBytes -= itm.dlcSizeBytes;
+                        itm.dlcSizeBytes = 0;
+                        itm.dlcCount = 0;
+                        auto it = itm.components.begin();
+                        while (it != itm.components.end()) {
+                            if (it->type == InstalledComponent::Type::Dlc) {
+                                it = itm.components.erase(it);
+                            } else {
+                                ++it;
+                            }
+                        }
+                        break;
+                    }
+                }
+                rebuildSections(currentSection, currentRow);
+                brls::Application::notify(brls::getStr("app/library/comp_delete_all_dlc_success", displayName));
+                refreshOrClose();
+            });
+            confirmDlg->addButton("app/common/no"_i18n, []() {});
+            confirmDlg->open();
         });
-    });
-    dialog->addButton("app/common/no"_i18n, []() {});
-    dialog->open();
+    }
+
+    compDialog->addButton("app/common/cancel"_i18n, []() {});
+    compDialog->open();
 }
 
 int LibraryView::LibraryDataSource::numberOfSections(brls::RecyclerFrame* recycler) {
@@ -1122,11 +1734,39 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         std::string tidStrLower(tidBufLower);
 
         std::string tidLine = "ID: " + tidStrUpper;
+        if (item.totalSizeBytes > 0) {
+            tidLine += " • " + formatBytes(item.totalSizeBytes);
+        }
         if (!item.sdkVersion.empty()) {
             tidLine += " • SDK " + item.sdkVersion;
         }
         cell->titleId->setText(tidLine);
 
+        // Patch badge
+        if (cell->patchBadgeBox && cell->patchBadge) {
+            if (item.hasPatch) {
+                cell->patchBadgeBox->setVisibility(brls::Visibility::VISIBLE);
+                cell->patchBadge->setText("app/library/badge_patch"_i18n);
+            } else {
+                cell->patchBadgeBox->setVisibility(brls::Visibility::GONE);
+            }
+        }
+
+        // DLC badge
+        if (cell->dlcBadgeBox && cell->dlcBadge) {
+            if (item.dlcCount > 0) {
+                cell->dlcBadgeBox->setVisibility(brls::Visibility::VISIBLE);
+                if (item.dlcCount > 1) {
+                    cell->dlcBadge->setText(brls::getStr("app/library/badge_dlc_count", std::to_string(item.dlcCount)));
+                } else {
+                    cell->dlcBadge->setText("app/library/badge_dlc"_i18n);
+                }
+            } else {
+                cell->dlcBadgeBox->setVisibility(brls::Visibility::GONE);
+            }
+        }
+
+        // Mod badge
         if (cell->modBadgeBox && cell->modBadge) {
             if (item.hasMods) {
                 cell->modBadgeBox->setVisibility(brls::Visibility::VISIBLE);
@@ -1235,10 +1875,10 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
                 });
         }
 
-        // Uninstall action (Y button)
+        // Action menu (Y button)
         cell->registerAction("app/library/uninstall"_i18n, brls::ControllerButton::BUTTON_Y,
-            [parent = parent_, tid, displayName](brls::View* view) {
-                parent->uninstallGame(tid, displayName);
+            [parent = parent_, item, currentSection, currentRow](brls::View* view) {
+                parent->showGameActionMenu(item, currentSection, currentRow);
                 return true;
             });
 

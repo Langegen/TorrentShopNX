@@ -294,6 +294,7 @@ static brls::ScrollingFrame* makeTabBox(brls::Box** out_box) {
 } // namespace
 
 SettingsTab::SettingsTab() {
+    aliveToken_ = std::make_shared<bool>(true);
     // Компактный сайдбар категорий в виде стеклянной рамки дашборда
     brls::getStyle().addMetric("brls/tab_frame/sidebar_width", 260.0f);
     brls::getStyle().addMetric("brls/sidebar/padding_top", 16.0f);
@@ -305,6 +306,12 @@ SettingsTab::SettingsTab() {
     brls::getStyle().addMetric("brls/sidebar/item_accent_margin_sides", 10.0f);
 }
 
+SettingsTab::~SettingsTab() {
+    if (aliveToken_) {
+        *aliveToken_ = false;
+    }
+}
+
 void SettingsTab::onContentAvailable() {
     brls::View* sidebar = tabFrame->getView("brls/tab_frame/sidebar");
     if (sidebar) {
@@ -314,6 +321,7 @@ void SettingsTab::onContentAvailable() {
     }
 
     tabFrame->addTab("app/settings/cat_general"_i18n, [this]() { return buildGeneralTab(); });
+    tabFrame->addTab("app/settings/cat_updates"_i18n, [this]() { return buildUpdatesTab(); });
     tabFrame->addTab("app/settings/cat_appearance"_i18n, [this]() { return buildAppearanceTab(); });
     tabFrame->addTab("app/settings/cat_downloads"_i18n, [this]() { return buildDownloadsTab(); });
     tabFrame->addTab("app/settings/cat_retro"_i18n, [this]() { return buildRetroTab(); });
@@ -321,10 +329,23 @@ void SettingsTab::onContentAvailable() {
     tabFrame->addTab("app/settings/cat_about"_i18n, [this]() { return buildAboutTab(); });
 }
 
+static void addSettingsSectionHeader(brls::Box* parent, const std::string& title) {
+    auto* header = new brls::Label();
+    header->setFontSize(16.0f);
+    header->setText(title);
+    header->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    header->setMarginTop(20.0f);
+    header->setMarginBottom(8.0f);
+    parent->addView(header);
+}
+
 brls::View* SettingsTab::buildGeneralTab() {
     auto& cfg = config::ConfigManager::instance();
     brls::Box* box = nullptr;
     brls::ScrollingFrame* scroll = makeTabBox(&box);
+
+    // ── Секция Язык ──────────────────────────────────────────────────
+    addSettingsSectionHeader(box, "app/settings/sec_language"_i18n);
 
     // Язык интерфейса
     std::vector<std::string> languages = {
@@ -383,6 +404,31 @@ brls::View* SettingsTab::buildGeneralTab() {
     });
     box->addView(languageCell);
 
+    // ── Секция Управление и отклик ──────────────────────────────────
+    addSettingsSectionHeader(box, "app/settings/sec_feedback"_i18n);
+
+    // Вибрация Joy-Con / контроллеров
+    auto* rumbleCell = new brls::BooleanCell();
+    rumbleCell->init("app/settings/joycon_rumble"_i18n, cfg.getRumbleEnabled(), [&cfg](bool value) {
+        cfg.setRumbleEnabled(value);
+        cfg.save();
+        if (value) {
+            util::triggerHapticFeedback(3);
+        }
+    });
+    box->addView(rumbleCell);
+
+    return scroll;
+}
+
+brls::View* SettingsTab::buildUpdatesTab() {
+    auto& cfg = config::ConfigManager::instance();
+    brls::Box* box = nullptr;
+    brls::ScrollingFrame* scroll = makeTabBox(&box);
+
+    // ── Приложение ──────────────────────────────────────────────────
+    addSettingsSectionHeader(box, "app/settings/sec_app_update"_i18n);
+
     // Авто-проверка обновлений приложения
     auto* autoAppUpdateCell = new brls::BooleanCell();
     autoAppUpdateCell->init("app/settings/auto_app_update"_i18n, cfg.getAutoAppUpdate(), [&cfg](bool value) {
@@ -391,7 +437,7 @@ brls::View* SettingsTab::buildGeneralTab() {
     });
     box->addView(autoAppUpdateCell);
 
-    // Принудительная переустановка приложения
+    // Принудительное обновление приложения (с GitHub)
     auto* forceAppUpdateCell = new brls::DetailCell();
     forceAppUpdateCell->setText("app/settings/force_app_update"_i18n);
     forceAppUpdateCell->setDetailText("app/settings/force_app_update_desc"_i18n);
@@ -453,36 +499,14 @@ brls::View* SettingsTab::buildGeneralTab() {
     });
     box->addView(forceAppUpdateCell);
 
-    // Кэширование миниатюр обложек
-    auto* cacheThumbnailsCell = new brls::BooleanCell();
-    cacheThumbnailsCell->init("app/settings/cache_thumbnails"_i18n, cfg.getCacheCoverThumbnails(), [&cfg](bool value) {
-        cfg.setCacheCoverThumbnails(value);
-        cfg.save();
-    });
-    box->addView(cacheThumbnailsCell);
-
-    // Звуковые эффекты
-    auto* soundEffectsCell = new brls::BooleanCell();
-    soundEffectsCell->init("app/settings/sound_effects"_i18n, cfg.getSoundEffectsEnabled(), [&cfg](bool value) {
-        cfg.setSoundEffectsEnabled(value);
-        util::triggerHapticFeedback(1);
-    });
-    box->addView(soundEffectsCell);
-
-    // Вибрация Joy-Con / контроллеров
-    auto* rumbleCell = new brls::BooleanCell();
-    rumbleCell->init("app/settings/joycon_rumble"_i18n, cfg.getRumbleEnabled(), [&cfg](bool value) {
-        cfg.setRumbleEnabled(value);
-        if (value) {
-            util::triggerHapticFeedback(3);
-        }
-    });
-    box->addView(rumbleCell);
+    // ── Каталог игр ─────────────────────────────────────────────────
+    addSettingsSectionHeader(box, "app/settings/sec_catalog_update"_i18n);
 
     // URL каталога JSON
     auto* catalogUrlCell = new brls::DetailCell();
     catalogUrlCell->setText("app/settings/catalog_url"_i18n);
-    auto updateCatalogUrlDisplay = [catalogUrlCell, &cfg]() {
+    auto updateCatalogUrlDisplay = [catalogUrlCell, &cfg, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         std::string url = cfg.getCatalogSourceUrl();
         if (url.empty()) {
             url = cfg.getEffectiveCatalogSourceUrl();
@@ -493,9 +517,10 @@ brls::View* SettingsTab::buildGeneralTab() {
         catalogUrlCell->setDetailText(url);
     };
     updateCatalogUrlDisplay();
-    catalogUrlCell->registerClickAction([updateCatalogUrlDisplay, &cfg](brls::View* view) {
+    catalogUrlCell->registerClickAction([updateCatalogUrlDisplay, &cfg, alive = aliveToken_](brls::View* view) {
         brls::Application::getImeManager()->openForText(
-            [updateCatalogUrlDisplay, &cfg](std::string text) {
+            [updateCatalogUrlDisplay, &cfg, alive](std::string text) {
+                if (!alive || !*alive) return;
                 if (!text.empty()) {
                     if (text == "default" || text == "reset") {
                         cfg.setCatalogSourceUrl("");
@@ -521,33 +546,38 @@ brls::View* SettingsTab::buildGeneralTab() {
     // Обновление каталога игр (принудительное обновление)
     auto* catalogUpdateCell = new brls::DetailCell();
     catalogUpdateCell->setText("app/settings/update_catalog_btn"_i18n);
-    auto updateCatalogStatusDisplay = [catalogUpdateCell]() {
+    auto updateCatalogStatusDisplay = [catalogUpdateCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         auto snap = getCatalogSnapshot();
         size_t gameCount = snap ? snap->size() : 0;
         catalogUpdateCell->setDetailText(brls::getStr("app/catalog/games_count", std::to_string(gameCount)));
     };
     updateCatalogStatusDisplay();
-    catalogUpdateCell->registerClickAction([updateCatalogStatusDisplay](brls::View* view) {
+    catalogUpdateCell->registerClickAction([updateCatalogStatusDisplay, alive = aliveToken_](brls::View* view) {
         if (catalog::CatalogUpdater::instance().isUpdateRunning()) {
             brls::Application::notify("app/catalog/updating_db"_i18n);
             return true;
         }
 
         auto* dialog = new brls::Dialog("app/settings/update_catalog_dialog_msg"_i18n);
-        dialog->addButton("app/settings/update_catalog_fast_diff"_i18n, [updateCatalogStatusDisplay]() {
+        dialog->addButton("app/settings/update_catalog_fast_diff"_i18n, [updateCatalogStatusDisplay, alive]() {
             catalog::CatalogUpdater::instance().startUpdate(
                 catalog::CatalogUpdateMode::ForceDiff,
-                [updateCatalogStatusDisplay](const catalog::CatalogUpdateResult& res) {
-                    updateCatalogStatusDisplay();
+                [updateCatalogStatusDisplay, alive](const catalog::CatalogUpdateResult& res) {
+                    if (alive && *alive) {
+                        updateCatalogStatusDisplay();
+                    }
                 },
                 true
             );
         });
-        dialog->addButton("app/settings/update_catalog_full"_i18n, [updateCatalogStatusDisplay]() {
+        dialog->addButton("app/settings/update_catalog_full"_i18n, [updateCatalogStatusDisplay, alive]() {
             catalog::CatalogUpdater::instance().startUpdate(
                 catalog::CatalogUpdateMode::ForceFull,
-                [updateCatalogStatusDisplay](const catalog::CatalogUpdateResult& res) {
-                    updateCatalogStatusDisplay();
+                [updateCatalogStatusDisplay, alive](const catalog::CatalogUpdateResult& res) {
+                    if (alive && *alive) {
+                        updateCatalogStatusDisplay();
+                    }
                 },
                 true
             );
@@ -558,15 +588,30 @@ brls::View* SettingsTab::buildGeneralTab() {
     });
     box->addView(catalogUpdateCell);
 
-    // Telegram и GitHub (QR-коды)
-    auto* communityCell = new brls::DetailCell();
-    communityCell->setText("app/settings/links_cell_title"_i18n);
-    communityCell->setDetailText("app/settings/links_cell_desc"_i18n);
-    communityCell->registerClickAction([this](brls::View* view) {
-        showCommunityDialog();
+    // ── Ретро-каталоги ──────────────────────────────────────────────
+    addSettingsSectionHeader(box, "app/settings/sec_retro_update"_i18n);
+
+    auto* updateRetroCatalogsCell = new brls::DetailCell();
+    updateRetroCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
+    auto updateRetroDetailText = [updateRetroCatalogsCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
+        int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
+        if (count > 0) {
+            updateRetroCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
+        } else {
+            updateRetroCatalogsCell->setDetailText("app/settings/retro_update_catalogs_empty"_i18n);
+        }
+    };
+    updateRetroDetailText();
+    updateRetroCatalogsCell->registerClickAction([updateRetroDetailText, alive = aliveToken_](brls::View* view) {
+        showRetroCatalogUpdateDialog([updateRetroDetailText, alive](int updatedCount) {
+            if (alive && *alive) {
+                updateRetroDetailText();
+            }
+        });
         return true;
     });
-    box->addView(communityCell);
+    box->addView(updateRetroCatalogsCell);
 
     return scroll;
 }
@@ -790,20 +835,6 @@ brls::View* SettingsTab::buildDownloadsTab() {
     int initialMode = 0;
     if (cfg.getDataMode() == "local_client" || cfg.getDataMode() == "custom_engine") initialMode = 1;
 
-    auto* modeCell = new brls::SelectorCell();
-    modeCell->init("app/settings/data_mode"_i18n, modes, initialMode, [](int selected) {}, [&cfg, &dm](int selected) {
-        if (selected == 1) {
-            cfg.setDataMode("custom_engine");
-            dm.dataSourceManager().setMode(datasource::DataSourceMode::CustomEngine);
-        } else {
-            cfg.setDataMode("torrserver");
-            dm.dataSourceManager().setMode(datasource::DataSourceMode::Remote);
-        }
-        cfg.save();
-        brls::Application::notify("app/settings/mode_changed"_i18n);
-    });
-    box->addView(modeCell);
-
     // Адрес удалённого TorrServer
     auto* remoteUrlCell = new brls::DetailCell();
     remoteUrlCell->setText("app/settings/remote_url"_i18n);
@@ -836,6 +867,24 @@ brls::View* SettingsTab::buildDownloadsTab() {
         );
         return true;
     });
+
+    auto* modeCell = new brls::SelectorCell();
+    modeCell->init("app/settings/data_mode"_i18n, modes, initialMode, [](int selected) {}, [&cfg, &dm, remoteUrlCell](int selected) {
+        if (selected == 1) {
+            cfg.setDataMode("custom_engine");
+            dm.dataSourceManager().setMode(datasource::DataSourceMode::CustomEngine);
+            remoteUrlCell->setVisibility(brls::Visibility::GONE);
+        } else {
+            cfg.setDataMode("torrserver");
+            dm.dataSourceManager().setMode(datasource::DataSourceMode::Remote);
+            remoteUrlCell->setVisibility(brls::Visibility::VISIBLE);
+        }
+        cfg.save();
+        brls::Application::notify("app/settings/mode_changed"_i18n);
+    });
+    box->addView(modeCell);
+
+    remoteUrlCell->setVisibility((initialMode == 0) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     box->addView(remoteUrlCell);
 
     return scroll;
@@ -848,14 +897,18 @@ brls::View* SettingsTab::buildRetroTab() {
 
     // 1. Base ROMs folder selection
     std::vector<std::string> folderOptions = {
+        "app/settings/retro_folder_prompt"_i18n,
+        "app/settings/retro_folder_tico"_i18n,
         "app/settings/retro_folder_retroarch"_i18n,
         "app/settings/retro_folder_downloads"_i18n,
         "app/settings/retro_folder_custom"_i18n
     };
     int initialFolderIdx = 0;
     std::string currentMode = cfg.getRetroRomsMode();
-    if (currentMode == "downloads") initialFolderIdx = 1;
-    else if (currentMode == "custom") initialFolderIdx = 2;
+    if (currentMode == "tico") initialFolderIdx = 1;
+    else if (currentMode == "retroarch") initialFolderIdx = 2;
+    else if (currentMode == "downloads") initialFolderIdx = 3;
+    else if (currentMode == "custom") initialFolderIdx = 4;
     else initialFolderIdx = 0;
 
     auto* customFolderCell = new brls::DetailCell();
@@ -891,20 +944,28 @@ brls::View* SettingsTab::buildRetroTab() {
     auto* folderCell = new brls::SelectorCell();
     folderCell->init("app/settings/retro_roms_folder"_i18n, folderOptions, initialFolderIdx, [](int selected) {}, [&cfg, customFolderCell](int selected) {
         if (selected == 1) {
+            cfg.setRetroRomsMode("tico");
+            customFolderCell->setVisibility(brls::Visibility::GONE);
+            tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
+            tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+        } else if (selected == 2) {
+            cfg.setRetroRomsMode("retroarch");
+            customFolderCell->setVisibility(brls::Visibility::GONE);
+        } else if (selected == 3) {
             cfg.setRetroRomsMode("downloads");
             customFolderCell->setVisibility(brls::Visibility::GONE);
-        } else if (selected == 2) {
+        } else if (selected == 4) {
             cfg.setRetroRomsMode("custom");
             customFolderCell->setVisibility(brls::Visibility::VISIBLE);
         } else {
-            cfg.setRetroRomsMode("retroarch");
+            cfg.setRetroRomsMode("prompt");
             customFolderCell->setVisibility(brls::Visibility::GONE);
         }
         cfg.save();
     });
     box->addView(folderCell);
 
-    customFolderCell->setVisibility((initialFolderIdx == 2) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    customFolderCell->setVisibility((initialFolderIdx == 4) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     box->addView(customFolderCell);
 
     // 2. Auto-extract toggle
@@ -919,7 +980,8 @@ brls::View* SettingsTab::buildRetroTab() {
     auto* updateCatalogsCell = new brls::DetailCell();
     updateCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
 
-    auto updateDetailText = [updateCatalogsCell]() {
+    auto updateDetailText = [updateCatalogsCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
         int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
         if (count > 0) {
             updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
@@ -929,9 +991,11 @@ brls::View* SettingsTab::buildRetroTab() {
     };
     updateDetailText();
 
-    updateCatalogsCell->registerClickAction([updateDetailText](brls::View* view) {
-        showRetroCatalogUpdateDialog([updateDetailText](int updatedCount) {
-            updateDetailText();
+    updateCatalogsCell->registerClickAction([updateDetailText, alive = aliveToken_](brls::View* view) {
+        showRetroCatalogUpdateDialog([updateDetailText, alive](int updatedCount) {
+            if (alive && *alive) {
+                updateDetailText();
+            }
         });
         return true;
     });
@@ -1094,103 +1158,6 @@ brls::View* SettingsTab::buildAboutTab() {
     return scroll;
 }
 
-void SettingsTab::showCommunityDialog() {
-    brls::Box* content = new brls::Box(brls::Axis::COLUMN);
-    content->setAlignItems(brls::AlignItems::CENTER);
-    content->setWidth(680.0f);
-    content->setPadding(10.0f, 10.0f, 10.0f, 10.0f);
-
-    brls::Label* titleLabel = new brls::Label();
-    titleLabel->setText("app/settings/links_dialog_title"_i18n);
-    titleLabel->setFontSize(20.0f);
-    titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
-    titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    titleLabel->setMarginBottom(4.0f);
-    content->addView(titleLabel);
-
-    brls::Label* hintLabel = new brls::Label();
-    hintLabel->setText("app/settings/community_hint"_i18n);
-    hintLabel->setFontSize(13.5f);
-    hintLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
-    hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    hintLabel->setMarginBottom(16.0f);
-    content->addView(hintLabel);
-
-    brls::Box* row = new brls::Box(brls::Axis::ROW);
-    row->setJustifyContent(brls::JustifyContent::CENTER);
-    row->setAlignItems(brls::AlignItems::CENTER);
-    row->setWidth(brls::View::AUTO);
-    row->setHeight(brls::View::AUTO);
-
-    auto addQrCol = [row](const std::string& name, const std::string& url,
-                          const std::string& desc, NVGcolor titleColor) {
-        brls::Box* col = new brls::Box(brls::Axis::COLUMN);
-        col->setAlignItems(brls::AlignItems::CENTER);
-        col->setWidth(300.0f);
-        col->setMarginLeft(10.0f);
-        col->setMarginRight(10.0f);
-
-        brls::Label* lblName = new brls::Label();
-        lblName->setText(name);
-        lblName->setFontSize(17.0f);
-        lblName->setTextColor(titleColor);
-        lblName->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-        lblName->setMarginBottom(2.0f);
-        col->addView(lblName);
-
-        brls::Label* lblDesc = new brls::Label();
-        lblDesc->setText(desc);
-        lblDesc->setFontSize(11.5f);
-        lblDesc->setTextColor(ThemeManager::instance().getTextSecondaryColor());
-        lblDesc->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-        lblDesc->setMarginBottom(8.0f);
-        col->addView(lblDesc);
-
-        brls::Box* qrBox = new brls::Box();
-        qrBox->setWidth(170.0f);
-        qrBox->setHeight(170.0f);
-        qrBox->setBackgroundColor(nvgRGB(255, 255, 255));
-        qrBox->setCornerRadius(10.0f);
-        qrBox->setJustifyContent(brls::JustifyContent::CENTER);
-        qrBox->setAlignItems(brls::AlignItems::CENTER);
-        qrBox->setPadding(8.0f, 8.0f, 8.0f, 8.0f);
-        qrBox->setMarginBottom(8.0f);
-
-        QrCodeView* qr = new QrCodeView();
-        qr->setWidth(154.0f);
-        qr->setHeight(154.0f);
-        qr->setContent(url);
-        qrBox->addView(qr);
-        col->addView(qrBox);
-
-        brls::Label* lblUrl = new brls::Label();
-        lblUrl->setText(url);
-        lblUrl->setFontSize(11.0f);
-        lblUrl->setTextColor(titleColor);
-        lblUrl->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-        col->addView(lblUrl);
-
-        row->addView(col);
-    };
-
-    addQrCol("app/settings/telegram_title"_i18n,
-             "https://t.me/TorrentShopNX",
-             "app/settings/telegram_desc"_i18n,
-             nvgRGB(56, 170, 245));
-
-    addQrCol("app/settings/github_title"_i18n,
-             "https://github.com/Langegen/TorrentShopNX",
-             "app/settings/github_desc"_i18n,
-             ThemeManager::instance().isCurrentThemeLight() ? nvgRGB(36, 42, 54) : nvgRGB(230, 235, 245));
-
-    content->addView(row);
-
-    brls::Dialog* dialog = new brls::Dialog(content);
-    dialog->setCancelable(true);
-    dialog->addButton("app/common/ok"_i18n, []() {});
-    dialog->open();
-}
-
 void SettingsTab::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     if (resetState) {
@@ -1200,7 +1167,6 @@ void SettingsTab::willAppear(bool resetState) {
 
 void SettingsTab::willDisappear(bool resetState) {
     brls::Activity::willDisappear(resetState);
-    brls::Application::giveFocus(nullptr);
 }
 
 } // namespace ui

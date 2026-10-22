@@ -53,13 +53,35 @@ static bool ensureDirRecursive(const std::string& path) {
 
 StreamInstaller::StreamInstaller(size_t buffer_size_bytes)
     : buffer_capacity_(buffer_size_bytes) {
-    buffer_.reserve(buffer_capacity_);
+    // Buffer is allocated lazily in openStream() to avoid OOM when queuing multiple downloads
+}
+
+StreamInstaller::~StreamInstaller() {
+    closeStream();
+}
+
+void StreamInstaller::closeStream() {
+    closeCurrentFile();
+    for (void* f : file_handles_) {
+        if (f) std::fclose(static_cast<FILE*>(f));
+    }
+    file_handles_.clear();
+    buffer_.clear();
+    buffer_.shrink_to_fit();
 }
 
 bool StreamInstaller::openStream(const std::string& name) {
+    closeStream();
     stream_name_ = name;
     output_dir_ = std::string(TSNX_CACHE_STREAM) + "/" + stream_name_;
     buffer_.clear();
+    if (buffer_capacity_ > 0) {
+        try {
+            buffer_.reserve(buffer_capacity_);
+        } catch (const std::bad_alloc&) {
+            return false;
+        }
+    }
     stream_pos_ = 0;
     header_parsed_ = false;
     entries_parsed_ = false;
@@ -72,10 +94,6 @@ bool StreamInstaller::openStream(const std::string& name) {
     entries_.clear();
     current_file_index_ = 0;
     current_file_written_ = 0;
-    for (void* f : file_handles_) {
-        if (f) std::fclose(static_cast<FILE*>(f));
-    }
-    file_handles_.clear();
     return true;
 }
 
@@ -212,6 +230,8 @@ void StreamInstaller::processBuffer() {
             current_file_written_ = 0;
             if (current_file_index_ >= entries_.size()) {
                 completed_ = true;
+                buffer_.clear();
+                buffer_.shrink_to_fit();
             }
             continue;
         }
@@ -232,6 +252,8 @@ void StreamInstaller::processBuffer() {
             current_file_written_ = 0;
             if (current_file_index_ >= entries_.size()) {
                 completed_ = true;
+                buffer_.clear();
+                buffer_.shrink_to_fit();
             }
         }
     }
@@ -239,10 +261,22 @@ void StreamInstaller::processBuffer() {
 
 size_t StreamInstaller::readChunk(const void* data, size_t size) {
     if (size == 0) return 0;
-    size_t available = buffer_capacity_ - buffer_.size();
+    if (buffer_.capacity() < buffer_capacity_) {
+        try {
+            buffer_.reserve(buffer_capacity_);
+        } catch (const std::bad_alloc&) {
+            return 0;
+        }
+    }
+    size_t available = buffer_capacity_ > buffer_.size() ? buffer_capacity_ - buffer_.size() : 0;
     size_t to_copy = size < available ? size : available;
+    if (to_copy == 0) return 0;
     const unsigned char* p = static_cast<const unsigned char*>(data);
-    buffer_.insert(buffer_.end(), p, p + to_copy);
+    try {
+        buffer_.insert(buffer_.end(), p, p + to_copy);
+    } catch (const std::bad_alloc&) {
+        return 0;
+    }
     processBuffer();
     return to_copy;
 }

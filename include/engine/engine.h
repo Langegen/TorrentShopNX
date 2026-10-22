@@ -116,6 +116,7 @@ bool     tsnx_engine_prepare_stream(tsnx_engine *eng, const char *hash,
 int64_t  tsnx_engine_read(tsnx_engine *eng, const char *hash,
                           int64_t offset, void *buf, int64_t size);
 void     tsnx_engine_cancel_read(tsnx_engine *eng, const char *hash);
+void     tsnx_engine_resume_reader(tsnx_engine *eng, const char *hash);
 
 /* Hints the engine how far the installer has already consumed. */
 void tsnx_engine_set_min_keep_offset(tsnx_engine *eng, const char *hash,

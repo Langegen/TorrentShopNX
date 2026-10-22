@@ -16,6 +16,7 @@
 #include <fstream>
 #include <vector>
 #include <borealis.hpp>
+#include <nanovg.h>
 
 #if __has_include(<curl/curl.h>)
 #include <curl/curl.h>
@@ -355,6 +356,22 @@ static bool checkAndApplyPendingUpdate() {
 }
 
 int main(int argc, char** argv) {
+    std::set_terminate([]() {
+        std::string err = "std::terminate called!";
+        std::exception_ptr ex = std::current_exception();
+        if (ex) {
+            try {
+                std::rethrow_exception(ex);
+            } catch (const std::exception& e) {
+                err += " Exception: " + std::string(e.what());
+            } catch (...) {
+                err += " Unknown exception";
+            }
+        }
+        util::logLine("FATAL: " + err);
+        std::abort();
+    });
+
 #if defined(_WIN32)
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -381,6 +398,12 @@ int main(int argc, char** argv) {
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
                   " mem_size=" + std::to_string(g_socket_mem_size_used) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
+    bool startupBoostActive = false;
+    if (!checkAppletMode()) {
+        util::cpuBoostBegin();
+        startupBoostActive = true;
+        util::logLine("main: startup CPU boost enabled (1785 MHz)");
+    }
 #endif
     migrateStorageLayout();
     clearCaches();
@@ -428,6 +451,7 @@ int main(int argc, char** argv) {
         util::logLine("main: failed to initialize Borealis");
         return EXIT_FAILURE;
     }
+
     // Snappy focus highlight and smooth scrolling transitions (down from sluggish 200ms default)
     brls::getStyle().addMetric("brls/animations/highlight", 100.0f);
 
@@ -443,6 +467,49 @@ int main(int argc, char** argv) {
     });
 
     brls::Application::createWindow("TorrentShopNX");
+
+    // Ensure Arabic fallback font is registered with NVG if not already registered by font loader
+    {
+        NVGcontext* vg = brls::Application::getNVGContext();
+        int baseFont = brls::Application::getFont(brls::FONT_REGULAR);
+        int arFont = brls::Application::getFont("arabic");
+
+        if (vg && baseFont != brls::FONT_INVALID && arFont == brls::FONT_INVALID) {
+            std::vector<std::string> candidateArabicPaths = {
+#ifdef __SWITCH__
+                "romfs:/font/arabic_font.ttf",
+#endif
+                "sdmc:/switch/TorrentShopNX/font/arabic.ttf",
+                "sdmc:/switch/TorrentShopNX/arabic.ttf",
+#ifndef __SWITCH__
+                "resources/font/arabic_font.ttf",
+                "build_pc/resources/font/arabic_font.ttf"
+#endif
+            };
+
+#if defined(_WIN32)
+            const char* winDir = getenv("SystemRoot");
+            std::string winFonts = (winDir ? std::string(winDir) : "C:\\Windows") + "\\Fonts\\";
+            candidateArabicPaths.push_back(winFonts + "tahoma.ttf");
+            candidateArabicPaths.push_back(winFonts + "arial.ttf");
+            candidateArabicPaths.push_back(winFonts + "seguiui.ttf");
+#endif
+
+            for (const auto& path : candidateArabicPaths) {
+                if (access(path.c_str(), F_OK) != -1) {
+                    if (brls::Application::loadFontFromFile("arabic", path)) {
+                        arFont = brls::Application::getFont("arabic");
+                        if (arFont != brls::FONT_INVALID) {
+                            util::logLine("main: loaded Arabic font from: " + path);
+                            nvgAddFallbackFontId(vg, baseFont, arFont);
+                            util::logLine("main: registered Arabic fallback font");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::LIGHT);
     brls::Application::setGlobalQuit(false);
     ui::ThemeManager::instance().init();
@@ -478,7 +545,7 @@ int main(int argc, char** argv) {
         // Initialize managers for Title Mode
         catalog::FavoritesManager::instance().init(TSNX_FAVORITES_PATH);
         catalog::IgnoredUpdatesManager::instance().init(TSNX_IGNORED_UPDATES_PATH);
-        catalog::GameStatsManager::instance().loadFromDisk();
+        catalog::GameStatsManager::instance().loadFromDiskAsync();
         ui::DownloadManager::instance().init();
 
         // Initialize curl first, so background network threads can safely use it.
@@ -527,6 +594,19 @@ int main(int argc, char** argv) {
 #endif
     }
 
+    // Global safety guard: ensure gamepad focus is automatically recovered whenever it drops to null
+    brls::Application::getRunLoopEvent()->subscribe([]() {
+        if (brls::Application::getCurrentFocus() == nullptr) {
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (!stack.empty() && stack.back()) {
+                brls::View* defFocus = stack.back()->getDefaultFocus();
+                if (defFocus) {
+                    brls::Application::giveFocus(defFocus);
+                }
+            }
+        }
+    });
+
     util::logLine("main: initializing ScreenSleepManager");
     util::ScreenSleepManager::instance().init();
 
@@ -536,14 +616,42 @@ int main(int argc, char** argv) {
         int frameCount = 0;
         while (brls::Application::mainLoop()) {
             frameCount++;
-            if (frameCount <= 3) {
+            if (frameCount <= 3 || frameCount == 10 || frameCount == 30 || frameCount == 60) {
                 util::logLine("main: mainLoop frame=" + std::to_string(frameCount));
+                if (frameCount == 60) {
+                    util::logLine("main: initial startup stabilized (frame 60)");
+#ifdef __SWITCH__
+                    if (startupBoostActive) {
+                        util::cpuBoostEnd();
+                        startupBoostActive = false;
+                        util::logLine("main: startup CPU boost returned to normal (1020 MHz)");
+                    }
+#endif
+                }
             }
         }
+#ifdef __SWITCH__
+        if (startupBoostActive) {
+            util::cpuBoostEnd();
+            startupBoostActive = false;
+        }
+#endif
         util::logLine("main: mainLoop exited normally after " + std::to_string(frameCount) + " frames");
     } catch (const std::exception& e) {
+#ifdef __SWITCH__
+        if (startupBoostActive) {
+            util::cpuBoostEnd();
+            startupBoostActive = false;
+        }
+#endif
         util::logLine(std::string("main: EXCEPTION in mainLoop: ") + e.what());
     } catch (...) {
+#ifdef __SWITCH__
+        if (startupBoostActive) {
+            util::cpuBoostEnd();
+            startupBoostActive = false;
+        }
+#endif
         util::logLine("main: UNKNOWN EXCEPTION in mainLoop");
     }
 

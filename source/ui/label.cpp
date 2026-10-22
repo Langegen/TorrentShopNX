@@ -24,6 +24,7 @@
 #include <borealis/views/label.hpp>
 #include <unordered_map>
 #include "../config/config.h"
+#include "../utils/arabic_shaper.h"
 
 namespace brls
 {
@@ -379,6 +380,11 @@ void Label::setText(const std::string& text)
         convertedText = Label::STConverter(text);
     }
 #endif
+
+    if (util::ArabicShaper::hasArabic(convertedText))
+    {
+        convertedText = util::ArabicShaper::shape(convertedText);
+    }
 
     this->truncatedText = convertedText;
     this->fullText      = convertedText;

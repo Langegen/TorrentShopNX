@@ -30,7 +30,7 @@
 ## 📸 Скриншоты интерфейса
 
 <div align="center">
-  <img src="docs/screenshots/dashboard.jpg" alt="Главное меню / Dashboard TorrentShopNX v2.16" width="95%"/>
+  <img src="docs/screenshots/dashboard.jpg" alt="Главное меню / Dashboard TorrentShopNX v2.17" width="95%"/>
   <p><em>Главное меню и дашборд: быстрый доступ к каталогу игр, ретро-платформам, менеджеру игр, загрузкам и системной информации</em></p>
   <br/>
 

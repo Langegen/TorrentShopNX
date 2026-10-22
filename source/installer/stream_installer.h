@@ -9,8 +9,10 @@ namespace installer {
 class StreamInstaller {
 public:
     explicit StreamInstaller(size_t buffer_size_bytes = 64 * 1024 * 1024);
+    ~StreamInstaller();
 
     bool openStream(const std::string& name);
+    void closeStream();
     size_t readChunk(const void* data, size_t size);
     bool installChunk();
     bool isComplete() const { return completed_; }

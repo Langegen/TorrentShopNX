@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <vector>
 #include <cstdlib>
 #include <algorithm>
@@ -36,7 +37,7 @@ namespace util {
     }
 
     // UTF-8 lowercase helper handling both ASCII and Cyrillic (CP1251 / UTF-8)
-    inline std::string toLowerUtf8(const std::string& s) {
+    inline std::string toLowerUtf8(std::string_view s) {
         std::string out;
         out.reserve(s.size());
         for (size_t i = 0; i < s.size(); ) {
@@ -119,41 +120,7 @@ namespace util {
     };
 
     inline std::string extractPatchVersionString(const std::string& filename) {
-        // 1. First priority: look for semantic version in brackets/parentheses, e.g. (v1.2.0), [v1.2.0], (1.2.0), [1.2.0], (v1.2), etc.
-        for (size_t i = 0; i < filename.size(); ++i) {
-            if (filename[i] == '[' || filename[i] == '(') {
-                char closeChar = (filename[i] == '[') ? ']' : ')';
-                size_t closePos = filename.find(closeChar, i + 1);
-                if (closePos != std::string::npos && closePos - i > 2) {
-                    std::string token = filename.substr(i + 1, closePos - i - 1);
-                    std::string lowerToken = toLowerUtf8(token);
-                    size_t vstart = 0;
-                    if (!lowerToken.empty() && lowerToken[0] == 'v') vstart = 1;
-                    bool hasDot = false;
-                    bool validVer = false;
-                    size_t numDigits = 0;
-                    for (size_t k = vstart; k < token.size(); ++k) {
-                        if (std::isdigit(static_cast<unsigned char>(token[k]))) {
-                            numDigits++;
-                        } else if (token[k] == '.') {
-                            hasDot = true;
-                        } else {
-                            validVer = false;
-                            break;
-                        }
-                    }
-                    if (hasDot && numDigits >= 2) {
-                        validVer = true;
-                    }
-                    if (validVer) {
-                        std::string verNum = (vstart == 1) ? ("v" + token.substr(1)) : ("v" + token);
-                        return verNum;
-                    }
-                }
-            }
-        }
-
-        // 2. Second priority: look for Nintendo internal integer revision: [v65536], (v131072), etc.
+        // Strictly look for integer version: [v196608], (v65536), etc.
         for (size_t i = 0; i < filename.size(); ++i) {
             if (filename[i] == '[' || filename[i] == '(') {
                 char closeChar = (filename[i] == '[') ? ']' : ')';
@@ -172,10 +139,33 @@ namespace util {
                             try {
                                 unsigned long vval = std::stoul(token.substr(1));
                                 if (vval > 0) {
-                                    return "[" + token + "]";
+                                    return "[v" + std::to_string(vval) + "]";
                                 }
                             } catch (...) {}
                         }
+                    }
+                }
+            }
+        }
+
+        // Fallback: check other delimiters like _v196608 or v196608
+        for (size_t i = 0; i < filename.size(); ++i) {
+            char delim = filename[i];
+            if (delim == '_' || delim == ' ') {
+                if (i + 2 < filename.size() && (filename[i + 1] == 'v' || filename[i + 1] == 'V') &&
+                    std::isdigit(static_cast<unsigned char>(filename[i + 2]))) {
+                    size_t start = i + 2;
+                    size_t end = start;
+                    while (end < filename.size() && std::isdigit(static_cast<unsigned char>(filename[end]))) {
+                        end++;
+                    }
+                    if (end > start) {
+                        try {
+                            unsigned long vval = std::stoul(filename.substr(start, end - start));
+                            if (vval > 0) {
+                                return "[v" + std::to_string(vval) + "]";
+                            }
+                        } catch (...) {}
                     }
                 }
             }

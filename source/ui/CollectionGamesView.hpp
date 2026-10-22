@@ -104,6 +104,7 @@ private:
 
     catalog::CollectionInfo info_;
     catalog::FilterSortState filterState_;
+    std::shared_ptr<const std::vector<Game>> catalogSnapshot_;
     std::vector<catalog::CollectionEntry> entries_;
     std::vector<Game> matchedGames_;
     std::vector<bool> matchedComputed_;

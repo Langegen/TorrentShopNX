@@ -70,7 +70,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.16"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.17"; // Keep in sync with Makefile APP_VERSION
 
     const std::string& getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
@@ -94,8 +94,10 @@ public:
     void setLanguage(const std::string& lang);
 
     // Retro Games settings
-    const std::string& getRetroRomsMode() const; // "retroarch" (default), "downloads", "custom"
+    const std::string& getRetroRomsMode() const; // "prompt" (default), "tico", "retroarch", "downloads", "custom"
     void setRetroRomsMode(const std::string& mode);
+    bool isTicoMode() const;
+    bool isPromptMode() const;
 
     const std::string& getRetroCustomPath() const;
     void setRetroCustomPath(const std::string& path);

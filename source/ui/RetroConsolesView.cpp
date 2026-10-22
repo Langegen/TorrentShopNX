@@ -4,8 +4,11 @@
 #include "RetroEmulatorsView.hpp"
 #include "ThemeManager.hpp"
 #include "../catalog/retro_emulator_manager.h"
+#include "../config/config.h"
+#include "../utils/app_paths.h"
 #include "../utils/log.h"
 #include <algorithm>
+#include <filesystem>
 
 namespace ui {
 
@@ -76,6 +79,30 @@ void RetroConsolesView::onContentAvailable() {
 
     rebuildGrid();
     refreshGameCounts();
+
+    static bool s_checkedTicoPrompt = false;
+    if (!s_checkedTicoPrompt) {
+        s_checkedTicoPrompt = true;
+        auto& cfg = config::ConfigManager::instance();
+        std::error_code ec;
+        std::string ticoNro = catalog::RetroEmulatorManager::resolvePlatformPath(TSNX_TICO_NRO_PATH);
+        std::string ticoDir = catalog::RetroEmulatorManager::resolvePlatformPath(TSNX_TICO_BASE_DIR);
+        if (cfg.getRetroRomsMode() == "retroarch" && (std::filesystem::exists(ticoNro, ec) || std::filesystem::exists(ticoDir, ec))) {
+            std::string promptMsg = "app/retro/tico_detect_title"_i18n + "\n\n" +
+                                    "app/retro/tico_detect_desc"_i18n;
+            auto* prompt = new brls::Dialog(promptMsg);
+            prompt->setCancelable(true);
+            prompt->addButton("app/retro/tico_detect_switch"_i18n, [&cfg]() {
+                cfg.setRetroRomsMode("tico");
+                cfg.save();
+                tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
+                tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
+                brls::Application::notify("app/retro/tico_mode_active_notify"_i18n);
+            });
+            prompt->addButton("app/retro/tico_detect_later"_i18n, []() {});
+            prompt->open();
+        }
+    }
 }
 
 void RetroConsolesView::willAppear(bool resetState) {

@@ -9,6 +9,7 @@ class CatalogProgressNotification : public brls::Box {
 public:
     CatalogProgressNotification() {
         aliveToken_ = std::make_shared<bool>(true);
+        this->setFocusable(false);
         this->setAxis(brls::Axis::COLUMN);
         this->setWidth(300);
         this->setPadding(12);
@@ -19,6 +20,7 @@ public:
 
         // Title header
         headerLabel = new brls::Label();
+        headerLabel->setFocusable(false);
         headerLabel->setText("app/catalog/updating_db"_i18n);
         headerLabel->setFontSize(14);
         headerLabel->setTextColor(nvgRGB(255, 255, 255));
@@ -27,6 +29,7 @@ public:
 
         // Progress bar container & fill
         progressBg = new brls::Box();
+        progressBg->setFocusable(false);
         progressBg->setWidth(276); // 300 - 24 padding
         progressBg->setHeight(8);
         progressBg->setCornerRadius(4);
@@ -34,6 +37,7 @@ public:
         progressBg->setMarginBottom(6);
 
         progressFill = new brls::Box();
+        progressFill->setFocusable(false);
         progressFill->setWidth(0);
         progressFill->setHeight(8);
         progressFill->setCornerRadius(4);
@@ -44,6 +48,7 @@ public:
 
         // Status text label
         statusLabel = new brls::Label();
+        statusLabel->setFocusable(false);
         statusLabel->setText("app/catalog/connecting"_i18n);
         statusLabel->setFontSize(12);
         statusLabel->setTextColor(nvgRGB(170, 170, 180));

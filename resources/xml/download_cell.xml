@@ -1,20 +1,23 @@
 <brls:Box
     width="auto"
     height="auto"
-    focusable="true"
-    paddingTop="12"
-    paddingBottom="12"
-    paddingLeft="15"
-    paddingRight="15"
-    axis="column"
-    cornerRadius="8">
+    focusable="false"
+    axis="column">
 
     <!-- Main Card Header Row -->
     <brls:Box
+        id="headerBox"
         width="auto"
-        height="114px"
+        height="auto"
+        minHeight="114px"
         axis="row"
-        alignItems="center">
+        alignItems="center"
+        focusable="true"
+        cornerRadius="8"
+        paddingTop="8"
+        paddingBottom="8"
+        paddingLeft="15"
+        paddingRight="15">
 
         <!-- Cover Image -->
         <brls:Image
@@ -121,7 +124,9 @@
         width="auto"
         height="auto"
         axis="column"
-        marginTop="10"
+        marginTop="8"
+        paddingLeft="15"
+        paddingRight="15"
         visibility="gone" />
 
 </brls:Box>

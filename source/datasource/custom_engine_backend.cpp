@@ -63,6 +63,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
     magnet_link_ = request.magnet_link;
     torrent_file_path_ = request.torrent_file_path;
     file_index_ = request.file_index;
+    starving_ = false;
 
     const volatile bool* cancel =
         reinterpret_cast<const volatile bool*>(cancel_flag_);
@@ -111,6 +112,7 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
         set_state_locked(StreamState::Error, "prepare stream failed");
         return false;
     }
+    tsnx_engine_resume_reader(engine_, info_hash_str_.c_str());
 
     file_size_ = 0;
     std::string streamed_file_path;
@@ -169,6 +171,9 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
         last_scheduler_tick_ = std::chrono::steady_clock::now();
         int total_win = cfg.critical_pieces + cfg.urgent_pieces + cfg.prefetch_pieces + cfg.speculative_pieces + cfg.normal_pieces;
         util::logLine("custom_engine: streaming installer scheduler enabled (window=" + std::to_string(total_win) + ", strict_verify=1) for " + info_hash_str_);
+    }
+    if (scheduler_enabled_) {
+        scheduler_.on_read_request(0, piece_size_ > 0 ? piece_size_ : 1024 * 1024);
     }
     health_.init(engine_, info_hash_str_, nullptr);
 
@@ -290,6 +295,7 @@ void CustomEngineBackend::close() {
         tsnx_engine_cancel_read(engine_, info_hash_str_.c_str());
     }
     opened_ = false;
+    starving_ = false;
     state_ = StreamState::Idle;
     status_.state = StreamState::Idle;
     // The engine itself stays alive: it is owned by CustomEngineClient and

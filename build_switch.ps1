@@ -6,8 +6,7 @@ $env:PATH = "C:\devkitPro\devkitA64\bin;C:\devkitPro\tools\bin;C:\devkitPro\msys
 Write-Host "Starting Nintendo Switch build..."
 Write-Host "DEVKITPRO = $env:DEVKITPRO"
 
-$nproc = [System.Environment]::ProcessorCount
-if ($nproc -lt 1) { $nproc = 4 }
+$nproc = 2
 Write-Host "Parallel jobs: $nproc"
 & make -j $nproc
 

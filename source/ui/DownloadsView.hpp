@@ -23,6 +23,11 @@ public:
         }
     }
 
+    brls::View* getDefaultFocus() override;
+    brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
+    brls::View* getNextCellFocus(brls::FocusDirection direction);
+
+    BRLS_BIND(brls::Box, headerBox, "headerBox");
     BRLS_BIND(brls::Image, cover, "cover");
     BRLS_BIND(brls::Label, title, "title");
     BRLS_BIND(brls::Label, countBadge, "countBadge");
@@ -74,6 +79,8 @@ struct DownloadGroup {
     std::string failed_name;
     std::string failed_error;
     bool has_port_install = false;
+    std::string retro_console_id;
+    std::string retro_target_mode;
 };
 
 class DownloadsView : public brls::Activity {
