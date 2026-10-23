@@ -37,6 +37,10 @@ struct SpaceCache {
     bool valid = false;
 };
 SpaceCache g_space_cache[2]; // 0: NAND (BuiltInUser), 1: SD (SdCard)
+// Guards g_space_cache only. A cache hit must not wait for
+// g_switch_service_mutex, which the installer and library hold across slow
+// ns/ncm work.
+std::mutex g_space_cache_mtx;
 } // namespace
 
 void preventSleepBegin() {
@@ -240,15 +244,19 @@ void triggerHapticFeedback(int style) {
 
 bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space) {
 #ifdef __SWITCH__
-    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
     int cache_idx = (storageId == 1) ? 1 : 0;
     const auto now = std::chrono::steady_clock::now();
-    if (g_space_cache[cache_idx].valid &&
-        std::chrono::duration_cast<std::chrono::milliseconds>(now - g_space_cache[cache_idx].last_query).count() < 5000) {
-        out_free_space = g_space_cache[cache_idx].free_space;
-        out_total_space = g_space_cache[cache_idx].total_space;
-        return true;
+    {
+        std::lock_guard<std::mutex> cache_lock(g_space_cache_mtx);
+        if (g_space_cache[cache_idx].valid &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - g_space_cache[cache_idx].last_query).count() < 5000) {
+            out_free_space = g_space_cache[cache_idx].free_space;
+            out_total_space = g_space_cache[cache_idx].total_space;
+            return true;
+        }
     }
+
+    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
 
     NcmContentStorage cs = {};
     NcmStorageId target_id = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
@@ -283,10 +291,13 @@ bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_
         return false;
     }
 
-    g_space_cache[cache_idx].free_space = free_space;
-    g_space_cache[cache_idx].total_space = total_space;
-    g_space_cache[cache_idx].last_query = now;
-    g_space_cache[cache_idx].valid = true;
+    {
+        std::lock_guard<std::mutex> cache_lock(g_space_cache_mtx);
+        g_space_cache[cache_idx].free_space = free_space;
+        g_space_cache[cache_idx].total_space = total_space;
+        g_space_cache[cache_idx].last_query = std::chrono::steady_clock::now();
+        g_space_cache[cache_idx].valid = true;
+    }
 
     out_free_space = free_space;
     out_total_space = total_space;

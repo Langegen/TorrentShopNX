@@ -41,6 +41,7 @@
 #include "config/config.h"
 #include "utils/log.h"
 #include "utils/perf_stats.h"
+#include "utils/ui_watchdog.h"
 #include "engine/engine_log.h"
 #include "utils/switch_utils.h"
 #include "utils/screen_sleep_manager.h"
@@ -65,29 +66,28 @@ static bool checkAppletMode() {
 
 #ifdef __SWITCH__
 extern "C" {
-    u32 __nx_socket_mem_size = 0x02000000; // Default to 32MB for Title Mode
-    size_t __nx_socket_tcp_tx_buf_size = 0x10000; // Default to 64KB TCP send buffer
-    size_t __nx_socket_tcp_rx_buf_size = 0x10000; // Default to 64KB TCP recv buffer
-
     Result g_socket_init_result = 0xFFFFFFFF;
-    u32 g_socket_mem_size_used = 0;
+    u32 g_socket_mem_size_used = 0;   // BSD transfer memory actually handed to bsd:u
+    u32 g_socket_sb_efficiency = 0;
     int g_applet_type_detected = -1;
+
+    // Size of the BSD transfer memory libnx allocates for a config. This memory
+    // is the WHOLE socket-buffer pool of the process (every TCP/UDP socket,
+    // curl included), not a per-socket budget. Same formula as libnx
+    // bsdInitialize(): sb_efficiency * page_round(tx_max + rx_max + udp_tx + udp_rx).
+    static u32 socketPoolBytes(const SocketInitConfig& c) {
+        u32 tx = c.tcp_tx_buf_max_size ? c.tcp_tx_buf_max_size : c.tcp_tx_buf_size;
+        u32 rx = c.tcp_rx_buf_max_size ? c.tcp_rx_buf_max_size : c.tcp_rx_buf_size;
+        u32 sum = tx + rx + c.udp_tx_buf_size + c.udp_rx_buf_size;
+        sum = (sum + 0xFFF) & ~0xFFFu;
+        return c.sb_efficiency * sum;
+    }
 
     void userAppInit(void) {
         appletLockExit();
         AppletType applet_type = appletGetAppletType();
         g_applet_type_detected = static_cast<int>(applet_type);
         bool is_applet = (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet);
-
-        if (is_applet) {
-            __nx_socket_mem_size = 0x00100000;        // 1MB minimal socket pool for Applet Mode
-            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB default send buffer
-            __nx_socket_tcp_rx_buf_size = 0x4000;      // 16KB default recv buffer
-        } else {
-            __nx_socket_mem_size = 0x02000000;        // 32MB socket pool for Title Mode
-            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB initial send buffer
-            __nx_socket_tcp_rx_buf_size = 0x8000;      // 32KB initial recv buffer
-        }
 
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
         if (is_applet) {
@@ -100,25 +100,37 @@ extern "C" {
             cfg.udp_rx_buf_size = 8192;
             cfg.udp_tx_buf_size = 8192;
         } else {
-            // Switch BSD buffer pool is fixed (32MB in Title mode).
-            // BitTorrent is downstream-heavy: large RX buffers (512KB) support 25+ MB/s
-            // speeds from fast seeders, while minimal TX buffers (32KB) prevent mbuf waste.
-            // sb_efficiency = 2 (standard Switch libnx factor) keeps (512+32)*2 ~ 1.08MB per socket,
-            // allowing 20-25 parallel peers with plenty of headroom for UDP/trackers without ENOBUFS.
+            // The pool is sb_efficiency * (tx_max + rx_max + udp_tx + udp_rx) for the
+            // whole process (see socketPoolBytes). The old config (2 * 592 KB) gave
+            // ~1.2 MB: socket() failed with ENOBUFS after a few dozen sockets, so the
+            // engine held 15-20 peers out of hundreds known, UDP trackers failed with
+            // errno 105 and image fetches failed mid-download.
+            //
+            // 8 * (1.5 MB + 64 KB + 16 KB + 32 KB) ~= 12.9 MB: room for ~64 peers,
+            // dials in flight, trackers, DHT and HTTP. sb_efficiency stays within the
+            // documented 1..8; the size comes from rx_max, which is only the autotune
+            // ceiling of one socket (the engine sets SO_RCVBUF explicitly anyway).
             cfg.num_bsd_sessions = 16;
-            cfg.sb_efficiency = 2;
-            cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
-            cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x8000;   // 32 KB max (only small 17-byte BT requests)
-            cfg.tcp_rx_buf_max_size = 0x80000;  // 512 KB max (high throughput receive window)
-            cfg.udp_rx_buf_size = 0x8000;       // 32 KB
-            cfg.udp_tx_buf_size = 0x4000;       // 16 KB
+            cfg.sb_efficiency = 8;
+            cfg.tcp_tx_buf_size = 0x4000;        // 16 KB initial
+            cfg.tcp_rx_buf_size = 0x8000;        // 32 KB initial
+            cfg.tcp_tx_buf_max_size = 0x10000;   // 64 KB max (we also upload pieces)
+            cfg.tcp_rx_buf_max_size = 0x180000;  // 1.5 MB max
+            cfg.udp_rx_buf_size = 0x8000;        // 32 KB
+            cfg.udp_tx_buf_size = 0x4000;        // 16 KB
         }
         g_socket_init_result = socketInitialize(&cfg);
+        if (R_FAILED(g_socket_init_result) && !is_applet) {
+            // Smaller pool (~6.4 MB) if the service refused the big one.
+            cfg.sb_efficiency = 4;
+            g_socket_init_result = socketInitialize(&cfg);
+        }
         if (R_FAILED(g_socket_init_result)) {
+            cfg = *(socketGetDefaultInitConfig());
             g_socket_init_result = socketInitializeDefault();
         }
-        g_socket_mem_size_used = __nx_socket_mem_size;
+        g_socket_mem_size_used = socketPoolBytes(cfg);
+        g_socket_sb_efficiency = cfg.sb_efficiency;
 
         // Note: romfsInit() is deliberately NOT called here in userAppInit().
         // Calling romfsInit() here locks the running .nro file on SD card before main()
@@ -398,7 +410,8 @@ int main(int argc, char** argv) {
 
 #ifdef __SWITCH__
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
-                  " mem_size=" + std::to_string(g_socket_mem_size_used) +
+                  " pool=" + std::to_string(g_socket_mem_size_used / 1024) + "KB" +
+                  " sb_eff=" + std::to_string(g_socket_sb_efficiency) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
     bool startupBoostActive = false;
     if (!checkAppletMode()) {
@@ -613,12 +626,14 @@ int main(int argc, char** argv) {
     util::ScreenSleepManager::instance().init();
 
     util::logLine("main: entering mainLoop");
+    uiwd::start();
     // Execute Borealis main loop
     try {
         int frameCount = 0;
         while (brls::Application::mainLoop()) {
             frameCount++;
             perf::frame();
+            uiwd::beat();
             if (frameCount <= 3 || frameCount == 10 || frameCount == 30 || frameCount == 60) {
                 util::logLine("main: mainLoop frame=" + std::to_string(frameCount));
                 if (frameCount == 60) {
@@ -659,6 +674,7 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
+    uiwd::stop();
     util::ScreenSleepManager::instance().shutdown();
 
     // Signal background tasks and network transfers to cancel immediately

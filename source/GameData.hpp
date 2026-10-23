@@ -1303,6 +1303,12 @@ inline std::string normalizeImageUrl(const std::string& url) {
     if (norm.rfind("https://", 0) == 0 && (norm.find("imagebam.com") != std::string::npos || norm.find("vfl.ru") != std::string::npos)) {
         norm.replace(0, 5, "http");
     }
+    // wsrv.nl (eShop screenshot proxy) serves an ECDSA-only certificate that the
+    // Switch ssl service fails to handshake with ("SSL connect error" on every
+    // fetch). The same images are served over plain HTTP without a redirect.
+    if (norm.rfind("https://wsrv.nl/", 0) == 0 || norm.rfind("https://images.weserv.nl/", 0) == 0) {
+        norm.replace(0, 5, "http");
+    }
     return norm;
 }
 

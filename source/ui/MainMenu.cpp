@@ -25,7 +25,9 @@
 #include <borealis/views/hint.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <mutex>
 #include <thread>
 #include <ctime>
 #include <filesystem>
@@ -565,10 +567,65 @@ void MainMenu::updateDownloadsBadge(int count) {
     }
 }
 
+namespace {
+// Dashboard values that need a service call (ncm free space, nifm IP). They are
+// refreshed on a borealis worker so the 1 s dashboard timer never makes the UI
+// thread wait on ncm/nifm or on g_switch_service_mutex (measured: one dropped
+// frame every second, on every screen, before this).
+struct DashboardSysInfo {
+    std::mutex mtx;
+    bool have = false;
+    std::string sd, nand, ip;
+    std::atomic<bool> inFlight{false};
+    std::chrono::steady_clock::time_point last{};
+};
+DashboardSysInfo g_dashInfo;
+
+void refreshDashboardSysInfoAsync() {
+    auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_dashInfo.mtx);
+        if (g_dashInfo.have && now - g_dashInfo.last < std::chrono::seconds(5)) return;
+    }
+    if (g_dashInfo.inFlight.exchange(true)) return;
+    brls::async([]() {
+        int64_t sdFree = 0, sdTotal = 0, nandFree = 0, nandTotal = 0;
+        bool sdOk = util::getStorageStats(1, sdFree, sdTotal);
+        bool nandOk = util::getStorageStats(0, nandFree, nandTotal);
+        std::string ip = ui::RemoteAddView::getLocalIpAddress();
+        {
+            std::lock_guard<std::mutex> lock(g_dashInfo.mtx);
+            g_dashInfo.sd = sdOk
+                ? formatBytesLocal(static_cast<unsigned long long>(sdFree)) + " / " + formatBytesLocal(static_cast<unsigned long long>(sdTotal))
+                : "-";
+            g_dashInfo.nand = nandOk
+                ? formatBytesLocal(static_cast<unsigned long long>(nandFree)) + " / " + formatBytesLocal(static_cast<unsigned long long>(nandTotal))
+                : "-";
+            g_dashInfo.ip = ip;
+            g_dashInfo.have = true;
+            g_dashInfo.last = std::chrono::steady_clock::now();
+        }
+        g_dashInfo.inFlight.store(false);
+    });
+}
+} // namespace
+
 void MainMenu::refreshDashboardState() {
-    // 1. Calculate active downloads count (fast, in-memory)
+    // The timer keeps firing while other screens are on top: skip the work then.
+    const auto& stack = brls::Application::getActivitiesStack();
+    if (!stack.empty() && stack.back() != this) return;
+
+    refreshDashboardSysInfoAsync();
+
+    // 1. Active downloads: a snapshot taken under the queue lock (the progress
+    // thread mutates the queue). try_lock: never stall a frame for it.
     auto& dlMgr = ui::DownloadManager::instance();
-    const auto& items = dlMgr.getImpl().queue();
+    std::vector<download::DownloadItem> items;
+    {
+        std::unique_lock<std::recursive_mutex> lock(dlMgr.getImpl().queueMutex(), std::try_to_lock);
+        if (!lock.owns_lock()) return;   // next tick
+        items = dlMgr.getImpl().queue();
+    }
 
     int activeCount = 0;
     for (const auto& it : items) {
@@ -580,18 +637,16 @@ void MainMenu::refreshDashboardState() {
         }
     }
 
-    // 2. Storage Stats (SD & NAND)
-    int64_t sdFree = 0, sdTotal = 0;
-    bool sdOk = util::getStorageStats(1, sdFree, sdTotal);
-    std::string sdStr = sdOk
-        ? (formatBytesLocal(static_cast<unsigned long long>(sdFree)) + " / " + formatBytesLocal(static_cast<unsigned long long>(sdTotal)))
-        : "45.2 GB / 128.0 GB";
-
-    int64_t nandFree = 0, nandTotal = 0;
-    bool nandOk = util::getStorageStats(0, nandFree, nandTotal);
-    std::string nandStr = nandOk
-        ? (formatBytesLocal(static_cast<unsigned long long>(nandFree)) + " / " + formatBytesLocal(static_cast<unsigned long long>(nandTotal)))
-        : "18.5 GB / 32.0 GB";
+    // 2. Storage Stats (SD & NAND) and IP: last values from the worker
+    std::string sdStr = "...", nandStr = "...", ipStr;
+    {
+        std::lock_guard<std::mutex> lock(g_dashInfo.mtx);
+        if (g_dashInfo.have) {
+            sdStr = g_dashInfo.sd;
+            nandStr = g_dashInfo.nand;
+            ipStr = g_dashInfo.ip;
+        }
+    }
 
     // 3. Catalog Count & Update Timestamp (fast in-memory, avoid synchronous SD card stat every second)
     auto catalog = getCatalogSnapshot();
@@ -619,7 +674,7 @@ void MainMenu::refreshDashboardState() {
         if (!catalog->empty()) {
             summaryView_->setCatalogSample(*catalog);
         }
-        summaryView_->setRemoteInfo(ui::RemoteAddView::getLocalIpAddress(), 8080);
+        if (!ipStr.empty()) summaryView_->setRemoteInfo(ipStr, 8080);
     }
 }
 

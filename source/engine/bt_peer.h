@@ -100,6 +100,9 @@ int peer_nb_init(peer_nb *p, int sock, int64_t piece_count);
 // Same, but uses a µTP session instead of a TCP socket.
 int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count);
 void peer_nb_apply_speed_opts(peer_nb *p);
+// Set SO_RCVBUF to `bytes`, halving down to 64 KB if the stack refuses.
+// Returns the size that stuck, or 0 (TCP only; no-op without a socket).
+int peer_nb_set_rcvbuf(peer_nb *p, int bytes);
 void peer_nb_free(peer_nb *p);
 
 // Drain the socket into the rx buffer. Returns the number of bytes read (0 if
