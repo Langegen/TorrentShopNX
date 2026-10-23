@@ -153,6 +153,38 @@ function Build-MechanismsTest {
     Write-Host "OK -> pctest\test_mechanisms"
 }
 
+# 7z codec pre-check + libarchive ARM64 + rollback of partial extraction.
+# Needs mingw-w64-x86_64-libarchive. Run:
+#   pctest\test_extract_safety.exe <dir with big_arm64.7z, small_corrupt.7z, encrypted.7z, src_big\> <workDir>
+function Build-ExtractSafetyTest {
+    $OBJDIR = "pctest\obj\xs"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR -Force | Out-Null }
+    $objs = @()
+    foreach ($src in (Get-ChildItem "source\7zsdk\*.c")) {
+        $o = Join-Path $OBJDIR ($src.Name + ".o")
+        & $GCC -O1 -DZ7_PPMD_SUPPORT -DZ7_EXTRACT_ONLY -c $src.FullName -o $o
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $objs += $o
+    }
+    $XS_CPP = @(
+        "pctest\test_extract_safety.cpp",
+        "source\utils\archive_utils.cpp",
+        "source\utils\sevenzip_utils.cpp",
+        "source\utils\extraction_journal.cpp",
+        "source\utils\file_ops.cpp",
+        "source\utils\log.cpp"
+    )
+    foreach ($src in $XS_CPP) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        & $GPP -std=gnu++20 -O1 -g -Isource -Iinclude -c $src -o $o
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $objs += $o
+    }
+    & $GPP $objs -o "pctest\test_extract_safety" -larchive
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_extract_safety"
+}
+
 Build-CppObjects
 
 Build-Test "test_bencode"
@@ -166,4 +198,5 @@ Build-AppTest
 Build-NetBrowsingTest
 Build-PerfTest
 Build-MechanismsTest
+Build-ExtractSafetyTest
 

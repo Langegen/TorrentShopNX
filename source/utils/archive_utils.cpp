@@ -15,8 +15,53 @@
 #include <cmath>
 #include <cstdio>
 #include <unordered_set>
+#include "extraction_journal.h"
 
 namespace util {
+
+// 7-Zip 24.07: "7z a -t7z -mf=ARM64 -m0=LZMA2:d=4k -mhc=off probe.7z probe.bin",
+// probe.bin = 64 bytes where byte[i] = (i*7+3) & 0xFF. Folder = [LZMA2, ARM64],
+// the exact coder chain devkitPro's libarchive 3.7.2 rejects.
+static const unsigned char kArm64Lzma2Probe7z[] = {
+    0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0x00, 0x04, 0x49, 0xa2, 0xce, 0xfb, 0x44, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x95, 0xd7, 0x9f, 0x66,
+    0x01, 0x00, 0x3f, 0x03, 0x0a, 0x11, 0x18, 0x1f, 0x26, 0x2d, 0x34, 0x3b, 0x42, 0x49, 0x50, 0x57,
+    0x5e, 0x65, 0x6c, 0x73, 0x7a, 0x81, 0x88, 0x8f, 0x96, 0x9d, 0xa4, 0xab, 0xb2, 0xb9, 0xc0, 0xc7,
+    0xce, 0xd5, 0xdc, 0xe3, 0xea, 0xf1, 0xf8, 0xff, 0x06, 0x0d, 0x14, 0x1b, 0x22, 0x29, 0x30, 0x37,
+    0x3e, 0x45, 0x4c, 0x53, 0x5a, 0x61, 0x68, 0x6f, 0x76, 0x7d, 0x84, 0x8b, 0x92, 0x99, 0xa0, 0xa7,
+    0xae, 0xb5, 0xbc, 0x00, 0x01, 0x04, 0x06, 0x00, 0x01, 0x09, 0x44, 0x00, 0x07, 0x0b, 0x01, 0x00,
+    0x02, 0x21, 0x21, 0x01, 0x00, 0x01, 0x0a, 0x01, 0x00, 0x0c, 0x40, 0x40, 0x00, 0x08, 0x0a, 0x01,
+    0xf0, 0xec, 0xd9, 0xcb, 0x00, 0x00, 0x05, 0x01, 0x19, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x11, 0x15, 0x00, 0x70, 0x00, 0x72, 0x00, 0x6f, 0x00, 0x62, 0x00, 0x65, 0x00, 0x2e, 0x00,
+    0x62, 0x00, 0x69, 0x00, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+bool libarchiveSupports7zArm64Lzma() {
+    static const bool supported = [] {
+        bool ok = false;
+        std::string err;
+        struct archive* a = archive_read_new();
+        if (a) {
+            archive_read_support_format_7zip(a);
+            struct archive_entry* entry = nullptr;
+            if (archive_read_open_memory(a, kArm64Lzma2Probe7z, sizeof(kArm64Lzma2Probe7z)) == ARCHIVE_OK &&
+                archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+                unsigned char buf[128];
+                la_ssize_t n = archive_read_data(a, buf, sizeof(buf));
+                ok = (n == 64);
+                for (la_ssize_t i = 0; ok && i < n; i++) {
+                    ok = buf[i] == static_cast<unsigned char>((i * 7 + 3) & 0xFF);
+                }
+            }
+            if (!ok && archive_error_string(a)) err = archive_error_string(a);
+            archive_read_free(a);
+        }
+        util::logLine(std::string("archive_utils: ") + archive_version_string() +
+                      " 7z LZMA2+ARM64 support=" + (ok ? "1" : "0") + (err.empty() ? "" : " (" + err + ")"));
+        return ok;
+    }();
+    return supported;
+}
 
 bool isArchiveFile(const std::string& path) {
     if (path.empty()) return false;
@@ -488,8 +533,14 @@ static bool extractLibarchiveInternal(
     std::string& outError,
     uint64_t knownUncompressedSize = 0,
     size_t knownTotalEntries = 0,
-    PathTransformFn pathTransform = nullptr
+    PathTransformFn pathTransform = nullptr,
+    ExtractionJournal* journal = nullptr
 ) {
+    auto makeDirs = [journal](const std::string& dir) {
+        if (journal) journal->createDirectories(dir);
+        else safeCreateDirectories(dir);
+    };
+
     if (source) {
         util::logLine("archive_utils: extractLibarchiveInternal stream start, size=" + std::to_string(streamArchiveSize) + " -> " + destinationDir);
     } else {
@@ -506,7 +557,7 @@ static bool extractLibarchiveInternal(
                 return false;
             }
             totalFileSize = std::filesystem::file_size(archivePath, ec);
-            safeCreateDirectories(destinationDir);
+            makeDirs(destinationDir);
         } catch (const std::exception& e) {
             outError = e.what();
             util::logLine("archive_utils: exception preparing destination: " + std::string(e.what()));
@@ -517,7 +568,7 @@ static bool extractLibarchiveInternal(
             getArchiveTotals(archivePath, knownUncompressedSize, knownTotalEntries);
         }
     } else {
-        safeCreateDirectories(destinationDir);
+        makeDirs(destinationDir);
     }
 
     struct archive* a = archive_read_new();
@@ -682,12 +733,13 @@ static bool extractLibarchiveInternal(
         }
 
         if (isDir) {
-            safeCreateDirectories(fullPath);
+            makeDirs(fullPath);
         } else {
             size_t lastSlash = fullPath.rfind('/');
             if (lastSlash != std::string::npos) {
-                safeCreateDirectories(fullPath.substr(0, lastSlash));
+                makeDirs(fullPath.substr(0, lastSlash));
             }
+            if (journal) journal->noteFile(fullPath);
 
             FILE* outFile = fopen(fullPath.c_str(), "wb");
             if (!outFile) {
@@ -816,31 +868,40 @@ bool extractArchive(
     PathTransformFn pathTransform
 ) {
     ScopedCpuBoost boostGuard; // raises CPU to 1785 MHz and prevents auto-sleep!
+    ExtractionJournal journal;  // removes what this extraction created if it fails
 
     // 7z archives try 7-Zip SDK decoder first (supports all ARM64/ARM/x86 BCJ, BCJ2, PPMd codecs)
     if (is7zFile(archivePath)) {
         uint64_t knownUncompressed = 0;
         size_t knownEntries = 0;
-        bool ok = extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError, &knownUncompressed, &knownEntries, pathTransform);
+        bool noFallback = false;
+        bool ok = extract7zArchive(archivePath, destinationDir, progressCb, cancelToken, outError,
+                                   &knownUncompressed, &knownEntries, pathTransform, &journal, &noFallback);
         if (ok) return true;
-        if (cancelToken && cancelToken->load()) return false;
+        if (noFallback || (cancelToken && cancelToken->load())) {
+            journal.rollback();
+            return false;
+        }
 
         // If 7zsdk indicated requires_streaming (e.g. folder > 64 MB / 2 GB file) or memory error,
         // seamlessly fall back to streaming libarchive which streams 64KB blocks directly to disk!
         util::logLine("archive_utils: 7zsdk returned '" + outError + "', falling back to streaming libarchive");
         std::string fallbackErr;
-        if (extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, "", progressCb, cancelToken, nullptr, fallbackErr, knownUncompressed, knownEntries, pathTransform)) {
+        if (extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, "", progressCb, cancelToken, nullptr, fallbackErr, knownUncompressed, knownEntries, pathTransform, &journal)) {
             util::logLine("archive_utils: streaming libarchive fallback succeeded for 7z archive!");
             outError.clear();
             return true;
         }
-        if (outError.empty() || outError == "requires_streaming") {
+        if (outError.empty() || outError == k7zRequiresStreaming) {
             outError = fallbackErr.empty() ? "Ошибка распаковки 7z архива" : fallbackErr;
         }
+        journal.rollback();
         return false;
     }
 
-    return extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, "", progressCb, cancelToken, nullptr, outError, 0, 0, pathTransform);
+    bool ok = extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, "", progressCb, cancelToken, nullptr, outError, 0, 0, pathTransform, &journal);
+    if (!ok) journal.rollback();
+    return ok;
 }
 
 bool extractArchiveFromSource(
@@ -859,25 +920,34 @@ bool extractArchiveFromSource(
     }
 
     ScopedCpuBoost boostGuard; // raises CPU to 1785 MHz and prevents auto-sleep!
+    ExtractionJournal journal;  // removes what this extraction created if it fails
 
+    // The 7z header (start + tail of the stream) is checked first; an archive no
+    // decoder can handle is rejected before the bulk of the torrent is fetched.
     uint64_t knownUncompressed = 0;
     size_t knownEntries = 0;
+    bool noFallback = false;
     bool ok = extract7zArchiveFromSource(source, archiveSize, destinationDir, progressCb,
                                          cancelToken, pauseToken, outError,
-                                         &knownUncompressed, &knownEntries, pathTransform);
+                                         &knownUncompressed, &knownEntries, pathTransform,
+                                         &journal, &noFallback);
     if (ok) return true;
-    if (cancelToken && cancelToken->load()) return false;
+    if (noFallback || (cancelToken && cancelToken->load())) {
+        journal.rollback();
+        return false;
+    }
 
     util::logLine("archive_utils: extractArchiveFromSource 7zsdk returned '" + outError + "', falling back to streaming libarchive");
     std::string fallbackErr;
-    if (extractLibarchiveInternal("", source, archiveSize, destinationDir, "", progressCb, cancelToken, pauseToken, fallbackErr, knownUncompressed, knownEntries, pathTransform)) {
+    if (extractLibarchiveInternal("", source, archiveSize, destinationDir, "", progressCb, cancelToken, pauseToken, fallbackErr, knownUncompressed, knownEntries, pathTransform, &journal)) {
         util::logLine("archive_utils: streaming libarchive fallback succeeded for stream archive!");
         outError.clear();
         return true;
     }
-    if (outError.empty() || outError == "requires_streaming") {
+    if (outError.empty() || outError == k7zRequiresStreaming) {
         outError = fallbackErr.empty() ? "Ошибка распаковки потокового архива" : fallbackErr;
     }
+    journal.rollback();
     return false;
 }
 
@@ -890,7 +960,10 @@ bool extractSingleFileFromArchive(
     std::string& outError
 ) {
     ScopedCpuBoost boostGuard;
-    return extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, innerFilePath, progressCb, cancelToken, nullptr, outError, 0, 0);
+    ExtractionJournal journal;
+    bool ok = extractLibarchiveInternal(archivePath, nullptr, 0, destinationDir, innerFilePath, progressCb, cancelToken, nullptr, outError, 0, 0, nullptr, &journal);
+    if (!ok) journal.rollback();
+    return ok;
 }
 
 bool createZipArchive(

@@ -50,3 +50,6 @@ config.ini
 log.txt
 logs/
 /build_pc
+
+# Locally built libarchive for Switch (scripts/build_libarchive_switch.sh)
+_external/libarchive-switch/

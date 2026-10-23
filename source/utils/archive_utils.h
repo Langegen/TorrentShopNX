@@ -55,6 +55,11 @@ bool getArchiveTotals(
 
 using PathTransformFn = std::function<std::string(const std::string& entryName, bool isDir)>;
 
+// True if the linked libarchive can decode 7z LZMA/LZMA2 + ARM64 filter folders
+// (needs a build against liblzma >= 5.4). Checked once by decoding a tiny
+// embedded archive; the result is cached.
+bool libarchiveSupports7zArm64Lzma();
+
 // Iterates entries in an archive without decompressing file contents.
 // Calls callback for each entry until callback returns false or end of archive.
 // Returns true if the archive was successfully opened and read.
