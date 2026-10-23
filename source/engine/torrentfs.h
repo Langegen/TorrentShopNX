@@ -186,6 +186,13 @@ void torrentfs_announce_now(torrentfs *tfs);
 // session cap when unrestricted. For the debug panel.
 int torrentfs_calm(const torrentfs *tfs);
 
+// Session cap for this torrent (<= the compiled MAX_SESS; <= 0 restores it).
+// The dial target follows it down. For tests and a future global budget.
+void torrentfs_set_session_limit(torrentfs *tfs, int n);
+
+// Peer turnover timing, process-wide (defaults 30 s / 60 s). Tests shorten it.
+void torrentfs_set_rotation_timing(int turnover_secs, int trial_secs);
+
 // Fill-rate governor (an Options toggle, on by default): when the backlog is
 // deep, pause claiming while the measured download rate exceeds a
 // backlog-tied target (unlimited under 10 s of backlog, tapering to 1.5 MB/s

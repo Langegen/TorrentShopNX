@@ -1011,6 +1011,21 @@ void tsnx_engine_set_backlog_ms(tsnx_engine *eng, const char *hash, int ms) {
     REG_UNLOCK();
 }
 
+bool tsnx_engine_set_session_limit(tsnx_engine *eng, const char *hash, int n) {
+    eng = active_engine(eng);
+    if (!eng || !hash) return false;
+    bool ok = false;
+    REG_LOCK();
+    tsnx_torrent *t = find_locked(eng, hash);
+    if (t && t->fs) { torrentfs_set_session_limit(t->fs, n); ok = true; }
+    REG_UNLOCK();
+    return ok;
+}
+
+void tsnx_engine_set_rotation_timing(int turnover_secs, int trial_secs) {
+    torrentfs_set_rotation_timing(turnover_secs, trial_secs);
+}
+
 void tsnx_engine_set_governor(tsnx_engine *eng, int on) {
     (void)eng;
     torrentfs_set_governor(on);

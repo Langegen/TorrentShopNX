@@ -169,6 +169,14 @@ function Build-RegistryTest {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Write-Host "OK -> pctest\test_swarm_sched"
 
+    # Peer rotation test (24 seeders, session cap): reuses the swarm test.
+    $o_rot = Join-Path $OBJDIR "test_rotation.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -Ipctest -c pctest\test_rotation.cpp -o $o_rot
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_rot $o_sched $o_log $CPP_OBJ -o "pctest\test_rotation" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_rotation"
+
     # Peer pool index fuzz test: includes torrentfs.c, so link everything else.
     $o_pool = Join-Path $OBJDIR "test_pool.o"
     & $GCC @CFLAGS -c pctest\test_pool.c -o $o_pool

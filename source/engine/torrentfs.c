@@ -130,6 +130,25 @@
 #define SLOW_FRACTION    0.25
 #define SLOW_MIN_BYTES   (512 * 1024)
 
+// Peer turnover ("tournament"): every TURNOVER_SECS, if the session table is
+// (nearly) at its target and the pool has candidates ready, up to
+// TURNOVER_HEADROOM extra sessions may be dialed. Every session gets a
+// TRIAL_SECS grace period; when the window closes the table is trimmed back
+// to its target, one session per upkeep tick, always dropping the worst
+// established session by capability -- an old one or a newcomer alike. What
+// stays is the best of old + new, so the swarm only gets faster. A peer
+// rotated out this way waits SLOW_DROP_SECS before it is dialed again, which
+// leaves the slots to untried candidates. Without this the engine kept
+// whichever peers connected first: dialing stopped at the target and a
+// 20 KB/s peer held its slot forever.
+#define TURNOVER_SECS     30
+#define TRIAL_SECS        60
+#define TURNOVER_HEADROOM 4
+#define SLOW_DROP_SECS    600
+// Unchoked, requests on order, nothing delivered for this long: snubbed. Such
+// a session counts as slow at once (the stall gate needs 25 s and strikes).
+#define SNUB_SECS         15
+
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
 #define RAM_BUDGET       (256LL << 20)
 #define AQ_MAX           48
@@ -251,6 +270,13 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 
 enum { PIECE_NEEDED = 0, PIECE_ACTIVE = 1, PIECE_DONE = 2, PIECE_WRITING = 3 };
 
+static volatile int g_turnover_secs = TURNOVER_SECS;   // tunable (tests)
+static volatile int g_trial_secs = TRIAL_SECS;
+void torrentfs_set_rotation_timing(int turnover_secs, int trial_secs) {
+    if (turnover_secs > 0) g_turnover_secs = turnover_secs;
+    if (trial_secs > 0) g_trial_secs = trial_secs;
+}
+
 static volatile int g_governor = 1;
 void torrentfs_set_governor(int on) { g_governor = on ? 1 : 0; }
 int  torrentfs_governor(void)       { return g_governor; }
@@ -326,6 +352,7 @@ typedef struct {
     double  up_rate;        // smoothed upload rate to this peer, bytes/s
     int have_in_file;      // pieces of the streamed file the peer has (BITFIELD + HAVE)
     bool slow;             // speed class (see SLOW_FRACTION), refreshed every upkeep
+    bool snubbed;          // unchoked with requests on order, nothing for SNUB_SECS
     // Service-time meter for the speed class: per matched block, the time from
     // when the peer could start on it (the later of its request and the
     // previous delivery) to its arrival. Idle time never counts, so a bursty
@@ -341,6 +368,7 @@ typedef struct {
 
 static void sess_drop_requests(torrentfs *t, sess *s);
 static aq_entry *aq_find(torrentfs *t, int64_t idx);
+static double sess_capability(const torrentfs *t, const sess *s);
 
 #define SESS_MASK_BYTES ((MAX_SESS + 7) / 8)
 
@@ -428,6 +456,17 @@ struct torrentfs {
     uint32_t zone_gen;         // bumped (release) whenever piece zones change
     uint32_t pf_rebuilds;      // [perf] candidate rebuilds
     int n_fast;                // unchoked sessions not classified slow (netloop)
+
+    // Turnover (netloop): see TURNOVER_SECS.
+    int live_target;           // sessions to keep (default DIAL_STOP_LIVE)
+    int live_max;              // hard cap (default MAX_SESS)
+    u64 last_turnover;
+    u64 turnover_until;        // headroom window open until (0 = closed)
+    u64 turnover_start;        // when the current window opened
+    int trim_left;             // the window closed: sessions still to trim (<= headroom)
+    uint32_t dial_seq;         // every 4th dial explores an untried address
+    int st_rotated, pf_rotated;    // sessions rotated out by turnover / cap
+    int st_dials, pf_dials;
     int n_aq;
     int n_active_aq;
     uint8_t *aq_buf_pool[AQ_MAX];
@@ -459,6 +498,11 @@ struct torrentfs {
     uint8_t peer_src[TFS_MAX_PEERS];     // where the address came from (PEER_SRC_*)
     uint8_t peer_fail_kind[TFS_MAX_PEERS];  // last failure: 1 = connect timeout, 2 = other
     uint8_t peer_sha_fails[TFS_MAX_PEERS];  // accumulated sha1 check failures from this peer
+    // Speed history: the best capability (KB/s) any session to this address
+    // reached, and how often it was rotated out for being slow. Dial order and
+    // pool eviction prefer addresses that were fast before.
+    float peer_best_kbps[TFS_MAX_PEERS];
+    uint8_t peer_rot[TFS_MAX_PEERS];
     u64 peer_next_try[TFS_MAX_PEERS];
     u64 pause_dials_until;               // temporarily suspend new TCP dials (e.g. metadata probe)
     int peer_count;
@@ -929,6 +973,13 @@ static inline int peer_eval_score(const torrentfs *t, int j) {
     } else {
         score -= (int)t->peer_fails[j] * 40;
     }
+    // Speed history: an address that was fast before is dialed first.
+    float kb = t->peer_best_kbps[j];
+    if (kb >= 4096.0f) score += 1500;
+    else if (kb >= 1024.0f) score += 1000;
+    else if (kb >= 256.0f) score += 400;
+    else if (kb >= 64.0f) score += 100;
+    score -= (int)t->peer_rot[j] * 300;
     return score;
 }
 
@@ -1036,6 +1087,8 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
         t->peer_next_try[slot] = 0;
         t->peer_ok[slot]       = 0;
         t->peer_src[slot]      = (uint8_t)src;
+        t->peer_best_kbps[slot] = 0.0f;
+        t->peer_rot[slot]      = 0;
         added++;
     }
     mutexUnlock(&t->lock);
@@ -1070,6 +1123,9 @@ static int take_peer(torrentfs *t, peer_addr *out) {
     int n_in = 0;
     for (int k = 0; k < MAX_SESS; k++)
         if (t->S[k].active && t->S[k].pidx < 0) in_ips[n_in++] = t->S[k].addr.ip;
+    // Every 4th dial goes to an address never tried before, so the pool keeps
+    // being explored even when known-good addresses are ready.
+    const bool explore = (t->dial_seq++ % 4) == 3;
     if (!t->stop && t->peer_count > 0) {
         for (int tries = 0; tries < t->peer_count; tries++) {
             int i = (t->next_peer + tries) % t->peer_count;
@@ -1082,14 +1138,14 @@ static int take_peer(torrentfs *t, peer_addr *out) {
             if (ip_busy) continue;
 
             int score = peer_eval_score(t, i);
+            if (explore && t->peer_fails[i] == 0 && !t->peer_ok[i] &&
+                t->peer_best_kbps[i] == 0.0f && t->peer_rot[i] == 0)
+                score += 3000;
             if (score > best_score) {
                 best_score = score;
                 best_idx = i;
-                // Proven peer or fresh tracker peer: take immediately without scanning further
-                if (score >= 700) {
-                    t->next_peer = (i + 1) % t->peer_count;
-                    break;
-                }
+                // Known-fast (or, exploring, untried) address: no need to look on.
+                if (score >= 3000) break;
             }
         }
         if (best_idx >= 0) {
@@ -1143,6 +1199,11 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             if (had_conn && f == 1) secs = BACKOFF_DROP_SECS;
             if (t->peer_ok[pidx] && (t->peer_count <= 4 || t->st_live <= 2)) secs = BACKOFF_DROP_SECS;
         }
+        // A peer that was fast before and dropped on a network error (not a
+        // rotation) is redialed quickly, its first few times.
+        if (had_conn && fail_kind != PEER_FAIL_CHOKE_ROTATE &&
+            t->peer_best_kbps[pidx] >= 1024.0f && t->peer_fails[pidx] <= 3)
+            secs = BACKOFF_DROP_SECS;
         if (secs > BACKOFF_MAX_SECS) secs = BACKOFF_MAX_SECS;
         t->peer_next_try[pidx] = armGetSystemTick() + (u64)secs * t->freq;
     } else {
@@ -1469,6 +1530,12 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     }
     int kind = s->fail_kind ? s->fail_kind
                             : (failed ? PEER_FAIL_OTHER : PEER_FAIL_NONE);
+    if (s->pidx >= 0 && s->svc_ticks > 0) {
+        float kb = (float)(sess_capability(t, s) / 1024.0);
+        mutexLock(&t->lock);
+        if (kb > t->peer_best_kbps[s->pidx]) t->peer_best_kbps[s->pidx] = kb;
+        mutexUnlock(&t->lock);
+    }
     release_peer(t, s->pidx, failed, had_conn, kind);
     // A plaintext handshake that actually connected is proof the peer does
     // not need MSE; remember it so later dials skip the (wasted) attempt.
@@ -1845,7 +1912,7 @@ static void cand_refresh(torrentfs *t) {
 // Active unchoked peers ramp up their pipeline as blocks land without strikes,
 // so fast peers are never bottlenecked by static initial floors.
 static int nominal_depth(torrentfs *t, sess *s) {
-    if (s->nb.choked) return REQ_MIN;
+    if (s->nb.choked || s->snubbed) return REQ_MIN;
     bool is_seed = peer_is_seed(t, s);
     if (!is_seed && s->timeout_strikes >= 3) return REQ_MIN;
     if (s->expect_ticks <= t->freq) return (t->st_live <= 2) ? 48 : REQ_INITIAL;
@@ -2611,6 +2678,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 if (start && now > start) s->svc_ticks += now - start;
                 s->svc_bytes += dlen;
                 s->last_rx_block = now;
+                s->snubbed = false;
             } else {
                 t->st_dup_noring += dlen;
             }
@@ -2872,7 +2940,7 @@ static void classify_sessions(torrentfs *t) {
             s->svc_bytes /= 2;
         }
         if (s->active && !s->connecting && s->nb.handshaked && !s->nb.choked) {
-            if (s->timeout_strikes > 0) {
+            if (s->timeout_strikes > 0 || s->snubbed) {
                 slow = true;
             } else if (best > 0.0 && s->rx_total >= SLOW_MIN_BYTES) {
                 // Hysteresis: become slow under SLOW_FRACTION of the best,
@@ -3126,7 +3194,7 @@ static void perf_emit(torrentfs *t, u64 now) {
                "scans/s=%.0f picks/s=%.0f rebuilds/s=%.1f rate=%.0fKB/s dup=%.1f%% "
                "live=%d unchoked=%d connecting=%d pool=%d "
                "sock_fail+%d enobufs+%d timeouts+%d wq=%d wq_full+%d fast=%d slow=%d "
-               "aq=%d/%d rb=%lld rb_st=%d",
+               "aq=%d/%d rb=%lld rb_st=%d rotated+%d dials+%d",
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.50),
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.95),
                (unsigned long long)t->pf_loop.max, t->pf_loop.n,
@@ -3136,7 +3204,8 @@ static void perf_emit(torrentfs *t, u64 now) {
                t->st_conn_timeout - t->pf_timeouts,
                t->wq_n, t->st_wq_full - t->pf_wq_full, t->n_fast, unchoked - t->n_fast,
                t->n_active_aq, t->n_aq, (long long)t->read_blocked_piece,
-               t->read_blocked_piece >= 0 ? (int)t->status[t->read_blocked_piece] : -1);
+               t->read_blocked_piece >= 0 ? (int)t->status[t->read_blocked_piece] : -1,
+               t->st_rotated - t->pf_rotated, t->st_dials - t->pf_dials);
     perf_hist_reset(&t->pf_loop);
     t->pf_scans = t->pf_picks = 0;
     t->pf_rebuilds = 0;
@@ -3147,6 +3216,123 @@ static void perf_emit(torrentfs *t, u64 now) {
     t->pf_enobufs = t->st_enobufs;
     t->pf_timeouts = t->st_conn_timeout;
     t->pf_wq_full = t->st_wq_full;
+    t->pf_rotated = t->st_rotated;
+    t->pf_dials = t->st_dials;
+}
+
+// Pool addresses that could be dialed right now (turnover only opens a
+// window when there is someone new to try). Takes t->lock.
+static bool pool_has_ready(torrentfs *t, u64 now) {
+    bool ready = false;
+    mutexLock(&t->lock);
+    for (int i = 0; i < t->peer_count && !ready; i++)
+        if (!t->peer_busy[i] && t->peer_next_try[i] <= now && t->peer_fails[i] < 0xFF)
+            ready = true;
+    mutexUnlock(&t->lock);
+    return ready;
+}
+
+// The worst established session by capability, or -1. Established: older
+// than min_age, or measured (SLOW_MIN_BYTES delivered) and at least 3 s old --
+// a newcomer that is plainly slow does not get to sit out its whole trial.
+// A seed of a scarce swarm is never picked.
+static int worst_session(torrentfs *t, u64 now, u64 min_age) {
+    const bool scarce = t->st_live <= 4;
+    int worst = -1;
+    double worst_cap = 0.0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        sess *s = &t->S[i];
+        if (!s->active || s->connecting || !s->nb.handshaked) continue;
+        u64 age = now - s->started;
+        bool measured = s->svc_bytes >= SLOW_MIN_BYTES && age >= (u64)3 * t->freq;
+        if (age < min_age && !measured) continue;
+        if (scarce && peer_is_seed(t, s)) continue;
+        double cap = sess_capability(t, s);
+        if (worst < 0 || cap < worst_cap) { worst = i; worst_cap = cap; }
+    }
+    return worst;
+}
+
+// Close a session for turnover: a normal rotation, but the address waits
+// SLOW_DROP_SECS so untried candidates get the slot.
+// Best capability among the established sessions (for rotate_out).
+static double best_capability(const torrentfs *t) {
+    double best = 0.0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        const sess *s = &t->S[i];
+        if (!s->active || s->connecting || !s->nb.handshaked) continue;
+        double cap = sess_capability(t, s);
+        if (cap > best) best = cap;
+    }
+    return best;
+}
+
+static void rotate_out(torrentfs *t, sess *s, u64 now, const char *why) {
+    int pidx = s->pidx;
+    double cap = sess_capability(t, s);
+    // Only a genuinely slow peer is parked and marked: a decent one that just
+    // lost the tournament may come back with the next window.
+    bool slow = s->slow || cap < 0.5 * best_capability(t);
+    engine_log(ENGINE_LOG_INFO, "[rotate] sess %d out (%s): cap=%.0fKB/s slow=%d live=%d",
+               (int)(s - t->S), why, cap / 1024.0, slow ? 1 : 0, t->st_live);
+    s->fail_kind = PEER_FAIL_CHOKE_ROTATE;
+    sess_close(t, s, true);
+    if (pidx >= 0 && slow) {
+        mutexLock(&t->lock);
+        t->peer_next_try[pidx] = now + (u64)SLOW_DROP_SECS * t->freq;
+        if (t->peer_rot[pidx] < 255) t->peer_rot[pidx]++;
+        mutexUnlock(&t->lock);
+    }
+    t->st_rotated++;
+}
+
+// Turnover, once per upkeep tick (netloop).
+// True once every session that joined in the current window has been
+// measured (or has used up its trial) and no dial is pending.
+static bool window_trials_done(torrentfs *t, u64 now) {
+    if (now - t->turnover_start < (u64)3 * t->freq) return false;
+    if (t->st_connecting > 0 && now - t->turnover_start < (u64)g_trial_secs * t->freq)
+        return false;
+    for (int i = 0; i < MAX_SESS; i++) {
+        const sess *s = &t->S[i];
+        if (!s->active || s->connecting || !s->nb.handshaked) continue;
+        if (s->started < t->turnover_start) continue;   // not a newcomer
+        if (s->svc_bytes < SLOW_MIN_BYTES &&
+            now - s->started < (u64)g_trial_secs * t->freq) return false;
+    }
+    return true;
+}
+
+static void turnover_tick(torrentfs *t, u64 now) {
+    const u64 freq = t->freq;
+    if (t->turnover_until && (now >= t->turnover_until || window_trials_done(t, now))) {
+        t->turnover_until = 0;
+        t->trim_left = TURNOVER_HEADROOM;   // trials over: keep the best live_target
+    }
+    // While slow sessions hold slots, run windows three times as often.
+    u64 interval = (u64)g_turnover_secs * freq;
+    if (t->n_fast < t->st_live) interval /= 3;
+    if (!t->turnover_until && t->trim_left == 0 && now - t->last_turnover > interval) {
+        t->last_turnover = now;
+        if (t->st_live >= t->live_target - 1 && pool_has_ready(t, now)) {
+            t->turnover_start = now;
+            t->turnover_until = now + (u64)(g_trial_secs + 2) * freq;
+        }
+    }
+    // Hard cap: never more than live_max sessions (oldest-measured first).
+    if (t->st_live > t->live_max) {
+        int v = worst_session(t, now, (u64)5 * freq);
+        if (v >= 0) { rotate_out(t, &t->S[v], now, "over cap"); return; }
+    }
+    // End of a window: trim back to the target, one per tick, at most the
+    // headroom's worth (sessions above the target for other reasons -- the
+    // scarce-uploader dial rule -- are not this window's to cut).
+    if (t->trim_left > 0) {
+        if (t->st_live <= t->live_target) { t->trim_left = 0; return; }
+        int v = worst_session(t, now, (u64)g_trial_secs * freq);
+        if (v >= 0) { rotate_out(t, &t->S[v], now, "turnover"); t->trim_left--; }
+        else t->trim_left = 0;
+    }
 }
 
 // Publish the status snapshot (netloop, every upkeep tick).
@@ -3378,6 +3564,14 @@ static void netloop_main(void *arg) {
                     }
                 }
 
+                // Snub: unchoked, requests on order, nothing for SNUB_SECS.
+                if (!s->connecting && s->nb.handshaked && !s->nb.choked && s->req_n > 0 &&
+                    !s->snubbed && s->last_block &&
+                    now - s->last_block > (u64)SNUB_SECS * t->freq &&
+                    (!s->last_rx_block || now - s->last_rx_block > (u64)SNUB_SECS * t->freq)) {
+                    s->snubbed = true;
+                    engine_log(ENGINE_LOG_DEBUG, "[sess %d] snubbed", i);
+                }
                 // Keep-alive: raw 4 zero bytes, only when the tx queue is
                 // empty (an atomic small send cannot interleave mid-message).
                 if (!s->connecting && s->nb.handshaked &&
@@ -3406,6 +3600,7 @@ static void netloop_main(void *arg) {
 
             update_rates(t, now);   // per-session rate meter + expect-time anchor
             classify_sessions(t);   // speed classes for the request scheduler
+            turnover_tick(t, now);  // replace the slowest sessions over time
             // Reciprocation choking: 10 s round, 30 s optimistic rotation.
             if (now - t->last_choke > (u64)CHOKE_INTERVAL_SECS * t->freq) {
                 t->last_choke = now;
@@ -3523,12 +3718,16 @@ static void netloop_main(void *arg) {
                     active_unchoked++;
                 }
             }
-            bool need_dial = (t->st_live < DIAL_STOP_LIVE) ||
-                             (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < MAX_SESS);
-            if (t->pause_dials_until && now < t->pause_dials_until) {
-                need_dial = false;
-            }
-
+            const bool window = t->turnover_until != 0;
+            const int live_cap = t->live_target + (window ? TURNOVER_HEADROOM : 0);
+            // Sessions + dials in flight never pass the hard cap (+ headroom in
+            // a turnover window). At the default cap this is just the slot
+            // table; a lower cap would otherwise be overrun by one dial burst.
+            const int hard_cap = t->live_max + (window ? TURNOVER_HEADROOM : 0);
+            bool need_dial = ((t->st_live < live_cap) ||
+                              (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < t->live_max)) &&
+                             t->st_live + connecting < hard_cap;
+            if (t->pause_dials_until && now < t->pause_dials_until) need_dial = false;
             while (!t->paused && dial_budget > 0 &&
                    need_dial && connecting < MAX_CONNECTING) {
                 bool ok;
@@ -3546,8 +3745,10 @@ static void netloop_main(void *arg) {
                 if (!ok) break;
                 connecting++;
                 dial_budget--;
-                need_dial = (t->st_live < DIAL_STOP_LIVE) ||
-                            (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < MAX_SESS);
+                t->st_dials++;
+                need_dial = ((t->st_live < live_cap) ||
+                             (active_unchoked < MIN_ACTIVE_UNCHOKED && t->st_live < t->live_max)) &&
+                            t->st_live + connecting < hard_cap;
             }
 
             // Seek preemption: if the playhead has moved, a partially
@@ -3800,6 +4001,8 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     condvarInit(&t->piece_cv);
     for (int i = 0; i < CACHE_MAX_CHUNKS; i++) t->chunks[i] = -1;
     t->calm_now = MAX_SESS;
+    t->live_target = DIAL_STOP_LIVE;
+    t->live_max = MAX_SESS;
     t->slots_per_chunk = CACHE_CHUNK / t->meta.piece_len;
     t->piece_slot = malloc((size_t)t->meta.piece_count * sizeof(int32_t));
     if (t->piece_slot)
@@ -4485,6 +4688,13 @@ bool torrentfs_clear_piece_zones(torrentfs *tfs) {
     __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);
     mutexUnlock(&tfs->lock);
     return true;
+}
+
+void torrentfs_set_session_limit(torrentfs *tfs, int n) {
+    if (!tfs) return;
+    if (n <= 0 || n > MAX_SESS) n = MAX_SESS;
+    tfs->live_max = n;
+    tfs->live_target = n < DIAL_STOP_LIVE ? n : DIAL_STOP_LIVE;
 }
 
 int torrentfs_calm(const torrentfs *tfs) {

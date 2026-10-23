@@ -197,6 +197,14 @@ void tsnx_engine_set_ram_stream(tsnx_engine *eng, int on);
 // Strict verification mode: 1 = only return SHA-1 verified pieces (no unverified streaming reads)
 void tsnx_engine_set_strict_verify(tsnx_engine *eng, const char *hash, int on);
 
+// Cap this torrent's peer sessions (<= the engine's compiled maximum;
+// <= 0 restores the default). Turnover keeps the fastest within the cap.
+bool tsnx_engine_set_session_limit(tsnx_engine *eng, const char *hash, int n);
+
+// Peer turnover timing (defaults: every 30 s, 60 s trial per newcomer).
+// Process-wide; meant for tests and tuning.
+void tsnx_engine_set_rotation_timing(int turnover_secs, int trial_secs);
+
 // Force an immediate tracker re-announce for this torrent.
 bool tsnx_engine_announce_now(tsnx_engine *eng, const char *hash);
 
