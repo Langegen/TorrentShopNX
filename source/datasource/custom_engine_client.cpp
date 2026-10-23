@@ -211,6 +211,11 @@ void CustomEngineClient::unmarkInUse(const std::string& hash) {
                   in_use_.end());
 }
 
+bool CustomEngineClient::isInUse(const std::string& hash) const {
+    std::lock_guard<std::mutex> keep(keep_mtx_);
+    return std::find(in_use_.begin(), in_use_.end(), hash) != in_use_.end();
+}
+
 std::string CustomEngineClient::keptHash() const {
     std::lock_guard<std::mutex> keep(keep_mtx_);
     return kept_hash_;

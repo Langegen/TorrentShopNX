@@ -16,6 +16,7 @@
 #include "../installer/PortInstallPlanner.hpp"
 #include "../torrent/torrent_manager.h"
 #include "../datasource/data_source_manager.h"
+#include "../datasource/custom_engine_client.h"
 #include "../utils/switch_utils.h"
 
 namespace download {
@@ -100,6 +101,19 @@ struct DownloadItem {
     bool sdk_mismatch = false;
     util::SdkVersion game_sdk;
     util::SdkVersion console_sdk;
+
+    // Асинхронный зонд списка файлов (локальный движок). probeFiles() получает
+    // метаданные (анонс + DHT, до десятков секунд), поэтому идёт в своём
+    // потоке, а не под мьютексом очереди. Поток отсоединён и держит job сам,
+    // так что удаление элемента из очереди его не ждёт.
+    struct ProbeJob {
+        std::atomic<bool> done{false};
+        bool ok = false;
+        std::vector<datasource::CustomEngineFileInfo> files;
+        std::string error;
+    };
+    std::shared_ptr<ProbeJob> probe_job;
+    std::chrono::steady_clock::time_point probe_retry_at{};
 
     // Асинхронный open
     std::shared_ptr<std::future<bool>> open_future;
@@ -226,6 +240,12 @@ private:
         std::shared_ptr<std::atomic<bool>> stop;
         std::thread worker;
     };
+
+    // trackProgress() body, run under queue_mutex_. `list_refreshed`: the
+    // engine torrent list was already polled (without the lock) this round.
+    void trackProgressLocked(bool list_refreshed);
+    // Starts the background probeFiles() for a local-engine item.
+    void startLocalProbe(DownloadItem& item);
 
     void ensureStreamConsumer(DownloadItem& item);
     void stopStreamConsumer(int torrent_id);

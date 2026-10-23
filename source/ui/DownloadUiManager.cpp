@@ -4,6 +4,7 @@
 #include <borealis.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 #include "../utils/log.h"
+#include "../utils/perf_stats.h"
 #include "../utils/app_paths.h"
 #include "../utils/string_utils.h"
 #include "../config/config.h"
@@ -86,7 +87,9 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
 
     size_t idx = 0;
     {
+        const uint64_t lock_wait_start = perf::nowUs();
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
+        perf::LockTimer lock_timer(perf::LockSite::UiAdd, lock_wait_start);
         idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id, retro_target_mode);
 
         auto& item = impl_.queueMutable()[idx];

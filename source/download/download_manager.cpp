@@ -11,7 +11,9 @@
 #include "../datasource/custom_engine_client.h"
 #include "../net/http_client.h"
 #include "../utils/log.h"
+#include "../utils/perf_stats.h"
 #include "../utils/switch_utils.h"
+#include "../engine/thread_cfg.h"
 #include "../utils/app_paths.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../utils/archive_utils.h"
@@ -1680,6 +1682,9 @@ static void updateSleepPolicy(bool has_active_transfers) {
 DownloadManager::DownloadManager() {
     progress_thread_running_.store(true);
     progress_thread_ = std::thread([this]() {
+        // Off the UI core: this thread polls the engine and holds the queue
+        // mutex the UI also takes (see thread_cfg.h).
+        tsnx_thread_pin_self(TSNX_CORE_NET, TSNX_PRIO_PROGRESS);
         while (progress_thread_running_.load()) {
             try {
                 trackProgress();
@@ -2110,17 +2115,61 @@ static void clearTorrentCache(const std::string& hash) {
     }
 }
 
+// Removing a torrent joins its engine threads (the discovery thread may be in
+// a tracker announce or a DNS lookup: up to seconds) and deletes its cache.
+// trackProgress() runs under the queue mutex the UI also takes, so there the
+// removal is only queued here and carried out by the same progress thread
+// right after the mutex is released (DeferredReleaseScope). Other callers --
+// the user's own cancel/delete actions -- still release synchronously.
+static std::atomic<std::vector<std::string>*> g_deferred_releases{nullptr};
+static std::atomic<std::thread::id> g_deferred_owner{};
+
+class DeferredReleaseScope {
+public:
+    explicit DeferredReleaseScope(std::vector<std::string>& sink) {
+        g_deferred_owner.store(std::this_thread::get_id(), std::memory_order_relaxed);
+        g_deferred_releases.store(&sink, std::memory_order_release);
+    }
+    ~DeferredReleaseScope() { g_deferred_releases.store(nullptr, std::memory_order_release); }
+    DeferredReleaseScope(const DeferredReleaseScope&) = delete;
+    DeferredReleaseScope& operator=(const DeferredReleaseScope&) = delete;
+};
+
+static void removeTorrentNow(const std::string& hash) {
+    tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
+    if (eng) {
+        tsnx_engine_remove_torrent(eng, hash.c_str());
+    }
+    clearTorrentCache(hash);
+    util::logLine("download: released unneeded torrent and cleared cache, hash=" + hash);
+}
+
+// Called by the progress thread with the queue mutex released.
+static void runDeferredReleases(const std::vector<std::string>& hashes) {
+    for (const auto& hash : hashes) {
+        // Re-adopted (retry / re-added) between the decision and now: keep it.
+        if (datasource::CustomEngineClient::instance().isInUse(hash)) {
+            util::logLine("download: deferred release skipped, torrent re-adopted, hash=" + hash);
+            continue;
+        }
+        removeTorrentNow(hash);
+    }
+}
+
 static void releaseTorrentIfUnneeded(const std::vector<download::DownloadItem>& queue,
                                      size_t self_index, const std::string& hash) {
     if (hash.empty()) return;
     if (!torrentStillNeeded(queue, self_index, hash)) {
-        tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
-        if (eng) {
-            tsnx_engine_remove_torrent(eng, hash.c_str());
-        }
         datasource::CustomEngineClient::instance().unmarkInUse(hash);
-        clearTorrentCache(hash);
-        util::logLine("download: released unneeded torrent and cleared cache, hash=" + hash);
+        std::vector<std::string>* deferred = g_deferred_releases.load(std::memory_order_acquire);
+        if (deferred &&
+            g_deferred_owner.load(std::memory_order_relaxed) == std::this_thread::get_id()) {
+            if (std::find(deferred->begin(), deferred->end(), hash) == deferred->end())
+                deferred->push_back(hash);
+            util::logLine("download: torrent release queued until the queue lock is free, hash=" + hash);
+        } else {
+            removeTorrentNow(hash);
+        }
     } else {
         util::logLine("download: keeping torrent active as it is needed by another queued item, hash=" + hash);
     }
@@ -2819,7 +2868,37 @@ void DownloadManager::startNextDownload() {
 }
 
 void DownloadManager::trackProgress() {
-    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    // Poll the engine's torrent list BEFORE taking the queue mutex: the UI
+    // thread takes the same mutex, and nothing here needs the queue. The list
+    // and its timestamp are only ever touched by this (progress) thread.
+    bool list_refreshed = false;
+    if (isLocalBackend() &&
+        (ds_manager_.mode() == datasource::DataSourceMode::CustomEngine ||
+         ds_manager_.mode() == datasource::DataSourceMode::LocalClient)) {
+        const auto now = std::chrono::steady_clock::now();
+        if (last_torrent_list_poll_.time_since_epoch().count() == 0 ||
+            (now - last_torrent_list_poll_) >= std::chrono::milliseconds(800)) {
+            std::vector<torrent::TorrentInfo> fresh_list;
+            customEngineGetTorrentList(fresh_list);
+            last_torrent_list_ = std::move(fresh_list);
+            last_torrent_list_poll_ = now;
+            list_refreshed = true;
+        }
+    }
+
+    std::vector<std::string> deferred_releases;
+    {
+        DeferredReleaseScope release_scope(deferred_releases);
+        const uint64_t lock_wait_start = perf::nowUs();
+        std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+        perf::LockTimer lock_timer(perf::LockSite::TrackProgress, lock_wait_start);
+        trackProgressLocked(list_refreshed);
+    }
+    // Torrent teardown (joins engine threads) with the queue mutex released.
+    runDeferredReleases(deferred_releases);
+}
+
+void DownloadManager::trackProgressLocked(bool list_refreshed) {
     auto now = std::chrono::steady_clock::now();
     bool refreshed_torrent_list = false;
     const bool is_local_client = (isLocalBackend());
@@ -2837,7 +2916,9 @@ void DownloadManager::trackProgress() {
         }
     } else if (is_local_client) {
         const auto poll_interval = std::chrono::milliseconds(800);
-        if (last_torrent_list_poll_.time_since_epoch().count() == 0 ||
+        if (list_refreshed) {
+            refreshed_torrent_list = true;   // polled by trackProgress() without the lock
+        } else if (last_torrent_list_poll_.time_since_epoch().count() == 0 ||
             (now - last_torrent_list_poll_) >= poll_interval) {
             std::vector<torrent::TorrentInfo> fresh_list;
             if (ds_manager_.mode() == datasource::DataSourceMode::CustomEngine ||
@@ -3323,6 +3404,31 @@ bool DownloadManager::hasActiveTransfers() const {
     return false;
 }
 
+void DownloadManager::startLocalProbe(DownloadItem& item) {
+    auto job = std::make_shared<DownloadItem::ProbeJob>();
+    item.probe_job = job;
+    item.probe_retry_at = std::chrono::steady_clock::time_point{};
+    has_open_pending_.store(true);   // progress loop polls every 100 ms meanwhile
+    util::logLine("download: background probeFiles started hash=" + item.torrent_hash);
+    // Detached: the job is shared, so dropping the item never waits for it.
+    // CustomEngineClient::shutdown() waits for an in-flight probe itself.
+    std::thread([job, hash = item.torrent_hash, magnet = item.magnet]() {
+        tsnx_thread_pin_self(TSNX_CORE_NET, TSNX_PRIO_NET_BG);
+        std::vector<datasource::CustomEngineFileInfo> files;
+        std::string err;
+        bool ok = false;
+        if (!g_appExiting.load()) {
+            ok = datasource::CustomEngineClient::instance().probeFiles(hash, magnet, "", files, &err);
+        } else {
+            err = "app is exiting";
+        }
+        job->files = std::move(files);
+        job->error = std::move(err);
+        job->ok = ok;
+        job->done.store(true, std::memory_order_release);
+    }).detach();
+}
+
 bool DownloadManager::startHybridInstall(size_t index) {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
@@ -3381,12 +3487,30 @@ bool DownloadManager::startHybridInstall(size_t index) {
                     return false;
                 }
             } else if (isLocalBackend()) {
-                std::vector<datasource::CustomEngineFileInfo> local_files;
-                std::string probe_err;
-                if (!datasource::CustomEngineClient::instance().probeFiles(item.torrent_hash, item.magnet, "", local_files, &probe_err) || local_files.empty()) {
-                    util::logLine("download: local probeFiles failed in hybrid start: " + probe_err);
+                // probeFiles() fetches the metadata (announce + DHT, up to tens
+                // of seconds). It runs on its own thread; until it is done this
+                // returns false ("not started yet") and the progress loop calls
+                // again on its next tick, without ever blocking the queue.
+                if (!item.probe_job) {
+                    if (item.probe_retry_at.time_since_epoch().count() != 0 &&
+                        std::chrono::steady_clock::now() < item.probe_retry_at) {
+                        return false;
+                    }
+                    startLocalProbe(item);
                     return false;
                 }
+                if (!item.probe_job->done.load(std::memory_order_acquire)) {
+                    return false;   // still fetching
+                }
+                std::shared_ptr<DownloadItem::ProbeJob> job = std::move(item.probe_job);
+                item.probe_job.reset();
+                if (!job->ok || job->files.empty()) {
+                    util::logLine("download: local probeFiles failed in hybrid start: " + job->error);
+                    has_open_pending_.store(false);
+                    item.probe_retry_at = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                    return false;
+                }
+                std::vector<datasource::CustomEngineFileInfo> local_files = std::move(job->files);
                 std::vector<torrent::TorrentFileInfo> files;
                 files.reserve(local_files.size());
                 for (const auto& lf : local_files) {

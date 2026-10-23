@@ -16,6 +16,7 @@
 
 #include "torrentfs.h"
 #include "engine_log.h"
+#include "thread_cfg.h"
 
 #define INCOMING_HS_TIMEOUT_SECS 5   // patience for the peer's handshake bytes
 
@@ -218,8 +219,8 @@ int torrent_listener_start(int port, listen_find_fn find) {
         return -1;
     }
 
-    if (threadCreate(&s_thread, listener_main, NULL, NULL, 0x20000, 0x2C,
-                     -2) == 0) {
+    if (threadCreate(&s_thread, listener_main, NULL, NULL, 0x20000,
+                     TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) == 0) {
         threadStart(&s_thread);
         s_thread_started = true;
     } else {

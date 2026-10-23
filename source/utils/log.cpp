@@ -1,11 +1,17 @@
 #include "log.h"
 
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <sys/stat.h>
+
+#include "../engine/thread_cfg.h"
 
 #if defined(__MINGW32__)
 #include <direct.h>
@@ -63,6 +69,8 @@ static void ensureDirRecursive(const std::string& path) {
     }
 }
 
+static void startAsyncWriter();
+
 void logInit() {
 #ifdef __SWITCH__
     ensureDirRecursive("sdmc:/switch/TorrentShopNX");
@@ -86,19 +94,144 @@ void logInit() {
         file << "TorrentShopNX log start\n";
         file.close();
     }
+    startAsyncWriter();
 }
 
-void logLine(const std::string& line) {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-    std::ofstream file(logPath(), std::ios::app);
-    if (file.is_open()) {
-        file << line << "\n";
-        file.close();
+// ---------------------------------------------------------------------------
+// Asynchronous writer. logLine() used to open, append and close log.txt for
+// every single line -- several fs-service IPCs per line, from the UI thread
+// among others (one line per cover load). Now lines go into a memory buffer
+// and a writer thread on the work core appends them in batches, at most every
+// kFlushMs (or sooner when the buffer fills). The file is still opened and
+// closed per batch, so it is never held open between writes (it can be read
+// or pulled off the SD card while the app runs, as before).
+//
+// Before logInit() and after logClose() lines are written synchronously.
+// ---------------------------------------------------------------------------
+namespace {
+
+constexpr size_t kMaxPending = 512 * 1024;   // beyond this new lines are dropped
+constexpr int kFlushMs = 500;
+
+struct AsyncLog {
+    std::mutex mtx;
+    std::condition_variable cv;
+    std::string pending;
+    size_t dropped = 0;
+    bool running = false;
+    bool stop = false;
+    uint64_t requested = 0;   // flush generations (logFlush)
+    uint64_t written = 0;
+    std::condition_variable written_cv;
+    std::thread thread;
+};
+
+// Leaked on purpose: the console exits through _exit() and the PC build may
+// log from static destructors; a destroyed mutex there would crash.
+AsyncLog& asyncLog() {
+    static AsyncLog* l = new AsyncLog();
+    return *l;
+}
+
+void appendToFile(const std::string& data) {
+    if (data.empty()) return;
+    FILE* f = fopen(logPath(), "ab");
+    if (!f) return;
+    fwrite(data.data(), 1, data.size(), f);
+    fclose(f);
+}
+
+void writerMain() {
+    tsnx_thread_pin_self(TSNX_CORE_WORK, TSNX_PRIO_LOGGER);
+    AsyncLog& l = asyncLog();
+    std::string batch;
+    for (;;) {
+        size_t dropped = 0;
+        bool stop = false;
+        uint64_t gen = 0;
+        {
+            std::unique_lock<std::mutex> lk(l.mtx);
+            l.cv.wait_for(lk, std::chrono::milliseconds(kFlushMs), [&l]() {
+                return l.stop || l.requested != l.written || l.pending.size() > kMaxPending / 2;
+            });
+            batch.swap(l.pending);
+            dropped = l.dropped;
+            l.dropped = 0;
+            stop = l.stop;
+            gen = l.requested;
+        }
+        if (dropped > 0)
+            batch += "[log] dropped " + std::to_string(dropped) + " lines (buffer full)\n";
+        appendToFile(batch);
+        batch.clear();
+        {
+            std::lock_guard<std::mutex> lk(l.mtx);
+            l.written = gen;
+            if (stop && l.pending.empty()) {
+                l.written_cv.notify_all();
+                return;
+            }
+        }
+        l.written_cv.notify_all();
     }
 }
 
+} // namespace
+
+static void startAsyncWriter() {
+    AsyncLog& l = asyncLog();
+    std::lock_guard<std::mutex> lk(l.mtx);
+    if (l.running) return;
+    l.stop = false;
+    l.running = true;
+    l.thread = std::thread(writerMain);
+}
+
+void logLine(const std::string& line) {
+    AsyncLog& l = asyncLog();
+    {
+        std::lock_guard<std::mutex> lk(l.mtx);
+        if (l.running) {
+            if (l.pending.size() + line.size() + 1 > kMaxPending) {
+                l.dropped++;
+                return;
+            }
+            l.pending += line;
+            l.pending += '\n';
+            if (l.pending.size() > kMaxPending / 2) l.cv.notify_one();
+            return;
+        }
+    }
+    // No writer thread (before logInit / after logClose): synchronous append.
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+    appendToFile(line + "\n");
+}
+
+void logFlush() {
+    AsyncLog& l = asyncLog();
+    std::unique_lock<std::mutex> lk(l.mtx);
+    if (!l.running) return;
+    const uint64_t gen = ++l.requested;
+    l.cv.notify_one();
+    l.written_cv.wait_for(lk, std::chrono::milliseconds(1000),
+                          [&l, gen]() { return l.written >= gen || !l.running; });
+}
+
 void logClose() {
-    // File is closed after every line write to avoid file locks
+    AsyncLog& l = asyncLog();
+    {
+        std::lock_guard<std::mutex> lk(l.mtx);
+        if (!l.running) return;
+        l.stop = true;
+    }
+    l.cv.notify_one();
+    if (l.thread.joinable()) l.thread.join();
+    std::lock_guard<std::mutex> lk(l.mtx);
+    l.running = false;
+    l.stop = false;
+    // Anything logged between the writer's last batch and running=false.
+    appendToFile(l.pending);
+    l.pending.clear();
 }
 
 } // namespace util

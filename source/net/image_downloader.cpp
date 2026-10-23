@@ -2,7 +2,9 @@
 #include "http_client.h"
 #include "../config/config.h"
 #include "../utils/log.h"
+#include "../utils/perf_stats.h"
 #include "../utils/app_paths.h"
+#include "../engine/thread_cfg.h"
 #include <borealis/core/cache_helper.hpp>
 #include <algorithm>
 #include <cmath>
@@ -24,6 +26,12 @@
 #pragma GCC diagnostic pop
 
 namespace net {
+
+static uint64_t msSince(std::chrono::steady_clock::time_point t0) {
+    if (t0.time_since_epoch().count() == 0) return 0;
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0).count());
+}
 
 namespace {
 
@@ -346,6 +354,7 @@ void ImageDownloader::enqueueInternal(brls::Image* img,
             }
         }
         ImageTask newTask{img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride};
+        newTask.enqueuedAt = std::chrono::steady_clock::now();
         int newPriority = calculatePriority(newTask);
         auto insertPos = std::lower_bound(tasks_.begin(), tasks_.end(), newPriority, [this](const ImageTask& t, int targetPriority) {
             return calculatePriority(t) > targetPriority;
@@ -356,6 +365,8 @@ void ImageDownloader::enqueueInternal(brls::Image* img,
 }
 
 void ImageDownloader::workerLoop() {
+    // Fetch + decode on the work core, off the UI core (see thread_cfg.h).
+    tsnx_thread_pin_self(TSNX_CORE_WORK, TSNX_PRIO_IMAGE);
     net::HttpClient http;
     http.setKeepAlive(true);
 
@@ -462,7 +473,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
     if (cacheEnabled && !thumbPath.empty()) {
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
-            util::logLine("ImageDownloader: loaded thumbnail from disk: " + thumbPath + " (" + std::to_string(cachedBody.size()) + " bytes)");
+            perf::imageLoaded(msSince(task.enqueuedAt), true);
             // Pre-decode RGBA in worker thread to prevent main UI thread frame drops
             int dw = 0, dh = 0, dcomp = 0;
             stbi_uc* rgba = stbi_load_from_memory(
@@ -550,7 +561,6 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
     if (g_appExiting.load()) return;
 
     if (res.status_code == 200 && !res.body.empty()) {
-        util::logLine("ImageDownloader: HTTP 200 OK for url=" + task.url + " (size=" + std::to_string(res.body.size()) + ")");
         if (!host.empty()) {
             markHostSuccess(host);
         }
@@ -626,6 +636,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
 
         // Pre-decode RGBA in worker thread before scheduling on main thread
         int dw = 0, dh = 0, dcomp = 0;
+        perf::imageLoaded(msSince(task.enqueuedAt), false);
         stbi_uc* rgba = stbi_load_from_memory(
             reinterpret_cast<const stbi_uc*>(bodyToDisplay.data()),
             static_cast<int>(bodyToDisplay.size()),

@@ -74,6 +74,8 @@
 #include "utp_nb.h"
 #include "listen.h"
 #include "engine_log.h"
+#include "thread_cfg.h"
+#include "perf_hist.h"
 #include "../utils/app_paths.h"
 
 //-----------------------------------------------------------------------------
@@ -439,6 +441,16 @@ struct torrentfs {
     u8  hb_core[4];
     uint32_t lat_n[5];
     uint64_t lat_max[5];
+
+    // [perf] window, netloop-private (see perf_emit): per-iteration work time
+    // with the poll() wait excluded, and how often the request scheduler ran.
+    perf_hist pf_loop;
+    uint32_t pf_scans;         // request_scan() calls
+    uint32_t pf_picks;         // scan_next_block() calls (one per requested block)
+    u64 pf_tick;
+    int64_t pf_bytes, pf_dup;
+    int pf_sock_fail, pf_timeouts, pf_enobufs;
+    int st_enobufs;            // socket()/connect() failed with ENOBUFS (BSD pool exhausted)
 };
 
 enum { LAT_POLL = 0, LAT_RECV, LAT_SEND, LAT_WR, LAT_RD };
@@ -1134,7 +1146,7 @@ static void writer_main(void *arg) {
             mark_ever_done(t, j.idx);
             t->st_piece_ok++;
             t->st_cache_written += j.plen;
-            engine_log(ENGINE_LOG_INFO, "[writer] piece %lld verified (RAM)", (long long)j.idx);
+            engine_log(ENGINE_LOG_DEBUG, "[writer] piece %lld verified (RAM)", (long long)j.idx);
         } else if (ok) {
             mutexLock(&t->cache_lock);
             int wci = -1;
@@ -1163,7 +1175,7 @@ static void writer_main(void *arg) {
                 mark_ever_done(t, j.idx);
                 t->st_piece_ok++;
                 t->st_cache_written += j.plen;
-                engine_log(ENGINE_LOG_INFO, "[writer] piece %lld verified (SD)", (long long)j.idx);
+                engine_log(ENGINE_LOG_DEBUG, "[writer] piece %lld verified (SD)", (long long)j.idx);
             } else {
                 t->status[j.idx] = PIECE_NEEDED;   // lost: re-download
                 t->st_cache_wr_fail++;
@@ -1318,6 +1330,7 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
     if (sock < 0) {
         t->st_sock_fail++;
         t->st_conn_fail++;
+        if (errno == ENOBUFS) t->st_enobufs++;
         set_err(t, "socket(): errno %lld", (long long)errno);
         // Local descriptor/buffer exhaustion; do not penalize the remote peer.
         release_peer(t, pidx, false, false, PEER_FAIL_NONE);
@@ -1343,11 +1356,13 @@ static bool sess_dial(torrentfs *t, u64 now, int conn_secs) {
                (pa.ip >> 16) & 0xff, (pa.ip >> 24) & 0xff, pa.port);
     if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) != 0 &&
         errno != EINPROGRESS) {
+        int cerr = errno;   // before anything that may clobber it
         t->st_sock_fail++;
         t->st_conn_fail++;
-        engine_log(ENGINE_LOG_DEBUG, "[sess %d] tcp connect failed errno=%d", sid, errno);
+        engine_log(ENGINE_LOG_DEBUG, "[sess %d] tcp connect failed errno=%d", sid, cerr);
         close(sock);
-        bool is_local = (errno == ENOBUFS || errno == ENOMEM || errno == EMFILE || errno == ENFILE);
+        if (cerr == ENOBUFS) t->st_enobufs++;
+        bool is_local = (cerr == ENOBUFS || cerr == ENOMEM || cerr == EMFILE || cerr == ENFILE);
         release_peer(t, pidx, !is_local, false, is_local ? PEER_FAIL_NONE : PEER_FAIL_OTHER);
         return true;   // slot still free; try another peer next tick
     }
@@ -1728,6 +1743,7 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
 // finishing out of order and starving the installer.
 static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                             int64_t *out_piece, int *out_block) {
+    t->pf_picks++;
     int64_t fhi = t->file_last_piece + LOOKAHEAD_PIECES;
     if (fhi >= t->meta.piece_count) fhi = t->meta.piece_count - 1;
     int64_t flo = (t->playhead_piece > t->file_first_piece) ? t->playhead_piece : t->file_first_piece;
@@ -1786,6 +1802,7 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
 static void request_scan(torrentfs *t, sess *s, u64 now) {
     if (!s->nb.handshaked || s->connecting || s->nb.choked) return;
     if (t->paused) return;
+    t->pf_scans++;
     // Prune any stale requests for pieces that already finished or blocks already held,
     // or requests that timed out (> 4.0s)
     int kept = 0;
@@ -2609,12 +2626,58 @@ static void drain_incoming(torrentfs *t, u64 now) {
     }
 }
 
+// One [perf] line every PERF_WINDOW_SECS (netloop thread): the baseline the
+// optimisation work is measured against. loop_us is the CPU time of one netloop
+// iteration with the poll() wait excluded; scans/picks are request_scan() and
+// per-block scheduler calls per second; dup is the share of received payload
+// that duplicated blocks we already had.
+#define PERF_WINDOW_SECS 5
+
+static void perf_emit(torrentfs *t, u64 now) {
+    double secs = (double)(now - t->pf_tick) / (double)t->freq;
+    if (secs <= 0.0) secs = 1.0;
+    int unchoked = 0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        const sess *s = &t->S[i];
+        if (s->active && !s->connecting && s->nb.handshaked && !s->nb.choked)
+            unchoked++;
+    }
+    int64_t bytes = t->st_bytes_recv - t->pf_bytes;
+    int64_t dup = t->st_dup_bytes - t->pf_dup;
+    double dup_pct = bytes > 0 ? 100.0 * (double)dup / (double)bytes : 0.0;
+    double kbps = (double)(bytes - dup) / 1024.0 / secs;
+    engine_log(ENGINE_LOG_INFO,
+               "[perf] net loop_us p50=%llu p95=%llu max=%llu iters=%u "
+               "scans/s=%.0f picks/s=%.0f rate=%.0fKB/s dup=%.1f%% "
+               "live=%d unchoked=%d connecting=%d pool=%d "
+               "sock_fail+%d enobufs+%d timeouts+%d",
+               (unsigned long long)perf_hist_pct(&t->pf_loop, 0.50),
+               (unsigned long long)perf_hist_pct(&t->pf_loop, 0.95),
+               (unsigned long long)t->pf_loop.max, t->pf_loop.n,
+               t->pf_scans / secs, t->pf_picks / secs, kbps, dup_pct,
+               t->st_live, unchoked, t->st_connecting, t->peer_count,
+               t->st_sock_fail - t->pf_sock_fail, t->st_enobufs - t->pf_enobufs,
+               t->st_conn_timeout - t->pf_timeouts);
+    perf_hist_reset(&t->pf_loop);
+    t->pf_scans = t->pf_picks = 0;
+    t->pf_tick = now;
+    t->pf_bytes = t->st_bytes_recv;
+    t->pf_dup = t->st_dup_bytes;
+    t->pf_sock_fail = t->st_sock_fail;
+    t->pf_enobufs = t->st_enobufs;
+    t->pf_timeouts = t->st_conn_timeout;
+}
+
 static void netloop_main(void *arg) {
     torrentfs *t = arg;
     u64 last_upkeep = 0;
     engine_log(ENGINE_LOG_INFO, "[netloop] start");
+    t->pf_tick = armGetSystemTick();
+    t->pf_bytes = t->st_bytes_recv;
+    t->pf_dup = t->st_dup_bytes;
 
     while (!t->stop) {
+        u64 it0 = armGetSystemTick();   // [perf] iteration start
         tsnx_engine_wd_tick(4);
         hb_beat(t, HB_NET);
         int sel = __atomic_load_n(&t->pending_select_file, __ATOMIC_ACQUIRE);
@@ -3007,6 +3070,9 @@ static void netloop_main(void *arg) {
                 request_scan(t, s, now);
                 if (peer_nb_tx_pending(&s->nb)) peer_nb_flush(&s->nb);
             }
+
+            if (now - t->pf_tick >= (u64)PERF_WINDOW_SECS * t->freq)
+                perf_emit(t, now);
         }
 
         // One poll over the session sockets plus the shared ВµTP UDP socket,
@@ -3093,6 +3159,10 @@ static void netloop_main(void *arg) {
             }
             sess_service(t, s, i, now);
         }
+
+        // [perf] CPU time of this iteration, the poll() wait left out.
+        u64 work = (lt0 - it0) + (armGetSystemTick() - now);
+        perf_hist_add(&t->pf_loop, work * 1000000ULL / t->freq);
     }
 
     for (int i = 0; i < MAX_SESS; i++) sess_close(t, &t->S[i], false);
@@ -3232,20 +3302,17 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     // searches every 30 s, instead of one-shot lookups that re-bootstrap each time.
     dht_background_add(t->meta.info_hash, add_peers_dht_cb, t);
 
-    if (threadCreate(&t->discovery, discovery_main, t, NULL, 0x20000, 0x2C,
-                     -2) == 0) {
+    if (threadCreate(&t->discovery, discovery_main, t, NULL, 0x20000,
+                     TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) == 0) {
         t->discovery_started = true;
         threadStart(&t->discovery);
     }
-    // Priority 0x2D, one notch BELOW the app default (0x2C): the writer runs
-    // on the render thread's default core, and Horizon neither timeslices nor
-    // preempts between equal priorities -- at 0x2C, a render thread waking
-    // from vsync waited out whatever slice of a 4 MB SD write (or the SHA-1)
-    // the writer had started, and the playback draw loop has zero frame
-    // budget to spare. One notch lower, the renderer preempts it instead.
-    // The writer needs ~1 write per streamed piece; it starves only if every
-    // core is 100% busy, which hardware-decoded playback never sustains.
-    if (threadCreate(&t->writer, writer_main, t, NULL, 0x20000, 0x2D, -2) == 0) {
+    // Writer (SHA-1 + cache write) on the work core, off the UI core. Horizon
+    // neither timeslices nor preempts between equal priorities, so if it ever
+    // has to fall back to the UI core it runs one notch BELOW the UI (0x2D):
+    // at 0x2C a frame waking from vsync waited out a whole SHA-1/SD write.
+    if (threadCreate(&t->writer, writer_main, t, NULL, 0x20000,
+                     TSNX_THREAD_ARGS(TSNX_CORE_WORK, TSNX_PRIO_WRITER)) == 0) {
         t->writer_started = true;
         threadStart(&t->writer);
     } else {
@@ -3253,10 +3320,14 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
         torrentfs_close(t);
         return NULL;
     }
-    // Priority 0x2B, one notch above the app default (0x2C): Horizon never preempts
-    // between equal priorities, and CPU-bound threads otherwise starve this loop's
-    // ~100 IPC yield points for seconds at a time (v2's finding).
-    if (threadCreate(&t->netloop, netloop_main, t, NULL, 0x40000, 0x2B, -2) == 0) {
+    // Netloop on the network core at 0x2B, above the background net threads
+    // that share it: Horizon never preempts between equal priorities, and
+    // CPU-bound threads otherwise starve this loop's ~100 IPC yield points for
+    // seconds at a time (v2's finding). It used to run on the UI core at 0x2B
+    // -- ABOVE the UI -- which is what stuttered the interface during
+    // downloads; on a fallback to the UI core it now drops below the UI.
+    if (threadCreate(&t->netloop, netloop_main, t, NULL, 0x40000,
+                     TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NETLOOP)) == 0) {
         t->netloop_started = true;
         threadStart(&t->netloop);
     } else {

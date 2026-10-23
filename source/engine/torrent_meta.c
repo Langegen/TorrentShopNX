@@ -15,6 +15,7 @@
 #include "magnet.h"
 #include "bt_peer.h"
 #include "dhtclient.h"
+#include "thread_cfg.h"
 #include "../utils/app_paths.h"
 
 static void set_err(char *err, size_t errlen, const char *msg) {
@@ -466,7 +467,7 @@ static void meta_run(meta_fetch *fetch) {
     int started = 0;
     for (int i = 0; i < nw; i++) {
         if (threadCreate(&workers[started], meta_worker, fetch, NULL, 0x10000,
-                         0x2C, -2) != 0)
+                         TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) != 0)
             break;
         if (threadStart(&workers[started]) != 0) {
             threadClose(&workers[started]);
@@ -1177,7 +1178,8 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         }
 
         if (i < n_threaded) {
-            if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
+            if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000,
+                             TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) == 0) {
                 j->has_thread = true;
                 threadStart(&j->thread);
 #ifdef __SWITCH__

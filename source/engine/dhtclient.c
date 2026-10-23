@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 
 #include "engine_log.h"
+#include "thread_cfg.h"
 #include "torrent_meta.h"   // torrent_announce_port(): our advertised listen port
 #include "../utils/app_paths.h"
 
@@ -700,7 +701,7 @@ static int dht_bg_start(void) {
     }
     s_bg_stop = false;
     if (threadCreate(&s_bg_thread, dht_bg_main, NULL, NULL,
-                     0x20000, 0x2C, -2) == 0) {
+                     0x20000, TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) == 0) {
         threadStart(&s_bg_thread);
         s_bg_thread_started = true;
         mutexUnlock(&s_bg_mtx);

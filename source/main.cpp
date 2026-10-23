@@ -40,6 +40,8 @@
 #include "catalog/retro_catalog_manager.h"
 #include "config/config.h"
 #include "utils/log.h"
+#include "utils/perf_stats.h"
+#include "engine/engine_log.h"
 #include "utils/switch_utils.h"
 #include "utils/screen_sleep_manager.h"
 #include "net/http_client.h"
@@ -388,8 +390,8 @@ int main(int argc, char** argv) {
 #ifdef __SWITCH__
     if (checkAndApplyPendingUpdate()) {
         util::logLine("main: exiting for update relaunch");
+        util::logClose();   // drain the async writer before committing
         fsdevCommitDevice("sdmc");
-        util::logClose();
         _exit(0);
     }
 #endif
@@ -616,6 +618,7 @@ int main(int argc, char** argv) {
         int frameCount = 0;
         while (brls::Application::mainLoop()) {
             frameCount++;
+            perf::frame();
             if (frameCount <= 3 || frameCount == 10 || frameCount == 30 || frameCount == 60) {
                 util::logLine("main: mainLoop frame=" + std::to_string(frameCount));
                 if (frameCount == 60) {
@@ -705,9 +708,10 @@ int main(int argc, char** argv) {
     //   - With exitToHomeMode(true), _appletCleanup() exits directly to the Switch Home Menu
     //     (or chainloads via envSetNextLoad when __nx_applet_exit_mode == 0 for updates).
 #ifdef __SWITCH__
-    fsdevCommitDevice("sdmc");
     util::logLine("main: closing log and exiting via _exit(0). Goodbye!");
-    util::logClose();  // close log file before __appExit calls fsExit
+    engine_log_flush();  // applet mode skips the engine shutdown: drain its log ring
+    util::logClose();    // drains the async log writer; before __appExit calls fsExit
+    fsdevCommitDevice("sdmc");
     _exit(0);
 #else
     util::logLine("main: closing log and exiting. Goodbye!");
