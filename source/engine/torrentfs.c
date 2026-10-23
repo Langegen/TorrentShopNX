@@ -193,13 +193,18 @@
 #define RAM_STREAM_BUDGET (256LL << 20)
 
 #define TFS_MAX_PEERS    2048
-// IP -> pool slot index (open addressing, linear probing): the pool holds one
-// entry per IP, and finding it used to be a scan of all 2048 entries for every
-// address a tracker / DHT / PEX reply delivered.
+// ip:port -> pool slot index (open addressing, linear probing). Finding an
+// address used to be a scan of all 2048 entries for every address a tracker /
+// DHT / PEX reply delivered. Keyed by ip:port (it used to be the IP alone):
+// several clients behind one NAT / CGNAT address are distinct peers.
 #define POOL_HASH_SIZE   4096   // power of two, >= 2 * TFS_MAX_PEERS
 // When the pool is full, the eviction victim is the worst of this many
 // entries from a rotating cursor (was: a scan of the whole pool per address).
 #define POOL_EVICT_SAMPLE 64
+// Outbound sessions per IP (different ports = different clients behind one
+// address). An IP that already has an INCOMING session is not dialed at all:
+// that would just open a second session to the same peer.
+#define MAX_SESS_PER_IP   2
 #define BACKOFF_CONN_SECS 5
 #define BACKOFF_MAX_SECS  120
 #define BACKOFF_DROP_SECS 5
@@ -467,6 +472,18 @@ struct torrentfs {
     uint32_t dial_seq;         // every 4th dial explores an untried address
     int st_rotated, pf_rotated;    // sessions rotated out by turnover / cap
     int st_dials, pf_dials;
+    // Pool exhaustion (netloop): below the session target with nothing left
+    // to dial -> ask trackers and the DHT for fresh addresses.
+    u64 last_exhaust_check;
+    u64 last_exhaust_announce;
+    bool pool_exhausted;
+    int st_exhaust_announces;
+    u64 last_dup_dbg;          // [dupdbg] cadence (was a static shared by all torrents)
+    // Files the app did not select (1 = unwanted). Only the multi-file
+    // lookahead consults it: near the end of the streamed file the engine
+    // pre-fetches up to 64 MB of the NEXT file -- wasted when that file was
+    // not selected.
+    uint8_t *file_unwanted;
     int n_aq;
     int n_active_aq;
     uint8_t *aq_buf_pool[AQ_MAX];
@@ -983,41 +1000,41 @@ static inline int peer_eval_score(const torrentfs *t, int j) {
     return score;
 }
 
-static inline uint32_t pool_hash_of(uint32_t ip) {
-    return (ip * 2654435761u) >> (32 - 12);   // 12 bits = POOL_HASH_SIZE
+static inline uint32_t pool_hash_of(uint32_t ip, uint16_t port) {
+    return ((ip ^ ((uint32_t)port * 0x9E3779B1u)) * 2654435761u) >> (32 - 12);   // 12 bits
 }
 
-// Caller holds t->lock. Pool slot of `ip`, or -1.
-static int pool_find(const torrentfs *t, uint32_t ip) {
-    for (uint32_t h = pool_hash_of(ip), k = 0; k < POOL_HASH_SIZE; k++, h = (h + 1) & (POOL_HASH_SIZE - 1)) {
+// Caller holds t->lock. Pool slot of ip:port, or -1.
+static int pool_find(const torrentfs *t, uint32_t ip, uint16_t port) {
+    for (uint32_t h = pool_hash_of(ip, port), k = 0; k < POOL_HASH_SIZE; k++, h = (h + 1) & (POOL_HASH_SIZE - 1)) {
         int v = t->pool_hash[h];
         if (v == 0) return -1;
-        if (t->peers[v - 1].ip == ip) return v - 1;
+        if (t->peers[v - 1].ip == ip && t->peers[v - 1].port == port) return v - 1;
     }
     return -1;
 }
 
-static void pool_hash_insert(torrentfs *t, uint32_t ip, int slot) {
-    uint32_t h = pool_hash_of(ip);
+static void pool_hash_insert(torrentfs *t, uint32_t ip, uint16_t port, int slot) {
+    uint32_t h = pool_hash_of(ip, port);
     while (t->pool_hash[h] != 0) h = (h + 1) & (POOL_HASH_SIZE - 1);
     t->pool_hash[h] = (int16_t)(slot + 1);
 }
 
-// Remove `ip` (backward-shift deletion keeps every probe chain unbroken).
-// Must run BEFORE peers[slot] is overwritten: probing compares stored IPs.
-static void pool_hash_remove(torrentfs *t, uint32_t ip) {
-    uint32_t h = pool_hash_of(ip);
+// Remove ip:port (backward-shift deletion keeps every probe chain unbroken).
+// Must run BEFORE peers[slot] is overwritten: probing compares stored keys.
+static void pool_hash_remove(torrentfs *t, uint32_t ip, uint16_t port) {
+    uint32_t h = pool_hash_of(ip, port);
     for (;;) {
         int v = t->pool_hash[h];
         if (v == 0) return;
-        if (t->peers[v - 1].ip == ip) break;
+        if (t->peers[v - 1].ip == ip && t->peers[v - 1].port == port) break;
         h = (h + 1) & (POOL_HASH_SIZE - 1);
     }
     uint32_t hole = h;
     for (uint32_t j = (hole + 1) & (POOL_HASH_SIZE - 1);; j = (j + 1) & (POOL_HASH_SIZE - 1)) {
         int v = t->pool_hash[j];
         if (v == 0) break;
-        uint32_t home = pool_hash_of(t->peers[v - 1].ip);
+        uint32_t home = pool_hash_of(t->peers[v - 1].ip, t->peers[v - 1].port);
         // Move j into the hole unless its home lies cyclically in (hole, j].
         bool in_range = (hole <= j) ? (home > hole && home <= j)
                                     : (home > hole || home <= j);
@@ -1038,13 +1055,10 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
         // only rejects port 0. Dialing them just burns the dial budget.
         if (peers[i].port <= 1) continue;
         bool dup = false;
-        int j = pool_find(t, peers[i].ip);
+        int j = pool_find(t, peers[i].ip, peers[i].port);
         if (j >= 0) {
-                // Same IP: upgrade provenance and update port if newer source
-                if ((uint8_t)src < t->peer_src[j]) {
-                    t->peer_src[j] = (uint8_t)src;
-                    t->peers[j].port = peers[i].port;
-                }
+                // Known address: upgrade provenance if the source is better
+                if ((uint8_t)src < t->peer_src[j]) t->peer_src[j] = (uint8_t)src;
                 // If we are starved and tracker/PEX reports this peer again, give it a fresh chance
                 if (t->st_live < STARVED_LIVE && t->peer_fails[j] > 0 && !t->peer_busy[j]) {
                     t->peer_fails[j] = 0;
@@ -1075,12 +1089,12 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
             }
             if (worst >= 0 && (worst_score < incoming_score || worst_score <= 300)) {
                 slot = worst;
-                pool_hash_remove(t, t->peers[slot].ip);   // before overwriting
+                pool_hash_remove(t, t->peers[slot].ip, t->peers[slot].port);   // before overwriting
             }
         }
         if (slot < 0) continue;
         t->peers[slot]         = peers[i];
-        pool_hash_insert(t, peers[i].ip, slot);
+        pool_hash_insert(t, peers[i].ip, peers[i].port, slot);
         t->peer_fails[slot]    = 0;
         t->peer_fail_kind[slot]= PEER_FAIL_NONE;
         t->peer_sha_fails[slot]= 0;
@@ -1096,7 +1110,7 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
     // and a lock held across a blocking write freezes every thread that
     // needs it.
     if (added > 0)
-        engine_log(ENGINE_LOG_INFO, "[torrentfs] added %d peers (total %d)", added, t->peer_count);
+        engine_log(ENGINE_LOG_DEBUG, "[torrentfs] added %d peers (total %d)", added, t->peer_count);
 }
 
 static void add_peers_tracker_cb(void *ctx, const peer_addr *peers, int n) {
@@ -1115,14 +1129,22 @@ static int take_peer(torrentfs *t, peer_addr *out) {
     mutexLock(&t->lock);
     int best_idx = -1;
     int best_score = -999999;
-    // Avoid opening multiple parallel connections to the same IP. The pool
-    // holds one entry per IP and an outbound session marks its entry busy,
-    // so only INCOMING sessions (no pool entry) can collide with an idle
-    // entry: check against those few instead of every session per entry.
-    uint32_t in_ips[MAX_SESS];
-    int n_in = 0;
-    for (int k = 0; k < MAX_SESS; k++)
-        if (t->S[k].active && t->S[k].pidx < 0) in_ips[n_in++] = t->S[k].addr.ip;
+    // Sessions per IP: at most MAX_SESS_PER_IP outbound (distinct ports), and
+    // none at all to an IP that already dialed us. Built once per call into a
+    // small hash table (the per-entry scan of every session was O(pool x sessions)).
+    enum { IPTAB = 256 };   // power of two, > 2 * MAX_SESS
+    uint32_t tab_ip[IPTAB];
+    uint8_t tab_n[IPTAB];   // outbound sessions; 0xFF = has an incoming one
+    memset(tab_n, 0, sizeof(tab_n));
+    for (int k = 0; k < MAX_SESS; k++) {
+        const sess *ss = &t->S[k];
+        if (!ss->active) continue;
+        uint32_t h = (ss->addr.ip * 2654435761u) >> 24;
+        while (tab_n[h] && tab_ip[h] != ss->addr.ip) h = (h + 1) & (IPTAB - 1);
+        tab_ip[h] = ss->addr.ip;
+        if (ss->pidx < 0) tab_n[h] = 0xFF;
+        else if (tab_n[h] != 0xFF) tab_n[h]++;
+    }
     // Every 4th dial goes to an address never tried before, so the pool keeps
     // being explored even when known-good addresses are ready.
     const bool explore = (t->dial_seq++ % 4) == 3;
@@ -1132,10 +1154,12 @@ static int take_peer(torrentfs *t, peer_addr *out) {
             if (t->peer_busy[i]) continue;
             if (t->peer_next_try[i] > now) continue;
 
-            bool ip_busy = false;
-            for (int k = 0; k < n_in; k++)
-                if (in_ips[k] == t->peers[i].ip) { ip_busy = true; break; }
-            if (ip_busy) continue;
+            {
+                uint32_t ip = t->peers[i].ip;
+                uint32_t h = (ip * 2654435761u) >> 24;
+                while (tab_n[h] && tab_ip[h] != ip) h = (h + 1) & (IPTAB - 1);
+                if (tab_n[h] && tab_n[h] >= MAX_SESS_PER_IP) continue;   // 0xFF counts too
+            }
 
             int score = peer_eval_score(t, i);
             if (explore && t->peer_fails[i] == 0 && !t->peer_ok[i] &&
@@ -1179,7 +1203,11 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             // every few seconds burns the dial budget that fresh peers need
             // (measured: ~half of all dial slots went to re-dialing dead
             // addresses).
-            secs = f > 1 ? BACKOFF_MAX_SECS : 60;
+            // Tracker / PEX addresses were reported live moments ago: their
+            // one retry (with CONNECT_RETRY_SECS patience, see sess_dial)
+            // comes after 30 s; cached DHT entries keep the 60 s park.
+            secs = f > 1 ? BACKOFF_MAX_SECS
+                         : (t->peer_src[pidx] == PEER_SRC_DHT ? 60 : 30);
         } else if (!had_conn &&
                    t->st_piece_ok < BOOTSTRAP_THRESH &&
                    t->peer_src[pidx] == PEER_SRC_TRACKER) {
@@ -1829,6 +1857,18 @@ static void sess_drop_requests(torrentfs *t, sess *s) {
 // Zone 3: Readahead (up to 5 pieces)
 // Zone 4: Speculative (up to 15 pieces)
 // Zone 5: Normal pieces of current file, and lookahead pieces into next files.
+// True if the file holding piece idx's first byte was deselected.
+static bool piece_file_unwanted(const torrentfs *t, int64_t idx) {
+    if (!t->file_unwanted || t->meta.file_count <= 0) return false;
+    int64_t at = idx * t->meta.piece_len;
+    int lo = 0, hi = t->meta.file_count - 1;
+    while (lo < hi) {   // last file with offset <= at
+        int mid = (lo + hi + 1) / 2;
+        if (t->meta.files[mid].offset <= at) lo = mid; else hi = mid - 1;
+    }
+    return t->file_unwanted[lo] != 0;
+}
+
 static int piece_priority_rb(torrentfs *t, int64_t idx, int64_t rb) {
     if (idx < t->file_first_piece) return 0;
     if (idx > t->file_last_piece + LOOKAHEAD_PIECES || idx >= t->meta.piece_count) return 0;
@@ -1841,7 +1881,8 @@ static int piece_priority_rb(torrentfs *t, int64_t idx, int64_t rb) {
         int64_t lookahead = (64LL << 20) / plen;
         if (lookahead < 1) lookahead = 1;
         if (lookahead > LOOKAHEAD_PIECES) lookahead = LOOKAHEAD_PIECES;
-        if (idx <= t->file_last_piece + lookahead && (t->file_last_piece - ph) <= 4) {
+        if (idx <= t->file_last_piece + lookahead && (t->file_last_piece - ph) <= 4 &&
+            !piece_file_unwanted(t, idx)) {
             return 5;
         }
         return 0;
@@ -2589,7 +2630,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 for (int64_t p = 0; p < t->meta.piece_count && full; p++)
                     if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p))
                         full = false;
-                engine_log(ENGINE_LOG_INFO,
+                engine_log(ENGINE_LOG_DEBUG,
                            "[sess %d] bitfield ok empty=%d full=%d ip=%u.%u.%u.%u",
                            (int)(s - t->S), empty ? 1 : 0, full ? 1 : 0,
                            s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
@@ -2784,7 +2825,7 @@ static void send_our_bitfield(torrentfs *t, sess *s) {
     }
     mutexUnlock(&t->lock);
     if (peer_nb_queue(&s->nb, MSG_BITFIELD, bf, (uint32_t)n) == 0) {
-        engine_log(ENGINE_LOG_INFO,
+        engine_log(ENGINE_LOG_DEBUG,
                    "[sess %d] sent our bitfield (%zu bytes)", (int)(s - t->S), n);
     }
     free(bf);
@@ -2817,7 +2858,7 @@ static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
             t->st_live++;
             if (t->st_live > t->st_peak_live) t->st_peak_live = t->st_live;
             peer_nb_apply_speed_opts(&s->nb);
-            engine_log(ENGINE_LOG_INFO, "[sess %d] handshake ok live=%d/%d",
+            engine_log(ENGINE_LOG_DEBUG, "[sess %d] handshake ok live=%d/%d",
                        sid, t->st_live, MAX_SESS);
             peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
             engine_log(ENGINE_LOG_DEBUG, "[sess %d] queued interested", sid);
@@ -3408,9 +3449,8 @@ static void netloop_main(void *arg) {
 
             // Duplicate-traffic provenance, every ~10 s (PC diagnostics).
             {
-                static u64 last_dup_dbg;
-                if (now - last_dup_dbg > (u64)10 * t->freq) {
-                    last_dup_dbg = now;
+                if (now - t->last_dup_dbg > (u64)10 * t->freq) {
+                    t->last_dup_dbg = now;
                     engine_log(ENGINE_LOG_DEBUG,
                                "[dupdbg] total=%lld noring=%lld have=%lld gone=%lld",
                                (long long)t->st_dup_bytes,
@@ -3606,9 +3646,27 @@ static void netloop_main(void *arg) {
                 t->last_choke = now;
                 choking_round(t, now);
             }
+            // Pool exhaustion: under the session target and no address left to
+            // dial. Checked every 5 s; triggers an extra tracker announce at
+            // most every 2 min (trackers cut the peer list of clients that
+            // announce too often) and keeps the DHT searching hard.
+            if (now - t->last_exhaust_check > (u64)5 * t->freq) {
+                t->last_exhaust_check = now;
+                t->pool_exhausted = t->st_live < t->live_target && !pool_has_ready(t, now);
+                if (t->pool_exhausted &&
+                    (t->last_exhaust_announce == 0 ||
+                     now - t->last_exhaust_announce > (u64)120 * t->freq)) {
+                    t->last_exhaust_announce = now;
+                    t->announce_now = true;
+                    t->st_exhaust_announces++;
+                    engine_log(ENGINE_LOG_INFO,
+                               "[torrentfs] peer pool exhausted (live=%d pool=%d): re-announce",
+                               t->st_live, t->peer_count);
+                }
+            }
             // Starvation signal for the background DHT: search more often so
             // the peer pool refills instead of waiting out the 15 s timer.
-            dht_bg_set_hungry(t->st_live < STARVED_LIVE ? 1 : 0);
+            dht_bg_set_hungry((t->st_live < STARVED_LIVE || t->pool_exhausted) ? 1 : 0);
             drain_incoming(t, now); // sockets the shared listener accepted
 
             int live = 0, connecting = 0, bf_empty = 0;
@@ -3982,6 +4040,7 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
         if (!t->aq[i].have || !t->aq[i].req || !t->aq[i].req_ts || !t->aq[i].req_by)
             aq_ok = false;
     }
+    t->file_unwanted = calloc((size_t)(t->meta.file_count > 0 ? t->meta.file_count : 1), 1);
     t->cand     = malloc((size_t)(t->meta.piece_count + 1) * sizeof(int32_t));
     t->cand_tmp = malloc((size_t)t->meta.piece_count + 1);
     if (!t->cand || !t->cand_tmp) aq_ok = false;
@@ -4116,6 +4175,7 @@ void torrentfs_close(torrentfs *tfs) {
     free(tfs->aq_of_piece);
     free(tfs->cand);
     free(tfs->cand_tmp);
+    free(tfs->file_unwanted);
     for (int i = 0; i < tfs->aq_buf_pool_cnt; i++) {
         free(tfs->aq_buf_pool[i]);
         tfs->aq_buf_pool[i] = NULL;
@@ -4688,6 +4748,15 @@ bool torrentfs_clear_piece_zones(torrentfs *tfs) {
     __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);
     mutexUnlock(&tfs->lock);
     return true;
+}
+
+void torrentfs_set_file_wanted(torrentfs *tfs, int file_index, bool wanted) {
+    if (!tfs || !tfs->file_unwanted || file_index < 0 || file_index >= tfs->meta.file_count)
+        return;
+    mutexLock(&tfs->lock);
+    tfs->file_unwanted[file_index] = wanted ? 0 : 1;
+    __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);   // rebuild candidates
+    mutexUnlock(&tfs->lock);
 }
 
 void torrentfs_set_session_limit(torrentfs *tfs, int n) {

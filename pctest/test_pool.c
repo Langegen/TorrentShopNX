@@ -22,14 +22,15 @@ static int check(torrentfs *t, const char *when) {
         return 1;
     }
     for (int i = 0; i < t->peer_count; i++) {
-        int f = pool_find(t, t->peers[i].ip);
+        int f = pool_find(t, t->peers[i].ip, t->peers[i].port);
         if (f != i) {
-            printf("FAIL (%s): slot %d ip %08x found at %d\n", when, i, t->peers[i].ip, f);
+            printf("FAIL (%s): slot %d %08x:%u found at %d\n", when, i, t->peers[i].ip,
+                   t->peers[i].port, f);
             return 1;
         }
         for (int j = i + 1; j < t->peer_count; j++)
-            if (t->peers[j].ip == t->peers[i].ip) {
-                printf("FAIL (%s): duplicate ip in slots %d and %d\n", when, i, j);
+            if (t->peers[j].ip == t->peers[i].ip && t->peers[j].port == t->peers[i].port) {
+                printf("FAIL (%s): duplicate address in slots %d and %d\n", when, i, j);
                 return 1;
             }
     }
@@ -50,7 +51,7 @@ int main(void) {
         int n = 1 + (int)(rnd() % 512);
         for (int k = 0; k < n; k++) {
             batch[k].ip = 0x0A000000u + rnd() % universe;
-            batch[k].port = (uint16_t)(1000 + rnd() % 60000);
+            batch[k].port = (uint16_t)(6881 + rnd() % 4);   // few ports: same-IP clients
         }
         int src = (int)(rnd() % 3);
         add_peers_src(t, batch, n, src);
@@ -68,5 +69,36 @@ int main(void) {
     }
     printf("pool fuzz: %d entries in the end, %s\n", t->peer_count, fails ? "FAILED" : "PASSED");
     free(t);
+
+    // Lookahead vs file selection: two files of 40 pieces each; streaming
+    // file 0 near its end, the first pieces of file 1 are pre-fetched only
+    // while file 1 is wanted.
+    torrentfs *u = calloc(1, sizeof(*u));
+    mutexInit(&u->lock);
+    torrent_file files[2] = {{40LL << 20, 0, "a"}, {40LL << 20, 40LL << 20, "b"}};
+    u->meta.files = files;
+    u->meta.file_count = 2;
+    u->meta.piece_len = 1 << 20;
+    u->meta.piece_count = 80;
+    u->file_first_piece = 0;
+    u->file_last_piece = 39;
+    u->playhead_piece = 37;          // within 4 pieces of the end
+    u->read_blocked_piece = -1;
+    u->piece_zone = calloc(80, 1);
+    u->file_unwanted = calloc(2, 1);
+    u->n_aq = 48;
+    int wanted_prio = piece_priority(u, 41);
+    torrentfs_set_file_wanted(u, 1, false);
+    int unwanted_prio = piece_priority(u, 41);
+    torrentfs_set_file_wanted(u, 1, true);
+    int again_prio = piece_priority(u, 41);
+    bool la_ok = wanted_prio == 5 && unwanted_prio == 0 && again_prio == 5 &&
+                 piece_priority(u, 39) > 0;   // the streamed file itself is untouched
+    printf("lookahead vs selection: wanted=%d unwanted=%d re-wanted=%d %s\n",
+           wanted_prio, unwanted_prio, again_prio, la_ok ? "PASSED" : "FAILED");
+    free(u->piece_zone);
+    free(u->file_unwanted);
+    free(u);
+    if (!la_ok) fails++;
     return fails ? 1 : 0;
 }

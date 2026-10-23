@@ -210,6 +210,7 @@ int main(int argc, char **argv) {
     bool app_sched = false;
     bool fast_only = false;
     bool loose = false;
+    bool same_ip = false;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--size") && i + 1 < argc) size_mb = (uint32_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--piece") && i + 1 < argc) piece_mb = (uint32_t)atoi(argv[++i]);
@@ -217,6 +218,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--appsched")) { app_sched = true; zones_on = false; }
         else if (!strcmp(argv[i], "--fastonly")) fast_only = true;   // just the fast seeder
         else if (!strcmp(argv[i], "--loose")) loose = true;          // no strict SHA-1 reads
+        else if (!strcmp(argv[i], "--sameip")) same_ip = true;       // all seeders on 127.0.0.1
     }
 #ifdef _WIN32
     WSADATA wsa;
@@ -238,6 +240,7 @@ int main(int argc, char **argv) {
     };
     vector<thread> acceptors;
     for (auto &sd : seeders) {
+        if (same_ip) sd.ip_host = 0x7F000001;   // one address, three ports
         if (!start_seeder(sd)) { cerr << "bind failed for " << sd.name << endl; return 1; }
         acceptors.emplace_back(accept_loop, &sd, &pl);
     }

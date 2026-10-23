@@ -190,6 +190,10 @@ int torrentfs_calm(const torrentfs *tfs);
 // The dial target follows it down. For tests and a future global budget.
 void torrentfs_set_session_limit(torrentfs *tfs, int n);
 
+// Mark a file (de)selected. Only the lookahead into the next file honours it:
+// the streamed file itself is always downloaded.
+void torrentfs_set_file_wanted(torrentfs *tfs, int file_index, bool wanted);
+
 // Peer turnover timing, process-wide (defaults 30 s / 60 s). Tests shorten it.
 void torrentfs_set_rotation_timing(int turnover_secs, int trial_secs);
 

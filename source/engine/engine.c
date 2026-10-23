@@ -241,6 +241,9 @@ static bool slot_open_fs(tsnx_torrent *t, const char *source, int file_index,
     t->fs = nfs;
     t->file_index = file_index;
     if (t->paused) torrentfs_pause(nfs, 1);
+    // A selection made before the stream opened (e.g. during the probe).
+    for (int i = 0; t->wanted_files && i < t->wanted_files_count; i++)
+        if (!t->wanted_files[i]) torrentfs_set_file_wanted(nfs, i, false);
     REG_UNLOCK();
     return true;
 }
@@ -810,6 +813,7 @@ bool tsnx_engine_set_file_wanted(tsnx_engine *eng, const char *hash,
     tsnx_torrent *t = find_locked(eng, hash);
     if (t && file_index >= 0 && file_index < t->wanted_files_count && t->wanted_files) {
         t->wanted_files[file_index] = wanted;
+        if (t->fs) torrentfs_set_file_wanted(t->fs, file_index, wanted);
         ok = true;
     }
     REG_UNLOCK();

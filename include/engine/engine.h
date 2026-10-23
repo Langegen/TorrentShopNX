@@ -105,7 +105,9 @@ int  tsnx_engine_get_file_count(tsnx_engine *eng, const char *hash);
 int  tsnx_engine_get_files(tsnx_engine *eng, const char *hash,
                            tsnx_file_info *out, int max_files);
 
-/* Mark a file as wanted or not. Unwanted files are not downloaded. */
+/* Mark a file as wanted or not. The streamed file is always downloaded; an
+ * unwanted file is skipped by the lookahead that pre-fetches the start of the
+ * next file near the end of the current one. */
 bool tsnx_engine_set_file_wanted(tsnx_engine *eng, const char *hash,
                                  int file_index, bool wanted);
 
