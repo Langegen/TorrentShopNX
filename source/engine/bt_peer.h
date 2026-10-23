@@ -68,6 +68,7 @@ typedef struct {
     uint8_t *rx;        // accumulated inbound bytes (partial messages included)
     size_t rx_off;      // bytes at the front already handed out to the caller
     size_t rx_len;      // total bytes held, rx_off included
+    bool rx_more;       // last pump stopped on a full buffer: more may be waiting
 
     uint8_t *tx;        // queued outbound bytes, drained as the socket allows
     size_t tx_head;     // bytes already sent from the front of tx

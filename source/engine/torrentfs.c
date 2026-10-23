@@ -88,7 +88,7 @@
    512 KB (classify_sessions). Targeting 48-50 live sessions with active
    unchoke upkeep ensures 25-35 active uploaders. */
 #define MAX_SESS             64
-#define MAX_CONNECTING       24     // slots allowed to sit in a pending connect (prevents router NAT table exhaustion)
+#define MAX_CONNECTING       32     // slots allowed to sit in a pending connect (24 was always full on the console: 81 % of dials time out)
 #define DIAL_STOP_LIVE       50     // baseline live sessions
 #define MIN_ACTIVE_UNCHOKED  24     // keep dialing up to MAX_SESS if unchoked peers are below this
 #define REQ_INITIAL          32     // Initial probe window on Switch: 32 blocks (512 KB)
@@ -104,6 +104,7 @@
 #define CONNECT_SECS         2      // 2.0s fast-fail for dead DHT peers (pipensx uses 1.5s; 8-10s starved connection pool)
 #define CONNECT_STARVED_SECS 3      // starved swarm floor
 #define CONNECT_RETRY_SECS   5      // patience for proven peers (peer_ok)
+#define UTP_MAX_CONNECTING   4      // uTP dials in flight (each may hold a slot 10 s)
 // Dial budgets: bootstrap burst connects rapidly, upkeep maintains
 #define DIAL_BUDGET_PER_TICK 6
 #define DIAL_BUDGET_BOOTSTRAP 12
@@ -599,6 +600,9 @@ struct torrentfs {
     // from "slow socket service" in the [perf] line.
     u64 pf_sock_ticks;
     uint32_t pf_sock_calls;
+    u64 last_poll_ret;         // netloop: when the last poll() returned (rate cap)
+    int pf_utp_connecting;     // uTP dials in flight (last upkeep)
+    int st_utp_dials, pf_utp_dials;
     u64 pf_tick;
     int64_t pf_bytes, pf_dup;
     int pf_sock_fail, pf_timeouts, pf_enobufs;
@@ -2091,8 +2095,10 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     bool critical_tail = is_critical && remaining_blocks > 0 && remaining_blocks <= tail_threshold;
     bool is_endgame  = file_endgame || critical_tail;
     // Where waiting costs the most, hedge without asking whether the holder is
-    // on schedule: the reader is blocked, or the download is about to end.
-    bool must_hedge = is_read_blocked || file_endgame;
+    // on schedule: the last blocks of the piece the reader is blocked on, or
+    // the download is about to end. (With 16 MB pieces the reader is blocked
+    // almost all the time; hedging that whole piece kept dup at ~8 %.)
+    bool must_hedge = (is_read_blocked && critical_tail) || file_endgame;
 
     int max_dup = 1; // Default for background readahead pieces: 1 request
     if (must_hedge) {
@@ -2963,7 +2969,9 @@ static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
             if (!s->active) return;
         }
 
-        if (got == 0 || msgs == 0) break;
+        // Pump again only if the last pump stopped on a full rx buffer; a
+        // drained socket would just cost another recv IPC for EAGAIN.
+        if (got == 0 || msgs == 0 || !s->nb.rx_more) break;
     }
 
     request_scan_rx(t, s, now);
@@ -3330,7 +3338,7 @@ static void perf_emit(torrentfs *t, u64 now) {
                "live=%d unchoked=%d connecting=%d pool=%d "
                "sock_fail+%d enobufs+%d timeouts+%d wq=%d wq_full+%d fast=%d slow=%d "
                "aq=%d/%d rb=%lld rb_st=%d rotated+%d dials+%d "
-               "sock_ms/s=%.0f sock_calls/s=%.0f sock_us/call=%.0f",
+               "sock_ms/s=%.0f sock_calls/s=%.0f sock_us/call=%.0f utp_conn=%d utp_dials+%d",
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.50),
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.95),
                (unsigned long long)t->pf_loop.max, t->pf_loop.n,
@@ -3344,7 +3352,9 @@ static void perf_emit(torrentfs *t, u64 now) {
                t->st_rotated - t->pf_rotated, t->st_dials - t->pf_dials,
                (double)t->pf_sock_ticks * 1000.0 / (double)t->freq / secs,
                t->pf_sock_calls / secs,
-               t->pf_sock_calls ? (double)t->pf_sock_ticks * 1e6 / (double)t->freq / t->pf_sock_calls : 0.0);
+               t->pf_sock_calls ? (double)t->pf_sock_ticks * 1e6 / (double)t->freq / t->pf_sock_calls : 0.0,
+               t->pf_utp_connecting, t->st_utp_dials - t->pf_utp_dials);
+    t->pf_utp_dials = t->st_utp_dials;
     perf_hist_reset(&t->pf_loop);
     t->pf_sock_ticks = 0;
     t->pf_sock_calls = 0;
@@ -3857,13 +3867,24 @@ static void netloop_main(void *arg) {
             if (t->pause_dials_until && now < t->pause_dials_until) {
                 dial_budget = 0;
             }
-            if (dial_budget > 0) {
+            // uTP dials hold a connecting slot for up to 10 s. Every failed
+            // TCP dial (81 % of them on the console, mostly dead DHT
+            // addresses) queued a uTP retry ahead of new dials, so the 24
+            // slots sat on retries to dead peers while live=19 never grew.
+            // Cap the uTP dials in flight.
+            int utp_connecting = 0;
+            for (int s = 0; s < MAX_SESS; s++)
+                if (t->S[s].active && t->S[s].connecting && t->S[s].nb.utp) utp_connecting++;
+            t->pf_utp_connecting = utp_connecting;
+            if (dial_budget > 0 && utp_connecting < UTP_MAX_CONNECTING) {
                 peer_addr rpa;
                 int rp = take_utp_retry_peer(t, &rpa);
                 if (rp >= 0) {
                     if (sess_dial_utp_at(t, now, rp, rpa)) {
                         connecting++;
                         dial_budget--;
+                        utp_connecting++;
+                        t->st_utp_dials++;
                     }
                 }
             }
@@ -3893,9 +3914,11 @@ static void netloop_main(void *arg) {
                 // plain TCP on the Switch; keep it as a rare NAT fallback
                 // (1 dial in 8) rather than an every-4th-dial transport.
                 bool try_utp = utp_nb_fd() >= 0 && !few_peers &&
-                               (t->dial_toggle % 8) == 0;
+                               (t->dial_toggle % 8) == 0 &&
+                               utp_connecting < UTP_MAX_CONNECTING;
                 if (try_utp) {
                     ok = sess_dial_utp(t, now);
+                    if (ok) { utp_connecting++; t->st_utp_dials++; }
                 } else {
                     ok = sess_dial(t, now, conn_secs);
                 }
@@ -3980,11 +4003,29 @@ static void netloop_main(void *arg) {
             n++;
         }
 
+        u64 slept = 0;
+#ifdef __SWITCH__
+        // At most ~250 polls/s. With data trickling in on 20 sockets poll()
+        // returned immediately every time (~630 iterations/s measured), and
+        // each pass cost a poll IPC plus recv IPCs for a few KB. 4 ms is
+        // nothing next to RTT and 16 MB pieces, and the 128-512 KB receive
+        // windows absorb it.
+        {
+            u64 min_gap = t->freq / 250;
+            u64 since = armGetSystemTick() - t->last_poll_ret;
+            if (t->last_poll_ret && since < min_gap) {
+                u64 s0 = armGetSystemTick();
+                svcSleepThread((s64)((min_gap - since) * 1000000000ULL / t->freq));
+                slept = armGetSystemTick() - s0;
+            }
+        }
+#endif
         u64 lt0 = armGetSystemTick();
         int pr = poll(pfd, (nfds_t)n, 20);
         lat_add(t, LAT_POLL, lt0);
 
         now = armGetSystemTick();
+        t->last_poll_ret = now;
         bool utp_serviced = false;
         if (pr > 0) {
             for (int k = 0; k < n; k++) {
@@ -4036,7 +4077,7 @@ static void netloop_main(void *arg) {
         }
 
         // [perf] CPU time of this iteration, the poll() wait left out.
-        u64 work = (lt0 - it0) + (armGetSystemTick() - now);
+        u64 work = (lt0 - it0 - slept) + (armGetSystemTick() - now);
         perf_hist_add(&t->pf_loop, work * 1000000ULL / t->freq);
     }
 

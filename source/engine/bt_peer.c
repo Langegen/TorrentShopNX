@@ -769,16 +769,25 @@ void peer_nb_free(peer_nb *p) {
 // below; pump_rx drives the MSE handshake which queues its produced bytes.)
 static int nb_tx_append(peer_nb *p, const void *buf, size_t len);
 
+// Every recv() on the Switch is an IPC to the bsd sysmodule. A read that
+// returns less than asked for has drained the socket, so the pump stops there
+// instead of paying one more call just to get EAGAIN (level-triggered poll
+// reports the socket again if more arrives). Measured before: ~30k socket
+// calls/s at 8 MB/s, a third of the netloop's core.
 ssize_t peer_nb_pump_rx(peer_nb *p) {
     ssize_t total = 0;
+    p->rx_more = false;
     for (;;) {
         if (p->rx_len >= PEER_RX_CAP) {
             nb_compact(p);
-            if (p->rx_len >= PEER_RX_CAP)
+            if (p->rx_len >= PEER_RX_CAP) {
+                p->rx_more = true;
                 return total;  // a whole message is buffered; caller must drain it
+            }
         }
         ssize_t n;
         size_t old_len = p->rx_len;
+        size_t want = PEER_RX_CAP - p->rx_len;
         if (p->utp) {
             n = utp_nb_read((utp_nb_sess *)p->utp,
                             p->rx + p->rx_len, (int)(PEER_RX_CAP - p->rx_len));
@@ -856,6 +865,7 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
             }
             nb_compact(p);
         }
+        if (!p->utp && (size_t)n < want) return total;   // socket drained
     }
 }
 
