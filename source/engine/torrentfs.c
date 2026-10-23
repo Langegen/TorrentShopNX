@@ -162,6 +162,13 @@
 #define RAM_STREAM_BUDGET (256LL << 20)
 
 #define TFS_MAX_PEERS    2048
+// IP -> pool slot index (open addressing, linear probing): the pool holds one
+// entry per IP, and finding it used to be a scan of all 2048 entries for every
+// address a tracker / DHT / PEX reply delivered.
+#define POOL_HASH_SIZE   4096   // power of two, >= 2 * TFS_MAX_PEERS
+// When the pool is full, the eviction victim is the worst of this many
+// entries from a rotating cursor (was: a scan of the whole pool per address).
+#define POOL_EVICT_SAMPLE 64
 #define BACKOFF_CONN_SECS 5
 #define BACKOFF_MAX_SECS  120
 #define BACKOFF_DROP_SECS 5
@@ -257,6 +264,12 @@ typedef struct {
     uint8_t *req;       // one byte per block: outstanding-request COUNT (capped at 255)
     uint64_t *req_ts;   // when the block was last requested (dup gate: DUP_REQ_SECS)
     int16_t *peer_from; // pidx of peer that delivered block b (-1 if none)
+    // Which sessions hold an outstanding request for each block: row b is
+    // SESS_MASK_BYTES bytes, bit = session index. Kept in step with every
+    // session's request ring (rb_set on request, rb_clr on every removal), so
+    // "does this session already have (piece, block) on order" and "who else
+    // must get a CANCEL" are O(1) / O(holders) instead of ring scans.
+    uint8_t *req_by;
     int nblocks;
     int have_cnt;
     int next_req;       // scan cursor for the next block to request
@@ -307,6 +320,21 @@ typedef struct {
 
 static void sess_drop_requests(torrentfs *t, sess *s);
 static aq_entry *aq_find(torrentfs *t, int64_t idx);
+
+#define SESS_MASK_BYTES ((MAX_SESS + 7) / 8)
+
+static inline uint8_t *rb_row(const aq_entry *a, int b) {
+    return a->req_by + (size_t)b * SESS_MASK_BYTES;
+}
+static inline bool rb_has(const aq_entry *a, int b, int sid) {
+    return (rb_row(a, b)[sid >> 3] >> (sid & 7)) & 1;
+}
+static inline void rb_set(aq_entry *a, int b, int sid) {
+    rb_row(a, b)[sid >> 3] |= (uint8_t)(1u << (sid & 7));
+}
+static inline void rb_clr(aq_entry *a, int b, int sid) {
+    rb_row(a, b)[sid >> 3] &= (uint8_t)~(1u << (sid & 7));
+}
 static void torrentfs_apply_select_file(torrentfs *tfs, int file_index);
 
 typedef struct {
@@ -360,12 +388,35 @@ struct torrentfs {
     volatile int pending_select_file; // -1 = none, >= 0 = file index to switch to on netloop thread
 
     aq_entry aq[AQ_MAX];
+    int16_t *aq_of_piece;      // piece -> aq slot hint (validated by aq[slot].idx)
+
+    // Request candidates (netloop-private): the pieces with a non-zero
+    // priority, grouped by zone 1..5 and ascending within a zone. The request
+    // scheduler used to recompute the priority of EVERY piece from the
+    // playhead to the end of the file, 5 zones x 2 passes, for every single
+    // block it requested -- O(pieces) per 16 KB, the cost that grew with file
+    // size. The list is rebuilt only when an input of piece_priority changes
+    // (playhead, zones, file); the read-blocked piece, which the reader sets
+    // and clears on every read, is handled separately (always first).
+    int32_t *cand;
+    uint8_t *cand_tmp;         // rebuild scratch: per-piece zone
+    int cand_end[6];           // zone z occupies cand[cand_end[z-1] .. cand_end[z])
+    bool cand_valid;
+    int64_t cand_ph, cand_first, cand_last;
+    uint32_t cand_gen;
+    uint32_t zone_gen;         // bumped (release) whenever piece zones change
+    uint32_t pf_rebuilds;      // [perf] candidate rebuilds
     int n_aq;
     int n_active_aq;
     uint8_t *aq_buf_pool[AQ_MAX];
     int aq_buf_pool_cnt;
 
     wjob wq[WQ_CAP];
+    // Event wake-ups instead of polling (the writer used to poll its queue
+    // every 2 ms, the reader its piece every 20 ms -- in strict mode ~10 ms of
+    // dead time per piece). Both are waited on with t->lock held.
+    CondVar wq_cv;      // writer: a job was queued
+    CondVar piece_cv;   // reader: a piece became readable
     int wq_head, wq_n;
     int64_t writing_idx;
     uint8_t *writing_buf;
@@ -391,6 +442,7 @@ struct torrentfs {
     int peer_count;
     int next_peer;
     int peer_evict_rr;
+    int16_t pool_hash[POOL_HASH_SIZE];   // slot + 1, 0 = empty (under t->lock)
 
     // Starvation recovery state (escalating rounds).
     u64 last_starve;
@@ -773,8 +825,11 @@ static void ram_store(torrentfs *t, int64_t idx, uint8_t *buf) {
 //-----------------------------------------------------------------------------
 
 static aq_entry *aq_find(torrentfs *t, int64_t idx) {
-    for (int i = 0; i < t->n_aq; i++)
-        if (t->aq[i].idx == idx) return &t->aq[i];
+    // O(1): aq_of_piece is set when a slot takes a piece and never cleared --
+    // a stale hint simply fails the idx check below (the slot moved on).
+    if (idx < 0 || idx >= t->meta.piece_count || !t->aq_of_piece) return NULL;
+    int i = t->aq_of_piece[idx];
+    if (i >= 0 && i < t->n_aq && t->aq[i].idx == idx) return &t->aq[i];
     return NULL;
 }
 
@@ -821,6 +876,8 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         memset(c->have, 0, (size_t)t->blocks_per_piece);
         memset(c->req, 0, (size_t)t->blocks_per_piece);
         memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
+        memset(c->req_by, 0, (size_t)t->blocks_per_piece * SESS_MASK_BYTES);
+        if (t->aq_of_piece) t->aq_of_piece[idx] = (int16_t)i;
         if (!c->peer_from) {
             c->peer_from = malloc((size_t)t->blocks_per_piece * sizeof(int16_t));
         }
@@ -853,6 +910,52 @@ static inline int peer_eval_score(const torrentfs *t, int j) {
     return score;
 }
 
+static inline uint32_t pool_hash_of(uint32_t ip) {
+    return (ip * 2654435761u) >> (32 - 12);   // 12 bits = POOL_HASH_SIZE
+}
+
+// Caller holds t->lock. Pool slot of `ip`, or -1.
+static int pool_find(const torrentfs *t, uint32_t ip) {
+    for (uint32_t h = pool_hash_of(ip), k = 0; k < POOL_HASH_SIZE; k++, h = (h + 1) & (POOL_HASH_SIZE - 1)) {
+        int v = t->pool_hash[h];
+        if (v == 0) return -1;
+        if (t->peers[v - 1].ip == ip) return v - 1;
+    }
+    return -1;
+}
+
+static void pool_hash_insert(torrentfs *t, uint32_t ip, int slot) {
+    uint32_t h = pool_hash_of(ip);
+    while (t->pool_hash[h] != 0) h = (h + 1) & (POOL_HASH_SIZE - 1);
+    t->pool_hash[h] = (int16_t)(slot + 1);
+}
+
+// Remove `ip` (backward-shift deletion keeps every probe chain unbroken).
+// Must run BEFORE peers[slot] is overwritten: probing compares stored IPs.
+static void pool_hash_remove(torrentfs *t, uint32_t ip) {
+    uint32_t h = pool_hash_of(ip);
+    for (;;) {
+        int v = t->pool_hash[h];
+        if (v == 0) return;
+        if (t->peers[v - 1].ip == ip) break;
+        h = (h + 1) & (POOL_HASH_SIZE - 1);
+    }
+    uint32_t hole = h;
+    for (uint32_t j = (hole + 1) & (POOL_HASH_SIZE - 1);; j = (j + 1) & (POOL_HASH_SIZE - 1)) {
+        int v = t->pool_hash[j];
+        if (v == 0) break;
+        uint32_t home = pool_hash_of(t->peers[v - 1].ip);
+        // Move j into the hole unless its home lies cyclically in (hole, j].
+        bool in_range = (hole <= j) ? (home > hole && home <= j)
+                                    : (home > hole || home <= j);
+        if (!in_range) {
+            t->pool_hash[hole] = (int16_t)v;
+            hole = j;
+        }
+    }
+    t->pool_hash[hole] = 0;
+}
+
 static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) {
     int added = 0;
     mutexLock(&t->lock);
@@ -862,8 +965,8 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
         // only rejects port 0. Dialing them just burns the dial budget.
         if (peers[i].port <= 1) continue;
         bool dup = false;
-        for (int j = 0; j < t->peer_count; j++)
-            if (t->peers[j].ip == peers[i].ip) {
+        int j = pool_find(t, peers[i].ip);
+        if (j >= 0) {
                 // Same IP: upgrade provenance and update port if newer source
                 if ((uint8_t)src < t->peer_src[j]) {
                     t->peer_src[j] = (uint8_t)src;
@@ -875,8 +978,7 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
                     t->peer_next_try[j] = 0;
                 }
                 dup = true;
-                break;
-            }
+        }
         if (dup) continue;
         int slot = -1;
         if (t->peer_count < TFS_MAX_PEERS) {
@@ -887,21 +989,25 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
             int incoming_score = (src == PEER_SRC_TRACKER) ? 700 : (src == PEER_SRC_PEX ? 600 : 300);
             int worst = -1;
             int worst_score = 999999;
-            for (int j = 0; j < TFS_MAX_PEERS; j++) {
-                if (t->peer_busy[j]) continue;
-                int score = peer_eval_score(t, j);
+            for (int k = 0; k < POOL_EVICT_SAMPLE; k++) {
+                int e = t->peer_evict_rr;
+                t->peer_evict_rr = (t->peer_evict_rr + 1) % TFS_MAX_PEERS;
+                if (t->peer_busy[e]) continue;
+                int score = peer_eval_score(t, e);
                 if (score < worst_score) {
                     worst_score = score;
-                    worst = j;
+                    worst = e;
                     if (score <= -20) break; // Dead entry, evict immediately
                 }
             }
             if (worst >= 0 && (worst_score < incoming_score || worst_score <= 300)) {
                 slot = worst;
+                pool_hash_remove(t, t->peers[slot].ip);   // before overwriting
             }
         }
         if (slot < 0) continue;
         t->peers[slot]         = peers[i];
+        pool_hash_insert(t, peers[i].ip, slot);
         t->peer_fails[slot]    = 0;
         t->peer_fail_kind[slot]= PEER_FAIL_NONE;
         t->peer_sha_fails[slot]= 0;
@@ -934,20 +1040,23 @@ static int take_peer(torrentfs *t, peer_addr *out) {
     mutexLock(&t->lock);
     int best_idx = -1;
     int best_score = -999999;
+    // Avoid opening multiple parallel connections to the same IP. The pool
+    // holds one entry per IP and an outbound session marks its entry busy,
+    // so only INCOMING sessions (no pool entry) can collide with an idle
+    // entry: check against those few instead of every session per entry.
+    uint32_t in_ips[MAX_SESS];
+    int n_in = 0;
+    for (int k = 0; k < MAX_SESS; k++)
+        if (t->S[k].active && t->S[k].pidx < 0) in_ips[n_in++] = t->S[k].addr.ip;
     if (!t->stop && t->peer_count > 0) {
         for (int tries = 0; tries < t->peer_count; tries++) {
             int i = (t->next_peer + tries) % t->peer_count;
             if (t->peer_busy[i]) continue;
             if (t->peer_next_try[i] > now) continue;
 
-            // Avoid opening multiple parallel connections to the same IP.
             bool ip_busy = false;
-            for (int s = 0; s < MAX_SESS; s++) {
-                if (t->S[s].active && t->S[s].addr.ip == t->peers[i].ip) {
-                    ip_busy = true;
-                    break;
-                }
-            }
+            for (int k = 0; k < n_in; k++)
+                if (in_ips[k] == t->peers[i].ip) { ip_busy = true; break; }
             if (ip_busy) continue;
 
             int score = peer_eval_score(t, i);
@@ -1171,6 +1280,8 @@ static void writer_main(void *arg) {
         wjob j;
         bool has = false;
         mutexLock(&t->lock);
+        if (t->wq_n == 0 && !t->stop)   // 50 ms cap keeps the heartbeat alive
+            condvarWaitTimeout(&t->wq_cv, &t->lock, 50000000ULL);
         if (t->wq_n > 0) {
             j = t->wq[t->wq_head];
             t->wq_head = (t->wq_head + 1) % WQ_CAP;
@@ -1184,7 +1295,6 @@ static void writer_main(void *arg) {
 
         if (!has) {
             if (stopping) break;   // drained: nothing more can be queued
-            svcSleepThread(2000000ULL);  // 2 ms
             continue;
         }
 
@@ -1210,6 +1320,7 @@ static void writer_main(void *arg) {
                 t->status[j.idx] = PIECE_DONE;
                 t->pieces_done++;
             }
+            condvarWakeAll(&t->piece_cv);
             mark_ever_done(t, j.idx);
             t->st_piece_ok++;
             t->st_cache_written += j.plen;
@@ -1239,6 +1350,7 @@ static void writer_main(void *arg) {
                     t->status[j.idx] = PIECE_DONE;
                     t->pieces_done++;
                 }
+                condvarWakeAll(&t->piece_cv);
                 mark_ever_done(t, j.idx);
                 t->st_piece_ok++;
                 t->st_cache_written += j.plen;
@@ -1609,13 +1721,15 @@ static void send_cancel_one(torrentfs *t, sess *s, int ep, int eb) {
 // may re-request the blocks after the duplicate timer expires. Used when the
 // peer chokes us or when the session closes.
 static void sess_drop_requests(torrentfs *t, sess *s) {
+    int sid = (int)(s - t->S);
     for (int i = 0; i < s->req_n; i++) {
         int ep = s->req_piece[i];
         int eb = s->req_block[i];
         aq_entry *ea = aq_find(t, ep);
-        if (ea && eb >= 0 && eb < ea->nblocks &&
-            ea->req[eb] > 0 && ea->req[eb] < 255)
-            ea->req[eb]--;
+        if (ea && eb >= 0 && eb < ea->nblocks) {
+            if (ea->req[eb] > 0 && ea->req[eb] < 255) ea->req[eb]--;
+            rb_clr(ea, eb, sid);
+        }
     }
     s->req_n = 0;
 }
@@ -1626,10 +1740,10 @@ static void sess_drop_requests(torrentfs *t, sess *s) {
 // Zone 3: Readahead (up to 5 pieces)
 // Zone 4: Speculative (up to 15 pieces)
 // Zone 5: Normal pieces of current file, and lookahead pieces into next files.
-static int piece_priority(torrentfs *t, int64_t idx) {
+static int piece_priority_rb(torrentfs *t, int64_t idx, int64_t rb) {
     if (idx < t->file_first_piece) return 0;
     if (idx > t->file_last_piece + LOOKAHEAD_PIECES || idx >= t->meta.piece_count) return 0;
-    if (idx == t->read_blocked_piece) return 1;
+    if (idx == rb) return 1;
     int64_t ph = t->playhead_piece;
     if (ph < t->file_first_piece) ph = t->file_first_piece;
     if (ph > t->file_last_piece) ph = t->file_last_piece;
@@ -1664,6 +1778,46 @@ static int piece_priority(torrentfs *t, int64_t idx) {
     return 5;
 }
 
+static int piece_priority(torrentfs *t, int64_t idx) {
+    return piece_priority_rb(t, idx, t->read_blocked_piece);
+}
+
+// Rebuild the candidate list if any input of piece_priority (other than the
+// read-blocked piece) changed since the last build. Netloop only.
+static void cand_refresh(torrentfs *t) {
+    uint32_t gen = __atomic_load_n(&t->zone_gen, __ATOMIC_ACQUIRE);
+    int64_t ph = t->playhead_piece;
+    if (t->cand_valid && ph == t->cand_ph && gen == t->cand_gen &&
+        t->file_first_piece == t->cand_first && t->file_last_piece == t->cand_last)
+        return;
+    t->cand_valid = false;
+    if (!t->cand || !t->cand_tmp) return;
+    t->cand_ph = ph;
+    t->cand_gen = gen;
+    t->cand_first = t->file_first_piece;
+    t->cand_last = t->file_last_piece;
+    t->pf_rebuilds++;
+
+    int64_t fhi = t->file_last_piece + LOOKAHEAD_PIECES;
+    if (fhi >= t->meta.piece_count) fhi = t->meta.piece_count - 1;
+    int64_t flo = (ph > t->file_first_piece) ? ph : t->file_first_piece;
+    int count[6] = {0};
+    for (int64_t i = flo; i <= fhi; i++) {
+        int z = piece_priority_rb(t, i, -1);
+        if (z < 1 || z > 5) z = 0;
+        t->cand_tmp[i - flo] = (uint8_t)z;
+        count[z]++;
+    }
+    t->cand_end[0] = 0;
+    for (int z = 1; z <= 5; z++) t->cand_end[z] = t->cand_end[z - 1] + count[z];
+    int pos[6];
+    for (int z = 1; z <= 5; z++) pos[z] = t->cand_end[z - 1];
+    for (int64_t i = flo; i <= fhi; i++) {
+        int z = t->cand_tmp[i - flo];
+        if (z) t->cand[pos[z]++] = (int32_t)i;
+    }
+    t->cand_valid = true;
+}
 // Per-session in-flight request budget: dynamic window scaled by rate EMA and
 // connection RTT (~2.0s of useful throughput) with TCP slow-start fast-ramp.
 // Active unchoked peers ramp up their pipeline as blocks land without strikes,
@@ -1712,21 +1866,17 @@ static int nominal_depth(torrentfs *t, sess *s) {
     return d;
 }
 
-static bool sess_has_req(const sess *s, int piece, int block) {
-    for (int i = 0; i < s->req_n; i++) {
-        if (s->req_piece[i] == piece && s->req_block[i] == block)
-            return true;
-    }
-    return false;
-}
-
 // Reconcile a->req[b] against actual active sessions and count how many
-// non-stalled sessions currently hold a request for (piece_idx, b).
-static int active_healthy_reqs(torrentfs *t, int64_t piece_idx, int b, u64 now,
+// non-stalled sessions currently hold a request for (piece_idx, b). Only the
+// sessions in the block's holder bitmap can hold one.
+static int active_healthy_reqs(torrentfs *t, aq_entry *a, int b, u64 now,
                                uint8_t *out_total) {
+    int64_t piece_idx = a->idx;
     int total = 0;
     int healthy = 0;
+    const uint8_t *row = rb_row(a, b);
     for (int i = 0; i < MAX_SESS; i++) {
+        if (!(row[i >> 3] & (1u << (i & 7)))) continue;
         const sess *os = &t->S[i];
         if (!os->active || os->connecting || !os->nb.handshaked) continue;
         for (int k = 0; k < os->req_n; k++) {
@@ -1771,7 +1921,7 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
         int b = a->next_req;
         a->next_req = (b + 1) % a->nblocks;
         if (a->have[b]) continue;
-        if (sess_has_req(s, (int)a->idx, b)) continue;
+        if (rb_has(a, b, (int)(s - t->S))) continue;   // already on order here
         uint8_t r = a->req[b];
         if (r == 0) return b; // Fresh unrequested block: always grab
 
@@ -1780,7 +1930,7 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
             // For background pieces, steal/hedge if the existing request has stalled > 2.5s
             if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000)) {
                 uint8_t actual_r = 0;
-                int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
+                int healthy = active_healthy_reqs(t, a, b, now, &actual_r);
                 a->req[b] = actual_r;
                 if (actual_r < 2 || healthy == 0)
                     return b;
@@ -1795,7 +1945,7 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
         // If r reached max_dup, check if existing holders are actually stalled (> 2.0s)
         if (now - a->req_ts[b] > (u64)2000 * (t->freq / 1000)) {
             uint8_t actual_r = 0;
-            int healthy = active_healthy_reqs(t, a->idx, b, now, &actual_r);
+            int healthy = active_healthy_reqs(t, a, b, now, &actual_r);
             a->req[b] = actual_r;
             if (actual_r < max_dup || healthy < 2)
                 return b;
@@ -1808,56 +1958,89 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
 // Uses strict_fill_pending_first: existing open/assembling pieces are filled
 // to completion BEFORE opening new pieces far ahead, preventing pieces from
 // finishing out of order and starving the installer.
+// One candidate of scan_next_block's pass 1: finish an assembling piece.
+// 1 = found a block, 0 = nothing here.
+static int try_active(torrentfs *t, sess *s, u64 now, int64_t i, int zone,
+                      int64_t *out_piece, int *out_block) {
+    if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) return 0;
+    if (t->status[i] != PIECE_ACTIVE) return 0;
+    aq_entry *a = aq_find(t, i);
+    if (!a) {
+        engine_log(ENGINE_LOG_WARN,
+                   "[claim] healing orphaned PIECE_ACTIVE for piece %lld",
+                   (long long)i);
+        a = aq_alloc(t, i);
+        if (!a) {
+            mutexLock(&t->lock);
+            if (t->status[i] == PIECE_ACTIVE) t->status[i] = PIECE_NEEDED;
+            mutexUnlock(&t->lock);
+            return 0;
+        }
+    }
+    int b = next_block_in(t, s, a, now, zone);
+    if (b < 0) return 0;
+    *out_piece = i;
+    *out_block = b;
+    return 1;
+}
+
+// One candidate of pass 2: open a new piece. 1 = found, 0 = next, -1 = stop
+// the pass (assembly budget or writer queue full).
+static int try_open(torrentfs *t, sess *s, u64 now, int64_t i, int zone,
+                    int64_t *out_piece, int *out_block) {
+    if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) return 0;
+    if (t->status[i] != PIECE_NEEDED) return 0;
+    if (t->n_active_aq >= t->n_aq) return -1; // Assembly budget capped
+    if (!wq_has_room(t)) return -1;           // writer behind: no new pieces
+    aq_entry *a = aq_alloc(t, i);
+    if (!a) return 0;
+    mutexLock(&t->lock);
+    t->status[i] = PIECE_ACTIVE;
+    mutexUnlock(&t->lock);
+    int b = next_block_in(t, s, a, now, zone);
+    if (b < 0) return 0;
+    *out_piece = i;
+    *out_block = b;
+    return 1;
+}
+
+// Pick the next (piece, block) this session should request:
+// Uses strict_fill_pending_first: existing open/assembling pieces are filled
+// to completion BEFORE opening new pieces far ahead, preventing pieces from
+// finishing out of order and starving the installer. Walks the candidate list
+// (cand_refresh) zone by zone; the read-blocked piece leads zone 1.
 static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                             int64_t *out_piece, int *out_block) {
     t->pf_picks++;
+    if (!t->cand_valid) return false;
     int64_t fhi = t->file_last_piece + LOOKAHEAD_PIECES;
     if (fhi >= t->meta.piece_count) fhi = t->meta.piece_count - 1;
     int64_t flo = (t->playhead_piece > t->file_first_piece) ? t->playhead_piece : t->file_first_piece;
+    int64_t rb = t->read_blocked_piece;   // racy snapshot (reader thread)
+    if (rb < flo || rb > fhi) rb = -1;
 
     for (int zone = 1; zone <= 5; zone++) {
+        const int z0 = t->cand_end[zone - 1], z1 = t->cand_end[zone];
         // Pass 1: Complete already active assembly slots first
-        for (int64_t i = flo; i <= fhi; i++) {
-            if (piece_priority(t, i) != zone) continue;
-            if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) continue;
-            if (t->status[i] != PIECE_ACTIVE) continue;
-            aq_entry *a = aq_find(t, i);
-            if (!a) {
-                engine_log(ENGINE_LOG_WARN,
-                           "[claim] healing orphaned PIECE_ACTIVE for piece %lld",
-                           (long long)i);
-                a = aq_alloc(t, i);
-                if (!a) {
-                    mutexLock(&t->lock);
-                    if (t->status[i] == PIECE_ACTIVE) t->status[i] = PIECE_NEEDED;
-                    mutexUnlock(&t->lock);
-                    continue;
-                }
-            }
-            int b = next_block_in(t, s, a, now, zone);
-            if (b < 0) continue;
-            *out_piece = i;
-            *out_block = b;
-            return true;
+        if (zone == 1 && rb >= 0 &&
+            try_active(t, s, now, rb, 1, out_piece, out_block)) return true;
+        for (int c = z0; c < z1; c++) {
+            int64_t i = t->cand[c];
+            if (i == rb) continue;   // zone 1 already tried it
+            if (try_active(t, s, now, i, zone, out_piece, out_block)) return true;
         }
-
         // Pass 2: Open a new piece if no active piece has available blocks in this zone
-        for (int64_t i = flo; i <= fhi; i++) {
-            if (piece_priority(t, i) != zone) continue;
-            if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) continue;
-            if (t->status[i] != PIECE_NEEDED) continue;
-            if (t->n_active_aq >= t->n_aq) break; // Assembly budget capped
-            if (!wq_has_room(t)) break;           // writer behind: no new pieces
-            aq_entry *a = aq_alloc(t, i);
-            if (!a) continue;
-            mutexLock(&t->lock);
-            t->status[i] = PIECE_ACTIVE;
-            mutexUnlock(&t->lock);
-            int b = next_block_in(t, s, a, now, zone);
-            if (b < 0) continue;
-            *out_piece = i;
-            *out_block = b;
-            return true;
+        if (zone == 1 && rb >= 0) {
+            int r = try_open(t, s, now, rb, 1, out_piece, out_block);
+            if (r > 0) return true;
+            if (r < 0) continue;
+        }
+        for (int c = z0; c < z1; c++) {
+            int64_t i = t->cand[c];
+            if (i == rb) continue;
+            int r = try_open(t, s, now, i, zone, out_piece, out_block);
+            if (r > 0) return true;
+            if (r < 0) break;
         }
     }
     return false;
@@ -1874,6 +2057,7 @@ static void request_scan(torrentfs *t, sess *s, u64 now) {
     // Prune any stale requests for pieces that already finished or blocks already held,
     // or requests that timed out (> 4.0s)
     int kept = 0;
+    const int sid = (int)(s - t->S);
     u64 req_timeout_ticks = (u64)4000 * (t->freq / 1000);
     for (int i = 0; i < s->req_n; i++) {
         int ep = s->req_piece[i];
@@ -1882,12 +2066,16 @@ static void request_scan(torrentfs *t, sess *s, u64 now) {
                       t->status[ep] == PIECE_DONE || t->status[ep] == PIECE_WRITING);
         if (!stale) {
             aq_entry *ea = aq_find(t, ep);
-            if (!ea || eb < 0 || eb >= ea->nblocks || ea->have[eb]) {
+            if (!ea || eb < 0 || eb >= ea->nblocks) {
+                stale = true;
+            } else if (ea->have[eb]) {
+                rb_clr(ea, eb, sid);
                 stale = true;
             } else if (s->req_time[i] > 0 && (now - s->req_time[i] > req_timeout_ticks)) {
                 // Individual block request timed out (> 4.0s): release lock on block
                 if (ea->req[eb] > 0 && ea->req[eb] < 255)
                     ea->req[eb]--;
+                rb_clr(ea, eb, sid);
                 send_cancel_one(t, s, ep, eb);
                 stale = true;
             }
@@ -1904,6 +2092,7 @@ static void request_scan(torrentfs *t, sess *s, u64 now) {
     s->req_n = kept;
 
     int depth = nominal_depth(t, s);
+    cand_refresh(t);
     int was_empty = (s->req_n == 0);
     if (was_empty)
         engine_log(ENGINE_LOG_DEBUG, "[sess %d] scan depth=%d",
@@ -1923,6 +2112,7 @@ static void request_scan(torrentfs *t, sess *s, u64 now) {
         if (a) {
             if (a->req[b] < 255) a->req[b]++;
             a->req_ts[b] = now;
+            rb_set(a, b, sid);
         }
         s->req_piece[s->req_n] = (int)pi;
         s->req_block[s->req_n] = b;
@@ -1944,6 +2134,24 @@ static void request_scan(torrentfs *t, sess *s, u64 now) {
         else
             engine_log(ENGINE_LOG_DEBUG, "[sess %d] scan found nothing", (int)(s - t->S));
     }
+}
+
+// request_scan() after a receive burst. Refilling the ring on every delivery
+// re-ran the whole prune + pick pass for one or two new requests (13k passes/s
+// on loopback); refill once a batch's worth of the pipeline has drained
+// instead. The upkeep tick still runs the full scan every 125 ms (timeouts),
+// and a blocked reader keeps the per-delivery refill (its piece is urgent).
+static void request_scan_rx(torrentfs *t, sess *s, u64 now) {
+    if (!s->nb.handshaked || s->connecting || s->nb.choked || t->paused) return;
+    if (t->read_blocked_piece >= 0 || s->req_n == 0) {
+        request_scan(t, s, now);
+        return;
+    }
+    int depth = nominal_depth(t, s);
+    int gap = depth / 8;
+    if (gap < 4) gap = 4;
+    int room = depth - s->req_n;
+    if (room >= gap || (depth <= gap && room > 0)) request_scan(t, s, now);
 }
 
 // All blocks landed: hand the buffer to the writer (which verifies + writes).
@@ -1993,6 +2201,8 @@ static void piece_full(torrentfs *t, aq_entry *a) {
     int tail = (t->wq_head + t->wq_n) % WQ_CAP;
     t->wq[tail] = (wjob){ idx, torrent_piece_len(&t->meta, idx), a->buf, a->peer_from };
     t->wq_n++;                 // bounded by WQ_CAP via wq_has_room()
+    condvarWakeAll(&t->wq_cv);
+    condvarWakeAll(&t->piece_cv);
     a->idx = -1;               // slot reset inside the lock: the writer picks
     a->buf = NULL;             // its return slot by these very fields
     a->peer_from = NULL;
@@ -2309,6 +2519,10 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             // request was duplicated by another peer and this copy arrives
             // second, we NEVER discard genuine, unreceived payload data.
             int matched = 0;
+            {
+                aq_entry *ma = aq_find(t, idx);
+                if (ma && b < ma->nblocks) rb_clr(ma, b, (int)(s - t->S));
+            }
             for (int i = 0; i < s->req_n; ) {
                 if (s->req_piece[i] == (int)idx && s->req_block[i] == b) {
                     s->req_piece[i] = s->req_piece[s->req_n - 1];
@@ -2350,6 +2564,9 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             __atomic_store_n(&a->have[b], 1, __ATOMIC_RELEASE);
             if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
             a->have_cnt++;
+            // A non-strict reader streams partial pieces block by block.
+            if ((int64_t)idx == t->read_blocked_piece && !t->strict_verify)
+                condvarWakeAll(&t->piece_cv);
 
             t->st_blocks_have++;
             t->last_progress_tick = now;
@@ -2358,7 +2575,13 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             // Cancel duplicate copies of this block still in flight on other
             // sessions (anacrolix postCancel): the block is here, the copies
             // would only waste the swarm's bandwidth.
+            // Only the sessions in the block's holder bitmap can have a copy
+            // on order (this used to walk every ring of every session, per
+            // delivered 16 KB block).
+            uint8_t *holders = rb_row(a, b);
             for (int j = 0; j < MAX_SESS; j++) {
+                if (!(holders[j >> 3] & (1u << (j & 7)))) continue;
+                rb_clr(a, b, j);
                 sess *other = &t->S[j];
                 if (other == s || !other->active || other->connecting) continue;
                 bool sent_cancel = false;
@@ -2478,7 +2701,7 @@ static void sess_service(torrentfs *t, sess *s, int sid, u64 now) {
         if (got == 0 || msgs == 0) break;
     }
 
-    request_scan(t, s, now);
+    request_scan_rx(t, s, now);
 
     if (peer_nb_flush(&s->nb) != 0) { sess_close(t, s, true); return; }
 }
@@ -2734,19 +2957,20 @@ static void perf_emit(torrentfs *t, u64 now) {
     double kbps = (double)(bytes - dup) / 1024.0 / secs;
     engine_log(ENGINE_LOG_INFO,
                "[perf] net loop_us p50=%llu p95=%llu max=%llu iters=%u "
-               "scans/s=%.0f picks/s=%.0f rate=%.0fKB/s dup=%.1f%% "
+               "scans/s=%.0f picks/s=%.0f rebuilds/s=%.1f rate=%.0fKB/s dup=%.1f%% "
                "live=%d unchoked=%d connecting=%d pool=%d "
                "sock_fail+%d enobufs+%d timeouts+%d wq=%d wq_full+%d",
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.50),
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.95),
                (unsigned long long)t->pf_loop.max, t->pf_loop.n,
-               t->pf_scans / secs, t->pf_picks / secs, kbps, dup_pct,
+               t->pf_scans / secs, t->pf_picks / secs, t->pf_rebuilds / secs, kbps, dup_pct,
                t->st_live, unchoked, t->st_connecting, t->peer_count,
                t->st_sock_fail - t->pf_sock_fail, t->st_enobufs - t->pf_enobufs,
                t->st_conn_timeout - t->pf_timeouts,
                t->wq_n, t->st_wq_full - t->pf_wq_full);
     perf_hist_reset(&t->pf_loop);
     t->pf_scans = t->pf_picks = 0;
+    t->pf_rebuilds = 0;
     t->pf_tick = now;
     t->pf_bytes = t->st_bytes_recv;
     t->pf_dup = t->st_dup_bytes;
@@ -3383,8 +3607,18 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
         t->aq[i].have = calloc(1, (size_t)t->blocks_per_piece);
         t->aq[i].req  = calloc(1, (size_t)t->blocks_per_piece);
         t->aq[i].req_ts = calloc(1, (size_t)t->blocks_per_piece * sizeof(uint64_t));
-        if (!t->aq[i].have || !t->aq[i].req || !t->aq[i].req_ts) aq_ok = false;
+        t->aq[i].req_by = calloc(1, (size_t)t->blocks_per_piece * SESS_MASK_BYTES);
+        if (!t->aq[i].have || !t->aq[i].req || !t->aq[i].req_ts || !t->aq[i].req_by)
+            aq_ok = false;
     }
+    t->cand     = malloc((size_t)(t->meta.piece_count + 1) * sizeof(int32_t));
+    t->cand_tmp = malloc((size_t)t->meta.piece_count + 1);
+    if (!t->cand || !t->cand_tmp) aq_ok = false;
+    t->aq_of_piece = malloc((size_t)t->meta.piece_count * sizeof(int16_t));
+    if (t->aq_of_piece)
+        for (int64_t i = 0; i < t->meta.piece_count; i++) t->aq_of_piece[i] = -1;
+    else
+        aq_ok = false;
 
     snprintf(t->cache_base, sizeof(t->cache_base), "%s", cache_path);
     tsnx_ensure_parent_dirs(t->cache_base);
@@ -3392,6 +3626,8 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     mutexInit(&t->lock);
     mutexInit(&t->inc_q.lock);
     mutexInit(&t->snap_lock);
+    condvarInit(&t->wq_cv);
+    condvarInit(&t->piece_cv);
     for (int i = 0; i < CACHE_MAX_CHUNKS; i++) t->chunks[i] = -1;
     t->calm_now = MAX_SESS;
     t->slots_per_chunk = CACHE_CHUNK / t->meta.piece_len;
@@ -3501,8 +3737,12 @@ void torrentfs_close(torrentfs *tfs) {
         free(tfs->aq[i].have);
         free(tfs->aq[i].req);
         free(tfs->aq[i].req_ts);
+        free(tfs->aq[i].req_by);
         free(tfs->aq[i].peer_from);
     }
+    free(tfs->aq_of_piece);
+    free(tfs->cand);
+    free(tfs->cand_tmp);
     for (int i = 0; i < tfs->aq_buf_pool_cnt; i++) {
         free(tfs->aq_buf_pool[i]);
         tfs->aq_buf_pool[i] = NULL;
@@ -3581,6 +3821,8 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
         memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
     }
     tfs->has_custom_zones = false;
+    __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);
+    tfs->cand_valid = false;
 
     for (int i = 0; i < MAX_SESS; i++)
         if (tfs->S[i].active) tfs->S[i].have_in_file = count_have_in_file(tfs, &tfs->S[i]);
@@ -3604,9 +3846,9 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
                     kept++;
                 } else {
                     aq_entry *ea = aq_find(tfs, ep);
-                    if (ea && eb >= 0 && eb < ea->nblocks &&
-                        ea->req[eb] > 0 && ea->req[eb] < 255) {
-                        ea->req[eb]--;
+                    if (ea && eb >= 0 && eb < ea->nblocks) {
+                        if (ea->req[eb] > 0 && ea->req[eb] < 255) ea->req[eb]--;
+                        rb_clr(ea, eb, i);
                     }
                 }
             }
@@ -3807,7 +4049,12 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
     int64_t last_recv = tfs->st_bytes_recv;
     u64 last_recv_tick = wait_start;
     while (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0)) {
-        svcSleepThread(20000000ULL);  // 20 ms
+        // Woken when the piece verifies (or, non-strict, a block lands); the
+        // 20 ms cap keeps the stall/heartbeat bookkeeping below running.
+        mutexLock(&tfs->lock);
+        if (!tfs->stop && !tfs->cancel_reader && !piece_ready(tfs, first, b0))
+            condvarWaitTimeout(&tfs->piece_cv, &tfs->lock, 20000000ULL);
+        mutexUnlock(&tfs->lock);
         u64 now = armGetSystemTick();
         if (tfs->paused) {
             wait_start = now;
@@ -3875,11 +4122,18 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
 void torrentfs_cancel(torrentfs *tfs) {
     if (!tfs) return;  // metadata-only slots have no torrentfs
     tfs->stop = true;
+    mutexLock(&tfs->lock);
+    condvarWakeAll(&tfs->piece_cv);
+    condvarWakeAll(&tfs->wq_cv);
+    mutexUnlock(&tfs->lock);
 }
 
 void torrentfs_cancel_reader(torrentfs *tfs) {
     if (!tfs) return;
     tfs->cancel_reader = true;
+    mutexLock(&tfs->lock);
+    condvarWakeAll(&tfs->piece_cv);
+    mutexUnlock(&tfs->lock);
 }
 
 void torrentfs_resume_reader(torrentfs *tfs) {
@@ -4024,6 +4278,7 @@ bool torrentfs_set_piece_zone(torrentfs *tfs, int64_t first_piece,
     for (int64_t i = 0; i < piece_count; i++)
         tfs->piece_zone[first_piece + i] = (uint8_t)zone;
     if (zone > 0) tfs->has_custom_zones = true;
+    __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);
     mutexUnlock(&tfs->lock);
     engine_log(ENGINE_LOG_DEBUG, "[zone] set first=%lld count=%lld zone=%d",
                (long long)first_piece, (long long)piece_count, zone);
@@ -4035,6 +4290,7 @@ bool torrentfs_clear_piece_zones(torrentfs *tfs) {
     mutexLock(&tfs->lock);
     memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
     tfs->has_custom_zones = false;
+    __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);
     mutexUnlock(&tfs->lock);
     return true;
 }

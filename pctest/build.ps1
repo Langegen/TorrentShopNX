@@ -152,6 +152,23 @@ function Build-RegistryTest {
     & $GPP @CXXFLAGS -std=c++17 $cobj $o_reg $CPP_OBJ -o "pctest\test_registry" @LIBS
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Write-Host "OK -> pctest\test_registry"
+
+    # Multi-seeder scheduler test (hedging, CANCEL, zones, strict verify).
+    $o_sw = Join-Path $OBJDIR "test_swarm_sched.o"
+    & $GPP @CXXFLAGS -std=c++17 -c pctest\test_swarm_sched.cpp -o $o_sw
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_sw $CPP_OBJ -o "pctest\test_swarm_sched" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_swarm_sched"
+
+    # Peer pool index fuzz test: includes torrentfs.c, so link everything else.
+    $o_pool = Join-Path $OBJDIR "test_pool.o"
+    & $GCC @CFLAGS -c pctest\test_pool.c -o $o_pool
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $cobj_nofs = $cobj | Where-Object { $_ -notlike "*torrentfs.c.o" }
+    & $GPP @CXXFLAGS -std=c++17 $cobj_nofs $o_pool $CPP_OBJ -o "pctest\test_pool" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_pool"
 }
 
 function Build-MechanismsTest {
