@@ -10,7 +10,12 @@
 //   medium - ~1 ms per block
 //   flaky  - every 40th block is held back for 3 s
 //
-//   pctest\test_swarm_sched.exe [--size MB] [--piece MB]
+//   pctest\test_swarm_sched.exe [--size MB] [--piece MB] [--nozones | --appsched]
+//
+//   default     a fixed 24-piece zone window re-applied as the reader moves
+//   --nozones   no zones: the engine's own picker
+//   --appsched  the app's CustomEngineScheduler (installer profile), driven
+//               like CustomEngineBackend: on_read_request per read, on_tick 1/s
 //
 // Passes when every byte matches and the whole file is read.
 
@@ -41,6 +46,9 @@
 
 #include <mbedtls/sha1.h>
 #include "engine.h"
+#include "../source/datasource/custom_engine_scheduler.h"
+
+std::atomic<bool> g_appExiting{false};   // extern in utils/log.h
 
 using namespace std;
 using namespace std::chrono;
@@ -198,9 +206,17 @@ static bool write_torrent(const char *path, Payload &pl) {
 
 int main(int argc, char **argv) {
     uint32_t size_mb = 512, piece_mb = 2;
+    bool zones_on = true;
+    bool app_sched = false;
+    bool fast_only = false;
+    bool loose = false;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--size") && i + 1 < argc) size_mb = (uint32_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--piece") && i + 1 < argc) piece_mb = (uint32_t)atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--nozones")) zones_on = false;   // engine's own picker
+        else if (!strcmp(argv[i], "--appsched")) { app_sched = true; zones_on = false; }
+        else if (!strcmp(argv[i], "--fastonly")) fast_only = true;   // just the fast seeder
+        else if (!strcmp(argv[i], "--loose")) loose = true;          // no strict SHA-1 reads
     }
 #ifdef _WIN32
     WSADATA wsa;
@@ -233,8 +249,9 @@ int main(int argc, char **argv) {
         cerr << "engine setup failed" << endl;
         return 1;
     }
-    tsnx_engine_set_strict_verify(eng, hash, 1);   // as the app does
+    tsnx_engine_set_strict_verify(eng, hash, loose ? 0 : 1);   // strict: as the app does
     for (auto &sd : seeders) {
+        if (fast_only && &sd != &seeders[0]) continue;
         uint32_t ip = htonl(sd.ip_host);
         uint16_t port = sd.port;
         tsnx_engine_add_peers(eng, hash, &ip, &port, 1);
@@ -247,7 +264,7 @@ int main(int argc, char **argv) {
     const int pieces = (int)pl.pieces;
     thread sched([&]() {
         int last = -1;
-        while (!stop) {
+        while (!stop && zones_on) {
             int cur = (int)(read_off.load() / pl.piece);
             if (cur != last) {
                 last = cur;
@@ -268,6 +285,19 @@ int main(int argc, char **argv) {
         }
     });
 
+    datasource::CustomEngineScheduler app;
+    thread app_tick;
+    if (app_sched) {
+        app.setConfig(datasource::CustomEngineScheduler::defaultInstallerConfig((int)pl.piece));
+        app.init(eng, hash, (int)pl.piece, 0, 0, pieces - 1);
+        app_tick = thread([&]() {
+            while (!stop) {
+                this_thread::sleep_for(seconds(1));
+                app.on_tick();
+            }
+        });
+    }
+
     vector<uint8_t> buf(4 << 20);
     int64_t off = 0, total = (int64_t)pl.data.size();
     uint64_t mismatches = 0;
@@ -275,6 +305,7 @@ int main(int argc, char **argv) {
     auto t0 = steady_clock::now();
     while (off < total) {
         int64_t want = min<int64_t>((int64_t)buf.size(), total - off);
+        if (app_sched) app.on_read_request(off, want);
         int64_t n = tsnx_engine_read(eng, hash, off, buf.data(), want);
         if (n <= 0) {
             if (++empty > 3) { cerr << "read failed at " << off << " (" << n << ")" << endl; break; }
@@ -290,6 +321,7 @@ int main(int argc, char **argv) {
     bool have_diag = tsnx_engine_get_diag(eng, hash, &diag);
     stop = true;
     sched.join();
+    if (app_tick.joinable()) app_tick.join();
     tsnx_engine_stop(eng);
     for (auto &sd : seeders) { sd.stop = true; closesocket(sd.srv); }
     for (auto &t : acceptors) t.join();

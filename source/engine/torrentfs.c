@@ -118,6 +118,18 @@
 #define REQ_MIN          2
 #define LOOKAHEAD_PIECES 16     // Multi-file lookahead: allow prefetching pieces into upcoming files
 
+// Speed classes. A session delivering less than SLOW_FRACTION of the fastest
+// session's rate (once it has delivered SLOW_MIN_BYTES), or one with stall
+// strikes, is "slow" while at least one fast session exists. Slow sessions no
+// longer take blocks of the pieces the reader needs next: a block on order at
+// a slow peer held its whole piece back until the 1 s hedge (2.5 s for
+// background pieces), and a mixed swarm downloaded several times SLOWER than
+// its fastest peer alone (measured: 1 fast + 2 slow seeds = 62 MB/s, the fast
+// seed alone = 384 MB/s). Instead each slow session works on a piece of its
+// own at the far end of the window (libtorrent's speed-class picking).
+#define SLOW_FRACTION    0.25
+#define SLOW_MIN_BYTES   (512 * 1024)
+
 // RAM for in-flight piece buffers; bounds how many pieces are open at once.
 #define RAM_BUDGET       (256LL << 20)
 #define AQ_MAX           48
@@ -313,6 +325,15 @@ typedef struct {
     u64 up_rate_tick;       // last up-rate sample (0 = meter not started yet)
     double  up_rate;        // smoothed upload rate to this peer, bytes/s
     int have_in_file;      // pieces of the streamed file the peer has (BITFIELD + HAVE)
+    bool slow;             // speed class (see SLOW_FRACTION), refreshed every upkeep
+    // Service-time meter for the speed class: per matched block, the time from
+    // when the peer could start on it (the later of its request and the
+    // previous delivery) to its arrival. Idle time never counts, so a bursty
+    // fast peer reads fast (the upkeep-sampled rate saw it idle and read 0).
+    u64 svc_ticks;
+    int64_t svc_bytes;
+    u64 last_rx_block;
+    int64_t own_piece1;    // slow sessions: piece they work on alone, + 1 (0 = none)
     bool peer_interested;  // peer wants our pieces (we may unchoke)
     uint8_t timeout_strikes; // strikes before closing on stall
     u64 choked_at;         // tick when peer last choked us (0 = unchoked)
@@ -406,6 +427,7 @@ struct torrentfs {
     uint32_t cand_gen;
     uint32_t zone_gen;         // bumped (release) whenever piece zones change
     uint32_t pf_rebuilds;      // [perf] candidate rebuilds
+    int n_fast;                // unchoked sessions not classified slow (netloop)
     int n_aq;
     int n_active_aq;
     uint8_t *aq_buf_pool[AQ_MAX];
@@ -1898,6 +1920,17 @@ static int active_healthy_reqs(torrentfs *t, aq_entry *a, int b, u64 now,
 // Critical stream-head pieces (current playback head and next piece, or read_blocked)
 // and endgame pieces use aggressive Adaptive Hedging (up to 4 duplicate requests)
 // with short hedge timeouts so slow peers never stall the installer.
+// True if every session holding (a, b) on order is slow (or gone).
+static bool holders_all_slow(const torrentfs *t, const aq_entry *a, int b) {
+    const uint8_t *row = rb_row(a, b);
+    for (int i = 0; i < MAX_SESS; i++) {
+        if (!(row[i >> 3] & (1u << (i & 7)))) continue;
+        const sess *o = &t->S[i];
+        if (o->active && !o->connecting && !o->slow) return false;
+    }
+    return true;
+}
+
 static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int zone) {
     bool is_critical = (zone <= 2) || (t->read_blocked_piece == a->idx) ||
                        (a->idx >= t->playhead_piece && a->idx <= t->playhead_piece + 1);
@@ -1938,7 +1971,11 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
             continue;
         }
 
-        // Critical piece or Endgame: Fast Request Stealing / Adaptive Hedging
+        // Critical piece or Endgame: Fast Request Stealing / Adaptive Hedging.
+        // A fast session does not wait out the hedge timer for a block only
+        // slow sessions hold: that wait is what stalls the reader.
+        if (is_critical && !s->slow && r < max_dup && holders_all_slow(t, a, b))
+            return b;
         if (now - a->req_ts[b] <= hedge_timeout_ticks) continue;
         if (r < max_dup) return b;
 
@@ -2009,10 +2046,42 @@ static int try_open(torrentfs *t, sess *s, u64 now, int64_t i, int zone,
 // to completion BEFORE opening new pieces far ahead, preventing pieces from
 // finishing out of order and starving the installer. Walks the candidate list
 // (cand_refresh) zone by zone; the read-blocked piece leads zone 1.
+// scan_next_block for a slow session (while fast sessions exist): stay off
+// the head zones; keep working on its own piece, else open the farthest
+// needed piece, else help on the farthest active pieces.
+static bool scan_next_block_slow(torrentfs *t, sess *s, u64 now,
+                                 int64_t *out_piece, int *out_block) {
+    int64_t own = s->own_piece1 - 1;
+    if (own >= 0 && own < t->meta.piece_count && t->status[own] == PIECE_ACTIVE &&
+        bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, own)) {
+        aq_entry *a = aq_find(t, own);
+        if (a) {
+            int b = next_block_in(t, s, a, now, 5);
+            if (b >= 0) { *out_piece = own; *out_block = b; return true; }
+        }
+    }
+    s->own_piece1 = 0;
+    for (int zone = 5; zone >= 3; zone--) {
+        const int z0 = t->cand_end[zone - 1], z1 = t->cand_end[zone];
+        for (int c = z1 - 1; c >= z0; c--) {
+            int r = try_open(t, s, now, t->cand[c], zone, out_piece, out_block);
+            if (r > 0) { s->own_piece1 = *out_piece + 1; return true; }
+            if (r < 0) { zone = 0; break; }   // no room to open: go help instead
+        }
+    }
+    for (int zone = 5; zone >= 3; zone--) {
+        const int z0 = t->cand_end[zone - 1], z1 = t->cand_end[zone];
+        for (int c = z1 - 1; c >= z0; c--)
+            if (try_active(t, s, now, t->cand[c], zone, out_piece, out_block)) return true;
+    }
+    return false;
+}
+
 static bool scan_next_block(torrentfs *t, sess *s, u64 now,
                             int64_t *out_piece, int *out_block) {
     t->pf_picks++;
     if (!t->cand_valid) return false;
+    if (s->slow && t->n_fast > 0) return scan_next_block_slow(t, s, now, out_piece, out_block);
     int64_t fhi = t->file_last_piece + LOOKAHEAD_PIECES;
     if (fhi >= t->meta.piece_count) fhi = t->meta.piece_count - 1;
     int64_t flo = (t->playhead_piece > t->file_first_piece) ? t->playhead_piece : t->file_first_piece;
@@ -2523,8 +2592,10 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 aq_entry *ma = aq_find(t, idx);
                 if (ma && b < ma->nblocks) rb_clr(ma, b, (int)(s - t->S));
             }
+            u64 req_t = 0;
             for (int i = 0; i < s->req_n; ) {
                 if (s->req_piece[i] == (int)idx && s->req_block[i] == b) {
+                    if (!matched) req_t = s->req_time[i];
                     s->req_piece[i] = s->req_piece[s->req_n - 1];
                     s->req_block[i] = s->req_block[s->req_n - 1];
                     s->req_time[i]  = s->req_time[s->req_n - 1];
@@ -2536,6 +2607,10 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             }
             if (matched > 0) {
                 s->useful++;          // expected delivery: feeds nominal_depth
+                u64 start = s->last_rx_block > req_t ? s->last_rx_block : req_t;
+                if (start && now > start) s->svc_ticks += now - start;
+                s->svc_bytes += dlen;
+                s->last_rx_block = now;
             } else {
                 t->st_dup_noring += dlen;
             }
@@ -2766,6 +2841,53 @@ static void update_rates(torrentfs *t, u64 now) {
     }
 }
 
+// Speed classes (see SLOW_FRACTION), once per upkeep tick after the rates.
+// What a session can deliver, bytes/s: the better of its smoothed rate and
+// its average while it had requests outstanding. The EWMA alone is useless
+// here: it freezes and decays while a session has nothing on order, and a
+// fast peer left idle for a moment read as slow -- it was then kept off the
+// head pieces, stayed idle, and never recovered (measured: a 400 MB/s seed
+// classified slow behind a 1 MB/s one).
+static double sess_capability(const torrentfs *t, const sess *s) {
+    if (s->svc_ticks > t->freq / 20)   // >= 50 ms of measured service
+        return (double)s->svc_bytes * (double)t->freq / (double)s->svc_ticks;
+    return s->rate;
+}
+
+static void classify_sessions(torrentfs *t) {
+    double best = 0.0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        const sess *s = &t->S[i];
+        if (!s->active || s->connecting || !s->nb.handshaked || s->nb.choked) continue;
+        if (s->rx_total < SLOW_MIN_BYTES) continue;
+        double cap = sess_capability(t, s);
+        if (cap > best) best = cap;
+    }
+    int n_fast = 0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        sess *s = &t->S[i];
+        bool slow = false;
+        if (s->svc_ticks > (u64)4 * t->freq) {   // ~4 s memory: follow speed changes
+            s->svc_ticks /= 2;
+            s->svc_bytes /= 2;
+        }
+        if (s->active && !s->connecting && s->nb.handshaked && !s->nb.choked) {
+            if (s->timeout_strikes > 0) {
+                slow = true;
+            } else if (best > 0.0 && s->rx_total >= SLOW_MIN_BYTES) {
+                // Hysteresis: become slow under SLOW_FRACTION of the best,
+                // become fast again only above 1.6x that.
+                double cap = sess_capability(t, s);
+                double limit = best * SLOW_FRACTION * (s->slow ? 1.6 : 1.0);
+                slow = cap < limit;
+            }
+            if (!slow) n_fast++;
+        }
+        s->slow = slow;
+    }
+    t->n_fast = n_fast;
+}
+
 //-----------------------------------------------------------------------------
 // Reciprocation-based choking (BEP-3 tit-for-tat, streaming-adapted)
 //
@@ -2859,6 +2981,40 @@ struct torrentfs_incoming_q *torrentfs_incoming_queue(torrentfs *t) {
     return &t->inc_q;
 }
 
+// A session to make room for an incoming peer when every slot is taken.
+// Incoming peers dialed US, so they are reachable by construction -- often the
+// NAT'd seeders no outbound dial can reach -- and used to be dropped whenever
+// the table was full. Victims, cheapest first: a pending outbound dial; a
+// peer that has kept us choked for 30 s without delivering anything; the
+// slowest established peer older than 60 s. Never a seed of a scarce swarm.
+// Returns a session index or -1 (then the incoming socket is dropped).
+static int pick_incoming_victim(torrentfs *t, u64 now) {
+    for (int i = 0; i < MAX_SESS; i++)
+        if (t->S[i].active && t->S[i].connecting) return i;
+    const bool scarce = t->st_live <= 4;
+    int choked_idle = -1;
+    int slowest = -1;
+    double slowest_cap = 0.0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        sess *s = &t->S[i];
+        if (!s->active || s->connecting || !s->nb.handshaked) continue;
+        if (scarce && peer_is_seed(t, s)) continue;
+        u64 age = now - s->started;
+        if (s->nb.choked && s->rx_total == 0 && age > (u64)30 * t->freq) {
+            if (choked_idle < 0) choked_idle = i;
+            continue;
+        }
+        if (age > (u64)60 * t->freq) {
+            double cap = sess_capability(t, s);
+            if (slowest < 0 || cap < slowest_cap) { slowest = i; slowest_cap = cap; }
+        }
+    }
+    if (choked_idle >= 0) return choked_idle;
+    // Only displace a slow peer: a full table of fast ones keeps its slots.
+    if (slowest >= 0 && t->S[slowest].slow) return slowest;
+    return -1;
+}
+
 // Attach sockets queued by the shared listener. The listener already consumed
 // the peer's 68-byte handshake (that is how it routed the connection here), so
 // we preload it into the peer_nb rx buffer and re-validate it against our own
@@ -2883,9 +3039,19 @@ static void drain_incoming(torrentfs *t, u64 now) {
         for (int i = 0; i < MAX_SESS; i++)
             if (!t->S[i].active) { sid = i; break; }
         if (sid < 0) {
-            engine_log(ENGINE_LOG_DEBUG, "[sess] no slot for incoming conn");
-            close(fd);
-            continue;
+            int v = pick_incoming_victim(t, now);
+            if (v < 0) {
+                engine_log(ENGINE_LOG_DEBUG, "[sess] no slot for incoming conn");
+                close(fd);
+                continue;
+            }
+            engine_log(ENGINE_LOG_INFO,
+                       "[sess %d] closed to make room for an incoming peer (connecting=%d slow=%d)",
+                       v, t->S[v].connecting ? 1 : 0, t->S[v].slow ? 1 : 0);
+            // A normal rotation, not a dead address: minimal backoff.
+            t->S[v].fail_kind = PEER_FAIL_CHOKE_ROTATE;
+            sess_close(t, &t->S[v], true);
+            sid = v;
         }
 
         sess *s = &t->S[sid];
@@ -2959,7 +3125,8 @@ static void perf_emit(torrentfs *t, u64 now) {
                "[perf] net loop_us p50=%llu p95=%llu max=%llu iters=%u "
                "scans/s=%.0f picks/s=%.0f rebuilds/s=%.1f rate=%.0fKB/s dup=%.1f%% "
                "live=%d unchoked=%d connecting=%d pool=%d "
-               "sock_fail+%d enobufs+%d timeouts+%d wq=%d wq_full+%d",
+               "sock_fail+%d enobufs+%d timeouts+%d wq=%d wq_full+%d fast=%d slow=%d "
+               "aq=%d/%d rb=%lld rb_st=%d",
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.50),
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.95),
                (unsigned long long)t->pf_loop.max, t->pf_loop.n,
@@ -2967,7 +3134,9 @@ static void perf_emit(torrentfs *t, u64 now) {
                t->st_live, unchoked, t->st_connecting, t->peer_count,
                t->st_sock_fail - t->pf_sock_fail, t->st_enobufs - t->pf_enobufs,
                t->st_conn_timeout - t->pf_timeouts,
-               t->wq_n, t->st_wq_full - t->pf_wq_full);
+               t->wq_n, t->st_wq_full - t->pf_wq_full, t->n_fast, unchoked - t->n_fast,
+               t->n_active_aq, t->n_aq, (long long)t->read_blocked_piece,
+               t->read_blocked_piece >= 0 ? (int)t->status[t->read_blocked_piece] : -1);
     perf_hist_reset(&t->pf_loop);
     t->pf_scans = t->pf_picks = 0;
     t->pf_rebuilds = 0;
@@ -3236,6 +3405,7 @@ static void netloop_main(void *arg) {
             }
 
             update_rates(t, now);   // per-session rate meter + expect-time anchor
+            classify_sessions(t);   // speed classes for the request scheduler
             // Reciprocation choking: 10 s round, 30 s optimistic rotation.
             if (now - t->last_choke > (u64)CHOKE_INTERVAL_SECS * t->freq) {
                 t->last_choke = now;
@@ -4282,6 +4452,28 @@ bool torrentfs_set_piece_zone(torrentfs *tfs, int64_t first_piece,
     mutexUnlock(&tfs->lock);
     engine_log(ENGINE_LOG_DEBUG, "[zone] set first=%lld count=%lld zone=%d",
                (long long)first_piece, (long long)piece_count, zone);
+    return true;
+}
+
+bool torrentfs_set_zones(torrentfs *tfs, const int64_t *first, const int64_t *count,
+                         const int *zone, int n) {
+    if (!tfs || !tfs->piece_zone || n < 0) return false;
+    bool any = false;
+    mutexLock(&tfs->lock);
+    memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
+    for (int r = 0; r < n; r++) {
+        int64_t f = first[r], c = count[r];
+        int z = zone[r];
+        if (f < 0 || c <= 0 || z <= 0) continue;
+        if (f >= tfs->meta.piece_count) continue;
+        if (f + c > tfs->meta.piece_count) c = tfs->meta.piece_count - f;
+        if (z > 255) z = 255;
+        memset(tfs->piece_zone + f, z, (size_t)c);
+        any = true;
+    }
+    tfs->has_custom_zones = any;
+    __atomic_add_fetch(&tfs->zone_gen, 1, __ATOMIC_RELEASE);   // one rebuild
+    mutexUnlock(&tfs->lock);
     return true;
 }
 

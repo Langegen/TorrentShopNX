@@ -86,12 +86,21 @@ public:
             cfg.slow_peer_speed_bps = 100.0f * 1024.0f;
             cfg.slow_peer_count_max = 4;
         } else {
-            // ~44 pieces = 44-88 MB RAM window for small piece sizes
+            // Small pieces: the window is sized in BYTES, at least 128 MB.
+            // 44 fixed pieces were only 44 MB at 1 MB pieces, and a window that
+            // small starves the swarm's pipelines (measured on a 3-seed swarm:
+            // 1 MB pieces ran at half the 2-4 MB rate).
             cfg.critical_pieces    = 1;
             cfg.urgent_pieces      = 3;
             cfg.prefetch_pieces    = 16;
             cfg.speculative_pieces = 12;
             cfg.normal_pieces      = 12;
+            if (piece_size > 0) {
+                int head = cfg.critical_pieces + cfg.urgent_pieces +
+                           cfg.prefetch_pieces + cfg.speculative_pieces;
+                int want = static_cast<int>((128LL * 1024 * 1024) / piece_size);
+                if (want - head > cfg.normal_pieces) cfg.normal_pieces = want - head;
+            }
             cfg.slow_peer_speed_bps = 80.0f * 1024.0f;
             cfg.slow_peer_count_max = 4;
         }

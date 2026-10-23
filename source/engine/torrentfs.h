@@ -162,6 +162,13 @@ int torrentfs_ram_active(const torrentfs *tfs);
 bool torrentfs_set_piece_zone(torrentfs *tfs, int64_t first_piece,
                               int64_t piece_count, int zone);
 bool torrentfs_clear_piece_zones(torrentfs *tfs);
+// Replace ALL piece zones in one step: zone[r] applies to pieces
+// [first[r], first[r] + count[r]); everything else becomes unzoned. The
+// netloop never sees a half-applied window (clear + several set_piece_zone
+// calls left it empty or partial in between -- requests stopped meanwhile).
+// n == 0 clears the zones.
+bool torrentfs_set_zones(torrentfs *tfs, const int64_t *first, const int64_t *count,
+                         const int *zone, int n);
 
 // How many milliseconds of playback the player has buffered ahead. The deeper
 // the backlog, the fewer sessions the engine lets claim new work (a ramp from

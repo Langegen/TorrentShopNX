@@ -154,10 +154,18 @@ function Build-RegistryTest {
     Write-Host "OK -> pctest\test_registry"
 
     # Multi-seeder scheduler test (hedging, CANCEL, zones, strict verify).
+    # Links the app's CustomEngineScheduler (+ util log) for --appsched.
+    $SW_INC = @("-Isource", "-Iinclude", "-Isource\datasource", "-Isource\utils")
     $o_sw = Join-Path $OBJDIR "test_swarm_sched.o"
-    & $GPP @CXXFLAGS -std=c++17 -c pctest\test_swarm_sched.cpp -o $o_sw
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -c pctest\test_swarm_sched.cpp -o $o_sw
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & $GPP @CXXFLAGS -std=c++17 $cobj $o_sw $CPP_OBJ -o "pctest\test_swarm_sched" @LIBS
+    $o_sched = Join-Path $OBJDIR "sw_custom_engine_scheduler.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -c source\datasource\custom_engine_scheduler.cpp -o $o_sched
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $o_log = Join-Path $OBJDIR "sw_log.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -c source\utils\log.cpp -o $o_log
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_sw $o_sched $o_log $CPP_OBJ -o "pctest\test_swarm_sched" @LIBS
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     Write-Host "OK -> pctest\test_swarm_sched"
 

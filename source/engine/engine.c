@@ -982,6 +982,26 @@ bool tsnx_engine_clear_piece_zones(tsnx_engine *eng, const char *hash) {
     return ok;
 }
 
+bool tsnx_engine_set_window(tsnx_engine *eng, const char *hash,
+                            const tsnx_zone_range *ranges, int n) {
+    eng = active_engine(eng);
+    if (!eng || !hash || n < 0 || (n > 0 && !ranges)) return false;
+    if (n > TSNX_MAX_ZONE_RANGES) n = TSNX_MAX_ZONE_RANGES;
+    int64_t first[TSNX_MAX_ZONE_RANGES], count[TSNX_MAX_ZONE_RANGES];
+    int zone[TSNX_MAX_ZONE_RANGES];
+    for (int i = 0; i < n; i++) {
+        first[i] = ranges[i].first_piece;
+        count[i] = ranges[i].piece_count;
+        zone[i]  = (int)ranges[i].zone;
+    }
+    bool ok = false;
+    REG_LOCK();
+    tsnx_torrent *t = find_locked(eng, hash);
+    if (t && t->fs) ok = torrentfs_set_zones(t->fs, first, count, zone, n);
+    REG_UNLOCK();
+    return ok;
+}
+
 void tsnx_engine_set_backlog_ms(tsnx_engine *eng, const char *hash, int ms) {
     eng = active_engine(eng);
     if (!eng || !hash) return;

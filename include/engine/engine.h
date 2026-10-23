@@ -171,6 +171,18 @@ bool tsnx_engine_set_piece_zone(tsnx_engine *eng, const char *hash,
 // Remove all externally-set zones and let the internal picker decide.
 bool tsnx_engine_clear_piece_zones(tsnx_engine *eng, const char *hash);
 
+// Replace the whole zone window atomically (preferred over clear + several
+// set_piece_zone calls, whose in-between state the engine could act on).
+// Ranges are absolute piece indices; at most TSNX_MAX_ZONE_RANGES are used.
+#define TSNX_MAX_ZONE_RANGES 64
+typedef struct {
+    int first_piece;
+    int piece_count;
+    tsnx_piece_zone zone;
+} tsnx_zone_range;
+bool tsnx_engine_set_window(tsnx_engine *eng, const char *hash,
+                            const tsnx_zone_range *ranges, int n);
+
 // Calm mode: how many milliseconds of buffer are ahead of the consumer.
 // Deeper backlog narrows the number of peers allowed to claim new work.
 void tsnx_engine_set_backlog_ms(tsnx_engine *eng, const char *hash, int ms);

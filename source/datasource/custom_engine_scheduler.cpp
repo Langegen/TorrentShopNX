@@ -148,12 +148,13 @@ CustomSchedulerSnapshot CustomEngineScheduler::rebuild(int current_piece) {
 void CustomEngineScheduler::apply_zones(const CustomSchedulerSnapshot& snap) {
     if (!engine_ || hash_.empty()) return;
 
-    tsnx_engine_clear_piece_zones(engine_, hash_.c_str());
-
+    // One atomic window update: clear + several set_piece_zone calls let
+    // the engine act on an empty or half-built window in between.
+    std::vector<tsnx_zone_range> ranges;
+    ranges.reserve(8 + boosted_pieces_.size());
     auto apply = [&](const PieceRange& r, tsnx_piece_zone zone) {
         if (!r.valid()) return;
-        tsnx_engine_set_piece_zone(engine_, hash_.c_str(), r.start,
-                                   r.end - r.start + 1, zone);
+        ranges.push_back({r.start, r.end - r.start + 1, zone});
     };
 
     apply(snap.critical,    TSNX_ZONE_CRITICAL);
@@ -168,9 +169,11 @@ void CustomEngineScheduler::apply_zones(const CustomSchedulerSnapshot& snap) {
     // Re-apply any currently boosted slow-peer pieces so they aren't wiped out by on_read_request
     for (int p : boosted_pieces_) {
         if (p >= file_first_piece_ && p <= file_last_piece_) {
-            tsnx_engine_set_piece_zone(engine_, hash_.c_str(), p, 1, TSNX_ZONE_CRITICAL);
+            ranges.push_back({p, 1, TSNX_ZONE_CRITICAL});
         }
     }
+    tsnx_engine_set_window(engine_, hash_.c_str(), ranges.data(),
+                           static_cast<int>(ranges.size()));
 }
 
 CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offset,
