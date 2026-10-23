@@ -551,9 +551,6 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
 
     bool dlActive = isDownloadActive();
     int timeoutSec = dlActive ? 8 : 6;
-    if (dlActive) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
-    }
 
     http.setTimeout(timeoutSec);
     auto res = http.httpGet(task.url);
@@ -750,9 +747,6 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
         }
     }
 
-    if (dlActive) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(15));
-    }
 }
 
 } // namespace net

@@ -218,6 +218,8 @@ static int s_bg_sock = -1;
 static bool s_bg_bootstrapped = false;
 static uint8_t s_bg_node_id[20];
 static dht_target s_targets[DHT_MAX_TARGETS];
+// Callbacks taken from s_targets and running outside s_bg_mtx (guarded by it).
+static int s_cb_inflight = 0;
 static u64 s_last_walk = 0;       // last random-id walk tick
 
 // Table-refresh sweep state (moved to file scope so a socket restart can
@@ -380,11 +382,17 @@ static void bg_on_event(void *closure, int event,
     }
     dht_peer_cb cb = target ? target->cb : NULL;
     void *ctx = target ? target->ctx : NULL;
+    if (cb) s_cb_inflight++;   // dht_background_remove waits for this to drain
     mutexUnlock(&s_bg_mtx);
     if (!cb) return;
 
     int n = (int)(data_len / 6);
-    if (n <= 0) return;
+    if (n <= 0) {
+        mutexLock(&s_bg_mtx);
+        s_cb_inflight--;
+        mutexUnlock(&s_bg_mtx);
+        return;
+    }
     peer_addr peers[128];
     int np = 0;
     const uint8_t *b = data;
@@ -401,6 +409,9 @@ static void bg_on_event(void *closure, int event,
         mutexUnlock(&s_bg_mtx);
         cb(ctx, peers, np);
     }
+    mutexLock(&s_bg_mtx);
+    s_cb_inflight--;
+    mutexUnlock(&s_bg_mtx);
 }
 
 static void dht_bg_main(void *arg) {
@@ -848,6 +859,13 @@ void dht_background_remove(const uint8_t info_hash[20]) {
             s_targets[i].ctx = NULL;
             break;
         }
+    }
+    // A callback that already took cb/ctx runs outside the lock: the caller is
+    // about to free ctx (torrentfs_close), so wait until none is in flight.
+    while (s_cb_inflight > 0) {
+        mutexUnlock(&s_bg_mtx);
+        svcSleepThread(1000000ULL);   // 1 ms
+        mutexLock(&s_bg_mtx);
     }
     mutexUnlock(&s_bg_mtx);
     // The thread itself keeps running: the routing table stays warm for the

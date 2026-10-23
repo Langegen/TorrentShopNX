@@ -122,6 +122,15 @@
 #define RAM_BUDGET       (256LL << 20)
 #define AQ_MAX           48
 #define AQ_MIN           4
+// Writer queue capacity. Every queued job owns a whole piece buffer, and an
+// assembly slot gets a FRESH buffer as soon as its last one is queued -- so
+// the queue is not bounded by the slot count. A new piece may only be opened
+// while (queued jobs + active pieces) < WQ_CAP (see wq_has_room): each active
+// piece adds at most one job, so the ring can never overflow, and the RAM held
+// by verify-pending pieces is bounded. Before this, a writer slower than the
+// network (software SHA-1 at loopback speed) grew the queue to 150+ jobs:
+// the ring wrapped onto itself, jobs ran twice and the heap was corrupted.
+#define WQ_CAP           (AQ_MAX + 2)
 
 // Streaming window
 #define STREAM_WINDOW    (384LL * 1024 * 1024)
@@ -290,6 +299,7 @@ typedef struct {
     int64_t up_rate_prev;   // tx_total at the last up-rate sample
     u64 up_rate_tick;       // last up-rate sample (0 = meter not started yet)
     double  up_rate;        // smoothed upload rate to this peer, bytes/s
+    int have_in_file;      // pieces of the streamed file the peer has (BITFIELD + HAVE)
     bool peer_interested;  // peer wants our pieces (we may unchoke)
     uint8_t timeout_strikes; // strikes before closing on stall
     u64 choked_at;         // tick when peer last choked us (0 = unchoked)
@@ -355,7 +365,7 @@ struct torrentfs {
     uint8_t *aq_buf_pool[AQ_MAX];
     int aq_buf_pool_cnt;
 
-    wjob wq[AQ_MAX + 2];
+    wjob wq[WQ_CAP];
     int wq_head, wq_n;
     int64_t writing_idx;
     uint8_t *writing_buf;
@@ -451,6 +461,18 @@ struct torrentfs {
     int64_t pf_bytes, pf_dup;
     int pf_sock_fail, pf_timeouts, pf_enobufs;
     int st_enobufs;            // socket()/connect() failed with ENOBUFS (BSD pool exhausted)
+    int st_wq_full;            // new pieces refused because the writer queue was full
+
+    // Status snapshot for other threads (UI, scheduler, status polls). The
+    // session table is netloop-private -- reading it from another thread
+    // raced with sess_close() freeing a session's bitfield -- so the netloop
+    // publishes what those callers need every upkeep tick, under snap_lock.
+    Mutex snap_lock;
+    torrentfs_peer_info snap_peers[MAX_SESS];
+    int snap_n_peers;
+    int snap_seeds;
+    int snap_claiming, snap_idle;
+    int pf_wq_full;
 };
 
 enum { LAT_POLL = 0, LAT_RECV, LAT_SEND, LAT_WR, LAT_RD };
@@ -534,7 +556,7 @@ static bool cache_piece_read(torrentfs *t, int64_t idx, int64_t within,
                     src = t->writing_buf;
                 } else {
                     for (int i = 0; i < t->wq_n; i++) {
-                        int slot = (t->wq_head + i) % (AQ_MAX + 2);
+                        int slot = (t->wq_head + i) % WQ_CAP;
                         if (t->wq[slot].idx == idx && t->wq[slot].buf) {
                             src = t->wq[slot].buf;
                             break;
@@ -582,12 +604,34 @@ static size_t aq_piece_read(torrentfs *t, int64_t idx, int64_t within,
                             uint8_t *dst, size_t len) {
     size_t total = 0;
     mutexLock(&t->lock);
+    int64_t plen = torrent_piece_len(&t->meta, idx);
+    // The piece may have completed since the caller looked in the writer
+    // queue: piece_full() moves it from its slot to the queue under this very
+    // lock. Check both here, in ONE critical section, or a read landing in
+    // that gap finds the piece nowhere and comes back empty (the caller then
+    // returned 0 = "no data" mid-file). The writer cannot move it on into the
+    // RAM window meanwhile: that needs cache_lock, which the caller holds.
+    uint8_t *full = NULL;
+    if (t->writing_idx == idx && t->writing_buf) {
+        full = t->writing_buf;
+    } else {
+        for (int i = 0; i < t->wq_n; i++) {
+            int slot = (t->wq_head + i) % WQ_CAP;
+            if (t->wq[slot].idx == idx && t->wq[slot].buf) { full = t->wq[slot].buf; break; }
+        }
+    }
+    if (full) {
+        size_t n = len;
+        if (within + (int64_t)n > plen) n = (size_t)(plen - within);
+        memcpy(dst, full + within, n);
+        mutexUnlock(&t->lock);
+        return n;
+    }
     aq_entry *a = aq_find(t, idx);
     if (!a || a->idx != idx) {
         mutexUnlock(&t->lock);
         return 0;
     }
-    int64_t plen = torrent_piece_len(&t->meta, idx);
     int b = (int)(within / BLOCK_LEN);
     int64_t b_offset = within % BLOCK_LEN;
     while (b < a->nblocks && total < len && within + (int64_t)total < plen) {
@@ -741,9 +785,21 @@ static aq_entry *aq_find(torrentfs *t, int64_t idx) {
 // The bitmap reset ALSO runs under the lock: the streaming reader (RAM mode)
 // reads have[] of an active piece, and a reset visible mid-assignment would
 // hand it stale blocks.
+// Room to open one more piece without the writer queue ever overflowing:
+// every active piece can add one job. Caller holds t->lock (or reads racily
+// as a pre-check: the writer only ever shrinks wq_n).
+static bool wq_has_room(const torrentfs *t) {
+    return t->wq_n + t->n_active_aq < WQ_CAP;
+}
+
 static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
     aq_entry *a = NULL;
     mutexLock(&t->lock);
+    if (!wq_has_room(t)) {           // backpressure: the writer is behind
+        t->st_wq_full++;
+        mutexUnlock(&t->lock);
+        return NULL;
+    }
     for (int i = 0; i < t->n_aq; i++) {
         aq_entry *c = &t->aq[i];
         if (c->idx >= 0) continue;
@@ -970,12 +1026,19 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
 // Used to grant full seeds extra patience during bootstrap, when we have
 // nothing to reciprocate with and must wait out their optimistic-unchoke cycle.
 static bool peer_is_seed(torrentfs *t, sess *s) {
-    if (!s->nb.bitfield) return false;
-    for (int64_t p = t->file_first_piece; p <= t->file_last_piece; p++) {
-        if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p))
-            return false;
-    }
-    return true;
+    // O(1): have_in_file is kept current on BITFIELD / HAVE / file switch
+    // (it used to scan every piece of the file, per session, per upkeep tick).
+    return s->nb.bitfield &&
+           s->have_in_file == (int)(t->file_last_piece - t->file_first_piece + 1);
+}
+
+// Recount a session's pieces inside the streamed file (BITFIELD, file switch).
+static int count_have_in_file(const torrentfs *t, const sess *s) {
+    if (!s->nb.bitfield) return 0;
+    int n = 0;
+    for (int64_t p = t->file_first_piece; p <= t->file_last_piece; p++)
+        if (bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p)) n++;
+    return n;
 }
 
 // Does this peer have pieces we currently need (the read-blocked piece or
@@ -1042,7 +1105,11 @@ static bool file_done(torrentfs *t) {
 static bool discovery_wait(torrentfs *t) {
     u64 start = armGetSystemTick();
     while (!t->stop) {
-        svcSleepThread(1000000000ULL);  // 1 s
+        // 1 s between checks, in 50 ms steps: torrentfs_close() joins this
+        // thread, and a plain 1 s sleep made every remove/cancel wait for it.
+        for (int i = 0; i < 20 && !t->stop && !t->announce_now; i++)
+            svcSleepThread(50000000ULL);
+        if (t->stop) break;
         tsnx_engine_wd_tick(1);
         if (t->announce_now) {
             t->announce_now = false;
@@ -1106,7 +1173,7 @@ static void writer_main(void *arg) {
         mutexLock(&t->lock);
         if (t->wq_n > 0) {
             j = t->wq[t->wq_head];
-            t->wq_head = (t->wq_head + 1) % (AQ_MAX + 2);
+            t->wq_head = (t->wq_head + 1) % WQ_CAP;
             t->wq_n--;
             t->writing_idx = j.idx;
             t->writing_buf = j.buf;
@@ -1780,6 +1847,7 @@ static bool scan_next_block(torrentfs *t, sess *s, u64 now,
             if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) continue;
             if (t->status[i] != PIECE_NEEDED) continue;
             if (t->n_active_aq >= t->n_aq) break; // Assembly budget capped
+            if (!wq_has_room(t)) break;           // writer behind: no new pieces
             aq_entry *a = aq_alloc(t, i);
             if (!a) continue;
             mutexLock(&t->lock);
@@ -1909,10 +1977,22 @@ static void piece_full(torrentfs *t, aq_entry *a) {
         s->req_n = kept;
     }
     mutexLock(&t->lock);
+    if (t->wq_n >= WQ_CAP) {
+        // Must not happen (wq_has_room gates every new piece). Never let the
+        // ring overwrite itself: drop the piece, keep the buffer in its slot.
+        t->status[idx] = PIECE_NEEDED;
+        a->idx = -1;
+        if (t->n_active_aq > 0) t->n_active_aq--;
+        t->st_wq_full++;
+        mutexUnlock(&t->lock);
+        engine_log(ENGINE_LOG_ERROR, "[writer] queue full (%d), piece %lld dropped",
+                   WQ_CAP, (long long)idx);
+        return;
+    }
     t->status[idx] = PIECE_WRITING;
-    int tail = (t->wq_head + t->wq_n) % (AQ_MAX + 2);
+    int tail = (t->wq_head + t->wq_n) % WQ_CAP;
     t->wq[tail] = (wjob){ idx, torrent_piece_len(&t->meta, idx), a->buf, a->peer_from };
-    t->wq_n++;                 // can't overflow: each job holds one aq buffer
+    t->wq_n++;                 // bounded by WQ_CAP via wq_has_room()
     a->idx = -1;               // slot reset inside the lock: the writer picks
     a->buf = NULL;             // its return slot by these very fields
     a->peer_from = NULL;
@@ -2142,13 +2222,19 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 uint32_t v;
                 memcpy(&v, pl, 4);
                 int64_t idx = (int64_t)ntohl(v);
-                if (idx >= 0 && idx < t->meta.piece_count)
-                    s->nb.bitfield[idx / 8] |= (uint8_t)(0x80 >> (idx % 8));
+                if (idx >= 0 && idx < t->meta.piece_count) {
+                    uint8_t bit = (uint8_t)(0x80 >> (idx % 8));
+                    if (!(s->nb.bitfield[idx / 8] & bit) &&
+                        idx >= t->file_first_piece && idx <= t->file_last_piece)
+                        s->have_in_file++;
+                    s->nb.bitfield[idx / 8] |= bit;
+                }
             }
             break;
         case MSG_BITFIELD:
             if (plen == s->nb.bitfield_len) {
                 memcpy(s->nb.bitfield, pl, plen);
+                s->have_in_file = count_have_in_file(t, s);
                 t->st_bf_ok++;
                 bool empty = true;
                 bool full = true;
@@ -2650,14 +2736,15 @@ static void perf_emit(torrentfs *t, u64 now) {
                "[perf] net loop_us p50=%llu p95=%llu max=%llu iters=%u "
                "scans/s=%.0f picks/s=%.0f rate=%.0fKB/s dup=%.1f%% "
                "live=%d unchoked=%d connecting=%d pool=%d "
-               "sock_fail+%d enobufs+%d timeouts+%d",
+               "sock_fail+%d enobufs+%d timeouts+%d wq=%d wq_full+%d",
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.50),
                (unsigned long long)perf_hist_pct(&t->pf_loop, 0.95),
                (unsigned long long)t->pf_loop.max, t->pf_loop.n,
                t->pf_scans / secs, t->pf_picks / secs, kbps, dup_pct,
                t->st_live, unchoked, t->st_connecting, t->peer_count,
                t->st_sock_fail - t->pf_sock_fail, t->st_enobufs - t->pf_enobufs,
-               t->st_conn_timeout - t->pf_timeouts);
+               t->st_conn_timeout - t->pf_timeouts,
+               t->wq_n, t->st_wq_full - t->pf_wq_full);
     perf_hist_reset(&t->pf_loop);
     t->pf_scans = t->pf_picks = 0;
     t->pf_tick = now;
@@ -2666,6 +2753,40 @@ static void perf_emit(torrentfs *t, u64 now) {
     t->pf_sock_fail = t->st_sock_fail;
     t->pf_enobufs = t->st_enobufs;
     t->pf_timeouts = t->st_conn_timeout;
+    t->pf_wq_full = t->st_wq_full;
+}
+
+// Publish the status snapshot (netloop, every upkeep tick).
+static void publish_snapshot(torrentfs *t) {
+    torrentfs_peer_info peers[MAX_SESS];
+    int n = 0, seeds = 0, claiming = 0, idle = 0;
+    for (int i = 0; i < MAX_SESS; i++) {
+        sess *s = &t->S[i];
+        if (!s->active) continue;
+        torrentfs_peer_info *o = &peers[n++];
+        o->ip         = s->addr.ip;
+        o->port       = s->addr.port;
+        o->bytes_recv = s->rx_total;
+        o->rate_bps   = s->rate;
+        o->rtt_ms     = -1;
+        o->connecting = s->connecting;
+        o->handshaked = s->nb.handshaked;
+        o->choked     = s->nb.choked;
+        // The app's slow-peer isolation reads this: the highest-priority
+        // piece this session is currently requesting (first ring entry).
+        o->claim_piece = s->req_n > 0 ? s->req_piece[0] : -1;
+        if (s->connecting || !s->nb.handshaked) continue;
+        if (peer_is_seed(t, s)) seeds++;
+        if (s->req_n > 0) claiming++;          // actively downloading
+        else if (!s->nb.choked) idle++;        // unchoked but nothing outstanding
+    }
+    mutexLock(&t->snap_lock);
+    memcpy(t->snap_peers, peers, (size_t)n * sizeof(peers[0]));
+    t->snap_n_peers = n;
+    t->snap_seeds = seeds;
+    t->snap_claiming = claiming;
+    t->snap_idle = idle;
+    mutexUnlock(&t->snap_lock);
 }
 
 static void netloop_main(void *arg) {
@@ -3071,6 +3192,7 @@ static void netloop_main(void *arg) {
                 if (peer_nb_tx_pending(&s->nb)) peer_nb_flush(&s->nb);
             }
 
+            publish_snapshot(t);
             if (now - t->pf_tick >= (u64)PERF_WINDOW_SECS * t->freq)
                 perf_emit(t, now);
         }
@@ -3269,6 +3391,7 @@ torrentfs *torrentfs_open_file_cancel(const char *source, const char *cache_path
     mutexInit(&t->cache_lock);
     mutexInit(&t->lock);
     mutexInit(&t->inc_q.lock);
+    mutexInit(&t->snap_lock);
     for (int i = 0; i < CACHE_MAX_CHUNKS; i++) t->chunks[i] = -1;
     t->calm_now = MAX_SESS;
     t->slots_per_chunk = CACHE_CHUNK / t->meta.piece_len;
@@ -3363,6 +3486,13 @@ void torrentfs_close(torrentfs *tfs) {
         threadClose(&tfs->writer);
         tfs->writer_started = false;
     }
+    // Incoming sockets the listener queued after the netloop's last drain
+    // would otherwise leak (the engine routes nothing here once we are
+    // unregistered, so the queue cannot refill).
+    mutexLock(&tfs->inc_q.lock);
+    for (int i = 0; i < tfs->inc_q.n; i++) close(tfs->inc_q.q[i].fd);
+    tfs->inc_q.n = 0;
+    mutexUnlock(&tfs->inc_q.lock);
     for (int i = 0; i < CACHE_MAX_CHUNKS; i++)
         if (tfs->chunks[i] >= 0) { close(tfs->chunks[i]); tfs->chunks[i] = -1; }
     cache_delete_all(tfs);  // per-playback scratch, not a library
@@ -3451,6 +3581,9 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
         memset(tfs->piece_zone, 0, (size_t)tfs->meta.piece_count);
     }
     tfs->has_custom_zones = false;
+
+    for (int i = 0; i < MAX_SESS; i++)
+        if (tfs->S[i].active) tfs->S[i].have_in_file = count_have_in_file(tfs, &tfs->S[i]);
 
     // Drop only in-flight requests that are outside the new file range and allowed lookahead window.
     // Retaining valid in-flight requests prevents peer stall during multi-file transitions.
@@ -3792,41 +3925,19 @@ void torrentfs_add_peers(torrentfs *tfs, const peer_addr *peers, int n) {
 // read can only misclassify one peer for one snapshot.
 int torrentfs_seed_count(const torrentfs *tfs) {
     torrentfs *t = (torrentfs *)tfs;
-    int seeds = 0;
-    for (int i = 0; i < MAX_SESS; i++) {
-        const sess *s = &t->S[i];
-        if (!s->active || !s->nb.handshaked || !s->nb.bitfield) continue;
-        bool full = true;
-        for (int64_t p = t->file_first_piece; p <= t->file_last_piece; p++) {
-            if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p)) {
-                full = false;
-                break;
-            }
-        }
-        if (full) seeds++;
-    }
+    mutexLock(&t->snap_lock);
+    int seeds = t->snap_seeds;
+    mutexUnlock(&t->snap_lock);
     return seeds;
 }
 
 int torrentfs_get_peers(const torrentfs *tfs, torrentfs_peer_info *out, int max) {
-    int n = 0;
-    for (int i = 0; i < MAX_SESS && n < max; i++) {
-        const sess *s = &tfs->S[i];
-        if (!s->active) continue;
-        out[n].ip           = s->addr.ip;
-        out[n].port         = s->addr.port;
-        out[n].bytes_recv   = s->rx_total;
-        out[n].rate_bps     = s->rate;
-        out[n].rtt_ms       = -1;
-        out[n].connecting   = s->connecting;
-        out[n].handshaked   = s->nb.handshaked;
-        out[n].choked       = s->nb.choked;
-        // The app's slow-peer isolation reads this: report the highest-priority
-        // piece this session is currently requesting (first ring entry).
-        out[n].claim_piece  = s->req_n > 0 ? s->req_piece[0] : -1;
-        n++;
-    }
-    return n;
+    torrentfs *t = (torrentfs *)tfs;
+    mutexLock(&t->snap_lock);
+    int n = t->snap_n_peers < max ? t->snap_n_peers : max;
+    if (n > 0) memcpy(out, t->snap_peers, (size_t)n * sizeof(out[0]));
+    mutexUnlock(&t->snap_lock);
+    return n < 0 ? 0 : n;
 }
 
 void torrentfs_live_peers(const torrentfs *tfs, int *live, int *peak,
@@ -3837,13 +3948,10 @@ void torrentfs_live_peers(const torrentfs *tfs, int *live, int *peak,
 }
 
 void torrentfs_claim_stats(const torrentfs *tfs, int *claiming, int *idle) {
-    int c = 0, id = 0;
-    for (int i = 0; i < MAX_SESS; i++) {
-        const sess *s = &tfs->S[i];
-        if (!s->active || s->connecting || !s->nb.handshaked) continue;
-        if (s->req_n > 0) c++;          // actively downloading
-        else if (!s->nb.choked) id++;   // unchoked but nothing outstanding
-    }
+    torrentfs *t = (torrentfs *)tfs;
+    mutexLock(&t->snap_lock);
+    int c = t->snap_claiming, id = t->snap_idle;
+    mutexUnlock(&t->snap_lock);
     if (claiming) *claiming = c;
     if (idle) *idle = id;
 }

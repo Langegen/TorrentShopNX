@@ -204,13 +204,11 @@ std::int64_t CustomEngineBackend::read(std::int64_t offset, void* buffer, std::i
         if (scheduler_enabled_) {
             scheduler_.on_tick();
         }
-        float kbps = static_cast<float>(downloadSpeedKBps());
-        tsnx_torrent_item items[8];
-        int peers = 0;
-        int n = tsnx_engine_get_torrents(engine_, items, 8);
-        for (int i = 0; i < n; i++) {
-            if (info_hash_str_ == items[i].hash) { peers = items[i].peers; break; }
-        }
+        // One lookup for both numbers (each lookup also advances the speed EWMA).
+        tsnx_torrent_item item{};
+        bool found = tsnx_engine_get_torrent(engine_, info_hash_str_.c_str(), &item);
+        float kbps = found ? item.download_kbps : 0.0f;
+        int peers = found ? item.peers : 0;
         health_.on_tick(peers, kbps, starving_.load());
     }
 
@@ -238,15 +236,11 @@ BackendStatus CustomEngineBackend::status() const {
     std::lock_guard<std::mutex> lock(mutex_);
     BackendStatus s = status_;
 
-    tsnx_torrent_item items[8];
-    int n = tsnx_engine_get_torrents(engine_, items, 8);
-    for (int i = 0; i < n; i++) {
-        if (info_hash_str_ == items[i].hash) {
-            s.peers = items[i].peers;
-            s.seeds = items[i].seeds;
-            s.known_peers = items[i].known_peers;
-            break;
-        }
+    tsnx_torrent_item item{};
+    if (tsnx_engine_get_torrent(engine_, info_hash_str_.c_str(), &item)) {
+        s.peers = item.peers;
+        s.seeds = item.seeds;
+        s.known_peers = item.known_peers;
     }
 
     if (scheduler_enabled_ && piece_size_ > 0) {
@@ -303,13 +297,9 @@ void CustomEngineBackend::close() {
 }
 
 int CustomEngineBackend::downloadSpeedKBps() const {
-    tsnx_torrent_item items[8];
-    int n = tsnx_engine_get_torrents(engine_, items, 8);
-    for (int i = 0; i < n; i++) {
-        if (info_hash_str_ == items[i].hash) {
-            return static_cast<int>(items[i].download_kbps);
-        }
-    }
+    tsnx_torrent_item item{};
+    if (tsnx_engine_get_torrent(engine_, info_hash_str_.c_str(), &item))
+        return static_cast<int>(item.download_kbps);
     return 0;
 }
 

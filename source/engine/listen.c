@@ -26,7 +26,7 @@ static volatile bool  s_stop = false;
 static int            s_listen_fd = -1;
 static int            s_port = 0;      // last successfully bound port (0 = none)
 static int            s_req_port = 0;  // port requested at torrent_listener_start
-static listen_find_fn s_find = NULL;
+static listen_route_fn s_find = NULL;
 
 // Read exactly 68 bytes of the peer's handshake, with a deadline. Returns 0 on
 // success, -1 on error/timeout. The peer's first byte must be 19 (the BT
@@ -180,15 +180,12 @@ static void listener_main(void *arg) {
             }
 
             const uint8_t *info_hash = hs + 28;
-            torrentfs *t = s_find ? s_find(info_hash) : NULL;
-            if (!t) {
+            if (!s_find || !s_find(info_hash, fd, hs)) {
                 engine_log(ENGINE_LOG_DEBUG,
                            "[listen] no torrent for this info_hash");
                 close(fd);
                 continue;
             }
-
-            torrentfs_incoming_push(t, fd, hs);
         }
 
         close(s_listen_fd);
@@ -204,7 +201,7 @@ static void listener_main(void *arg) {
     }
 }
 
-int torrent_listener_start(int port, listen_find_fn find) {
+int torrent_listener_start(int port, listen_route_fn find) {
     if (s_thread_started) return 0;
 
     s_req_port = port;

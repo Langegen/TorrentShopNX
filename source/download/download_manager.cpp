@@ -74,8 +74,8 @@ bool customEngineSetFileWanted(const std::string& hash, int file_index, bool wan
 
 void customEngineGetTorrentList(std::vector<torrent::TorrentInfo>& out) {
     out.clear();
-    tsnx_torrent_item items[8];
-    int n = tsnx_engine_get_torrents(nullptr, items, 8);
+    tsnx_torrent_item items[TSNX_MAX_TORRENTS];
+    int n = tsnx_engine_get_torrents(nullptr, items, TSNX_MAX_TORRENTS);
     for (int i = 0; i < n; i++) {
         torrent::TorrentInfo ti;
         ti.id = -1;

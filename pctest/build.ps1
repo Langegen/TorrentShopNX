@@ -133,6 +133,27 @@ function Build-PerfTest {
     Write-Host "OK -> pctest\test_engine_perf"
 }
 
+# Engine registry stress test (concurrent remove/re-add, reads, status polls).
+function Build-RegistryTest {
+    $OBJDIR = "pctest\obj"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
+    $cobj = @()
+    foreach ($src in $COMMON_SOURCES) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        if (-not (Test-Path $o)) {
+            & $GCC @CFLAGS -c $src -o $o
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        $cobj += $o
+    }
+    $o_reg = Join-Path $OBJDIR "test_registry.o"
+    & $GPP @CXXFLAGS -std=c++17 -Ipctest -c pctest\test_registry.cpp -o $o_reg
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_reg $CPP_OBJ -o "pctest\test_registry" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_registry"
+}
+
 function Build-MechanismsTest {
     $OBJDIR = "pctest\obj"
     if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
@@ -197,6 +218,7 @@ Build-Test "dhttest"
 Build-AppTest
 Build-NetBrowsingTest
 Build-PerfTest
+Build-RegistryTest
 Build-MechanismsTest
 Build-ExtractSafetyTest
 
