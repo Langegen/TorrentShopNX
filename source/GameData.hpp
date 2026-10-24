@@ -1333,6 +1333,29 @@ inline std::string normalizeImageUrl(const std::string& url) {
     return norm;
 }
 
+// Second route for images served through the wsrv.nl / images.weserv.nl proxy
+// (eShop screenshots: img-eshop.cdn.nintendo.net is unreachable under 90DNS).
+// On the console wsrv.nl failed outright in some sessions ("SSL connect error"
+// over https, "Failure when receiving data from the peer" over http) while the
+// same URLs loaded fine from a PC on the same network. DuckDuckGo's image proxy
+// is not behind Cloudflare and has an RSA certificate, which the Switch ssl
+// service handles. Returns "" when the URL is not a weserv one.
+inline std::string imageProxyFallback(const std::string& url) {
+    if (url.find("://wsrv.nl/") == std::string::npos &&
+        url.find("://images.weserv.nl/") == std::string::npos) return "";
+    size_t p = url.find("url=");
+    if (p == std::string::npos) return "";
+    p += 4;
+    size_t e = url.find('&', p);
+    std::string inner = url.substr(p, e == std::string::npos ? std::string::npos : e - p);
+    if (inner.empty()) return "";
+    if (inner.rfind("http://", 0) != 0 && inner.rfind("https://", 0) != 0 && inner.rfind("http%3A", 0) != 0 &&
+        inner.rfind("https%3A", 0) != 0) {
+        inner = "https://" + inner;   // weserv accepts scheme-less url=
+    }
+    return "https://external-content.duckduckgo.com/iu/?u=" + inner;
+}
+
 // Helper to convert thumbnail URLs from popular image hostings to their original/full-size versions
 inline std::string getOriginalImageUrl(const std::string& url) {
     std::string original = normalizeImageUrl(url);
@@ -1595,6 +1618,16 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         std::string orig = getOriginalImageUrl(normUrl);
         if (orig != normUrl) {
             effectiveFallback = orig;
+        }
+    }
+    // weserv proxy: the fallback must leave that host (the caller's fallback is
+    // usually the same weserv URL), or a failing wsrv.nl leaves a placeholder.
+    {
+        std::string proxyFb = imageProxyFallback(normUrl);
+        if (!proxyFb.empty() &&
+            (effectiveFallback.empty() || effectiveFallback == normUrl ||
+             !imageProxyFallback(effectiveFallback).empty())) {
+            effectiveFallback = proxyFb;
         }
     }
 

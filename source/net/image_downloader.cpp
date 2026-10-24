@@ -712,6 +712,21 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
             markHostFailed(host);
         }
 
+        // A network error with a fallback on ANOTHER host (e.g. wsrv.nl ->
+        // DuckDuckGo's image proxy): switch right away. Retrying the failing
+        // host twice, with cooldowns, only delayed the picture by seconds.
+        {
+            std::string fbHost0 = extractHost(task.fallbackUrl);
+            if (res.status_code == 0 && !task.fallbackUrl.empty() && !fbHost0.empty() &&
+                fbHost0 != host && !isHostInCooldown(fbHost0)) {
+                if (task.token && !*task.token) return;
+                util::logLine("ImageDownloader: switching to fallback host " + fbHost0 + " for " + task.url);
+                enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder,
+                                task.bypassCache, "", task.row, task.col, task.priorityOverride);
+                return;
+            }
+        }
+
         // If it was a network timeout / connection error (code == 0) and we haven't exhausted retries,
         // retry the task instead of giving up immediately and setting a placeholder (skip retrying known blocked hosts)
         if (res.status_code == 0 && !isKnownBlockedHost(host) && task.retryCount < 2) {
