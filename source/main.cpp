@@ -16,6 +16,7 @@
 #include <fstream>
 #include <vector>
 #include <borealis.hpp>
+#include <borealis/core/thread_pool.hpp>
 #include <nanovg.h>
 
 #if __has_include(<curl/curl.h>)
@@ -40,6 +41,7 @@
 #include "catalog/retro_catalog_manager.h"
 #include "config/config.h"
 #include "utils/log.h"
+#include "utils/update_journal.h"
 #include "utils/perf_stats.h"
 #include "utils/ui_watchdog.h"
 #include "engine/engine_log.h"
@@ -294,7 +296,33 @@ static bool replaceNroFile(const std::string& srcPath, const std::string& dstPat
 extern "C" u32 __nx_applet_exit_mode;
 #endif
 
-static bool checkAndApplyPendingUpdate() {
+// How the process leaves after an update was applied.
+//   relaunch=true  (start of main, nothing but the main thread is running):
+//                  hand the new NRO to hbloader via envSetNextLoad.
+//   relaunch=false (end of a normal session): only replace the file and keep
+//                  the normal exit to the HOME menu. Returning to hbloader from
+//                  a full session is unsafe: engine/curl/image threads may still
+//                  be alive in the shared process, and once hbloader maps the
+//                  next NRO over their code they crash the whole title.
+static void prepareExitAfterUpdate(const std::string& nroPath, bool relaunch) {
+#ifdef __SWITCH__
+    if (relaunch && envHasNextLoad()) {
+        std::string quotedArg = "\"" + nroPath + "\"";
+        envSetNextLoad(nroPath.c_str(), quotedArg.c_str());
+        __nx_applet_exit_mode = 0;
+        util::updateJournal("relaunching updated NRO via envSetNextLoad: " + nroPath);
+    } else {
+        __nx_applet_exit_mode = 1; // straight to the HOME menu, process is torn down
+        util::updateJournal(relaunch ? "loader has no next-load support, exiting to HOME"
+                                     : "update applied at exit, closing to HOME");
+    }
+#else
+    (void)nroPath;
+    (void)relaunch;
+#endif
+}
+
+static bool checkAndApplyPendingUpdate(bool relaunch) {
 #ifdef __SWITCH__
     // Ensure RomFS is not mounted while we manipulate NRO files
     util::unmountRomfs();
@@ -303,23 +331,14 @@ static bool checkAndApplyPendingUpdate() {
     // 1. If we are running AS the .update file (e.g. TorrentShopNX.nro.update)
     if (g_nroPath.find(".update") != std::string::npos) {
         std::string mainNroPath = g_nroPath.substr(0, g_nroPath.find(".update"));
-        util::logLine("main: running as update NRO (" + g_nroPath + "). Overwriting main NRO: " + mainNroPath);
-        
+        util::updateJournal("running as update NRO (" + g_nroPath + "), overwriting " + mainNroPath);
+
         bool ok = replaceNroFile(g_nroPath, mainNroPath);
-        util::logLine("main: replace result=" + std::to_string(ok));
-        
+        util::updateJournal(std::string("replace result=") + (ok ? "ok" : "FAILED"));
+
         std::remove(g_nroPath.c_str());
-        
-#ifdef __SWITCH__
-        if (envHasNextLoad()) {
-            std::string quotedArg = "\"" + mainNroPath + "\"";
-            envSetNextLoad(mainNroPath.c_str(), quotedArg.c_str());
-            __nx_applet_exit_mode = 0;
-            util::logLine("main: relaunching main NRO via envSetNextLoad: " + mainNroPath);
-            return true; // Signal main to exit so HBL chainloads mainNroPath
-        }
-#endif
-        return ok;
+        prepareExitAfterUpdate(mainNroPath, relaunch);
+        return true;
     }
 
     // 2. We are running as regular TorrentShopNX.nro. Check for pending .update files.
@@ -332,7 +351,7 @@ static bool checkAndApplyPendingUpdate() {
     for (const auto& upPath : possibleUpdates) {
         struct stat st;
         if (stat(upPath.c_str(), &st) == 0) {
-            if (st.st_size >= 100 * 1024) {
+            if (util::isValidNroFile(upPath)) {
                 // Determine target NRO path for this update file
                 std::string targetNro = upPath;
                 if (targetNro.size() > 7 && targetNro.rfind(".update") == targetNro.size() - 7) {
@@ -341,27 +360,20 @@ static bool checkAndApplyPendingUpdate() {
                     targetNro = g_nroPath;
                 }
 
-                util::logLine("main: found pending update at " + upPath + " (" + std::to_string(st.st_size) + " bytes), target=" + targetNro);
-                
+                util::updateJournal(std::string(relaunch ? "start" : "exit") + ": found pending update " +
+                                    upPath + " (" + std::to_string(st.st_size) + " bytes), target=" + targetNro);
+
                 bool ok = replaceNroFile(upPath, targetNro);
-                util::logLine("main: replaceNroFile to " + targetNro + " result=" + std::to_string(ok));
-                
+                util::updateJournal("replaceNroFile to " + targetNro + (ok ? " ok" : " FAILED"));
+
                 if (ok) {
                     g_nroPath = targetNro;
-#ifdef __SWITCH__
-                    if (envHasNextLoad()) {
-                        std::string quotedArg = "\"" + g_nroPath + "\"";
-                        envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
-                        __nx_applet_exit_mode = 0;
-                        util::logLine("main: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
-                    }
-#endif
-                    return true; // Signal main to exit so HBL chainloads the freshly updated NRO
-                } else {
-                    util::logLine("main: failed to replace NRO with update from " + upPath);
+                    prepareExitAfterUpdate(g_nroPath, relaunch);
+                    return true;
                 }
             } else {
-                util::logLine("main: removing invalid/small update file at " + upPath + " (" + std::to_string(st.st_size) + " bytes)");
+                util::updateJournal("removing invalid update file " + upPath + " (" + std::to_string(st.st_size) +
+                                    " bytes, no NRO0 header)");
                 std::remove(upPath.c_str());
             }
         }
@@ -400,7 +412,13 @@ int main(int argc, char** argv) {
     util::logLine("main: start g_nroPath=" + g_nroPath);
 
 #ifdef __SWITCH__
-    if (checkAndApplyPendingUpdate()) {
+    if (checkAndApplyPendingUpdate(/*relaunch=*/true)) {
+        // borealis creates its global ThreadPool (3 workers) in a static
+        // initializer, before main(). Returning to hbloader with those threads
+        // still parked in the process crashed the title as soon as the next NRO
+        // was mapped over their code ("closed because of an error", update
+        // applied only on the launch after). Join them first.
+        brls::ThreadPool::shutdownGlobal();
         util::logLine("main: exiting for update relaunch");
         util::logClose();   // drain the async writer before committing
         fsdevCommitDevice("sdmc");
@@ -710,8 +728,10 @@ int main(int argc, char** argv) {
     // This releases the file lock on g_nroPath so any pending update can be applied right now!
     util::unmountRomfs();
 
-    // Apply pending update if one was downloaded during this session
-    if (checkAndApplyPendingUpdate()) {
+    // Apply pending update if one was downloaded during this session.
+    // Only the file is replaced here; the process still exits to HOME (see
+    // prepareExitAfterUpdate), the next launch runs the new version.
+    if (checkAndApplyPendingUpdate(/*relaunch=*/false)) {
         util::logLine("main: pending update applied during shutdown");
     }
 #endif

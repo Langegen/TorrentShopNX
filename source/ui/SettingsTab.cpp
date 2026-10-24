@@ -11,6 +11,7 @@
 #include "../config/config.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/update_journal.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
@@ -207,9 +208,12 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                 }
                 
                 struct stat st;
-                bool validDownloadedFile = (stat(tmpPath.c_str(), &st) == 0 && st.st_size > 100 * 1024);
-                
-                util::logLine("downloadAndInstallAppUpdate: res=" + std::to_string(res) + " http=" + std::to_string(http_code) + " size=" + (validDownloadedFile ? std::to_string(st.st_size) : "invalid"));
+                bool haveFile = (stat(tmpPath.c_str(), &st) == 0);
+                bool validDownloadedFile = haveFile && util::isValidNroFile(tmpPath);
+
+                util::updateJournal("download: curl=" + std::to_string(res) + " http=" + std::to_string(http_code) +
+                                    " size=" + (haveFile ? std::to_string(st.st_size) : "none") +
+                                    (validDownloadedFile ? " nro=ok" : " nro=INVALID"));
                 
                 if (res == CURLE_OK && http_code == 200 && validDownloadedFile) {
                     try {
@@ -231,9 +235,14 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
 #ifdef __SWITCH__
                             fsdevCommitDevice("sdmc");
 #endif
+                            util::updateJournal("download: saved " + updatePath);
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
                             pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
-                                brls::Application::getPlatform()->exitToHomeMode(false);
+                                // Normal exit to HOME: the NRO is replaced during shutdown
+                                // and the next launch runs the new version. Going back to
+                                // hbloader from a live session (exitToHomeMode(false)) crashed
+                                // the title because engine/curl threads were still running.
+                                util::updateJournal("user chose close-and-update");
                                 brls::Application::quit();
                             });
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
