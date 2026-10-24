@@ -1317,12 +1317,18 @@ PortRecipeStore& PortRecipeStore::instance() {
     return inst;
 }
 
+std::string onlinePortRecipesPath() {
+    return std::string(TSNX_DATA_DIR) + "/port_recipes_online.json";
+}
+
 void PortRecipeStore::reload() {
+    std::lock_guard<std::mutex> lk(mtx_);
     loaded_ = false;
     recipes_.clear();
 }
 
-const PortRecipe* PortRecipeStore::find(const std::string& topic_id, const std::string& release_title) {
+bool PortRecipeStore::find(const std::string& topic_id, const std::string& release_title, PortRecipe& out) {
+    std::lock_guard<std::mutex> lk(mtx_);
     if (!loaded_) {
         loaded_ = true;
 #ifdef __SWITCH__
@@ -1331,7 +1337,7 @@ const PortRecipe* PortRecipeStore::find(const std::string& topic_id, const std::
         const std::string builtin = "resources/ports/recipes.json";
 #endif
         const std::string user = std::string(TSNX_DATA_DIR) + "/port_recipes.json";
-        for (const std::string& path : {builtin, user}) {
+        for (const std::string& path : {builtin, onlinePortRecipesPath(), user}) {
             std::ifstream in(path, std::ios::binary);
             if (!in) continue;
             std::stringstream ss;
@@ -1355,7 +1361,10 @@ const PortRecipe* PortRecipeStore::find(const std::string& topic_id, const std::
             util::logLine("PortRecipeStore: loaded " + std::to_string(count) + " recipes from " + path);
         }
     }
-    return findPortRecipe(recipes_, topic_id, release_title);
+    const PortRecipe* r = findPortRecipe(recipes_, topic_id, release_title);
+    if (!r) return false;
+    out = *r;
+    return true;
 }
 
 bool PortInstallPlanner::analyzeWithRecipe(const PortRecipe& recipe,
@@ -1552,10 +1561,11 @@ PortInstallPlan PortInstallPlanner::plan(const std::string& topic_id,
                                          const std::string& release_title,
                                          const std::vector<torrent::TorrentFileInfo>& files,
                                          const std::string& preferred_lang) {
-    if (const PortRecipe* r = PortRecipeStore::instance().find(topic_id, release_title)) {
+    PortRecipe recipe;
+    if (PortRecipeStore::instance().find(topic_id, release_title, recipe)) {
         PortInstallPlan p;
         std::string err;
-        if (analyzeWithRecipe(*r, release_title, files, preferred_lang, p, err)) {
+        if (analyzeWithRecipe(recipe, release_title, files, preferred_lang, p, err)) {
             util::logLine("PortInstallPlanner: recipe '" + p.recipe_id + "' used for '" + release_title + "'");
             return p;
         }

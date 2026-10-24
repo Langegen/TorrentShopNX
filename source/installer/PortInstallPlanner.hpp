@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
+#include <mutex>
 #include "torrent/torrent_manager.h"
 #include "utils/archive_peek.h"
 
@@ -154,16 +155,22 @@ const PortRecipe* findPortRecipe(const std::vector<PortRecipe>& recipes,
                                  const std::string& topic_id,
                                  const std::string& release_title);
 
-// Loaded once from romfs and the data folder.
+// Recipes from romfs, then the downloaded file (port_recipes_online.json,
+// refreshed with the catalog), then the user's own data/port_recipes.json;
+// a later file overrides recipes for the same release. Thread-safe.
 class PortRecipeStore {
 public:
     static PortRecipeStore& instance();
-    const PortRecipe* find(const std::string& topic_id, const std::string& release_title);
+    bool find(const std::string& topic_id, const std::string& release_title, PortRecipe& out);
     void reload();
 private:
+    std::mutex mtx_;
     bool loaded_ = false;
     std::vector<PortRecipe> recipes_;
 };
+
+// Downloaded recipes (written by the catalog updater).
+std::string onlinePortRecipesPath();
 
 class PortInstallPlanner {
 public:

@@ -4,6 +4,7 @@
 #include "FilterSortDialog.hpp"
 #include "../catalog/filter_manager.hpp"
 #include "../utils/log.h"
+#include "../installer/installed_ports.h"
 
 #include <cstdio>
 #include <algorithm>
@@ -433,7 +434,14 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
 
                 brls::Label* sizeLabel = cards[i].size;
                 if (sizeLabel) {
-                    sizeLabel->setText(hasMatch ? parent_->matchedGames_[idx].size : "");
+                    std::string sizeText = hasMatch ? parent_->matchedGames_[idx].size : "";
+                    // Port installed by the auto-installer (manifest list is cached in memory).
+                    if (hasMatch && isHomebrewGame(parent_->matchedGames_[idx]) &&
+                        installer::InstalledPorts::instance().isInstalled(parent_->matchedGames_[idx].topic_id,
+                                                                          parent_->matchedGames_[idx].title)) {
+                        sizeText = "app/detail/in_library"_i18n + (sizeText.empty() ? "" : " · " + sizeText);
+                    }
+                    sizeLabel->setText(sizeText);
                 }
 
                 brls::Box* statsBox = cards[i].statsBox;

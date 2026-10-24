@@ -87,9 +87,25 @@ bool InstalledPorts::load(const std::string& key, InstalledPort& out) const {
     return true;
 }
 
-bool InstalledPorts::isInstalled(const std::string& topic_id, const std::string& title) const {
-    std::error_code ec;
-    return std::filesystem::exists(manifestPath(keyFor(topic_id, title)), ec);
+bool InstalledPorts::isInstalled(const std::string& topic_id, const std::string& title) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (!keys_loaded_) {
+        keys_loaded_ = true;
+        std::error_code ec;
+        const std::string dir = std::string(TSNX_DATA_DIR) + "/ports";
+        if (std::filesystem::is_directory(dir, ec)) {
+            for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+                if (e.path().extension() == ".json") keys_.insert(e.path().stem().string());
+            }
+        }
+    }
+    return keys_.count(keyFor(topic_id, title)) > 0;
+}
+
+void InstalledPorts::rememberKey(const std::string& key, bool installed) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (installed) keys_.insert(key);
+    else keys_.erase(key);
 }
 
 size_t InstalledPorts::saveReplacing(const InstalledPort& port) {
@@ -134,7 +150,10 @@ size_t InstalledPorts::saveReplacing(const InstalledPort& port) {
     std::filesystem::remove(path, ec);
     std::filesystem::rename(tmp, path, ec);
     if (ec) util::logLine("installed_ports: cannot save " + path + ": " + ec.message());
-    else util::logLine("installed_ports: saved " + path + " (" + std::to_string(fresh.files.size()) + " files)");
+    else {
+        rememberKey(fresh.key, true);
+        util::logLine("installed_ports: saved " + path + " (" + std::to_string(fresh.files.size()) + " files)");
+    }
     return removed;
 }
 
@@ -204,6 +223,7 @@ bool InstalledPorts::uninstall(const std::string& key, size_t& removed_files, st
 #endif
     std::error_code ec;
     std::filesystem::remove(manifestPath(key), ec);
+    rememberKey(key, false);
     util::logLine("installed_ports: uninstalled " + key + ", removed " + std::to_string(removed_files) + " files");
     return true;
 }

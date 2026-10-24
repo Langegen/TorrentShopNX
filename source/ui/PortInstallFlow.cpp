@@ -82,6 +82,8 @@ void showPreview(const Game& game, std::shared_ptr<installer::PortInstallPlan> p
                        brls::getStr("app/ports/preview_version", variantTitle(v)) + "\n" +
                        brls::getStr("app/ports/preview_download", formatSize(static_cast<unsigned long long>(v.total_size)));
     if (sdFree >= 0) text += "\n" + brls::getStr("app/ports/preview_free", formatSize(static_cast<unsigned long long>(sdFree)));
+    // Archives: their unpacked size is known only from the listing read at install time.
+    if (!plan->getArchivesForVariant(variant).empty()) text += "\n" + "app/ports/preview_space_note"_i18n;
     if (!where.empty()) text += "\n" + "app/ports/preview_folders"_i18n + where;
     text += "\n" + (plan->forwardersForVariant(variant).empty() ? "app/ports/preview_no_forwarder"_i18n
                                                                  : "app/ports/preview_forwarder"_i18n);

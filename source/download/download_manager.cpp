@@ -1176,14 +1176,14 @@ static void portInstallWorker(datasource::IDataSource* source,
                               std::shared_ptr<PortInstallResume> resume) {
     if (!source || hash.empty()) {
         st->failed = true;
-        st->error = "Invalid port installation request";
+        st->error = "app/ports/error_engine"_i18n;
         return;
     }
 
     tsnx_engine* eng = datasource::CustomEngineClient::instance().sharedEngine();
     if (!eng) {
         st->failed = true;
-        st->error = "Torrent engine not available";
+        st->error = "app/ports/error_engine"_i18n;
         return;
     }
 
@@ -1193,7 +1193,7 @@ static void portInstallWorker(datasource::IDataSource* source,
                                        reinterpret_cast<const volatile bool*>(cancel.get()),
                                        out_hash, sizeof(out_hash))) {
             st->failed = true;
-            st->error = "Failed to add torrent";
+            st->error = "app/detail/auto_install_probe_failed"_i18n;
             return;
         }
     }
@@ -1201,14 +1201,14 @@ static void portInstallWorker(datasource::IDataSource* source,
     int total_files = tsnx_engine_get_file_count(eng, hash.c_str());
     if (total_files <= 0) {
         st->failed = true;
-        st->error = "Cannot resolve torrent file count";
+        st->error = "app/detail/auto_install_probe_failed"_i18n;
         return;
     }
     std::vector<tsnx_file_info> files(total_files);
     int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), total_files);
     if (n <= 0) {
         st->failed = true;
-        st->error = "Cannot resolve torrent file info";
+        st->error = "app/detail/auto_install_probe_failed"_i18n;
         return;
     }
     files.resize(static_cast<size_t>(n));
@@ -1219,7 +1219,7 @@ static void portInstallWorker(datasource::IDataSource* source,
     for (int i = 0; i < n; ++i) {
         if (files[i].index != i) {
             st->failed = true;
-            st->error = "Unexpected torrent file indices";
+            st->error = "app/detail/auto_install_probe_failed"_i18n;
             util::logLine("port_installer: file #" + std::to_string(i) + " has index " + std::to_string(files[i].index));
             return;
         }
@@ -1313,7 +1313,7 @@ static void portInstallWorker(datasource::IDataSource* source,
     std::vector<int> target_indices = plan->getFilesForVariant(variant_index);
     if (target_indices.empty()) {
         st->failed = true;
-        st->error = "No files to install for selected variant";
+        st->error = "app/ports/error_no_files"_i18n;
         return;
     }
 
@@ -1388,7 +1388,7 @@ static void portInstallWorker(datasource::IDataSource* source,
         source->setSchedulerEnabled(true);
         source->setCancelFlag(cancel.get());
         if (cancel->load() || !source->open(hash, file_idx)) {
-            st->error = "Failed to open torrent stream for " + std::string(files[file_idx].path);
+            st->error = brls::getStr("app/ports/error_open_stream", std::string(files[file_idx].path));
             return false;
         }
 
@@ -1428,7 +1428,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             f = std::fopen(resolved_dest.c_str(), "wb");
         }
         if (!f) {
-            st->error = "Cannot create destination file: " + resolved_dest;
+            st->error = brls::getStr("app/ports/error_create", resolved_dest);
             source->notifyStreamingComplete(false);
             return false;
         }
@@ -1615,7 +1615,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             datasource::IDataSource* arch_source = openArchive(a, concat, arch_file_size);
             if (!arch_source) {
                 st->failed = true;
-                st->error = "Failed to open torrent stream for " + a.archive_torrent_path;
+                st->error = brls::getStr("app/ports/error_open_stream", a.archive_torrent_path);
                 return;
             }
             const size_t volume_count = a.volume_indices.empty() ? 1 : a.volume_indices.size();
@@ -1815,7 +1815,7 @@ static void portInstallWorker(datasource::IDataSource* source,
         nspSource.setCancelFlag(cancel.get());
         if (!nspSource.open()) {
             st->failed = true;
-            st->error = "Cannot open downloaded forwarder NSP: " + resolved_nsp;
+            st->error = brls::getStr("app/ports/error_forwarder", resolved_nsp);
             util::logLine("port_installer: " + st->error);
             return;
         }
@@ -1857,7 +1857,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             }
         } else {
             st->failed = true;
-            st->error = "Failed to start NSP installer: " + nspInstaller.errorMessage();
+            st->error = brls::getStr("app/ports/error_forwarder", nspInstaller.errorMessage());
             util::logLine("port_installer: " + st->error);
         }
 
@@ -2968,7 +2968,7 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         auto* source = ds_manager_.getSource();
         if (!source) {
             item.state = DownloadState::Failed;
-            item.error_message = "Data source is unavailable";
+            item.error_message = "app/ports/error_engine"_i18n;
             return;
         }
         if (item.cancel_flag) item.cancel_flag->store(false);
@@ -3041,7 +3041,7 @@ void DownloadManager::handlePortAutoInstall(size_t index,
     if (item.port_install_state && item.port_install_state->failed.load()) {
         item.state = DownloadState::Failed;
         item.error_message = item.port_install_state->error.empty()
-            ? "Port installation failed" : item.port_install_state->error;
+            ? "app/ports/error_failed"_i18n : item.port_install_state->error;
         if (item.finish_time.time_since_epoch().count() == 0) {
             item.finish_time = std::chrono::steady_clock::now();
             if (item.start_time.time_since_epoch().count() > 0) {

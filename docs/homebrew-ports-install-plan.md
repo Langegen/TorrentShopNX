@@ -9,13 +9,14 @@
 | 0. Тесты | `pctest/test_port_planner.cpp`, `pctest/port_fixtures/`, запуск `pctest\build_port_planner.ps1`; `--lint <папка>` помечает подозрительные раздачи; в `log.txt` пишутся строки `port_file` и полный план |
 | 1. Планировщик | `source/installer/PortInstallPlanner.cpp` |
 | 2. Оглавление архива | `source/utils/archive_peek.*`, `peek7zArchiveFromSource`, `refineArchiveDestination` |
-| 3. Рецепты | `resources/ports/recipes.json` (+ `data/port_recipes.json` на карте), `PortInstallPlanner::plan` |
+| 3. Рецепты | `resources/ports/recipes.json`, скачиваемый `port_recipes.json` из репозитория подборок (раз в 12 ч, `catalog_updater`), свой `data/port_recipes.json` на карте; `PortInstallPlanner::plan` |
 | 4. Выбор версии | `source/ui/PortInstallFlow.*` |
 | 5. Надёжность | `PortInstallResume` в `download_manager.h`, воркер в `download_manager.cpp` |
 | 6. Переводы | раздел `ports` во всех `resources/i18n/*/app.json` |
-| 7. Учёт портов | `source/installer/installed_ports.*`, `data/ports/<topic>.json` |
+| 7. Учёт портов | `source/installer/installed_ports.*`, `data/ports/<topic>.json`; «Установлено» в карточке и в подборке портов |
 
 Осталось:
+- Выложить `port_recipes.json` в `Langegen/switch-game-collection` (формат как у `resources/ports/recipes.json`), когда появятся проверенные рецепты.
 - Проверить на консоли: обычный порт, порт с RUS/ENG, многотомный 7z, отмена посреди распаковки, повтор после ошибки, удаление порта.
 - Заменить фикстуры «по описанию» реальными списками из `log.txt`.
 - Уточнить рецепт Max Payne: в нём предположительные имена файлов, и нет `topic_id`.

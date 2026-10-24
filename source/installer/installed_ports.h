@@ -7,6 +7,8 @@
 
 #include <cstdint>
 #include <ctime>
+#include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -31,7 +33,8 @@ public:
     static std::string keyFor(const std::string& topic_id, const std::string& title);
 
     bool load(const std::string& key, InstalledPort& out) const;
-    bool isInstalled(const std::string& topic_id, const std::string& title) const;
+    // From an in-memory list of manifests (read once): cheap enough for list rendering.
+    bool isInstalled(const std::string& topic_id, const std::string& title);
 
     // Saves the manifest. If the port was installed before, files of the old
     // manifest that the new one does not list are deleted (stale files of the
@@ -43,6 +46,11 @@ public:
     bool uninstall(const std::string& key, size_t& removed_files, std::string& out_error);
 
 private:
+    std::mutex mtx_;
+    bool keys_loaded_ = false;
+    std::set<std::string> keys_;   // keys with a manifest
+    void rememberKey(const std::string& key, bool installed);
+
     std::string manifestPath(const std::string& key) const;
     // Drops paths listed by other installed ports (shared files stay).
     std::vector<std::string> withoutFilesOfOtherPorts(const std::string& key,
