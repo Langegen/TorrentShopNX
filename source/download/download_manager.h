@@ -18,6 +18,8 @@
 #include "../datasource/data_source_manager.h"
 #include "../datasource/custom_engine_client.h"
 #include "../utils/switch_utils.h"
+#include "../utils/extraction_journal.h"
+#include <set>
 
 namespace download {
 
@@ -70,6 +72,22 @@ struct PortInstallProgressState {
     std::string stage_label;
     std::string current_file;
     std::shared_ptr<installer::PortInstallPlan> resolved_plan;
+    std::atomic<int> resolved_variant{-1};   // variant the worker actually installs
+    std::string result_note;                 // shown after install (recipe note, "launch from hbmenu")
+};
+
+// What a port install already did. Survives "Retry" (finished stages are
+// skipped); cancelling or removing the item rolls the created files back.
+struct PortInstallResume {
+    std::mutex mtx;
+    util::ExtractionJournal journal;      // files and folders this install created
+    std::vector<std::string> written;     // every file written (for the installed-port manifest)
+    std::set<int> done_archives;          // first-volume indices fully extracted
+    std::set<int> done_files;             // loose files fully copied
+    std::set<int> done_forwarders;        // forwarder NSPs installed
+    std::vector<uint64_t> forwarder_tids; // title IDs of installed forwarders
+    std::set<std::string> partial_files;  // loose files this install started writing (may be resumed)
+    int variant = -1;                     // stages above belong to this variant
 };
 
 struct DownloadItem {
@@ -180,6 +198,7 @@ struct DownloadItem {
     std::shared_ptr<std::atomic<bool>> port_install_cancel = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<std::atomic<bool>> port_install_pause = std::make_shared<std::atomic<bool>>(false);
     std::shared_ptr<PortInstallProgressState> port_install_state;
+    std::shared_ptr<PortInstallResume> port_resume = std::make_shared<PortInstallResume>();
 
     // Группировка и классификация компонентов раздачи
     std::string group_id;
@@ -267,6 +286,17 @@ private:
     std::chrono::steady_clock::time_point last_torrent_list_poll_{};
     std::mutex stream_consumers_mtx_;
     std::vector<StreamConsumer> stream_consumers_;
+
+    // Port workers that were cancelled: they finish on their own; the UI never
+    // waits for them under queue_mutex_. A new install of the same torrent waits.
+    struct RetiredWorker {
+        std::string hash;
+        std::shared_ptr<std::future<void>> future;
+    };
+    std::vector<RetiredWorker> retired_port_workers_;
+    void retirePortWorker(DownloadItem& item);
+    void reapRetiredWorkers();
+    bool hasRetiredWorker(const std::string& hash);
 
     torrent::TorrentManager* getTorrent();
     bool isLocalBackend() const;

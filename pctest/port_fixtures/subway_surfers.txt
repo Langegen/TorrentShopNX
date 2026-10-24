@@ -1,0 +1,14 @@
+# title: Subway Surfers (port)
+# source: описание (архив данных + обновлённый nro в Homebrew/ + ярлык)
+302000000	Subway Surfers [01d2c0b236000000]/switch.7z
+45000000	Subway Surfers [01d2c0b236000000]/Homebrew/switch/subwaysurfers/subwaysurfers.nro
+350000	Subway Surfers [01d2c0b236000000]/Subway Surfers (port) [01d2c0b236000000].nsp
+2000	Subway Surfers [01d2c0b236000000]/Как установить.txt
+
+## expect
+game subwaysurfers
+variants default
+extract switch.7z => sdmc:/
+dest Homebrew/switch/subwaysurfers/subwaysurfers.nro => sdmc:/switch/subwaysurfers/subwaysurfers.nro
+forwarder default Subway Surfers (port) [01d2c0b236000000].nsp
+skip Как установить.txt

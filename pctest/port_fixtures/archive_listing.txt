@@ -1,0 +1,32 @@
+# title: Listing Rules (port) [NRO]
+# source: синтетика (куда распаковывать архив по его оглавлению)
+1000	Listing Rules/sdcard.zip
+1000	Listing Rules/data.7z
+1000	Listing Rules/homebrew_build.zip
+1000	Listing Rules/Homebrew wrapped.zip
+1000	Listing Rules/assets.zip
+1000	Listing Rules/evil.zip
+1000	Listing Rules/switch/lrules/lrules.nro
+300000	Listing Rules/Listing Rules (port) [0100AAAA00000000].nsp
+
+## expect
+game lrules
+listing sdcard.zip = switch/lrules/data/a.pak, atmosphere/contents/0100AAAA00000000/romfs/b.bin, readme.txt
+listing data.7z = levels/1.lvl, levels/2.lvl, sounds.bank
+listing homebrew_build.zip = lrules/lrules.nro, lrules/config.ini
+listing Homebrew wrapped.zip = Homebrew/switch/lrules/lrules_new.nro, Homebrew/openmw/settings.cfg
+listing assets.zip = lrules/textures/a.png, lrules/shaders/b.glsl
+listing evil.zip = switch/lrules/x.bin, bootloader/hekate_ipl.ini, atmosphere/config/system_settings.ini
+extract sdcard.zip => sdmc:/
+extract data.7z => sdmc:/switch/lrules/
+extract homebrew_build.zip => sdmc:/switch/
+extract Homebrew wrapped.zip => sdmc:/
+extract assets.zip => sdmc:/switch/
+extract evil.zip => sdmc:/
+entry Homebrew wrapped.zip | Homebrew/switch/lrules/lrules_new.nro => switch/lrules/lrules_new.nro
+entry Homebrew wrapped.zip | Other/file.bin => SKIP
+entry data.7z | levels/1.lvl => levels/1.lvl
+entry evil.zip | switch/lrules/x.bin => switch/lrules/x.bin
+entry evil.zip | bootloader/hekate_ipl.ini => SKIP
+entry evil.zip | atmosphere/config/system_settings.ini => SKIP
+entry sdcard.zip | atmosphere/contents/0100AAAA00000000/romfs/b.bin => atmosphere/contents/0100AAAA00000000/romfs/b.bin

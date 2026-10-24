@@ -1,0 +1,18 @@
+# title: Jak and Daxter 1 (port) [NRO][RUS/ENG]
+# source: описание (два архива: оригинал и русская озвучка)
+3500000000	switch.7z
+3600000000	switch_RUSSVOICE.7z
+350000	Jak and Daxter 1 (port) [05FDF7C538138000][v0].nsp
+
+## expect
+variants ru,en
+default ru
+default_en en
+extract switch.7z => sdmc:/
+extract switch_RUSSVOICE.7z => sdmc:/
+in ru switch_RUSSVOICE.7z
+notin ru switch.7z
+in en switch.7z
+notin en switch_RUSSVOICE.7z
+forwarder ru Jak and Daxter 1 (port) [05FDF7C538138000][v0].nsp
+forwarder en Jak and Daxter 1 (port) [05FDF7C538138000][v0].nsp

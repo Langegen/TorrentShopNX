@@ -19,6 +19,9 @@
 #include "../utils/archive_utils.h"
 #include "../utils/file_ops.h"
 #include "../datasource/file_data_source.h"
+#include "../datasource/concat_data_source.h"
+#include "../utils/archive_peek.h"
+#include "../installer/installed_ports.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../GameData.hpp"
 
@@ -1153,12 +1156,6 @@ static std::string resolvePlatformPath(const std::string& path) {
 }
 #endif
 
-static void ensureParentDirs(const std::string& filePath) {
-    size_t lastSlash = filePath.find_last_of("/\\");
-    if (lastSlash != std::string::npos) {
-        util::safeCreateDirectories(filePath.substr(0, lastSlash));
-    }
-}
 
 // Фоновый воркер автоматической установки портов хоумбрю:
 // 1. Скачивание архивов раздачи во временную папку cache/tmp/
@@ -1170,11 +1167,13 @@ static void portInstallWorker(datasource::IDataSource* source,
                               const std::string& hash,
                               const std::string& magnet,
                               const std::string& release_title,
+                              const std::string& topic_id,
                               std::shared_ptr<installer::PortInstallPlan> plan,
                               int variant_index,
                               const std::shared_ptr<std::atomic<bool>>& cancel,
                               const std::shared_ptr<std::atomic<bool>>& pause,
-                              const std::shared_ptr<PortInstallProgressState>& st) {
+                              const std::shared_ptr<PortInstallProgressState>& st,
+                              std::shared_ptr<PortInstallResume> resume) {
     if (!source || hash.empty()) {
         st->failed = true;
         st->error = "Invalid port installation request";
@@ -1200,7 +1199,11 @@ static void portInstallWorker(datasource::IDataSource* source,
     }
 
     int total_files = tsnx_engine_get_file_count(eng, hash.c_str());
-    if (total_files <= 0) total_files = 256;
+    if (total_files <= 0) {
+        st->failed = true;
+        st->error = "Cannot resolve torrent file count";
+        return;
+    }
     std::vector<tsnx_file_info> files(total_files);
     int n = tsnx_engine_get_files(eng, hash.c_str(), files.data(), total_files);
     if (n <= 0) {
@@ -1208,25 +1211,45 @@ static void portInstallWorker(datasource::IDataSource* source,
         st->error = "Cannot resolve torrent file info";
         return;
     }
+    files.resize(static_cast<size_t>(n));
+    // Below files[idx] is addressed by the torrent file index: keep them in that order.
+    std::sort(files.begin(), files.end(), [](const tsnx_file_info& a, const tsnx_file_info& b) {
+        return a.index < b.index;
+    });
+    for (int i = 0; i < n; ++i) {
+        if (files[i].index != i) {
+            st->failed = true;
+            st->error = "Unexpected torrent file indices";
+            util::logLine("port_installer: file #" + std::to_string(i) + " has index " + std::to_string(files[i].index));
+            return;
+        }
+    }
+    if (!resume) resume = std::make_shared<PortInstallResume>();
+
+    std::vector<torrent::TorrentFileInfo> tfiles(n);
+    for (int i = 0; i < n; ++i) {
+        tfiles[i].index = files[i].index;
+        tfiles[i].name = files[i].path;
+        tfiles[i].size = files[i].size;
+        tfiles[i].wanted = true;
+    }
+    // The file list in the format of pctest/port_fixtures (grep port_file | cut -f2-).
+    for (int i = 0; i < n && i < 2000; ++i) {
+        util::logLine("port_file\t" + std::to_string(files[i].size) + "\t" + files[i].path);
+    }
+    if (n > 2000) util::logLine("port_file: " + std::to_string(n - 2000) + " more files not logged");
 
     if (!plan) {
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
-            st->stage_label = "Анализ файлов...";
-        }
-        std::vector<torrent::TorrentFileInfo> tfiles(n);
-        for (int i = 0; i < n; ++i) {
-            tfiles[i].index = files[i].index;
-            tfiles[i].name = files[i].path;
-            tfiles[i].size = files[i].size;
-            tfiles[i].wanted = true;
+            st->stage_label = "app/ports/stage_analyzing"_i18n;
         }
         std::string userLang = config::ConfigManager::instance().getLanguage();
         auto analyzed = std::make_shared<installer::PortInstallPlan>(
-            installer::PortInstallPlanner::instance().analyze(release_title, tfiles, userLang));
+            installer::PortInstallPlanner::instance().plan(topic_id, release_title, tfiles, userLang));
         if (!analyzed->is_port) {
             st->failed = true;
-            st->error = "Release is not a recognized port";
+            st->error = "app/detail/auto_install_not_port"_i18n;
             return;
         }
         plan = analyzed;
@@ -1236,8 +1259,55 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
     }
 
+    // -1: the user did not pick a version, use the one for the UI language.
     if (variant_index < 0 || variant_index >= static_cast<int>(plan->variants.size())) {
-        variant_index = 0;
+        variant_index = plan->default_variant_index;
+        if (variant_index < 0 || variant_index >= static_cast<int>(plan->variants.size())) variant_index = 0;
+    }
+    st->resolved_variant.store(variant_index);
+
+    // Held for the whole install: a rollback after deleting the item waits for us.
+    std::unique_lock<std::mutex> resume_lock(resume->mtx);
+    if (resume->variant != variant_index) {
+        // Another version was picked: earlier stages do not count.
+        resume->done_archives.clear();
+        resume->done_files.clear();
+        resume->done_forwarders.clear();
+        resume->variant = variant_index;
+    } else if (!resume->done_archives.empty() || !resume->done_files.empty()) {
+        util::logLine("port_installer: retry, already done: " + std::to_string(resume->done_archives.size()) +
+                      " archives, " + std::to_string(resume->done_files.size()) + " files, " +
+                      std::to_string(resume->done_forwarders.size()) + " forwarders");
+    }
+    // Cancel: remove everything this install created. Failure: keep it for "Retry".
+    struct ResumeFinalizer {
+        PortInstallResume& r;
+        const std::shared_ptr<std::atomic<bool>>& cancel;
+        ~ResumeFinalizer() {
+            if (cancel->load()) {
+                util::logLine("port_installer: cancelled, removing " + std::to_string(r.journal.fileCount()) +
+                              " created files");
+                r.journal.rollback();
+                r.written.clear();
+                r.done_archives.clear();
+                r.done_files.clear();
+                r.done_forwarders.clear();
+                r.variant = -1;
+            }
+        }
+    } resume_finalizer{*resume, cancel};
+    util::logLine("port_installer: variant " + std::to_string(variant_index) +
+                  (plan->variants.empty() ? std::string() : " (" + plan->variants[variant_index].id + ")"));
+    {
+        // Full plan, one line per file (multi-line message is split for the log).
+        std::string desc = plan->describe(tfiles);
+        size_t pos = 0;
+        while (pos < desc.size()) {
+            size_t nl = desc.find('\n', pos);
+            if (nl == std::string::npos) nl = desc.size();
+            if (nl > pos) util::logLine(desc.substr(pos, nl - pos));
+            pos = nl + 1;
+        }
     }
 
     std::vector<int> target_indices = plan->getFilesForVariant(variant_index);
@@ -1245,6 +1315,17 @@ static void portInstallWorker(datasource::IDataSource* source,
         st->failed = true;
         st->error = "No files to install for selected variant";
         return;
+    }
+
+    // Refuse before downloading anything if an archive cannot be streamed.
+    auto archives = plan->getArchivesForVariant(variant_index);
+    for (const auto& a : archives) {
+        if (!a.unsupported_reason.empty()) {
+            st->failed = true;
+            st->error = brls::getStr("app/ports/error_unsupported_archive", std::filesystem::path(a.archive_torrent_path).filename().string());
+            util::logLine("port_installer: " + st->error);
+            return;
+        }
     }
 
     uint64_t total_dl_bytes = 0;
@@ -1263,33 +1344,19 @@ static void portInstallWorker(datasource::IDataSource* source,
         tsnx_engine_set_file_wanted(eng, hash.c_str(), files[i].index, wanted);
     }
 
-    auto archives = plan->getArchivesForVariant(variant_index);
-    int forwarder_nsp_idx = plan->forwarder_nsp_index;
-
-    // Выделяем отдельные loose-файлы (не архивы и не NSP)
-    std::vector<int> loose_indices;
-    for (int idx : target_indices) {
-        if (idx == forwarder_nsp_idx) continue;
-        bool is_archive = false;
-        for (const auto& a : archives) {
-            if (a.file_index == idx) {
-                is_archive = true;
-                break;
-            }
-        }
-        if (!is_archive) {
-            loose_indices.push_back(idx);
-        }
-    }
+    // Порядок: архивы, затем отдельные файлы поверх них (общие, потом файлы версии), затем ярлыки.
+    const std::vector<int> loose_indices = plan->getLooseFilesForVariant(variant_index);
+    const std::vector<int> forwarder_indices = plan->forwardersForVariant(variant_index);
 
     int total_stages = 0;
     if (!archives.empty()) total_stages += static_cast<int>(archives.size());
     if (!loose_indices.empty()) total_stages++;
-    if (forwarder_nsp_idx >= 0) total_stages++;
+    total_stages += static_cast<int>(forwarder_indices.size());
     if (total_stages == 0) total_stages = 1;
     int stage_num = 1;
 
     uint64_t overall_dl_written = 0;
+    std::vector<std::string> installed_nros;   // for the post-install check
 
     // Потоковое скачивание отдельного файла из раздачи по индексу
     auto streamDownloadFile = [&](int file_idx, const std::string& target_path,
@@ -1303,8 +1370,16 @@ static void portInstallWorker(datasource::IDataSource* source,
             st->current_file = std::filesystem::path(resolved_dest).filename().string();
         }
 
+        const bool is_tmp = target_path.rfind(TSNX_CACHE_TMP, 0) == 0;
+        auto noteWrite = [&]() {
+            size_t slash = resolved_dest.find_last_of("/\\");
+            if (slash != std::string::npos) resume->journal.createDirectories(resolved_dest.substr(0, slash));
+            resume->journal.noteFile(resolved_dest);
+            if (!is_tmp) resume->written.push_back(resolved_dest);
+        };
+
         if (file_size == 0) {
-            ensureParentDirs(resolved_dest);
+            noteWrite();
             FILE* empty_f = std::fopen(resolved_dest.c_str(), "wb");
             if (empty_f) std::fclose(empty_f);
             return true;
@@ -1317,7 +1392,11 @@ static void portInstallWorker(datasource::IDataSource* source,
             return false;
         }
 
-        ensureParentDirs(resolved_dest);
+        // Only a file this install started may be continued: a shorter file at the
+        // same path can be the previous version of the port.
+        const bool own_partial = resume->partial_files.count(resolved_dest) > 0;
+        noteWrite();
+        resume->partial_files.insert(resolved_dest);
 
         static constexpr size_t kChunk = 2 * 1024 * 1024;
         uint64_t offset = 0;
@@ -1325,7 +1404,7 @@ static void portInstallWorker(datasource::IDataSource* source,
 
         std::error_code ec_exist;
         uint64_t existing_size = std::filesystem::exists(resolved_dest, ec_exist) ? std::filesystem::file_size(resolved_dest, ec_exist) : 0;
-        if (existing_size > 0 && existing_size < file_size) {
+        if (own_partial && existing_size > 0 && existing_size < file_size) {
             uint64_t resume_offset = (existing_size / kChunk) * kChunk;
             f = std::fopen(resolved_dest.c_str(), "r+b");
             if (f && fseek64(f, static_cast<int64_t>(resume_offset), SEEK_SET) == 0) {
@@ -1378,7 +1457,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             }
             if (std::fwrite(buf.data(), 1, got, f) != got) {
                 ok = false;
-                st->error = "Disk write failed for " + resolved_dest;
+                st->error = brls::getStr("app/ports/error_write", resolved_dest);
                 break;
             }
             offset += got;
@@ -1395,13 +1474,14 @@ static void portInstallWorker(datasource::IDataSource* source,
 
         if (ok && offset >= file_size) {
             source->notifyStreamingComplete(true);
+            resume->partial_files.erase(resolved_dest);
             return true;
         } else {
             source->notifyStreamingComplete(false);
             if (cancel->load() || g_appExiting.load()) {
                 std::error_code ec;
                 std::filesystem::remove(resolved_dest, ec);
-                if (st->error.empty()) st->error = "Download cancelled";
+                if (st->error.empty()) st->error = "app/ports/error_cancelled"_i18n;
             } else if (!ok) {
                 std::error_code ec;
                 std::filesystem::remove(resolved_dest, ec);
@@ -1410,31 +1490,162 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
     };
 
+    // Тома разбитого архива (data.7z.001, .002, ...) читаются как один поток.
+    auto openArchive = [&](const installer::PortArchiveTask& a,
+                           std::unique_ptr<datasource::ConcatDataSource>& concat,
+                           uint64_t& arch_size) -> datasource::IDataSource* {
+        std::vector<datasource::ConcatDataSource::Volume> volumes;
+        arch_size = 0;
+        for (int vi : (a.volume_indices.empty() ? std::vector<int>{a.file_index} : a.volume_indices)) {
+            uint64_t vsz = (vi >= 0 && vi < n) ? static_cast<uint64_t>(files[vi].size) : 0;
+            volumes.push_back({vi, vsz});
+            arch_size += vsz;
+        }
+        concat.reset();
+        datasource::IDataSource* s = source;
+        if (volumes.size() > 1) {
+            concat = std::make_unique<datasource::ConcatDataSource>(source, hash, volumes);
+            s = concat.get();
+        }
+        source->setSchedulerEnabled(true);
+        source->setCancelFlag(cancel.get());
+        if (cancel->load() || !s->open(hash, a.file_index)) return nullptr;
+        return s;
+    };
+
+    // ── ЭТАП 0: ОГЛАВЛЕНИЯ АРХИВОВ (только хвост файла) И СВОБОДНОЕ МЕСТО ──
+    if (!archives.empty()) {
+        {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = "app/ports/stage_listing"_i18n;
+        }
+        std::vector<std::vector<util::ArchiveEntryInfo>> listings(archives.size());
+        std::vector<bool> listed(archives.size(), false);
+        for (size_t i = 0; i < archives.size() && !cancel->load(); ++i) {
+            std::unique_ptr<datasource::ConcatDataSource> concat;
+            uint64_t arch_size = 0;
+            datasource::IDataSource* s = openArchive(archives[i], concat, arch_size);
+            if (!s) continue;
+            util::ArchivePeek peek;
+            std::string perr;
+            if (util::peekArchiveFromSource(s, arch_size, cancel, peek, perr)) {
+                listings[i] = std::move(peek.entries);
+                listed[i] = true;
+                util::logLine("port_installer: listing " + archives[i].archive_torrent_path + " (" + peek.format + "): " +
+                              std::to_string(listings[i].size()) + " entries, " +
+                              std::to_string(peek.total_uncompressed) + " bytes");
+            } else {
+                util::logLine("port_installer: no listing for " + archives[i].archive_torrent_path + ": " + perr);
+            }
+            s->close();
+        }
+        if (cancel->load()) {
+            st->failed = true;
+            st->error = "app/ports/error_cancelled"_i18n;
+            return;
+        }
+        // Два прохода: во втором видно, куда легли остальные архивы раздачи.
+        installer::PortInstallPlan ctx = *plan;
+        ctx.archives_to_extract = archives;
+        for (int pass = 0; pass < 2; ++pass) {
+            for (size_t i = 0; i < archives.size(); ++i) {
+                if (listed[i]) installer::refineArchiveDestination(ctx, ctx.archives_to_extract[i], listings[i]);
+            }
+        }
+        archives = ctx.archives_to_extract;
+        for (const auto& a : archives) {
+            util::logLine("port_installer: " + a.archive_torrent_path + " -> " + a.extract_dest_dir +
+                          (a.strip_prefix.empty() ? "" : " (strip '" + a.strip_prefix + "')") +
+                          (a.dest_reason.empty() ? "" : " [" + a.dest_reason + "]"));
+        }
+    }
+
+    {
+        // Место на SD: распакованные архивы (если оглавление прочитано, иначе сжатый размер),
+        // отдельные файлы и временный NSP; плюс запас.
+        uint64_t need = 0;
+        for (const auto& a : archives) {
+            need += a.uncompressed_size > 0 ? a.uncompressed_size : static_cast<uint64_t>(a.compressed_size);
+        }
+        for (int idx : loose_indices) {
+            if (idx >= 0 && idx < n) need += static_cast<uint64_t>(files[idx].size);
+        }
+        for (int idx : forwarder_indices) {
+            if (idx >= 0 && idx < n) need += static_cast<uint64_t>(files[idx].size);
+        }
+        need += need / 50 + 64ULL * 1024 * 1024;
+        int64_t sd_free = 0;
+        if (util::getStorageFreeSpace(1, sd_free) && sd_free >= 0 && static_cast<uint64_t>(sd_free) < need) {
+            st->failed = true;
+            st->error = brls::getStr("app/ports/error_space", std::to_string(need / (1024 * 1024)) + " MB",
+                                     std::to_string(static_cast<uint64_t>(sd_free) / (1024 * 1024)) + " MB");
+            util::logLine("port_installer: " + st->error);
+            return;
+        }
+        util::logLine("port_installer: space check need=" + std::to_string(need) + " free=" + std::to_string(sd_free));
+    }
+
     // ── ЭТАП 1: ПОТОКОВАЯ РАСПАКОВКА И УСТАНОВКА АРХИВОВ НА ЛЕТУ ──
     if (!archives.empty()) {
         for (const auto& a : archives) {
             if (cancel->load()) break;
 
             std::string arch_filename = std::filesystem::path(a.archive_torrent_path).filename().string();
+            if (resume->done_archives.count(a.file_index)) {
+                // Retry: already extracted.
+                overall_dl_written += static_cast<uint64_t>(a.compressed_size);
+                st->dl_written.store(overall_dl_written);
+                util::logLine("port_installer: " + arch_filename + " already extracted, skipped");
+                stage_num++;
+                continue;
+            }
             {
                 std::lock_guard<std::mutex> lk(st->msg_mutex);
-                st->stage_label = "Установка " + arch_filename + " (" + std::to_string(stage_num) + "/" + std::to_string(total_stages) + ")";
+                st->stage_label = brls::getStr("app/ports/stage_extracting", arch_filename, std::to_string(stage_num), std::to_string(total_stages));
                 st->current_file = arch_filename;
             }
-            uint64_t arch_file_size = (a.file_index >= 0 && a.file_index < n) ? static_cast<uint64_t>(files[a.file_index].size) : 0;
             st->total.store(total_dl_bytes);
             st->dl_total.store(total_dl_bytes);
 
             std::string resolved_extract_dir = resolvePlatformPath(a.extract_dest_dir);
             util::safeCreateDirectories(resolved_extract_dir);
 
-            source->setSchedulerEnabled(true);
-            source->setCancelFlag(cancel.get());
-            if (cancel->load() || !source->open(hash, a.file_index)) {
+            std::unique_ptr<datasource::ConcatDataSource> concat;
+            uint64_t arch_file_size = 0;
+            datasource::IDataSource* arch_source = openArchive(a, concat, arch_file_size);
+            if (!arch_source) {
                 st->failed = true;
-                st->error = "Failed to open torrent stream for " + std::string(files[a.file_index].path);
+                st->error = "Failed to open torrent stream for " + a.archive_torrent_path;
                 return;
             }
+            const size_t volume_count = a.volume_indices.empty() ? 1 : a.volume_indices.size();
+
+            // Пути внутри архива: снять обёртку, оставить подпапку рецепта, не писать в
+            // bootloader/, Nintendo/, atmosphere/ (кроме contents/) и т.п.
+            int protected_skipped = 0;
+            auto protectTransform = [&](const std::string& entryName, bool isDir) -> std::string {
+                std::string target = installer::archiveEntryTarget(a, entryName);
+                if (target.empty()) {
+                    if (protected_skipped++ < 20) util::logLine("port_installer: skipped archive entry " + entryName);
+                    return target;
+                }
+                // The install journal (rollback on cancel) and the installed-files list.
+                std::string full = resolved_extract_dir;
+                if (!full.empty() && full.back() != '/') full += '/';
+                full += target;
+                if (isDir) {
+                    resume->journal.createDirectories(full);
+                } else {
+                    size_t slash = full.find_last_of('/');
+                    if (slash != std::string::npos) resume->journal.createDirectories(full.substr(0, slash));
+                    resume->journal.noteFile(full);
+                    resume->written.push_back(full);
+                    if (full.size() > 4 && util::equalsIgnoreCase(full.substr(full.size() - 4), ".nro")) {
+                        installed_nros.push_back(full);
+                    }
+                }
+                return target;
+            };
 
             auto extractProgressCb = [&](const util::ArchiveProgress& prog) {
                 if (cancel->load()) return;
@@ -1464,22 +1675,31 @@ static void portInstallWorker(datasource::IDataSource* source,
 
             std::string extractErr;
             util::logLine("port_installer: streaming extraction " + arch_filename + " (" +
-                          std::to_string(arch_file_size) + " bytes) -> " + resolved_extract_dir);
+                          std::to_string(arch_file_size) + " bytes, " + std::to_string(volume_count) +
+                          " volume(s)) -> " + resolved_extract_dir);
 
             bool extractOk = util::extractArchiveFromSource(
-                source, arch_file_size, resolved_extract_dir,
-                extractProgressCb, cancel, pause, extractErr
+                arch_source, arch_file_size, resolved_extract_dir,
+                extractProgressCb, cancel, pause, extractErr, protectTransform
             );
 
-            source->notifyStreamingComplete(extractOk);
+            arch_source->notifyStreamingComplete(extractOk);
+            if (concat) {
+                util::logLine("port_installer: volume switches=" + std::to_string(concat->volumeSwitches()));
+            }
+            if (protected_skipped > 0) {
+                util::logLine("port_installer: " + std::to_string(protected_skipped) +
+                              " archive entries were not written (outside the subfolder or protected)");
+            }
 
             if (!extractOk) {
                 st->failed = true;
-                st->error = "Archive streaming extraction failed: " + extractErr;
+                st->error = brls::getStr("app/ports/error_extract", extractErr);
                 util::logLine("port_installer: " + st->error);
                 return;
             }
 
+            resume->done_archives.insert(a.file_index);
             overall_dl_written += arch_file_size;
             st->dl_written.store(overall_dl_written);
             if (total_dl_bytes > 0) {
@@ -1491,7 +1711,7 @@ static void portInstallWorker(datasource::IDataSource* source,
 
     if (cancel->load()) {
         st->failed = true;
-        st->error = "Installation cancelled";
+        st->error = "app/ports/error_cancelled"_i18n;
         return;
     }
 
@@ -1500,42 +1720,77 @@ static void portInstallWorker(datasource::IDataSource* source,
         int current_stage = std::min(stage_num, total_stages);
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
-            st->stage_label = "Загрузка компонентов (" + std::to_string(current_stage) + "/" + std::to_string(total_stages) + ")";
+            st->stage_label = brls::getStr("app/ports/stage_files", std::to_string(current_stage), std::to_string(total_stages));
         }
 
         for (int idx : loose_indices) {
             if (cancel->load()) break;
-            std::string dest = plan->file_destinations[idx];
-            if (dest.empty()) {
-                dest = "sdmc:/switch/" + plan->port_game_name + "/" + std::filesystem::path(files[idx].path).filename().string();
+            auto dit = plan->file_destinations.find(idx);
+            if (dit == plan->file_destinations.end() || dit->second.empty()) {
+                util::logLine("port_installer: no destination for file #" + std::to_string(idx) + ", skipped");
+                continue;
             }
-            if (!streamDownloadFile(idx, dest, overall_dl_written, total_dl_bytes)) {
+            const std::string resolved = resolvePlatformPath(dit->second);
+            if (resume->done_files.count(idx)) {
+                std::error_code ec;
+                if (std::filesystem::exists(resolved, ec) &&
+                    std::filesystem::file_size(resolved, ec) == static_cast<uint64_t>(files[idx].size)) {
+                    overall_dl_written += static_cast<uint64_t>(files[idx].size);
+                    continue;   // retry: already copied
+                }
+                resume->done_files.erase(idx);
+            }
+            if (!streamDownloadFile(idx, dit->second, overall_dl_written, total_dl_bytes)) {
                 st->failed = true;
                 return;
             }
+            resume->done_files.insert(idx);
+            if (resolved.size() > 4 && util::equalsIgnoreCase(resolved.substr(resolved.size() - 4), ".nro")) {
+                installed_nros.push_back(resolved);
+            }
         }
+        stage_num++;
     }
 
     if (cancel->load()) {
         st->failed = true;
-        st->error = "Installation cancelled";
+        st->error = "app/ports/error_cancelled"_i18n;
         return;
     }
 
-    // ── ЭТАП 4: СКАЧИВАНИЕ И УСТАНОВКА ЯРЛЫКА FORWARDER NSP ──
-    if (forwarder_nsp_idx >= 0 && !cancel->load()) {
-        // forwarder nsp size tracked in total_dl_bytes
+    // ── ЭТАП 4: СКАЧИВАНИЕ И УСТАНОВКА ЯРЛЫКОВ FORWARDER NSP (по одному на версию) ──
+    for (int forwarder_nsp_idx : forwarder_indices) {
+        if (cancel->load() || st->failed.load()) break;
+        const int current_stage = std::min(stage_num, total_stages);
+        const std::string nsp_name = (forwarder_nsp_idx >= 0 && forwarder_nsp_idx < n)
+            ? std::filesystem::path(files[forwarder_nsp_idx].path).filename().string()
+            : plan->forwarder_nsp_name;
 
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
-            st->stage_label = "Загрузка ярлыка (" + std::to_string(total_stages) + "/" + std::to_string(total_stages) + ")";
-            st->current_file = plan->forwarder_nsp_name;
+            st->stage_label = brls::getStr("app/ports/stage_forwarder_download", std::to_string(current_stage), std::to_string(total_stages));
+            st->current_file = nsp_name;
         }
 
-        std::string nsp_dest = plan->file_destinations[forwarder_nsp_idx];
-        if (nsp_dest.empty()) {
-            nsp_dest = std::string(TSNX_CACHE_TMP) + "/" + plan->forwarder_nsp_name;
+        if (resume->done_forwarders.count(forwarder_nsp_idx)) {
+            util::logLine("port_installer: forwarder " + nsp_name + " already installed, skipped");
+            stage_num++;
+            continue;
         }
+
+        auto nit = plan->file_destinations.find(forwarder_nsp_idx);
+        std::string nsp_dest = nit != plan->file_destinations.end() ? nit->second : std::string();
+        if (nsp_dest.empty()) {
+            nsp_dest = std::string(TSNX_CACHE_TMP) + "/" + nsp_name;
+        }
+        // The temporary NSP is removed on every way out of this iteration.
+        struct TmpFileGuard {
+            std::string path;
+            ~TmpFileGuard() {
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+            }
+        } tmp_guard{resolvePlatformPath(nsp_dest)};
 
         if (!streamDownloadFile(forwarder_nsp_idx, nsp_dest, overall_dl_written, total_dl_bytes)) {
             st->failed = true;
@@ -1544,15 +1799,15 @@ static void portInstallWorker(datasource::IDataSource* source,
 
         if (cancel->load()) {
             st->failed = true;
-            st->error = "Installation cancelled";
+            st->error = "app/ports/error_cancelled"_i18n;
             return;
         }
 
         // Установка forwarder NSP в операционную систему Switch
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
-            st->stage_label = "Установка ярлыка (" + std::to_string(total_stages) + "/" + std::to_string(total_stages) + ")";
-            st->current_file = plan->forwarder_nsp_name;
+            st->stage_label = brls::getStr("app/ports/stage_forwarder_install", std::to_string(current_stage), std::to_string(total_stages));
+            st->current_file = nsp_name;
         }
 
         std::string resolved_nsp = resolvePlatformPath(nsp_dest);
@@ -1572,8 +1827,11 @@ static void portInstallWorker(datasource::IDataSource* source,
         config.install_ticket = true;
 
         installer::HybridNspInstaller nspInstaller;
+        const uint64_t nsp_tid = download::parseTitleIdFromFileName(nsp_name);
+        if (nsp_tid != 0) nspInstaller.setHintTitleId(nsp_tid);
         if (nspInstaller.start(&nspSource, config)) {
             while (!nspInstaller.isFinished() && !cancel->load()) {
+                nspInstaller.setPaused(pause && pause->load());
                 float p = std::clamp(nspInstaller.progress(), 0.0f, 1.0f);
                 st->progress.store(p);
                 st->written.store(nspInstaller.bytesInstalled());
@@ -1587,13 +1845,15 @@ static void portInstallWorker(datasource::IDataSource* source,
             if (cancel->load()) {
                 nspInstaller.cancel();
                 st->failed = true;
-                st->error = "Cancelled";
+                st->error = "app/ports/error_cancelled"_i18n;
             } else if (nspInstaller.state() == installer::InstallState::Failed) {
                 st->failed = true;
-                st->error = "Forwarder install failed: " + nspInstaller.errorMessage();
+                st->error = brls::getStr("app/ports/error_forwarder", nspInstaller.errorMessage());
                 util::logLine("port_installer: " + st->error);
             } else {
                 util::logLine("port_installer: forwarder NSP successfully installed!");
+                resume->done_forwarders.insert(forwarder_nsp_idx);
+                if (nsp_tid != 0) resume->forwarder_tids.push_back(nsp_tid);
             }
         } else {
             st->failed = true;
@@ -1602,13 +1862,52 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
 
         nspSource.close();
-
-        // Удаляем временный NSP файл после установки
-        std::error_code ec;
-        std::filesystem::remove(resolved_nsp, ec);
+        stage_num++;
     }
 
     if (!st->failed.load() && !cancel->load()) {
+        // Проверка: файлы из рецепта на месте; для эвристики только подсказки.
+        const auto& variant = plan->variants[variant_index];
+        for (const auto& check : variant.check_paths) {
+            std::error_code ec;
+            if (!std::filesystem::exists(resolvePlatformPath(check), ec)) {
+                st->failed = true;
+                st->error = brls::getStr("app/ports/error_check_missing", check);
+                util::logLine("port_installer: post-install check failed: " + check);
+                return;
+            }
+        }
+        std::string note = plan->note;
+        if (forwarder_indices.empty()) {
+            if (note.empty()) note = brls::getStr("app/ports/note_no_forwarder");
+        } else if (installed_nros.empty()) {
+            note += (note.empty() ? "" : "\n") + brls::getStr("app/ports/note_no_nro");
+            util::logLine("port_installer: warning: a forwarder was installed but no .nro was written");
+        }
+
+        // Манифест установленного порта: «Установлено», обновление, удаление.
+        installer::InstalledPort record;
+        record.topic_id = topic_id;
+        record.title = release_title;
+        record.key = installer::InstalledPorts::keyFor(topic_id, release_title);
+        record.variant_id = variant.id;
+        record.game = plan->port_game_name;
+        record.recipe_id = plan->recipe_id;
+        record.installed_at = std::time(nullptr);
+        record.files = resume->written;
+        record.forwarder_tids = resume->forwarder_tids;
+        installer::InstalledPorts::instance().saveReplacing(record);
+
+        // Готово: следующий «Повторить» начнёт с нуля.
+        resume->journal = util::ExtractionJournal();
+        resume->written.clear();
+        resume->done_archives.clear();
+        resume->done_files.clear();
+        resume->done_forwarders.clear();
+        resume->forwarder_tids.clear();
+        resume->partial_files.clear();
+        resume->variant = -1;
+
         st->done = true;
         st->progress.store(1.0f);
         st->dl_progress.store(1.0f);
@@ -1616,10 +1915,12 @@ static void portInstallWorker(datasource::IDataSource* source,
         if (total_dl_bytes > 0) st->dl_written.store(total_dl_bytes);
         {
             std::lock_guard<std::mutex> lk(st->msg_mutex);
-            st->stage_label = "Установка завершена";
-            st->current_file = "Готово!";
+            st->stage_label = "app/ports/stage_done"_i18n;
+            st->current_file = "app/ports/stage_done_file"_i18n;
+            st->result_note = note;
         }
-        util::logLine("port_installer: successfully finished all phases for " + release_title);
+        util::logLine("port_installer: successfully finished all phases for " + release_title +
+                      (note.empty() ? "" : " | note: " + note));
     }
 }
 
@@ -1782,6 +2083,7 @@ void DownloadManager::shutdown() {
         item.port_install_dispatched = false;
         item.port_install_state.reset();
     }
+    retired_port_workers_.clear();   // joins cancelled port workers (the source is closed)
 
     updateSleepPolicy(false);
     datasource::CustomEngineClient::instance().shutdown();
@@ -1830,7 +2132,7 @@ size_t DownloadManager::addPortInstall(const std::string& title,
         item.selected_files = plan->getFilesForVariant(variant_index);
     }
     item.state = DownloadState::Queued;
-    item.install_stage_label = "В очереди";
+    item.install_stage_label = "app/ports/stage_queued"_i18n;
     if (isLocalBackend()) {
         std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
         if (!local_hash.empty()) {
@@ -2660,6 +2962,9 @@ void DownloadManager::handlePortAutoInstall(size_t index,
     }
 
     if (!item.port_install_dispatched) {
+        // A cancelled worker of the same torrent still holds the stream: wait for it.
+        reapRetiredWorkers();
+        if (hasRetiredWorker(item.torrent_hash)) return;
         auto* source = ds_manager_.getSource();
         if (!source) {
             item.state = DownloadState::Failed;
@@ -2677,12 +2982,15 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         const std::string hash = item.torrent_hash;
         const std::string magnet = normalizeTorrentLink(item.magnet);
         const std::string title = item.title;
+        const std::string topic_id = item.topic_id;
         auto plan = item.port_plan;
         const int variant_idx = item.selected_variant_index;
+        if (!item.port_resume) item.port_resume = std::make_shared<PortInstallResume>();
+        auto resume = item.port_resume;
 
         item.port_install_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, plan, variant_idx, cancel, pause, st]() {
-                portInstallWorker(source, hash, magnet, title, plan, variant_idx, cancel, pause, st);
+            std::async(std::launch::async, [source, hash, magnet, title, topic_id, plan, variant_idx, cancel, pause, st, resume]() {
+                portInstallWorker(source, hash, magnet, title, topic_id, plan, variant_idx, cancel, pause, st, resume);
             }));
         item.port_install_dispatched = true;
         util::logLine("download: port auto install started hash=" + hash +
@@ -2707,6 +3015,11 @@ void DownloadManager::handlePortAutoInstall(size_t index,
             }
 
             std::lock_guard<std::mutex> lk(st->msg_mutex);
+            const int rv = st->resolved_variant.load();
+            if (rv >= 0 && rv != item.selected_variant_index) {
+                item.selected_variant_index = rv;
+                if (item.port_plan) item.selected_files = item.port_plan->getFilesForVariant(rv);
+            }
             if (!item.port_plan && st->resolved_plan) {
                 item.port_plan = st->resolved_plan;
                 item.selected_files = item.port_plan->getFilesForVariant(item.selected_variant_index);
@@ -2748,7 +3061,19 @@ void DownloadManager::handlePortAutoInstall(size_t index,
     item.install_progress = 1.0f;
     if (item.download_total_bytes > 0) item.bytes_downloaded = item.download_total_bytes;
     if (item.install_total > 0) item.install_written = item.install_total;
-    item.install_stage_label = "Установка завершена";
+    item.install_stage_label = "app/ports/stage_done"_i18n;
+    if (item.port_install_state) {
+        std::string note;
+        {
+            std::lock_guard<std::mutex> lk(item.port_install_state->msg_mutex);
+            note = item.port_install_state->result_note;
+        }
+        if (!note.empty()) {
+            item.install_current_file = note;
+            const std::string title = cleanTitle(item.title);
+            brls::sync([title, note]() { brls::Application::notify(title + ": " + note); });
+        }
+    }
     if (item.finish_time.time_since_epoch().count() == 0) {
         item.finish_time = std::chrono::steady_clock::now();
         if (item.start_time.time_since_epoch().count() > 0) {
@@ -3782,9 +4107,7 @@ bool DownloadManager::cancelDownload(size_t index) {
     if (item.file_dl_worker) {
         item.file_dl_worker.reset();
     }
-    if (item.port_install_worker) {
-        item.port_install_worker.reset();
-    }
+    retirePortWorker(item);   // never wait for the port worker under queue_mutex_
     item.file_dl_dispatched = false;
     item.file_dl_state.reset();
     item.file_dl_dest.clear();
@@ -3835,12 +4158,9 @@ bool DownloadManager::retryDownload(size_t index) {
     if (item.file_dl_pause) {
         item.file_dl_pause->store(false);
     }
-    if (item.port_install_cancel) {
-        item.port_install_cancel->store(false);
-    }
-    if (item.port_install_pause) {
-        item.port_install_pause->store(false);
-    }
+    // Fresh flags: a cancelled worker that is still finishing keeps the old ones.
+    item.port_install_cancel = std::make_shared<std::atomic<bool>>(false);
+    item.port_install_pause = std::make_shared<std::atomic<bool>>(false);
 
     if (item.hybrid_installer) {
         item.hybrid_installer->cancel();
@@ -3855,9 +4175,7 @@ bool DownloadManager::retryDownload(size_t index) {
     if (item.file_dl_worker) {
         item.file_dl_worker.reset();
     }
-    if (item.port_install_worker) {
-        item.port_install_worker.reset();
-    }
+    retirePortWorker(item);   // never wait for the port worker under queue_mutex_
     item.file_dl_dispatched = false;
     item.file_dl_state.reset();
     item.file_dl_dest.clear();
@@ -3888,11 +4206,56 @@ bool DownloadManager::retryDownload(size_t index) {
     return true;
 }
 
+void DownloadManager::retirePortWorker(DownloadItem& item) {
+    if (!item.port_install_worker) return;
+    if (item.port_install_worker->wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        try { item.port_install_worker->get(); } catch (...) {}
+    } else {
+        retired_port_workers_.push_back({item.torrent_hash, item.port_install_worker});
+        util::logLine("download: port worker of " + item.torrent_hash + " finishes in the background");
+    }
+    item.port_install_worker.reset();
+}
+
+void DownloadManager::reapRetiredWorkers() {
+    retired_port_workers_.erase(
+        std::remove_if(retired_port_workers_.begin(), retired_port_workers_.end(), [](RetiredWorker& w) {
+            if (!w.future || w.future->wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                try { if (w.future) w.future->get(); } catch (...) {}
+                return true;
+            }
+            return false;
+        }),
+        retired_port_workers_.end());
+}
+
+bool DownloadManager::hasRetiredWorker(const std::string& hash) {
+    for (const auto& w : retired_port_workers_) {
+        if (equalsIgnoreCase(w.hash, hash)) return true;
+    }
+    return false;
+}
+
 bool DownloadManager::deleteFromQueue(size_t index) {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
+    const bool failed_port = queue_[index].is_port_auto_install &&
+                             queue_[index].state == DownloadState::Failed;
+    auto resume = queue_[index].port_resume;
     cancelDownload(index);
     queue_.erase(queue_.begin() + index);
+    if (failed_port && resume) {
+        // A failed install left files for "Retry"; removing the item removes them
+        // (in the background: this runs on the UI thread).
+        std::thread([resume]() {
+            std::lock_guard<std::mutex> lk(resume->mtx);
+            if (resume->journal.fileCount() > 0 || resume->journal.dirCount() > 0) {
+                util::logLine("download: removing " + std::to_string(resume->journal.fileCount()) +
+                              " files of a failed port install");
+                resume->journal.rollback();
+            }
+        }).detach();
+    }
     return true;
 }
 

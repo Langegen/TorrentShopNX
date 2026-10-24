@@ -1,0 +1,26 @@
+# title: Call of Duty 4 Modern Warfare (port) [NRO][RUS/ENG]
+# source: описание (папки Russian/English version + обновление в Homebrew (дата))
+346000	Call of Duty 4 Modern Warfare/Call of Duty 4 Modern Warfare (port) [01B7F96B70C31000][v0].nsp
+40000000	Call of Duty 4 Modern Warfare/Homebrew (12.10.2026)/switch/codmw/codmw.nro
+800000000	Call of Duty 4 Modern Warfare/Russian version/switch/codmw/game/localized_russian.pak
+4000	Call of Duty 4 Modern Warfare/Russian version/switch/codmw/game/config.cfg
+800000000	Call of Duty 4 Modern Warfare/English version/switch/codmw/game/localized_english.pak
+4000	Call of Duty 4 Modern Warfare/English version/switch/codmw/game/config.cfg
+
+## expect
+game codmw
+variants ru,en
+default ru
+default_en en
+dest codmw/codmw.nro => sdmc:/switch/codmw/codmw.nro
+dest localized_russian.pak => sdmc:/switch/codmw/game/localized_russian.pak
+dest localized_english.pak => sdmc:/switch/codmw/game/localized_english.pak
+dest Russian version/switch/codmw/game/config.cfg => sdmc:/switch/codmw/game/config.cfg
+dest English version/switch/codmw/game/config.cfg => sdmc:/switch/codmw/game/config.cfg
+in ru localized_russian.pak
+in ru Russian version/switch/codmw/game/config.cfg
+notin ru localized_english.pak
+notin ru English version/switch/codmw/game/config.cfg
+in en codmw/codmw.nro
+in ru codmw/codmw.nro
+forwarder ru Call of Duty 4 Modern Warfare (port) [01B7F96B70C31000][v0].nsp

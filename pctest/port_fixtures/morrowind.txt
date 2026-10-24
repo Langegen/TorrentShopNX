@@ -1,0 +1,17 @@
+# title: The Elder Scrolls III Morrowind (OpenMW порт) [NRO][RUS]
+# source: описание (сборка с модами или оригинал, движок OpenMW в корне)
+30000000	Morrowind/openmw/openmw.nro
+2000	Morrowind/openmw/settings.cfg
+4200000000	Morrowind/Morrowind Better Pack.7z
+1900000000	Morrowind/Morrowind Vanilla.7z
+300000	Morrowind/OpenMW (port) [0100D1E2F3A40000].nsp
+
+## expect
+variants modded,vanilla
+default modded
+default_en modded
+dest openmw/openmw.nro => sdmc:/openmw/openmw.nro
+in modded Morrowind Better Pack.7z
+notin modded Morrowind Vanilla.7z
+in vanilla Morrowind Vanilla.7z
+in vanilla openmw/settings.cfg

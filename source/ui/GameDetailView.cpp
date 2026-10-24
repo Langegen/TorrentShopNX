@@ -7,6 +7,7 @@
 #include "FavoritesManager.hpp"
 #include "ScreenshotViewer.hpp"
 #include "QrCodeView.hpp"
+#include "PortInstallFlow.hpp"
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../config/config.h"
@@ -208,6 +209,11 @@ void GameDetailView::onContentAvailable() {
         }
     }
 
+    // Port installed by the auto-installer (has a manifest)
+    if ((isHomebrewGame(game_) || isHomebrewPort(game_)) && ui::isPortInstalled(game_)) {
+        btnDownload->setText("app/ports/installed_btn"_i18n);
+    }
+
     // Add language badge
     std::string lang = extractLangBadge(game_.interface_lang);
     if (!lang.empty()) {
@@ -331,12 +337,14 @@ void GameDetailView::onContentAvailable() {
 
                 // 1. Автоматическая установка (только для хоумбрю / портов)
                 if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
-                    dialog->addButton("app/detail/auto_install_btn"_i18n, [this]() {
-                        ui::DownloadManager::instance().addPortInstall(game_, nullptr, 0);
-                        brls::sync([]() {
-                            brls::Application::pushActivity(new ui::DownloadsView());
-                        });
-                    });
+                    const bool installed = ui::isPortInstalled(game_);
+                    // Список файлов -> выбор версии -> что куда ляжет -> очередь.
+                    dialog->addButton(installed ? "app/ports/update_btn"_i18n : "app/detail/auto_install_btn"_i18n,
+                                      [this]() { ui::startPortInstallFlow(game_); });
+                    if (installed) {
+                        dialog->addButton("app/ports/uninstall_btn"_i18n,
+                                          [this]() { ui::confirmPortUninstall(game_); });
+                    }
                 }
 
                 // 2. Скачать полностью

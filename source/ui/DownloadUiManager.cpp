@@ -144,7 +144,8 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
         item.component_type = 4;
 
         if (plan && variant_index >= 0 && (size_t)variant_index < (size_t)plan->variants.size()) {
-            item.download_total_bytes = plan->variants[variant_index].total_size + plan->forwarder_nsp_size;
+            // total_size already includes the variant's forwarder
+            item.download_total_bytes = plan->variants[variant_index].total_size;
             item.install_total = item.download_total_bytes;
         }
 

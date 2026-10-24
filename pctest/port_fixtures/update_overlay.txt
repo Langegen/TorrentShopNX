@@ -1,0 +1,14 @@
+# title: Update Port (port) [NRO]
+# source: синтетика (папка с обновлением перекрывает тот же файл, структура неизвестной папки сохраняется)
+1000000	Update Port/switch/upd/upd.nro
+1200000	Update Port/Update 1.1/switch/upd/upd.nro
+5000	Update Port/Extras/shaders/basic.glsl
+300000	Update Port/Forwarder/Update Port [0100EEEEFFFF0000].nsp
+
+## expect
+game upd
+variants default
+dest Update 1.1/switch/upd/upd.nro => sdmc:/switch/upd/upd.nro
+skip Update Port/switch/upd/upd.nro
+dest Extras/shaders/basic.glsl => sdmc:/switch/upd/Extras/shaders/basic.glsl
+forwarder default Forwarder/Update Port [0100EEEEFFFF0000].nsp

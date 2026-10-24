@@ -1,0 +1,14 @@
+# title: LEGO Batman 3 Beyond Gotham
+# source: описание (папка switch/ + ярлык)
+45000000	switch/legobatman3/legobatman3.nro
+1200000000	switch/legobatman3/game/data.pak
+800000000	switch/legobatman3/game/audio.pak
+350000	LEGO Batman 3 Beyond Gotham (port) [0102f02a7b220000].nsp
+
+## expect
+game legobatman3
+variants default
+dest switch/legobatman3/legobatman3.nro => sdmc:/switch/legobatman3/legobatman3.nro
+dest switch/legobatman3/game/data.pak => sdmc:/switch/legobatman3/game/data.pak
+forwarder default LEGO Batman 3 Beyond Gotham (port) [0102f02a7b220000].nsp
+in default switch/legobatman3/game/audio.pak

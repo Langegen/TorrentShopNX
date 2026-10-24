@@ -1,4 +1,5 @@
 #include "sevenzip_utils.h"
+#include "archive_peek.h"
 #include "extraction_journal.h"
 #include "file_ops.h"
 #include "../datasource/i_data_source.h"
@@ -740,6 +741,82 @@ bool extract7zArchiveFromSource(
                                 journal, outNoFallback);
     util::logLine("sevenzip: extract7zArchiveFromSource finished, success=" + std::string(ok ? "1" : "0"));
     return ok;
+}
+
+bool peek7zArchiveFromSource(datasource::IDataSource* source,
+                             uint64_t archive_size,
+                             const std::shared_ptr<std::atomic<bool>>& cancel,
+                             ArchivePeek& out,
+                             std::string& out_error) {
+    out = ArchivePeek();
+    out.format = "7z";
+    if (!source) {
+        out_error = "Null data source";
+        return false;
+    }
+
+    DataSourceInStream dsStream;
+    dsStream.source = source;
+    dsStream.totalSize = archive_size;
+    dsStream.currentOffset = 0;
+    dsStream.cancelToken = cancel;
+    dsStream.wres = 0;
+    DataSourceInStream_CreateVTable(&dsStream);
+
+    // Small look-ahead buffer: only the signature header and the end header are read.
+    const size_t kPeekBuf = 64 * 1024;
+    CLookToRead2 lookStream;
+    LookToRead2_CreateVTable(&lookStream, False);
+    lookStream.buf = static_cast<Byte*>(SzAlloc(nullptr, kPeekBuf));
+    if (!lookStream.buf) {
+        out_error = "out of memory";
+        return false;
+    }
+    lookStream.bufSize = kPeekBuf;
+    lookStream.realStream = &dsStream.vt;
+    LookToRead2_INIT(&lookStream);
+
+    CrcGenerateTable();
+    CSzArEx db;
+    SzArEx_Init(&db);
+    SRes res = SzArEx_Open(&db, &lookStream.vt, (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
+    if (res != SZ_OK) {
+        out_error = sresToMessage(res);
+        SzFree(nullptr, lookStream.buf);
+        SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+        return false;
+    }
+
+    UInt16* nameBuf = nullptr;
+    size_t nameBufSize = 0;
+    for (UInt32 i = 0; i < db.NumFiles; i++) {
+        size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
+        if (nameLen == 0 || nameLen > (1u << 20)) continue;
+        if (nameLen > nameBufSize) {
+            SzFree(nullptr, nameBuf);
+            nameBufSize = nameLen;
+            nameBuf = static_cast<UInt16*>(SzAlloc(nullptr, nameBufSize * sizeof(UInt16)));
+            if (!nameBuf) break;
+        }
+        SzArEx_GetFileNameUtf16(&db, i, nameBuf);
+        std::string clean = sanitizeEntryName(utf16leToUtf8(nameBuf, nameLen - 1));
+        for (char& c : clean) {
+            if (c == '\\') c = '/';
+        }
+        ArchiveEntryInfo info;
+        info.is_dir = (SzArEx_IsDir(&db, i) != 0) || (!clean.empty() && clean.back() == '/');
+        while (!clean.empty() && clean.back() == '/') clean.pop_back();
+        if (clean.empty()) continue;
+        info.path = clean;
+        info.size = info.is_dir ? 0 : static_cast<uint64_t>(SzArEx_GetFileSize(&db, i));
+        out.total_uncompressed += info.size;
+        out.entries.push_back(std::move(info));
+    }
+
+    if (nameBuf) SzFree(nullptr, nameBuf);
+    SzFree(nullptr, lookStream.buf);
+    SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+    return true;
 }
 
 bool list7zArchiveFolder(

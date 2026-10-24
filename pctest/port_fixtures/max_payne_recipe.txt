@@ -1,0 +1,33 @@
+# title: Max Payne Mobile (порт) [NRO][RUS/ENG]
+# use_recipes: yes
+# source: описание (тот же список, что max_payne.txt, но через рецепт из resources/ports/recipes.json)
+2000	Max Payne Mobile [NRO][RUS-ENG]/Homebrew/maxpaynenx/config.txt
+3000000	Max Payne Mobile [NRO][RUS-ENG]/Homebrew/maxpaynenx/maxpaynenx.nro
+400000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/MaxPayne.nsp
+900000000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/PCAE Switch.zip
+5000000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/maxpayne.zip
+1100000000	Max Payne Mobile [NRO][RUS-ENG]/maxpaynenx.7z
+1000	Max Payne Mobile [NRO][RUS-ENG]/Как установить.txt
+
+## expect
+recipe Max Payne Mobile
+game maxpayne
+variants nx,pcae,all
+default nx
+default_en nx
+extract maxpaynenx.7z => sdmc:/
+extract PCAE Switch/maxpayne.zip => sdmc:/switch/
+extract PCAE Switch/PCAE Switch.zip => sdmc:/switch/
+entry PCAE Switch/PCAE Switch.zip | maxpayne/files/data.dat => maxpayne/files/data.dat
+entry PCAE Switch/PCAE Switch.zip | Russian voice/data.dat => SKIP
+dest Homebrew/maxpaynenx/config.txt => sdmc:/maxpaynenx/config.txt
+in nx maxpaynenx.7z
+notin nx PCAE Switch/maxpayne.zip
+in pcae PCAE Switch/PCAE Switch.zip
+notin pcae Homebrew/maxpaynenx/config.txt
+forwarder nx -
+forwarder pcae PCAE Switch/MaxPayne.nsp
+forwarder all PCAE Switch/MaxPayne.nsp
+in all maxpaynenx.7z
+in all PCAE Switch/maxpayne.zip
+skip Как установить.txt

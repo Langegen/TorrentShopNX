@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "recipes": [
+    {
+      "title_match": "Max Payne Mobile",
+      "game": "maxpayne",
+      "default": "nx",
+      "combinable": true,
+      "note": "Версия NX ставится без ярлыка: запускайте её из hbmenu. Настройки: sdmc:/maxpaynenx/config.txt",
+      "variants": [
+        {
+          "id": "nx",
+          "title": "Max Payne Mobile (NX)",
+          "steps": [
+            { "extract": "maxpaynenx.7z", "to": "sdmc:/" },
+            { "copy": "Homebrew/maxpaynenx/", "to": "sdmc:/maxpaynenx/" }
+          ]
+        },
+        {
+          "id": "pcae",
+          "title": "Модификация PCAE",
+          "steps": [
+            { "extract": "PCAE Switch/maxpayne.zip", "to": "sdmc:/switch/" },
+            { "extract": "PCAE Switch/PCAE Switch.zip", "subpath": "maxpayne/", "to": "sdmc:/switch/" },
+            { "install_nsp": "PCAE Switch/MaxPayne.nsp" }
+          ]
+        }
+      ]
+    }
+  ]
+}
