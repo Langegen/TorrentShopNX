@@ -179,6 +179,16 @@ const GameStats* GameStatsManager::getSwitchStats(const std::string& topic_id) c
     return nullptr;
 }
 
+bool GameStatsManager::copySwitchStats(const std::string& topic_id, GameStats& out) const {
+    if (topic_id.empty()) return false;
+    ensureLoaded();
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = switch_stats_.find(topic_id);
+    if (it == switch_stats_.end()) return false;
+    out = it->second;
+    return true;
+}
+
 const GameStats* GameStatsManager::getConsoleStats(const std::string& topic_id) const {
     if (topic_id.empty()) return nullptr;
     ensureLoaded();

@@ -56,6 +56,11 @@ struct LibraryItem {
     uint32_t installedPatchVersion = 0;
     int dlcCount = 0;
     std::vector<InstalledComponent> components;
+
+    // Raw titledb numbers (Nintendo counts updates as N << 16)
+    uint32_t latestPatchVersion = 0;
+    // Every catalog release of this game, best first (releases[0] == game).
+    std::vector<Game> releases;
 };
 
 struct LibrarySection {
@@ -102,6 +107,11 @@ public:
     void showComponentManager(const LibraryItem& item, int currentSection, int currentRow);
     void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection = -1, int currentRow = -1);
     void showModWarningDialog(const LibraryItem& item);
+    // Opens the game's release: straight away when there is one, otherwise a
+    // list of all releases (best first) to pick from.
+    void openRelease(const LibraryItem& item);
+    // Queues the missing update of every game in "Updates available".
+    void updateAllGames();
     void rebuildSections(int targetSection = -1, int targetRow = -1);
     void updateStatsAndSpace();
     void updateSpaceHint();

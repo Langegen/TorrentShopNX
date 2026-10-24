@@ -24,6 +24,9 @@ public:
 
     // Fast O(1) thread-safe lookups
     const GameStats* getSwitchStats(const std::string& topic_id) const;
+    // Copy taken under the lock: safe from worker threads while a background
+    // stats refresh replaces the map (the pointer getters above are not).
+    bool copySwitchStats(const std::string& topic_id, GameStats& out) const;
     const GameStats* getConsoleStats(const std::string& topic_id) const;
     const GameStats* getAnyStats(const std::string& topic_id) const;
 
