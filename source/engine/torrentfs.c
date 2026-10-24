@@ -2105,8 +2105,15 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     int tail_threshold = a->nblocks / 4;
     if (tail_threshold > 64) tail_threshold = 64;
     if (tail_threshold < 1) tail_threshold = 1;
-    bool file_endgame = (t->file_last_piece - t->playhead_piece <= 4) ||
-                        (t->meta.piece_count > 0 && (t->file_last_piece - t->file_first_piece + 1) - t->pieces_ever <= 4);
+    // The last pieces of a LARGE streamed file. Measured on a port copied file
+    // by file (1816 files, 8 MB pieces): with the old per-file test every
+    // piece of every small file counted as "endgame" (a file shorter than one
+    // piece is always within 4 pieces of its end, and the pieces_ever test is
+    // torrent-wide), so every block was hedged up to 3 times without the
+    // holder_on_schedule check: dup 17 % on the small-file stretches against
+    // 7 % on the big files. Small files keep the read-blocked tail hedge.
+    const int64_t file_span = t->file_last_piece - t->file_first_piece + 1;
+    bool file_endgame = file_span > 8 && (t->file_last_piece - t->playhead_piece <= 4);
     bool critical_tail = is_critical && remaining_blocks > 0 && remaining_blocks <= tail_threshold;
     bool is_endgame  = file_endgame || critical_tail;
     // Where waiting costs the most, hedge without asking whether the holder is
