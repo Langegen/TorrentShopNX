@@ -30,6 +30,11 @@
 #include <mutex>
 #include <thread>
 #include <ctime>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <unordered_map>
+#include <unordered_set>
 #include <filesystem>
 
 using namespace brls::literals;
@@ -414,50 +419,81 @@ void MainMenu::onTileFocused(int index) {
                         }
                     }
 
-                    // Parse available versions database from versions.txt
-                    std::unordered_map<uint64_t, uint32_t> availableVersions;
-                    std::ifstream in(TSNX_VERSIONS_PATH);
-                    if (in.is_open()) {
-                        std::string line;
-                        while (std::getline(in, line)) {
-                            if (line.empty()) continue;
-                            size_t firstPipe = line.find('|');
-                            size_t lastPipe = line.rfind('|');
-                            if (firstPipe != std::string::npos && lastPipe != std::string::npos) {
-                                std::string tidStr = line.substr(0, firstPipe);
-                                std::string verStr = line.substr(lastPipe + 1);
-                                while (!verStr.empty() && (verStr.back() == '\r' || std::isspace(static_cast<unsigned char>(verStr.back())))) {
-                                    verStr.pop_back();
-                                }
-                                try {
-                                    uint64_t tid = std::stoull(tidStr, nullptr, 16);
-                                    uint32_t ver = static_cast<uint32_t>(std::stoul(verStr));
-                                    availableVersions[tid] = ver;
-                                } catch (...) {}
-                            }
-                        }
-                    }
+                    // Patch title IDs of the installed games: the only rows of
+                    // versions.txt and of the ncm database we care about.
+                    std::unordered_set<uint64_t> wantedPatchTids;
+                    for (uint64_t baseTid : baseTids) wantedPatchTids.insert(baseTid | 0x800ULL);
 
-                    // Query installed patch versions using ncm
+                    // Installed patch versions (patch tid -> highest version).
+                    // One List call per storage instead of one
+                    // GetLatestContentMetaKey per game: per-title queries flood
+                    // ncm, which shares the system core with the compositor,
+                    // and the UI thread then stalls in eglSwapBuffers (0.5 s
+                    // [uistall] samples on hovering this tile). Both SD and NAND
+                    // are read; the old code skipped NAND whenever SD opened.
                     std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
                     if (!baseTids.empty()) {
                         std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
-                        Result rc = ncmInitialize();
-                        if (R_SUCCEEDED(rc)) {
-                            NcmContentMetaDatabase db;
-                            rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_SdCard);
-                            if (R_FAILED(rc)) rc = ncmOpenContentMetaDatabase(&db, NcmStorageId_BuiltInUser);
-                            if (R_SUCCEEDED(rc)) {
-                                for (uint64_t baseTid : baseTids) {
-                                    uint64_t patchTid = baseTid | 0x800ULL;
-                                    NcmContentMetaKey key;
-                                    if (R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, patchTid))) {
-                                        installedPatchVersions[baseTid] = key.version;
+                        if (R_SUCCEEDED(ncmInitialize())) {
+                            for (NcmStorageId sid : {NcmStorageId_SdCard, NcmStorageId_BuiltInUser}) {
+                                NcmContentMetaDatabase db;
+                                if (R_FAILED(ncmOpenContentMetaDatabase(&db, sid))) continue;
+                                std::vector<NcmContentMetaKey> keys(256);
+                                s32 total = 0, written = 0;
+                                Result rc = ncmContentMetaDatabaseList(&db, &total, &written, keys.data(),
+                                                                       static_cast<s32>(keys.size()), NcmContentMetaType_Patch,
+                                                                       0, 0, UINT64_MAX, NcmContentInstallType_Full);
+                                if (R_SUCCEEDED(rc) && total > written) {
+                                    keys.resize(static_cast<size_t>(total));
+                                    rc = ncmContentMetaDatabaseList(&db, &total, &written, keys.data(),
+                                                                    static_cast<s32>(keys.size()), NcmContentMetaType_Patch,
+                                                                    0, 0, UINT64_MAX, NcmContentInstallType_Full);
+                                }
+                                if (R_SUCCEEDED(rc)) {
+                                    for (s32 i = 0; i < written; ++i) {
+                                        const NcmContentMetaKey& k = keys[static_cast<size_t>(i)];
+                                        if (!wantedPatchTids.count(k.id)) continue;
+                                        uint32_t& v = installedPatchVersions[k.id];
+                                        if (k.version > v) v = k.version;
                                     }
                                 }
                                 ncmContentMetaDatabaseClose(&db);
                             }
                             ncmExit();
+                        }
+                    }
+
+                    // Latest versions from versions.txt (~3 MB, "tid|...|version"
+                    // per line). Read in one go and scanned in place, keeping only
+                    // the installed games: no per-line strings, so this thread
+                    // doesn't hog the global malloc lock the UI thread needs too.
+                    std::unordered_map<uint64_t, uint32_t> availableVersions;
+                    if (!wantedPatchTids.empty()) {
+                        std::string buf;
+                        if (FILE* vf = std::fopen(TSNX_VERSIONS_PATH, "rb")) {
+                            std::fseek(vf, 0, SEEK_END);
+                            long len = std::ftell(vf);
+                            std::fseek(vf, 0, SEEK_SET);
+                            if (len > 0) {
+                                buf.resize(static_cast<size_t>(len));
+                                buf.resize(std::fread(&buf[0], 1, buf.size(), vf));
+                            }
+                            std::fclose(vf);
+                        }
+                        const char* p = buf.data();
+                        const char* end = p + buf.size();
+                        while (p < end) {
+                            const char* eol = static_cast<const char*>(std::memchr(p, '\n', static_cast<size_t>(end - p)));
+                            if (!eol) eol = end;
+                            char* tidEnd = nullptr;
+                            uint64_t tid = std::strtoull(p, &tidEnd, 16);
+                            if (tidEnd != p && tidEnd < eol && *tidEnd == '|' && wantedPatchTids.count(tid)) {
+                                const char* lastPipe = eol;
+                                while (lastPipe > tidEnd && *(lastPipe - 1) != '|') --lastPipe;
+                                // lastPipe now points just after the last '|'
+                                availableVersions[tid] = static_cast<uint32_t>(std::strtoul(lastPipe, nullptr, 10));
+                            }
+                            p = eol + 1;
                         }
                     }
 
@@ -471,7 +507,7 @@ void MainMenu::onTileFocused(int index) {
                         if (it != availableVersions.end() && it->second > 0) {
                             uint32_t latestVer = it->second;
                             uint32_t currentVer = 0;
-                            auto iv = installedPatchVersions.find(baseTid);
+                            auto iv = installedPatchVersions.find(patchTid);
                             if (iv != installedPatchVersions.end()) currentVer = iv->second;
                             if (latestVer > currentVer) {
                                 updatesCount++;
