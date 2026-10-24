@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <ctime>
 #include <thread>
+#include <chrono>
 #include <filesystem>
 #include <sys/stat.h>
 #include <borealis.hpp>
@@ -1190,13 +1191,20 @@ inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_second
         std::time_t now = std::time(nullptr);
         if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
         int removed = 0;
+        int seen = 0;
         for (const auto& entry : std::filesystem::directory_iterator(
                  dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
             if (g_cleanupCancelled.load()) break;
             std::error_code ec2;
-            if (!entry.is_regular_file(ec2)) continue;
+            // One stat per file (is_regular_file() was a second one). Every
+            // call is an fs IPC; fs, vi and bsd share the system core, and a
+            // burst of thousands of them stalled the UI's frame present
+            // ([uistall] in eglSwapBuffers during this sweep).
             struct stat st;
             if (stat(entry.path().string().c_str(), &st) != 0) continue;
+            if (!S_ISREG(st.st_mode)) continue;
+            if ((++seen & 31) == 0)   // 5 ms per 32 files
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
             if ((now - st.st_mtime) > max_age_seconds) {
                 std::filesystem::remove(entry.path(), ec2);
                 if (!ec2) ++removed;
@@ -1270,6 +1278,17 @@ inline void migrateStorageLayout() {
 
 // Age-based stale-cache sweep executed asynchronously in background to ensure instant startup
 inline void sweepStaleCaches() {
+    // Ages are counted in days: once a day is enough. The sweep walks every
+    // cached cover and icon and used to run on every start.
+    const std::string marker = std::string(TSNX_CACHE_DIR) + "/.last_sweep";
+    {
+        struct stat mst;
+        std::time_t now = std::time(nullptr);
+        if (now > 0 && stat(marker.c_str(), &mst) == 0 && now - mst.st_mtime < 86400) {
+            util::logLine("GameData: stale cache sweep skipped (last run < 24h ago)");
+            return;
+        }
+    }
     util::logLine("GameData: background stale cache sweep start");
     sweepExpiredFiles(TSNX_CACHE_CATALOG, 1800);           // catalog bodies (match read TTL: 30 min)
     if (g_cleanupCancelled.load()) return;
@@ -1280,6 +1299,8 @@ inline void sweepStaleCaches() {
     sweepExpiredFiles(TSNX_CACHE_ICONS, 90 * 86400);       // NACP icons: 90 days
     if (g_cleanupCancelled.load()) return;
     sweepExpiredFiles(TSNX_CACHE_THUMBNAILS, 30 * 86400);  // cover thumbnails: 30 days
+    if (g_cleanupCancelled.load()) return;
+    if (FILE* mf = fopen(marker.c_str(), "wb")) fclose(mf);   // mtime = this run
     util::logLine("GameData: background stale cache sweep done");
 }
 

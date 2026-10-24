@@ -9,7 +9,41 @@
 
 #ifdef __SWITCH__
 #include <mutex>
+#include "../engine/engine_log.h"
 extern std::recursive_mutex g_switch_service_mutex;
+
+// [perf] inst: time inside ncmContentStorageWritePlaceHolder, one line per 5 s
+// to engine.log (installer thread only). The SD write path (ncm -> fs) runs on
+// the system core next to bsd and vi; this lets the netloop's slow-socket
+// windows (sock_us/call) be lined up with slow writes.
+namespace {
+u64 g_pf_tick = 0, g_pf_sum = 0, g_pf_max = 0;
+uint32_t g_pf_n = 0;
+uint64_t g_pf_bytes = 0;
+
+void perfWrite(u64 dt, size_t bytes) {
+    u64 now = armGetSystemTick();
+    if (g_pf_tick == 0) g_pf_tick = now;
+    g_pf_sum += dt;
+    if (dt > g_pf_max) g_pf_max = dt;
+    g_pf_n++;
+    g_pf_bytes += bytes;
+    const u64 freq = armGetSystemTickFreq();
+    if (now - g_pf_tick >= 5 * freq) {
+        double secs = (double)(now - g_pf_tick) / (double)freq;
+        engine_log(ENGINE_LOG_INFO,
+                   "[perf] inst writes=%u rate=%.0fKB/s write_ms/s=%.0f max_ms=%.1f avg_ms=%.2f",
+                   g_pf_n, (double)g_pf_bytes / 1024.0 / secs,
+                   (double)g_pf_sum * 1000.0 / (double)freq / secs,
+                   (double)g_pf_max * 1000.0 / (double)freq,
+                   g_pf_n ? (double)g_pf_sum * 1000.0 / (double)freq / g_pf_n : 0.0);
+        g_pf_tick = now;
+        g_pf_sum = g_pf_max = 0;
+        g_pf_n = 0;
+        g_pf_bytes = 0;
+    }
+}
+} // namespace
 #endif
 
 namespace installer {
@@ -142,11 +176,13 @@ bool NcmInstaller::writePlaceHolder(const NcmContentId& id,
 
     while (remaining > 0) {
         size_t chunk = std::min(remaining, kMaxChunkSize);
+        u64 w0 = armGetSystemTick();
         Result rc = ncmContentStorageWritePlaceHolder(&content_storage_,
                                                        &placeholder_id,
                                                        static_cast<s64>(current_offset),
                                                        ptr,
                                                        chunk);
+        perfWrite(armGetSystemTick() - w0, chunk);
         if (R_FAILED(rc)) {
             util::logLine("ncm: writePlaceHolder failed, offset="
                            + std::to_string(current_offset)

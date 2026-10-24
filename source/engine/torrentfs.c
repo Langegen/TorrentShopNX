@@ -208,6 +208,7 @@
 #define MAX_SESS_PER_IP   2
 #define BACKOFF_CONN_SECS 5
 #define BACKOFF_MAX_SECS  120
+#define BACKOFF_DEAD_SECS 300   // connect timed out 3+ times: unreachable address
 #define BACKOFF_DROP_SECS 5
 
 // Peer provenance, kept per pool slot. Tracker/PEX/manual addresses are live
@@ -1217,7 +1218,10 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
             // Tracker / PEX addresses were reported live moments ago: their
             // one retry (with CONNECT_RETRY_SECS patience, see sess_dial)
             // comes after 30 s; cached DHT entries keep the 60 s park.
-            secs = f > 1 ? BACKOFF_MAX_SECS
+            // Third miss and later: 5 minutes (a pool of ~580 mostly dead
+            // DHT addresses otherwise costs ~5 dials/s at the 2-minute park).
+            secs = f > 2 ? BACKOFF_DEAD_SECS
+                 : f > 1 ? BACKOFF_MAX_SECS
                          : (t->peer_src[pidx] == PEER_SRC_DHT ? 60 : 30);
         } else if (!had_conn &&
                    t->st_piece_ok < BOOTSTRAP_THRESH &&
@@ -1243,7 +1247,9 @@ static void release_peer(torrentfs *t, int pidx, bool failed, bool had_conn,
         if (had_conn && fail_kind != PEER_FAIL_CHOKE_ROTATE &&
             t->peer_best_kbps[pidx] >= 1024.0f && t->peer_fails[pidx] <= 3)
             secs = BACKOFF_DROP_SECS;
-        if (secs > BACKOFF_MAX_SECS) secs = BACKOFF_MAX_SECS;
+        const int cap = (fail_kind == PEER_FAIL_TIMEOUT && !had_conn) ? BACKOFF_DEAD_SECS
+                                                                       : BACKOFF_MAX_SECS;
+        if (secs > cap) secs = cap;
         t->peer_next_try[pidx] = armGetSystemTick() + (u64)secs * t->freq;
     } else {
         t->peer_fails[pidx]     = 0;
@@ -1304,11 +1310,16 @@ static int take_utp_retry_peer(torrentfs *t, peer_addr *out) {
             int i = t->next_peer++ % t->peer_count;
             if (!t->peer_utp_retry[i]) continue;
             if (t->peer_busy[i]) continue;
-            if (t->peer_next_try[i] > now) continue;
+            // The flag is the one-shot permission: the TCP backoff does not
+            // apply, a ban (next_try far in the future) does.
+            if (t->peer_next_try[i] > now + (u64)BACKOFF_MAX_SECS * t->freq) continue;
             idx = i;
             *out = t->peers[i];
             t->peer_busy[i] = 1;
             t->peer_utp_retry[i] = 0;   // one attempt, then normal backoff
+            // Dialing now: clear the TCP backoff so the upkeep's "banned"
+            // check (next_try > now + 60 s) does not kill this session.
+            t->peer_next_try[i] = now;
             break;
         }
     }
@@ -1602,9 +1613,13 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     }
     if (failed && !had_conn && was_tcp && s->pidx >= 0 &&
         utp_nb_fd() >= 0) {
+        // Flag only: the TCP backoff that release_peer just set stays in
+        // force. take_utp_retry_peer() ignores it for the one uTP attempt.
+        // Resetting next_try to "now" here (as before) also made the address
+        // due for plain TCP again at once: dead addresses were re-dialed ~35
+        // times each (20k dials, 95 % timeouts, in one 24-minute download).
         mutexLock(&t->lock);
         t->peer_utp_retry[s->pidx] = 1;
-        t->peer_next_try[s->pidx] = armGetSystemTick();  // dial on next wave
         mutexUnlock(&t->lock);
     }
     s->active = false;
