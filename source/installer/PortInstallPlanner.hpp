@@ -121,7 +121,8 @@ std::string archiveEntryTarget(const PortArchiveTask& task, const std::string& e
 //       "check": [ "sdmc:/switch/maxpayne/maxpayne.nro" ] } ] } ] }
 // Paths are relative to the torrent root (its own top folder removed); a
 // trailing "/" means a folder. "subpath" extracts one folder of the archive
-// (the folder itself is kept).
+// (the folder itself is kept). "to": "auto" lets the archive's own listing
+// pick the folder at install time (refineArchiveDestination).
 
 struct PortRecipeStep {
     enum class Kind { Extract, Copy, InstallNsp };

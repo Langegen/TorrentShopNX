@@ -13,6 +13,11 @@
 #include "../installer/installed_ports.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../datasource/custom_engine_client.h"
+
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 using namespace brls::literals;
 
@@ -129,36 +134,128 @@ void chooseVariant(const Game& game, std::shared_ptr<installer::PortInstallPlan>
 
 } // namespace
 
+namespace {
+
+// One analysis at a time: a second press while the list is being fetched does nothing.
+std::atomic<bool> g_probeRunning{false};
+
+struct ProbeUi {
+    std::atomic<bool> running{true};
+    std::atomic<bool> cancelled{false};
+    brls::Dialog* dialog = nullptr;   // valid while running && !cancelled
+    brls::Label* status = nullptr;
+};
+
+void showMessage(const std::string& text) {
+    auto* d = new brls::Dialog(text);
+    d->setCancelable(true);
+    d->addButton("app/common/ok"_i18n, []() {});
+    d->open();
+}
+
+} // namespace
+
 void startPortInstallFlow(const Game& game) {
     if (ui::DownloadManager::instance().hasActiveDownload(game.topic_id, game.magnet, -1)) {
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
         return;
     }
-    brls::Application::notify("app/detail/auto_install_probing"_i18n);
+    if (g_probeRunning.exchange(true)) return;
+
+    // Modal "analyzing" window: spinner, live swarm status, Cancel.
+    auto ui = std::make_shared<ProbeUi>();
+    auto* box = new brls::Box(brls::Axis::COLUMN);
+    box->setAlignItems(brls::AlignItems::CENTER);
+    box->setPadding(40, 40, 30, 40);
+    auto* spinner = new brls::ProgressSpinner(brls::ProgressSpinnerSize::LARGE);
+    spinner->setWidth(64);
+    spinner->setHeight(64);
+    spinner->setMarginBottom(24);
+    box->addView(spinner);
+    auto* title = new brls::Label();
+    title->setText("app/ports/probe_title"_i18n);
+    title->setFontSize(24);
+    title->setMarginBottom(12);
+    box->addView(title);
+    auto* hint = new brls::Label();
+    hint->setText("app/ports/probe_wait"_i18n);
+    hint->setFontSize(18);
+    hint->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    hint->setMarginBottom(12);
+    box->addView(hint);
+    ui->status = new brls::Label();
+    ui->status->setText("app/fileselect/probing"_i18n);
+    ui->status->setFontSize(16);
+    ui->status->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    box->addView(ui->status);
+
+    ui->dialog = new brls::Dialog(box);
+    ui->dialog->setCancelable(false);
+    ui->dialog->addButton("app/common/cancel"_i18n, [ui]() {
+        ui->cancelled.store(true);
+        datasource::CustomEngineClient::instance().cancelProbe();
+        util::logLine("PortInstallFlow: analysis cancelled by the user");
+    });
+    ui->dialog->open();
+
+    // Live status of the metadata search (same text as the file-select screen).
+    brls::async([ui]() {
+        while (ui->running.load() && !ui->cancelled.load() && !g_appExiting.load()) {
+            for (int i = 0; i < 10 && ui->running.load() && !ui->cancelled.load(); ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            if (!ui->running.load() || ui->cancelled.load()) break;
+            auto s = datasource::CustomEngineClient::instance().probeStatus();
+            brls::sync([ui, s]() {
+                if (!ui->running.load() || ui->cancelled.load() || !ui->status) return;
+                std::string text;
+                if (s.active && s.meta_peers_total > 0) {
+                    text = brls::getStr("app/fileselect/meta_peers", std::to_string(s.meta_peers_tried),
+                                        std::to_string(s.meta_peers_total));
+                } else if (s.active) {
+                    text = brls::getStr("app/fileselect/peer_search", s.phase);
+                } else {
+                    text = brls::getStr("app/fileselect/swarm_stats", std::to_string(s.seeds),
+                                        std::to_string(s.peers), std::to_string(s.dht_nodes));
+                }
+                ui->status->setText(text);
+            });
+        }
+    });
+
     Game gameCopy = game;
-    brls::async([gameCopy]() {
+    brls::async([gameCopy, ui]() {
         std::vector<torrent::TorrentFileInfo> files;
         std::string err;
         bool ok = ui::DownloadManager::instance().getImpl().probeTorrentFiles(gameCopy.magnet, files, &err);
         std::shared_ptr<installer::PortInstallPlan> plan;
-        if (ok && !files.empty()) {
-            const std::string lang = config::ConfigManager::instance().getLanguage();
+        if (ok && !files.empty() && !ui->cancelled.load()) {
+            // "auto" in settings means the system language the UI runs in.
+            std::string lang = config::ConfigManager::instance().getLanguage();
+            if (lang.empty() || lang == "auto") lang = brls::Application::getLocale();
             plan = std::make_shared<installer::PortInstallPlan>(
                 installer::PortInstallPlanner::instance().plan(gameCopy.topic_id, gameCopy.title, files, lang));
             util::logLine("PortInstallFlow: " + plan->describe(files, 40));
-        } else {
+        } else if (!ui->cancelled.load()) {
             util::logLine("PortInstallFlow: probe failed for " + gameCopy.title + ": " + err);
         }
-        brls::sync([gameCopy, ok, plan]() {
-            if (!ok || !plan) {
-                brls::Application::notify("app/detail/auto_install_probe_failed"_i18n);
-                return;
-            }
-            if (!plan->is_port || plan->variants.empty()) {
-                brls::Application::notify("app/detail/auto_install_not_port"_i18n);
-                return;
-            }
-            chooseVariant(gameCopy, plan);
+        brls::sync([gameCopy, ok, plan, ui]() {
+            ui->running.store(false);
+            g_probeRunning.store(false);
+            if (ui->cancelled.load()) return;   // the dialog is already closed
+            ui->status = nullptr;
+            // Next step only after the waiting window is gone.
+            ui->dialog->close([gameCopy, ok, plan]() {
+                if (!ok || !plan) {
+                    showMessage("app/detail/auto_install_probe_failed"_i18n + "\n\n" + "app/ports/probe_failed_hint"_i18n);
+                    return;
+                }
+                if (!plan->is_port || plan->variants.empty()) {
+                    showMessage("app/detail/auto_install_not_port"_i18n);
+                    return;
+                }
+                chooseVariant(gameCopy, plan);
+            });
         });
     });
 }

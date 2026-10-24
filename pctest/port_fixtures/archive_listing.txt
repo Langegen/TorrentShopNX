@@ -30,3 +30,7 @@ entry evil.zip | switch/lrules/x.bin => switch/lrules/x.bin
 entry evil.zip | bootloader/hekate_ipl.ini => SKIP
 entry evil.zip | atmosphere/config/system_settings.ini => SKIP
 entry sdcard.zip | atmosphere/contents/0100AAAA00000000/romfs/b.bin => atmosphere/contents/0100AAAA00000000/romfs/b.bin
+entry sdcard.zip | readme.txt => SKIP
+entry homebrew_build.zip | Changelog 1.0.txt => SKIP
+entry homebrew_build.zip | lrules/config.ini => lrules/config.ini
+entry data.7z | notes.txt => notes.txt

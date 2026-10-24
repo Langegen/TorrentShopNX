@@ -652,6 +652,12 @@ std::string archiveEntryTarget(const PortArchiveTask& task, const std::string& e
     if (p.empty()) return "";
     std::string root = startsWith(task.extract_dest_dir, "sdmc:/") ? task.extract_dest_dir.substr(6) : "";
     if (!root.empty() && root.back() != '/') root += '/';
+    // "Changelog.txt" / readme / screenshots at the top of an archive must not
+    // land in the SD root or in sdmc:/switch/ itself.
+    if (p.find('/') == std::string::npos && isJunkFile(lowerName(p)) &&
+        (root.empty() || lowerName(root) == "switch/")) {
+        return "";
+    }
     if (isProtectedSdPath(root + p)) return "";
     return p;
 }
@@ -1283,7 +1289,8 @@ bool parsePortRecipes(const std::string& json_text, std::vector<PortRecipe>& out
                     }
                     s.to = str(sj, "to");
                     s.subpath = str(sj, "subpath");
-                    if (s.from.empty() || (s.kind != PortRecipeStep::Kind::InstallNsp && !startsWith(s.to, "sdmc:/"))) {
+                    const bool autoTarget = s.kind == PortRecipeStep::Kind::Extract && s.to == "auto";
+                    if (s.from.empty() || (s.kind != PortRecipeStep::Kind::InstallNsp && !autoTarget && !startsWith(s.to, "sdmc:/"))) {
                         out_error = "recipes: step of '" + v.id + "' needs a path and an sdmc:/ target";
                         return false;
                     }
@@ -1419,7 +1426,10 @@ bool PortInstallPlanner::analyzeWithRecipe(const PortRecipe& recipe,
             if (step.kind == PortRecipeStep::Kind::Extract) {
                 int pos = findFile(step.from);
                 if (pos < 0) { out_error = "archive not found: " + step.from; return false; }
-                if (isProtectedSdPath(sdRel(step.to))) { out_error = "protected target " + step.to; return false; }
+                // "auto": the archive's own listing picks the folder at install time.
+                const bool autoTarget = step.to == "auto";
+                const std::string target = autoTarget ? std::string("sdmc:/") : step.to;
+                if (isProtectedSdPath(sdRel(target))) { out_error = "protected target " + step.to; return false; }
                 const Entry& e = entries[static_cast<size_t>(pos)];
                 ArchiveName an = parseArchiveName(e.segs.back());
                 if (an.kind == VolKind::None) { out_error = "not an archive: " + step.from; return false; }
@@ -1438,7 +1448,7 @@ bool PortInstallPlanner::analyzeWithRecipe(const PortRecipe& recipe,
                 auto tb = taskBySet.find(setKey);
                 if (tb != taskBySet.end()) {
                     const auto& t = plan.archives_to_extract[tb->second];
-                    if (t.extract_dest_dir != step.to || t.only_subpath != step.subpath) {
+                    if (t.extract_dest_dir != target || t.only_subpath != step.subpath || t.from_recipe == autoTarget) {
                         out_error = "archive used with two targets: " + step.from;
                         return false;
                     }
@@ -1446,10 +1456,10 @@ bool PortInstallPlanner::analyzeWithRecipe(const PortRecipe& recipe,
                     PortArchiveTask t;
                     t.file_index = entries[vols.front()].idx;
                     t.archive_torrent_path = join(entries[vols.front()].segs, 0, entries[vols.front()].segs.size());
-                    t.extract_dest_dir = step.to;
+                    t.extract_dest_dir = target;
                     t.only_subpath = step.subpath;
-                    t.from_recipe = true;
-                    t.dest_reason = "recipe";
+                    t.from_recipe = !autoTarget;
+                    t.dest_reason = autoTarget ? "recipe: auto" : "recipe";
                     for (size_t i : vols) {
                         t.volume_indices.push_back(entries[i].idx);
                         t.compressed_size += entries[i].size;
@@ -1461,7 +1471,7 @@ bool PortInstallPlanner::analyzeWithRecipe(const PortRecipe& recipe,
                     plan.archives_to_extract.push_back(t);
                 }
                 for (size_t i : vols) {
-                    if (!setDest(i, step.to)) return false;
+                    if (!setDest(i, target)) return false;
                     users[i].insert(static_cast<int>(v));
                 }
             } else if (step.kind == PortRecipeStep::Kind::Copy) {

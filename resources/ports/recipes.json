@@ -2,27 +2,30 @@
   "version": 1,
   "recipes": [
     {
-      "title_match": "Max Payne Mobile",
+      "topic_id": "6017551",
+      "title_match": "Max Payne NX + PCAE",
       "game": "maxpayne",
       "default": "nx",
       "combinable": true,
-      "note": "Версия NX ставится без ярлыка: запускайте её из hbmenu. Настройки: sdmc:/maxpaynenx/config.txt",
+      "note": "Настройки версии NX: sdmc:/maxpaynenx/config.txt",
       "variants": [
         {
           "id": "nx",
-          "title": "Max Payne Mobile (NX)",
+          "title": "Max Payne NX",
           "steps": [
-            { "extract": "maxpaynenx.7z", "to": "sdmc:/" },
-            { "copy": "Homebrew/maxpaynenx/", "to": "sdmc:/maxpaynenx/" }
-          ]
+            { "extract": "Max Payne NX/maxpaynenx.7z", "to": "sdmc:/" },
+            { "copy": "Max Payne NX/Homebrew (r1, 250221)/maxpaynenx/", "to": "sdmc:/maxpaynenx/" },
+            { "install_nsp": "Max Payne NX/Max Payne NX_05CCC3D445AB0000.nsp" }
+          ],
+          "check": [ "sdmc:/maxpaynenx/max_nx.nro" ]
         },
         {
           "id": "pcae",
-          "title": "Модификация PCAE",
+          "title": "Max Payne PCAE",
           "steps": [
-            { "extract": "PCAE Switch/maxpayne.zip", "to": "sdmc:/switch/" },
-            { "extract": "PCAE Switch/PCAE Switch.zip", "subpath": "maxpayne/", "to": "sdmc:/switch/" },
-            { "install_nsp": "PCAE Switch/MaxPayne.nsp" }
+            { "extract": "PCAE Switch 1.0/maxpayne.zip", "to": "sdmc:/switch/" },
+            { "extract": "PCAE Switch 1.0/PCAE Switch.zip", "to": "auto" },
+            { "install_nsp": "PCAE Switch 1.0/Max Payne PCAE_050E6C92AD4A0000.nsp" }
           ]
         }
       ]

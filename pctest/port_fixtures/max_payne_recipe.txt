@@ -1,33 +1,32 @@
-# title: Max Payne Mobile (порт) [NRO][RUS/ENG]
-# use_recipes: yes
-# source: описание (тот же список, что max_payne.txt, но через рецепт из resources/ports/recipes.json)
-2000	Max Payne Mobile [NRO][RUS-ENG]/Homebrew/maxpaynenx/config.txt
-3000000	Max Payne Mobile [NRO][RUS-ENG]/Homebrew/maxpaynenx/maxpaynenx.nro
-400000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/MaxPayne.nsp
-900000000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/PCAE Switch.zip
-5000000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/maxpayne.zip
-1100000000	Max Payne Mobile [NRO][RUS-ENG]/maxpaynenx.7z
-1000	Max Payne Mobile [NRO][RUS-ENG]/Как установить.txt
+# title: Max Payne NX + PCAE [NSP][RUS (+Voice)/ENG]
+# topic: 6017551
+# source: log (консоль, 24.10.2026), рецепт из resources/ports/recipes.json
+613453631	PCAE Switch 1.0/maxpayne.zip
+546748491	Max Payne NX/maxpaynenx.7z
+7953793	Max Payne NX/Homebrew (r1, 250221)/maxpaynenx/max_nx.nro
+330456	PCAE Switch 1.0/Max Payne PCAE_050E6C92AD4A0000.nsp
+330968	Max Payne NX/Max Payne NX_05CCC3D445AB0000.nsp
+103596041	PCAE Switch 1.0/PCAE Switch.zip
 
 ## expect
-recipe Max Payne Mobile
+recipe 6017551
 game maxpayne
 variants nx,pcae,all
 default nx
 default_en nx
-extract maxpaynenx.7z => sdmc:/
-extract PCAE Switch/maxpayne.zip => sdmc:/switch/
-extract PCAE Switch/PCAE Switch.zip => sdmc:/switch/
-entry PCAE Switch/PCAE Switch.zip | maxpayne/files/data.dat => maxpayne/files/data.dat
-entry PCAE Switch/PCAE Switch.zip | Russian voice/data.dat => SKIP
-dest Homebrew/maxpaynenx/config.txt => sdmc:/maxpaynenx/config.txt
-in nx maxpaynenx.7z
-notin nx PCAE Switch/maxpayne.zip
-in pcae PCAE Switch/PCAE Switch.zip
-notin pcae Homebrew/maxpaynenx/config.txt
-forwarder nx -
-forwarder pcae PCAE Switch/MaxPayne.nsp
-forwarder all PCAE Switch/MaxPayne.nsp
-in all maxpaynenx.7z
-in all PCAE Switch/maxpayne.zip
-skip Как установить.txt
+extract Max Payne NX/maxpaynenx.7z => sdmc:/
+extract PCAE Switch 1.0/maxpayne.zip => sdmc:/switch/
+dest Max Payne NX/Homebrew (r1, 250221)/maxpaynenx/max_nx.nro => sdmc:/maxpaynenx/max_nx.nro
+check nx sdmc:/maxpaynenx/max_nx.nro
+in nx Max Payne NX/maxpaynenx.7z
+notin nx PCAE Switch 1.0/maxpayne.zip
+in pcae PCAE Switch 1.0/PCAE Switch.zip
+notin pcae Max Payne NX/maxpaynenx.7z
+forwarder nx Max Payne NX/Max Payne NX_05CCC3D445AB0000.nsp
+forwarder pcae PCAE Switch 1.0/Max Payne PCAE_050E6C92AD4A0000.nsp
+in all PCAE Switch 1.0/maxpayne.zip
+in all Max Payne NX/maxpaynenx.7z
+# "auto": куда распаковать PCAE Switch.zip, решает его оглавление (как на консоли).
+listing PCAE Switch 1.0/maxpayne.zip = maxpayne/, maxpayne/maxpayne.nro, maxpayne/files/data.dat
+listing PCAE Switch 1.0/PCAE Switch.zip = maxpayne/, maxpayne/files/pcae.ras
+extract PCAE Switch 1.0/PCAE Switch.zip => sdmc:/switch/

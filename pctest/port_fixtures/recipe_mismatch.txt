@@ -1,4 +1,4 @@
-# title: Max Payne Mobile (порт) [NRO] (другая сборка)
+# title: Max Payne NX + PCAE [NRO] (другая сборка)
 # use_recipes: yes
 # source: синтетика (рецепт найден по названию, но файлов из него нет: план строит эвристика)
 1000000	Max Payne Other/switch/maxpayne/maxpayne.nro

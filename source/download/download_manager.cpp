@@ -1245,6 +1245,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             st->stage_label = "app/ports/stage_analyzing"_i18n;
         }
         std::string userLang = config::ConfigManager::instance().getLanguage();
+        if (userLang.empty() || userLang == "auto") userLang = brls::Application::getLocale();   // "auto": UI language
         auto analyzed = std::make_shared<installer::PortInstallPlan>(
             installer::PortInstallPlanner::instance().plan(topic_id, release_title, tfiles, userLang));
         if (!analyzed->is_port) {
@@ -1655,13 +1656,27 @@ static void portInstallWorker(datasource::IDataSource* source,
                         st->current_file = prog.currentFileName;
                     }
                 }
+                // A streamed ZIP gives no unpacked total, so the bar stood at 0:
+                // take it from the listing read before the install.
+                const uint64_t unpacked_total = prog.totalUncompressedSize > 0 ? prog.totalUncompressedSize
+                                                                               : a.uncompressed_size;
+                uint64_t inst_w = prog.bytesExtracted;
+                uint64_t inst_t = unpacked_total;
                 float norm_pct = std::clamp(prog.percentage / 100.0f, 0.0f, 1.0f);
-                st->written.store(prog.bytesExtracted);
-                st->total.store(prog.totalUncompressedSize);
+                if (unpacked_total > 0) {
+                    norm_pct = std::clamp(static_cast<float>(static_cast<double>(prog.bytesExtracted) /
+                                                             static_cast<double>(unpacked_total)), 0.0f, 1.0f);
+                } else if (arch_file_size > 0) {
+                    // Nothing known: show the share of the archive read so far.
+                    inst_t = arch_file_size;
+                    inst_w = static_cast<uint64_t>(norm_pct * static_cast<double>(arch_file_size));
+                }
+                st->written.store(inst_w);
+                st->total.store(inst_t);
                 st->progress.store(norm_pct);
 
-                st->inst_written.store(prog.bytesExtracted);
-                st->inst_total.store(prog.totalUncompressedSize);
+                st->inst_written.store(inst_w);
+                st->inst_total.store(inst_t);
                 st->inst_progress.store(norm_pct);
 
                 if (arch_file_size > 0 && prog.totalArchiveSize > 0) {
