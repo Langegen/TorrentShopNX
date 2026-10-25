@@ -22,6 +22,8 @@
 //   forwarder <variant> <path|->    NSP installed for that variant ("-": none)
 //   listing <archive> = a/b.nro, a/c/, ...   archive contents (applied first; "/" = folder)
 //   entry <archive> | <entry> => <target|SKIP>   where an archive entry is written
+//   optional <path>                 offered as an extra, installed by no variant by default
+//   forwarders <variant> = <n>      number of shortcuts installed for the variant
 //   recipe <id|->                   plan was built from that recipe ("-": heuristics)
 //   check <variant> <sdmc path>     recipe check path of the variant
 // <path> matches the end of a torrent path ("/" separators).
@@ -236,6 +238,30 @@ private:
             std::string got = installer::archiveEntryTarget(*task, rest);
             if (got.empty()) got = "SKIP";
             if (got != target) fail(line, "entry " + rest + " -> '" + got + "' != '" + target + "'");
+            return;
+        }
+        if (cmd == "optional") {
+            // optional <path>: offered as an extra, not installed by default
+            int idx = fileIndex(line, arg);
+            if (idx < 0) return;
+            const auto& o = plan_.optional_file_indices;
+            if (std::find(o.begin(), o.end(), idx) == o.end()) fail(line, arg + " is not an optional extra");
+            for (size_t v = 0; v < plan_.variants.size(); ++v) {
+                auto files = plan_.getFilesForVariant(static_cast<int>(v));
+                if (std::find(files.begin(), files.end(), idx) != files.end())
+                    fail(line, arg + " is installed by default in " + plan_.variants[v].id);
+            }
+            return;
+        }
+        if (cmd == "forwarders") {
+            // forwarders <variant> = <n>
+            size_t eq = arg.find(" = ");
+            if (eq == std::string::npos) return fail(line, "syntax: forwarders <variant> = <n>");
+            int v = variantIndex(line, trim(arg.substr(0, eq)));
+            if (v < 0) return;
+            size_t n = std::stoul(arg.substr(eq + 3));
+            size_t got = plan_.forwardersForVariant(v).size();
+            if (got != n) fail(line, "forwarders " + std::to_string(got) + " != " + std::to_string(n));
             return;
         }
         if (cmd == "recipe") {

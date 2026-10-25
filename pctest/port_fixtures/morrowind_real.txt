@@ -1,0 +1,23 @@
+# title: TES 3 The Elder Scrolls III: Morrowind + Tribunal + Bloodmoon (нативный OpenMW), ванильная и с модами [NSP][RUS]
+# source: log (консоль, 25.10.2026), topic 5743243; раньше ставились оба архива подряд
+1271963244	Morrowind with Mods MTB Better Pack v1.2 RUS.7z
+841642406	Morrowind Vanilla RUS.7z
+395992	TES III Morrowind (port) [01bd15a045540000].nsp
+1042	Add-ons/docs_build-changes/build-openmw.txt
+2148	Add-ons/docs_build-changes/dlfcn-fix-mygui.patch
+1349	Add-ons/docs_build-changes/dlfcn-fix-osg.patch
+40	Add-ons/docs_build-changes/info.txt
+2336	Add-ons/docs_build-changes/openmw-libnx-update.patch
+1152	Add-ons/small_visible_aim/openmw/data/Textures/target.dds
+35763617	Homebrew (v4)/openmw/openmw.nro
+
+## expect
+variants modded,vanilla
+in modded Morrowind with Mods MTB Better Pack v1.2 RUS.7z
+notin modded Morrowind Vanilla RUS.7z
+in vanilla Morrowind Vanilla RUS.7z
+notin vanilla Morrowind with Mods MTB Better Pack v1.2 RUS.7z
+dest Homebrew (v4)/openmw/openmw.nro => sdmc:/openmw/openmw.nro
+optional Add-ons/small_visible_aim/openmw/data/Textures/target.dds
+forwarder modded TES III Morrowind (port) [01bd15a045540000].nsp
+forwarder vanilla TES III Morrowind (port) [01bd15a045540000].nsp

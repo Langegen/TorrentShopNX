@@ -43,7 +43,10 @@ struct PortInstallPlan {
     bool is_port = false;
     std::string port_game_name; // e.g. "codmw", "masseffect-nx", "nfsu2x", "Simpsons", etc.
 
-    // Common NSP forwarder (used by variants that have no forwarder of their own)
+    // Common NSP forwarders (used by variants that have no forwarder of their own);
+    // one per title ID, so a release with two games gets two shortcuts.
+    std::vector<int> common_forwarder_indices;
+    // The first common forwarder (kept for logs and older callers)
     int forwarder_nsp_index = -1;
     std::string forwarder_nsp_name;
     int64_t forwarder_nsp_size = 0;
@@ -65,24 +68,32 @@ struct PortInstallPlan {
     // Files that are not installed, with the reason (readme/screenshots, unsafe paths, big NSPs)
     std::unordered_map<int, std::string> skipped_files;
 
+    // Optional extras ("Mods" without a vanilla twin, "Add-ons", "Extras"):
+    // installed only when the user asks for them, on top of the chosen version.
+    std::vector<int> optional_file_indices;
+    int64_t optional_size = 0;
+
     std::string recipe_id;   // non-empty: built from a recipe (topic id)
     std::string note;        // recipe note shown after install (e.g. how to launch)
 
-    // All file indices needed for a variant (common + variant files, incl. its forwarder)
-    std::vector<int> getFilesForVariant(int variant_idx) const;
+    // All file indices needed for a variant (common + variant files, incl. its forwarders;
+    // optional extras when asked)
+    std::vector<int> getFilesForVariant(int variant_idx, bool with_optional = false) const;
 
-    // Archives needed for a variant, in install order (common first, then the variant's own)
-    std::vector<PortArchiveTask> getArchivesForVariant(int variant_idx) const;
+    // Archives needed for a variant, in install order (common first, then the variant's own,
+    // then optional extras)
+    std::vector<PortArchiveTask> getArchivesForVariant(int variant_idx, bool with_optional = false) const;
 
     // Loose (copied) files of a variant in install order: common first, then the
-    // variant's own, so variant files overwrite common ones. No archives, no NSPs.
-    std::vector<int> getLooseFilesForVariant(int variant_idx) const;
+    // variant's own, then extras, so later files overwrite earlier ones. No archives, no NSPs.
+    std::vector<int> getLooseFilesForVariant(int variant_idx, bool with_optional = false) const;
 
     // Forwarder NSPs for a variant (its own, else the common one; empty if none)
     std::vector<int> forwardersForVariant(int variant_idx) const;
 
     // Total download size for a variant
-    int64_t getDownloadSizeForVariant(int variant_idx, const std::vector<torrent::TorrentFileInfo>& all_files) const;
+    int64_t getDownloadSizeForVariant(int variant_idx, const std::vector<torrent::TorrentFileInfo>& all_files,
+                                      bool with_optional = false) const;
 
     // Human-readable dump of the plan (one line per file) for logs and tests
     std::string describe(const std::vector<torrent::TorrentFileInfo>& all_files, size_t max_files = 300) const;

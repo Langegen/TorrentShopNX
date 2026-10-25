@@ -189,6 +189,7 @@ struct DownloadItem {
 
     // Автоматическая установка портов хоумбрю
     bool is_port_auto_install = false;
+    bool port_include_optional = false;   // also install the release's optional extras
     std::shared_ptr<installer::PortInstallPlan> port_plan;
     int selected_variant_index = 0;
     std::string install_stage_label;
@@ -223,7 +224,8 @@ public:
     size_t addPortInstall(const std::string& title,
                           const std::string& magnet,
                           std::shared_ptr<installer::PortInstallPlan> plan,
-                          int variant_index);
+                          int variant_index,
+                          bool with_optional = false);
     bool startDownload(size_t index);
     void startNextDownload();
     void trackProgress();

@@ -121,7 +121,8 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
     saveDownloads();
 }
 
-void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index) {
+void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index,
+                                     bool with_optional) {
     if (hasActiveDownload(game.topic_id, game.magnet, -1)) {
         util::logLine("download_ui: port install already in download queue for " + game.title + " (topic_id=" + game.topic_id + "), ignoring duplicate");
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
@@ -131,7 +132,7 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
     size_t idx = 0;
     {
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
-        idx = impl_.addPortInstall(game.title, game.magnet, plan, variant_index);
+        idx = impl_.addPortInstall(game.title, game.magnet, plan, variant_index, with_optional);
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
@@ -145,7 +146,7 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
 
         if (plan && variant_index >= 0 && (size_t)variant_index < (size_t)plan->variants.size()) {
             // total_size already includes the variant's forwarder
-            item.download_total_bytes = plan->variants[variant_index].total_size;
+            item.download_total_bytes = plan->variants[variant_index].total_size + (with_optional ? plan->optional_size : 0);
             item.install_total = item.download_total_bytes;
         }
 

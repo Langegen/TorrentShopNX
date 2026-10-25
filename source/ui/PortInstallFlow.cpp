@@ -16,6 +16,7 @@
 #include "../datasource/custom_engine_client.h"
 
 #include <atomic>
+#include <functional>
 #include <chrono>
 #include <thread>
 
@@ -56,6 +57,32 @@ std::string variantTitle(const installer::PortVariant& v) {
     return v.title_arg.empty() ? brls::getStr(v.title_key) : brls::getStr(v.title_key, v.title_arg);
 }
 
+// Dialog body: one wrapping label per line. brls::Dialog(text) draws a
+// multi-line text as one line that runs past the dialog edges.
+struct TextLine {
+    std::string text;
+    float size = 20.0f;
+    bool accent = false;
+};
+
+brls::Box* makeTextBox(const std::vector<TextLine>& lines) {
+    auto* box = new brls::Box(brls::Axis::COLUMN);
+    box->setWidth(640.0f);
+    box->setPadding(30, 36, 24, 36);
+    for (const auto& l : lines) {
+        auto* label = new brls::Label();
+        label->setAutoAnimate(false);
+        label->setSingleLine(false);
+        label->setIsWrapping(true);
+        label->setFontSize(l.size);
+        label->setText(l.text);
+        label->setMarginBottom(l.size > 20.0f ? 14.0f : 6.0f);
+        if (l.accent) label->setTextColor(brls::Application::getTheme()["brls/accent"]);
+        box->addView(label);
+    }
+    return box;
+}
+
 void showPreview(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant) {
     const auto& v = plan->variants[static_cast<size_t>(variant)];
 
@@ -70,35 +97,58 @@ void showPreview(const Game& game, std::shared_ptr<installer::PortInstallPlan> p
         }
         folders.insert(isArchive ? it->second : topFolder(it->second));
     }
-    std::string where;
-    size_t shown = 0;
-    for (const auto& f : folders) {
-        if (f.empty()) continue;
-        if (shown++ == 5) {
-            where += "\n  …";
-            break;
-        }
-        where += "\n  " + f;
-    }
-
+    std::vector<TextLine> lines;
+    lines.push_back({cleanTitle(game.title), 24.0f});
+    lines.push_back({brls::getStr("app/ports/preview_version", variantTitle(v))});
+    lines.push_back({brls::getStr("app/ports/preview_download", formatSize(static_cast<unsigned long long>(v.total_size)))});
     int64_t sdFree = -1;
     util::getStorageFreeSpace(1, sdFree);
-    std::string text = brls::getStr("app/ports/preview_title", cleanTitle(game.title)) + "\n" +
-                       brls::getStr("app/ports/preview_version", variantTitle(v)) + "\n" +
-                       brls::getStr("app/ports/preview_download", formatSize(static_cast<unsigned long long>(v.total_size)));
-    if (sdFree >= 0) text += "\n" + brls::getStr("app/ports/preview_free", formatSize(static_cast<unsigned long long>(sdFree)));
+    if (sdFree >= 0) {
+        lines.push_back({brls::getStr("app/ports/preview_free", formatSize(static_cast<unsigned long long>(sdFree)))});
+    }
     // Archives: their unpacked size is known only from the listing read at install time.
-    if (!plan->getArchivesForVariant(variant).empty()) text += "\n" + "app/ports/preview_space_note"_i18n;
-    if (!where.empty()) text += "\n" + "app/ports/preview_folders"_i18n + where;
-    text += "\n" + (plan->forwardersForVariant(variant).empty() ? "app/ports/preview_no_forwarder"_i18n
-                                                                 : "app/ports/preview_forwarder"_i18n);
-    if (!plan->recipe_id.empty()) text += "\n" + "app/ports/preview_recipe"_i18n;
+    if (!plan->getArchivesForVariant(variant).empty()) lines.push_back({"app/ports/preview_space_note"_i18n, 17.0f});
+    if (!folders.empty()) {
+        lines.push_back({"app/ports/preview_folders"_i18n});
+        size_t shown = 0;
+        for (const auto& f : folders) {
+            if (f.empty()) continue;
+            if (shown++ == 5) {
+                lines.push_back({"   …", 17.0f});
+                break;
+            }
+            lines.push_back({"   " + f, 17.0f});
+        }
+    }
+    const size_t forwarders = plan->forwardersForVariant(variant).size();
+    lines.push_back({forwarders == 0 ? "app/ports/preview_no_forwarder"_i18n
+                     : forwarders == 1 ? "app/ports/preview_forwarder"_i18n
+                                       : brls::getStr("app/ports/preview_forwarders", std::to_string(forwarders))});
+    const bool hasExtras = !plan->optional_file_indices.empty();
+    if (hasExtras) {
+        lines.push_back({brls::getStr("app/ports/preview_extras",
+                                      formatSize(static_cast<unsigned long long>(plan->optional_size))), 18.0f});
+    }
+    if (!plan->recipe_id.empty()) lines.push_back({"app/ports/preview_recipe"_i18n, 17.0f, true});
 
-    auto* dialog = new brls::Dialog(text);
+    auto* dialog = new brls::Dialog(makeTextBox(lines));
     dialog->setCancelable(true);
     Game gameCopy = game;
     dialog->addButton("app/ports/install_btn"_i18n, [gameCopy, plan, variant]() {
-        ui::DownloadManager::instance().addPortInstall(gameCopy, plan, variant);
+        ui::DownloadManager::instance().addPortInstall(gameCopy, plan, variant, false);
+        brls::sync([]() { brls::Application::pushActivity(new ui::DownloadsView()); });
+    });
+    if (hasExtras) {
+        dialog->addButton(brls::getStr("app/ports/install_with_extras_btn",
+                                       formatSize(static_cast<unsigned long long>(plan->optional_size))),
+                          [gameCopy, plan, variant]() {
+            ui::DownloadManager::instance().addPortInstall(gameCopy, plan, variant, true);
+            brls::sync([]() { brls::Application::pushActivity(new ui::DownloadsView()); });
+        });
+    }
+    // The whole release as files in downloads/, nothing installed.
+    dialog->addButton("app/ports/download_files_btn"_i18n, [gameCopy]() {
+        ui::DownloadManager::instance().addDownload(gameCopy, {}, -1, "");
         brls::sync([]() { brls::Application::pushActivity(new ui::DownloadsView()); });
     });
     dialog->addButton("app/common/cancel"_i18n, []() {});
@@ -146,10 +196,25 @@ struct ProbeUi {
     brls::Label* status = nullptr;
 };
 
-void showMessage(const std::string& text) {
-    auto* d = new brls::Dialog(text);
+void showMessage(const std::string& text, const std::string& actionLabel = "",
+                 std::function<void()> action = nullptr) {
+    std::vector<TextLine> lines;
+    size_t pos = 0;
+    while (pos <= text.size()) {
+        size_t nl = text.find('\n', pos);
+        std::string part = text.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+        if (!part.empty()) lines.push_back({part});
+        if (nl == std::string::npos) break;
+        pos = nl + 1;
+    }
+    auto* d = new brls::Dialog(makeTextBox(lines));
     d->setCancelable(true);
-    d->addButton("app/common/ok"_i18n, []() {});
+    if (action) {
+        d->addButton(actionLabel, action);
+        d->addButton("app/common/cancel"_i18n, []() {});
+    } else {
+        d->addButton("app/common/ok"_i18n, []() {});
+    }
     d->open();
 }
 
@@ -166,6 +231,7 @@ void startPortInstallFlow(const Game& game) {
     auto ui = std::make_shared<ProbeUi>();
     auto* box = new brls::Box(brls::Axis::COLUMN);
     box->setAlignItems(brls::AlignItems::CENTER);
+    box->setWidth(640.0f);
     box->setPadding(40, 40, 30, 40);
     auto* spinner = new brls::ProgressSpinner(brls::ProgressSpinnerSize::LARGE);
     spinner->setWidth(64);
@@ -178,6 +244,9 @@ void startPortInstallFlow(const Game& game) {
     title->setMarginBottom(12);
     box->addView(title);
     auto* hint = new brls::Label();
+    hint->setAutoAnimate(false);
+    hint->setSingleLine(false);
+    hint->setIsWrapping(true);
     hint->setText("app/ports/probe_wait"_i18n);
     hint->setFontSize(18);
     hint->setHorizontalAlign(brls::HorizontalAlign::CENTER);
@@ -247,11 +316,18 @@ void startPortInstallFlow(const Game& game) {
             // Next step only after the waiting window is gone.
             ui->dialog->close([gameCopy, ok, plan]() {
                 if (!ok || !plan) {
-                    showMessage("app/detail/auto_install_probe_failed"_i18n + "\n\n" + "app/ports/probe_failed_hint"_i18n);
+                    showMessage("app/detail/auto_install_probe_failed"_i18n + "\n\n" + "app/ports/probe_failed_hint"_i18n,
+                                "app/ports/retry_btn"_i18n, [gameCopy]() {
+                        brls::sync([gameCopy]() { startPortInstallFlow(gameCopy); });
+                    });
                     return;
                 }
                 if (!plan->is_port || plan->variants.empty()) {
-                    showMessage("app/detail/auto_install_not_port"_i18n);
+                    // Not something the installer understands: offer the plain download.
+                    showMessage("app/detail/auto_install_not_port"_i18n, "app/ports/download_files_btn"_i18n, [gameCopy]() {
+                        ui::DownloadManager::instance().addDownload(gameCopy, {}, -1, "");
+                        brls::sync([]() { brls::Application::pushActivity(new ui::DownloadsView()); });
+                    });
                     return;
                 }
                 chooseVariant(gameCopy, plan);
@@ -271,8 +347,8 @@ void confirmPortUninstall(const Game& game) {
         brls::Application::notify("app/ports/not_installed"_i18n);
         return;
     }
-    auto* dialog = new brls::Dialog(brls::getStr("app/ports/uninstall_confirm", cleanTitle(game.title),
-                                                 std::to_string(port.files.size())));
+    auto* dialog = new brls::Dialog(makeTextBox({{brls::getStr("app/ports/uninstall_confirm", cleanTitle(game.title),
+                                                               std::to_string(port.files.size()))}}));
     dialog->setCancelable(true);
     dialog->addButton("app/ports/uninstall_btn"_i18n, [key]() {
         brls::async([key]() {

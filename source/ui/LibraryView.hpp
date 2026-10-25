@@ -4,6 +4,7 @@
 #include "../GameData.hpp"
 
 #include <atomic>
+#include <ctime>
 #include <functional>
 #include <vector>
 #include <string>
@@ -61,6 +62,14 @@ struct LibraryItem {
     uint32_t latestPatchVersion = 0;
     // Every catalog release of this game, best first (releases[0] == game).
     std::vector<Game> releases;
+
+    // Homebrew port installed by the auto-installer (its own section)
+    bool isPort = false;
+    std::string portKey;
+    std::string portVariant;
+    size_t portFiles = 0;
+    std::time_t portInstalledAt = 0;
+    std::vector<uint64_t> portForwarders;
 };
 
 struct LibrarySection {
@@ -104,6 +113,9 @@ public:
     void scanForUpdates();
     void showGameActionMenu(const LibraryItem& item, int currentSection, int currentRow);
     void uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods = false);
+    // Ports: Y opens this menu; removal deletes files, folders and shortcuts.
+    void showPortActionMenu(const LibraryItem& item, int currentSection, int currentRow);
+    void uninstallPort(const LibraryItem& item, int currentSection, int currentRow);
     void showComponentManager(const LibraryItem& item, int currentSection, int currentRow);
     void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection = -1, int currentRow = -1);
     void showModWarningDialog(const LibraryItem& item);

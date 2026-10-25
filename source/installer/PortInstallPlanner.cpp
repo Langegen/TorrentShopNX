@@ -267,7 +267,14 @@ bool isTagToken(const std::string& t) {
            t == "voice" || t == "version" || t == "ver" || t == "озвучка" || t == "версия";
 }
 
-Tag classifyName(const std::string& name) {
+// Language and edition are separate: "Morrowind Vanilla RUS" is a vanilla
+// edition (in Russian), not "the Russian version".
+struct NameTags {
+    Tag lang = Tag::None;      // Ru / En
+    Tag edition = Tag::None;   // Mod / Vanilla
+};
+
+NameTags classifyName(const std::string& name) {
     auto t = tokens(name);
     bool ru = false, en = false, mod = false, van = false;
     for (size_t i = 0; i < t.size(); ++i) {
@@ -277,13 +284,12 @@ Tag classifyName(const std::string& name) {
         if (isVanillaToken(t[i])) van = true;
         if (t[i] == "better" && i + 1 < t.size() && t[i + 1] == "pack") mod = true;
     }
-    if (ru && en) return Tag::None;        // "RUS-ENG": both languages inside
-    if (ru) return Tag::Ru;
-    if (en) return Tag::En;
-    if (mod && van) return Tag::None;
-    if (mod) return Tag::Mod;
-    if (van) return Tag::Vanilla;
-    return Tag::None;
+    NameTags r;
+    if (ru && !en) r.lang = Tag::Ru;           // "RUS-ENG": both languages inside
+    else if (en && !ru) r.lang = Tag::En;
+    if (mod && !van) r.edition = Tag::Mod;
+    else if (van && !mod) r.edition = Tag::Vanilla;
+    return r;
 }
 
 // "switch_RUSSVOICE.7z" -> "switch"; used to pair a tagged archive with its untagged twin.
@@ -315,6 +321,41 @@ bool isForwarderFolderName(const std::string& name) {
     return hasAnyToken(name, {"forwarder", "nsp", "ярлык", "форвардер"});
 }
 
+// Extras the release offers on top of the game ("Add-ons", "Extras", "Бонус"):
+// not installed unless the user asks for them.
+bool isOptionalName(const std::string& name) {
+    if (isUpdateName(name)) return false;
+    auto t = tokens(name);
+    for (size_t i = 0; i < t.size(); ++i) {
+        if (startsWith(t[i], "addon") || t[i] == "extra" || t[i] == "extras" || t[i] == "optional" ||
+            t[i] == "bonus" || startsWith(t[i], "дополн") || startsWith(t[i], "бонус") || startsWith(t[i], "опцион")) {
+            return true;
+        }
+        if (t[i] == "add" && i + 1 < t.size() && (t[i + 1] == "ons" || t[i + 1] == "on")) return true;
+    }
+    return false;
+}
+
+// Documentation folders are never copied.
+bool isDocsSeg(const std::string& seg) {
+    std::string l = lowerName(seg);
+    return l == "docs" || l == "doc" || l == "documentation" || l == "документация";
+}
+
+// Title ID in an NSP name: "[01782d13459b0000]" or "_05CCC3D445AB0000"; "" if none.
+std::string titleIdOf(const std::string& fileName) {
+    std::string l = lowerName(fileName);
+    for (size_t i = 0; i + 16 <= l.size(); ++i) {
+        bool hex = true;
+        for (size_t k = 0; k < 16 && hex; ++k) hex = std::isxdigit(static_cast<unsigned char>(l[i + k])) != 0;
+        if (!hex) continue;
+        const bool leftOk = i == 0 || !std::isxdigit(static_cast<unsigned char>(l[i - 1]));
+        const bool rightOk = i + 16 == l.size() || !std::isxdigit(static_cast<unsigned char>(l[i + 16]));
+        if (leftOk && rightOk && l[i] == '0') return l.substr(i, 16);   // Switch title IDs start with 0
+    }
+    return "";
+}
+
 // ── Planner internals ───────────────────────────────────────────────────────
 
 struct Entry {
@@ -335,7 +376,9 @@ struct Unit {
     bool marker = false;
     bool switchDir = false;
     bool knownRoot = false;
-    Tag tag = Tag::None;
+    NameTags names;            // tags read from the name
+    Tag tag = Tag::None;       // tag that forms variants (decided for the whole release)
+    bool optional = false;     // extras, installed only on request
     bool hasForwarder = false;
     bool hasPayload = false;   // archive, .nro or other non-junk non-NSP file
     bool version = false;
@@ -374,6 +417,11 @@ Mapping mapRelPath(const std::vector<std::string>& rel, const std::string& game)
     // .../switch/<...> -> sdmc:/switch/<...>
     for (size_t i = 0; i + 1 < rest.size(); ++i) {
         if (isSwitchSeg(rest[i])) {
+            // A readme lying right in switch/ would end up in sdmc:/switch/ itself.
+            if (i + 2 == rest.size() && isJunkFile(lowerFile)) {
+                m.reason = "readme/screenshot";
+                return m;
+            }
             m.kind = MapKind::Copy;
             m.dest = "sdmc:/switch/" + join(rest, i + 1, rest.size());
             return m;
@@ -416,11 +464,13 @@ std::string sanitizeTitle(const std::string& release_title) {
     std::string clean = release_title;
     size_t br = clean.find('[');
     if (br != std::string::npos) clean = clean.substr(0, br);
-    size_t paren = clean.find('(');
-    if (paren != std::string::npos) clean = clean.substr(0, paren);
+    // "TES 3 The Elder Scrolls III: Morrowind + Tribunal, ..." -> only the first part
+    size_t cut = clean.find_first_of("(:+,/");
+    if (cut != std::string::npos && cut > 0) clean = clean.substr(0, cut);
     std::string safe;
     for (char c : clean) {
         if (std::isalnum(static_cast<unsigned char>(c))) safe += c;
+        if (safe.size() >= 24) break;
     }
     return safe.empty() ? "game" : lowerName(safe);
 }
@@ -674,11 +724,12 @@ std::vector<int> PortInstallPlan::forwardersForVariant(int variant_idx) const {
         !variants[variant_idx].forwarder_nsp_indices.empty()) {
         return variants[variant_idx].forwarder_nsp_indices;
     }
+    if (!common_forwarder_indices.empty()) return common_forwarder_indices;
     if (forwarder_nsp_index >= 0) return {forwarder_nsp_index};
     return {};
 }
 
-std::vector<int> PortInstallPlan::getFilesForVariant(int variant_idx) const {
+std::vector<int> PortInstallPlan::getFilesForVariant(int variant_idx, bool with_optional) const {
     std::vector<int> res = common_file_indices;
     if (variant_idx >= 0 && variant_idx < static_cast<int>(variants.size())) {
         const auto& v = variants[variant_idx];
@@ -686,15 +737,18 @@ std::vector<int> PortInstallPlan::getFilesForVariant(int variant_idx) const {
     } else if (variants.empty()) {
         for (const auto& pair : file_destinations) res.push_back(pair.first);
     }
+    if (with_optional) res.insert(res.end(), optional_file_indices.begin(), optional_file_indices.end());
     for (int f : forwardersForVariant(variant_idx)) res.push_back(f);
     std::sort(res.begin(), res.end());
     res.erase(std::unique(res.begin(), res.end()), res.end());
     return res;
 }
 
-std::vector<PortArchiveTask> PortInstallPlan::getArchivesForVariant(int variant_idx) const {
+std::vector<PortArchiveTask> PortInstallPlan::getArchivesForVariant(int variant_idx, bool with_optional) const {
     std::unordered_set<int> common(common_file_indices.begin(), common_file_indices.end());
     std::unordered_set<int> own;
+    std::unordered_set<int> extra;
+    if (with_optional) extra.insert(optional_file_indices.begin(), optional_file_indices.end());
     if (variant_idx >= 0 && variant_idx < static_cast<int>(variants.size())) {
         own.insert(variants[variant_idx].file_indices.begin(), variants[variant_idx].file_indices.end());
     } else if (variants.empty()) {
@@ -707,16 +761,20 @@ std::vector<PortArchiveTask> PortInstallPlan::getArchivesForVariant(int variant_
     for (const auto& a : archives_to_extract) {
         if (!common.count(a.file_index) && own.count(a.file_index)) result.push_back(a);
     }
+    for (const auto& a : archives_to_extract) {   // extras go last, on top of the game
+        if (!common.count(a.file_index) && !own.count(a.file_index) && extra.count(a.file_index)) result.push_back(a);
+    }
     return result;
 }
 
-std::vector<int> PortInstallPlan::getLooseFilesForVariant(int variant_idx) const {
+std::vector<int> PortInstallPlan::getLooseFilesForVariant(int variant_idx, bool with_optional) const {
     std::unordered_set<int> excluded;
     for (const auto& a : archives_to_extract) {
         excluded.insert(a.volume_indices.begin(), a.volume_indices.end());
         excluded.insert(a.file_index);
     }
     if (forwarder_nsp_index >= 0) excluded.insert(forwarder_nsp_index);
+    excluded.insert(common_forwarder_indices.begin(), common_forwarder_indices.end());
     for (const auto& v : variants) {
         excluded.insert(v.forwarder_nsp_indices.begin(), v.forwarder_nsp_indices.end());
     }
@@ -735,12 +793,14 @@ std::vector<int> PortInstallPlan::getLooseFilesForVariant(int variant_idx) const
     if (variant_idx >= 0 && variant_idx < static_cast<int>(variants.size())) {
         take(variants[variant_idx].file_indices, out);
     }
+    if (with_optional) take(optional_file_indices, out);   // extras on top
     return out;
 }
 
 int64_t PortInstallPlan::getDownloadSizeForVariant(int variant_idx,
-                                                   const std::vector<torrent::TorrentFileInfo>& all_files) const {
-    auto needed = getFilesForVariant(variant_idx);
+                                                   const std::vector<torrent::TorrentFileInfo>& all_files,
+                                                   bool with_optional) const {
+    auto needed = getFilesForVariant(variant_idx, with_optional);
     std::unordered_map<int, int64_t> sizeMap;
     for (const auto& f : all_files) {
         sizeMap[f.index] = static_cast<int64_t>(f.size);
@@ -784,6 +844,12 @@ std::string PortInstallPlan::describe(const std::vector<torrent::TorrentFileInfo
         }
     }
     if (forwarder_nsp_index >= 0) owner[forwarder_nsp_index] = "common";
+    for (int idx : common_forwarder_indices) owner[idx] = "common";
+    for (int idx : optional_file_indices) owner[idx] = "optional";
+    if (!optional_file_indices.empty()) {
+        out += "  optional extras: " + std::to_string(optional_file_indices.size()) + " files, " +
+               std::to_string(optional_size) + " bytes\n";
+    }
 
     size_t shown = 0;
     for (const auto& f : all_files) {
@@ -866,9 +932,9 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
                 u.marker = isSdRootMarker(name);
                 u.switchDir = isSwitchSeg(name);
                 u.knownRoot = isKnownRootDir(name);
-                if (!u.marker && !u.switchDir && !u.knownRoot) u.tag = classifyName(name);
+                if (!u.marker && !u.switchDir && !u.knownRoot) u.names = classifyName(name);
             } else if (parseArchiveName(name).kind != VolKind::None) {
-                u.tag = classifyName(parseArchiveName(name).base);
+                u.names = classifyName(stripArchiveExt(parseArchiveName(name).base));
             }
             it = units.emplace(key, u).first;
             unitOrder.push_back(key);
@@ -883,9 +949,35 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
             }
         }
     }
+    // Variant tags for the whole release: modded + vanilla editions win over the
+    // language ("Morrowind with Mods RUS" / "Morrowind Vanilla RUS" are two editions);
+    // mods without a vanilla twin and "Add-ons"/"Extras" are optional extras.
+    {
+        bool haveMod = false, haveVan = false;
+        for (const auto& kv : units) {
+            if (kv.second.names.edition == Tag::Mod) haveMod = true;
+            if (kv.second.names.edition == Tag::Vanilla) haveVan = true;
+        }
+        for (auto& kv : units) {
+            Unit& u = kv.second;
+            if (u.folder && (u.marker || u.switchDir || u.knownRoot)) continue;
+            const bool folderOrArchive = u.folder || startsWith(u.key, "a:");
+            if (haveMod && haveVan && u.names.edition != Tag::None) {
+                u.tag = u.names.edition;
+            } else if (u.names.lang != Tag::None) {
+                u.tag = u.names.lang;
+            } else if (u.names.edition == Tag::Mod && folderOrArchive) {
+                u.optional = true;
+            }
+            if (folderOrArchive && isOptionalName(u.name)) {
+                u.optional = true;
+                u.tag = Tag::None;
+            }
+        }
+    }
     for (auto& kv : units) {
         Unit& u = kv.second;
-        u.version = u.folder && !u.marker && !u.switchDir && !u.knownRoot && u.tag == Tag::None &&
+        u.version = u.folder && !u.marker && !u.switchDir && !u.knownRoot && u.tag == Tag::None && !u.optional &&
                     u.hasForwarder && u.hasPayload && !isUpdateName(u.name) && !isForwarderFolderName(u.name);
     }
 
@@ -917,7 +1009,7 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
         }
         for (const auto& key : unitOrder) {
             const Unit& u = units[key];
-            if (u.tag == Tag::None && startsWith(key, "a:") && ruStems.count(untaggedStem(key.substr(2)))) {
+            if (u.tag == Tag::None && !u.optional && startsWith(key, "a:") && ruStems.count(untaggedStem(key.substr(2)))) {
                 enUnits.push_back(key);
             }
         }
@@ -941,7 +1033,7 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
         bool mainHasPayload = false;
         for (const auto& key : unitOrder) {
             const Unit& u = units[key];
-            if (u.version) continue;
+            if (u.version || u.optional) continue;
             if (u.hasPayload && (u.marker || u.switchDir || u.knownRoot || startsWith(key, "a:") ||
                                  (startsWith(key, "f:") && isNroFile(lowerName(u.name))))) {
                 mainHasPayload = true;
@@ -952,7 +1044,7 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
             if (mainHasPayload) {
                 std::set<std::string> mainUnits;
                 for (const auto& key : unitOrder) {
-                    if (!versionSet.count(key)) mainUnits.insert(key);
+                    if (!versionSet.count(key) && !units[key].optional) mainUnits.insert(key);
                 }
                 drafts.push_back({"main", "Основная версия", mainUnits});
             }
@@ -973,7 +1065,7 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
     for (auto& e : entries) {
         if (e.segs.empty()) continue;
         const Unit& u = units[e.unit];
-        bool strip = u.folder && (u.tag != Tag::None || u.version);
+        bool strip = u.folder && (u.tag != Tag::None || u.version || u.optional);
         e.rel = strip ? std::vector<std::string>(e.segs.begin() + 1, e.segs.end()) : e.segs;
     }
 
@@ -981,6 +1073,7 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
     {
         std::string withNro, any;
         for (const auto& e : entries) {
+            if (e.segs.empty() || units[e.unit].optional) continue;
             const auto& r = e.rel;
             size_t start = (r.size() > 1 && isSdRootMarker(r[0])) ? 1 : 0;
             for (size_t i = start; i + 2 < r.size(); ++i) {
@@ -993,8 +1086,9 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
         plan.port_game_name = !withNro.empty() ? withNro : (!any.empty() ? any : sanitizeTitle(release_title));
     }
 
-    // 7. Forwarders: one per owner (a variant or common).
-    std::map<int, std::vector<size_t>> nspByOwner;   // owner draft index, -1 = common
+    // 7. Forwarders: per owner (a variant or common), one per title ID: a release
+    //    with two games (C&C Tiberian Dawn + Red Alert) has two shortcuts.
+    std::map<int, std::map<std::string, std::vector<size_t>>> nspByOwner;   // owner -> title ID -> NSPs
     for (size_t i = 0; i < entries.size(); ++i) {
         const auto& e = entries[i];
         if (e.segs.empty() || !isNspFile(e.lowerFile)) continue;
@@ -1006,25 +1100,34 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
             plan.skipped_files[e.idx] = "NSP too big for a forwarder";
             continue;
         }
+        if (units[e.unit].optional) {
+            plan.skipped_files[e.idx] = "NSP in optional extras";
+            continue;
+        }
         auto uv = unitVariant.find(e.unit);
-        nspByOwner[uv != unitVariant.end() ? uv->second : -1].push_back(i);
+        nspByOwner[uv != unitVariant.end() ? uv->second : -1][titleIdOf(e.segs.back())].push_back(i);
     }
-    std::map<int, int> forwarderOf;   // owner -> file index
-    for (auto& kv : nspByOwner) {
-        size_t best = kv.second.front();
-        for (size_t i : kv.second) {
-            if (forwarderScore(entries[i]) > forwarderScore(entries[best])) best = i;
-        }
-        for (size_t i : kv.second) {
-            if (i != best) plan.skipped_files[entries[i].idx] = "extra NSP (one forwarder per version)";
-        }
-        const Entry& fe = entries[best];
-        forwarderOf[kv.first] = fe.idx;
-        plan.file_destinations[fe.idx] = std::string(TSNX_CACHE_TMP) + "/" + fileNameOf(fe.raw);
-        if (kv.first < 0) {
-            plan.forwarder_nsp_index = fe.idx;
-            plan.forwarder_nsp_name = fileNameOf(fe.raw);
-            plan.forwarder_nsp_size = fe.size;
+    std::map<int, std::vector<int>> forwarderOf;   // owner -> file indices
+    for (auto& owner : nspByOwner) {
+        for (auto& group : owner.second) {
+            size_t best = group.second.front();
+            for (size_t i : group.second) {
+                if (forwarderScore(entries[i]) > forwarderScore(entries[best])) best = i;
+            }
+            for (size_t i : group.second) {
+                if (i != best) plan.skipped_files[entries[i].idx] = "extra NSP with the same title ID";
+            }
+            const Entry& fe = entries[best];
+            forwarderOf[owner.first].push_back(fe.idx);
+            plan.file_destinations[fe.idx] = std::string(TSNX_CACHE_TMP) + "/" + fileNameOf(fe.raw);
+            if (owner.first < 0) {
+                plan.common_forwarder_indices.push_back(fe.idx);
+                if (plan.forwarder_nsp_index < 0) {
+                    plan.forwarder_nsp_index = fe.idx;
+                    plan.forwarder_nsp_name = fileNameOf(fe.raw);
+                    plan.forwarder_nsp_size = fe.size;
+                }
+            }
         }
     }
 
@@ -1048,8 +1151,18 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
             continue;
         }
         auto uv = unitVariant.find(e.unit);
-        const int owner = uv != unitVariant.end() ? uv->second : -1;
+        // owner: variant index, -1 = common, -2 = optional extras
+        const int owner = units[e.unit].optional ? -2 : (uv != unitVariant.end() ? uv->second : -1);
         ownerOf[e.idx] = owner;
+
+        bool docs = false;
+        for (size_t s = 0; s + 1 < e.rel.size(); ++s) {
+            if (isDocsSeg(e.rel[s])) docs = true;
+        }
+        if (docs) {
+            plan.skipped_files[e.idx] = "documentation";
+            continue;
+        }
 
         Mapping m = mapRelPath(e.rel, plan.port_game_name);
         if (m.kind == MapKind::Skip) {
@@ -1126,8 +1239,10 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
         variants[d].title = drafts[d].title;
         auto fw = forwarderOf.find(static_cast<int>(d));
         if (fw != forwarderOf.end()) {
-            variants[d].forwarder_nsp_indices.push_back(fw->second);
-            variants[d].file_indices.push_back(fw->second);
+            for (int idx : fw->second) {
+                variants[d].forwarder_nsp_indices.push_back(idx);
+                variants[d].file_indices.push_back(idx);
+            }
         }
     }
 
@@ -1149,7 +1264,10 @@ PortInstallPlan PortInstallPlanner::analyze(const std::string& release_title,
         if (isNspFile(e.lowerFile)) continue;   // forwarders handled above
         auto o = ownerOf.find(e.idx);
         int owner = o != ownerOf.end() ? o->second : -1;
-        if (owner >= 0) {
+        if (owner == -2) {
+            plan.optional_file_indices.push_back(e.idx);
+            plan.optional_size += e.size;
+        } else if (owner >= 0) {
             variants[owner].file_indices.push_back(e.idx);
         } else if (ruOverlay && !extracted.count(e.idx) &&
                    ruDests.count(lowerName(plan.file_destinations[e.idx]))) {

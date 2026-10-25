@@ -329,25 +329,39 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Buttons Actions
-    btnDownload->registerClickAction([this](brls::View* view) {
-        if (!retro_console_id_.empty() || isHomebrewGame(game_) || isHomebrewPort(game_)) {
+    const bool isPortRelease = retro_console_id_.empty() && (isHomebrewGame(game_) || isHomebrewPort(game_));
+    if (isPortRelease) {
+        // Ports: picking files by hand is the advanced path, kept on X.
+        btnDownload->registerAction("app/detail/select_files_btn"_i18n, brls::ControllerButton::BUTTON_X,
+                                    [this](brls::View*) {
+            brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
+            return true;
+        });
+    }
+
+    btnDownload->registerClickAction([this, isPortRelease](brls::View* view) {
+        // Ports: "Download" starts the installer straight away (file list ->
+        // version -> where files go). "Files only" is offered in that preview.
+        if (isPortRelease) {
+            if (!ui::isPortInstalled(game_)) {
+                ui::startPortInstallFlow(game_);
+                return true;
+            }
+            auto* dialog = new brls::Dialog(cleanTitle(game_.title));
+            dialog->setCancelable(true);
+            dialog->addButton("app/ports/update_btn"_i18n, [this]() { ui::startPortInstallFlow(game_); });
+            dialog->addButton("app/ports/uninstall_btn"_i18n, [this]() { ui::confirmPortUninstall(game_); });
+            dialog->addButton("app/common/cancel"_i18n, []() {});
+            dialog->open();
+            return true;
+        }
+
+        if (!retro_console_id_.empty()) {
             auto openOptionsDialog = [this]() {
                 auto* dialog = new brls::Dialog(cleanTitle(game_.title));
                 dialog->setCancelable(true);
 
-                // 1. Автоматическая установка (только для хоумбрю / портов)
-                if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
-                    const bool installed = ui::isPortInstalled(game_);
-                    // Список файлов -> выбор версии -> что куда ляжет -> очередь.
-                    dialog->addButton(installed ? "app/ports/update_btn"_i18n : "app/detail/auto_install_btn"_i18n,
-                                      [this]() { ui::startPortInstallFlow(game_); });
-                    if (installed) {
-                        dialog->addButton("app/ports/uninstall_btn"_i18n,
-                                          [this]() { ui::confirmPortUninstall(game_); });
-                    }
-                }
-
-                // 2. Скачать полностью
+                // 1. Скачать полностью
                 dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
                     if (!retro_console_id_.empty()) {
                         promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
@@ -364,12 +378,12 @@ void GameDetailView::onContentAvailable() {
                     }
                 });
 
-                // 3. Выбрать файлы
+                // 2. Выбрать файлы
                 dialog->addButton("app/detail/select_files_btn"_i18n, [this]() {
                     brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
                 });
 
-                // 4. Отмена
+                // 3. Отмена
                 dialog->addButton("app/common/cancel"_i18n, []() {});
 
                 dialog->open();

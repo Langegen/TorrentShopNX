@@ -15,9 +15,13 @@
 #include <cmath>
 #include <cstdio>
 #include <unordered_set>
+#include <vector>
 #include "extraction_journal.h"
 
 namespace util {
+
+// stdio buffer per extracted file (one per extracting thread).
+static constexpr size_t kExtractWriteBuffer = 4 * 1024 * 1024;
 
 // 7-Zip 24.07: "7z a -t7z -mf=ARM64 -m0=LZMA2:d=4k -mhc=off probe.7z probe.bin",
 // probe.bin = 64 bytes where byte[i] = (i*7+3) & 0xFF. Folder = [LZMA2, ARM64],
@@ -433,7 +437,13 @@ struct ArchiveStreamReader {
     std::shared_ptr<std::atomic<bool>> pauseToken;
     std::vector<uint8_t> buffer;
     uint64_t totalBytesReadFromStream = 0;
+    uint64_t readUs = 0;   // time spent getting data from the source (waiting for the torrent)
 };
+
+static uint64_t elapsedUs(std::chrono::steady_clock::time_point since) {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - since).count());
+}
 
 static la_ssize_t streamArchiveRead(struct archive* /*a*/, void* client_data, const void** buff) {
     auto* reader = static_cast<ArchiveStreamReader*>(client_data);
@@ -455,6 +465,7 @@ static la_ssize_t streamArchiveRead(struct archive* /*a*/, void* client_data, co
     }
 
     size_t got = 0;
+    const auto readStart = std::chrono::steady_clock::now();
     while (!got && !g_appExiting.load()) {
         if (reader->cancelToken && reader->cancelToken->load()) return ARCHIVE_FATAL;
         if (reader->pauseToken && reader->pauseToken->load()) {
@@ -468,6 +479,7 @@ static la_ssize_t streamArchiveRead(struct archive* /*a*/, void* client_data, co
             continue;
         }
     }
+    reader->readUs += elapsedUs(readStart);
 
     if (got > 0) {
         reader->currentOffset += got;
@@ -541,6 +553,9 @@ static bool extractLibarchiveInternal(
         else safeCreateDirectories(dir);
     };
 
+    // Where the time goes (logged at the end): waiting for data, writing, unpacking.
+    const auto extractStart = std::chrono::steady_clock::now();
+    uint64_t writeUs = 0;
     if (source) {
         util::logLine("archive_utils: extractLibarchiveInternal stream start, size=" + std::to_string(streamArchiveSize) + " -> " + destinationDir);
     } else {
@@ -589,7 +604,8 @@ static bool extractLibarchiveInternal(
         streamReader.currentOffset = 0;
         streamReader.cancelToken = cancelToken;
         streamReader.pauseToken = pauseToken;
-        streamReader.buffer.resize(65536);
+        // 1 MB per read: each read is a call into the torrent engine.
+        streamReader.buffer.resize(1024 * 1024);
 
         archive_read_set_callback_data(a, &streamReader);
         archive_read_set_read_callback(a, streamArchiveRead);
@@ -754,9 +770,16 @@ static bool extractLibarchiveInternal(
                 break;
             }
 
+            // Large write buffer: libarchive hands out small blocks, and writing each
+            // of them straight to the SD card made extraction slower than the download.
+            static thread_local std::vector<char> writeBuf;
+            if (writeBuf.size() < kExtractWriteBuffer) writeBuf.resize(kExtractWriteBuffer);
+            std::setvbuf(outFile, writeBuf.data(), _IOFBF, writeBuf.size());
+
             const void* buff = nullptr;
             size_t size = 0;
             la_int64_t offset = 0;
+            la_int64_t filePos = 0;   // where the next fwrite lands
             uint64_t entryBytesExtracted = 0;
 
             while ((r = archive_read_data_block(a, &buff, &size, &offset)) == ARCHIVE_OK) {
@@ -777,12 +800,19 @@ static bool extractLibarchiveInternal(
                 }
 
                 if (size > 0 && buff != nullptr) {
+                    // Seek only for sparse files: a seek flushes the buffer.
+                    if (offset != filePos) {
 #if defined(_WIN32)
-                    _fseeki64(outFile, offset, SEEK_SET);
+                        _fseeki64(outFile, offset, SEEK_SET);
 #else
-                    fseeko(outFile, static_cast<off_t>(offset), SEEK_SET);
+                        fseeko(outFile, static_cast<off_t>(offset), SEEK_SET);
 #endif
+                        filePos = offset;
+                    }
+                    const auto writeStart = std::chrono::steady_clock::now();
                     size_t written = fwrite(buff, 1, size, outFile);
+                    writeUs += elapsedUs(writeStart);
+                    filePos += static_cast<la_int64_t>(written);
                     if (written != size) {
                         outError = "Ошибка записи на диск: " + fullPath;
                         util::logLine("archive_utils: fwrite failed for " + fullPath);
@@ -800,7 +830,11 @@ static bool extractLibarchiveInternal(
                 }
             }
 
-            fclose(outFile);
+            {
+                const auto closeStart = std::chrono::steady_clock::now();
+                fclose(outFile);   // flushes the rest of the buffer
+                writeUs += elapsedUs(closeStart);
+            }
 
             if (!success) {
                 if (cancelToken && cancelToken->load()) {
@@ -856,6 +890,20 @@ static bool extractLibarchiveInternal(
     archive_read_free(a);
 
     util::logLine("archive_utils: extractLibarchiveInternal finished, success=" + std::to_string(success));
+    {
+        const double totalS = elapsedUs(extractStart) / 1e6;
+        const double readS = streamReader.readUs / 1e6;
+        const double writeS = writeUs / 1e6;
+        const double unpackS = std::max(0.0, totalS - readS - writeS);
+        const double outMB = progress.bytesExtracted / 1048576.0;
+        char buf[256];
+        std::snprintf(buf, sizeof(buf),
+                      "archive_utils: timing total=%.1fs wait_data=%.1fs write=%.1fs unpack=%.1fs out=%.0fMB "
+                      "(%.1f MB/s overall, %.1f MB/s without waiting)",
+                      totalS, readS, writeS, unpackS, outMB, totalS > 0 ? outMB / totalS : 0.0,
+                      (totalS - readS) > 0 ? outMB / (totalS - readS) : 0.0);
+        util::logLine(buf);
+    }
     return success;
 }
 

@@ -14,6 +14,7 @@
 #include "../catalog/game_stats_manager.h"
 #include "../catalog/release_picker.hpp"
 #include "../catalog/titledb.h"
+#include "../installer/installed_ports.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <cstdlib>
 #include "../installer/ncz_parser.h"
@@ -782,10 +783,15 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     std::vector<LibraryItem> ignoredItems;
     std::vector<LibraryItem> upToDateItems;
     std::vector<LibraryItem> otherItems;
+    std::vector<LibraryItem> portItems;
 
     auto& ignoredMgr = catalog::IgnoredUpdatesManager::instance();
 
     for (auto item : rawItems_) {
+        if (item.isPort) {
+            portItems.push_back(item);
+            continue;
+        }
         item.updateIgnored = ignoredMgr.isIgnored(item.titleId);
         if (item.updateIgnored) {
             item.status = GameUpdateStatus::UpdateIgnored;
@@ -814,6 +820,7 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     sortAlpha(upToDateItems);
     sortAlpha(otherItems);
     sortAlpha(ignoredItems);
+    sortAlpha(portItems);
 
     if (!modsUpdates.empty()) {
         std::string title = brls::getStr("app/library/section_mods_updates", std::to_string(modsUpdates.size()));
@@ -826,6 +833,10 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     if (!upToDateItems.empty()) {
         std::string title = brls::getStr("app/library/section_uptodate", std::to_string(upToDateItems.size()));
         sections_.push_back({title, std::move(upToDateItems)});
+    }
+    if (!portItems.empty()) {
+        std::string title = brls::getStr("app/ports/library_section", std::to_string(portItems.size()));
+        sections_.push_back({title, std::move(portItems)});
     }
     if (!otherItems.empty()) {
         std::string title = brls::getStr("app/library/section_other", std::to_string(otherItems.size()));
@@ -1549,6 +1560,41 @@ void LibraryView::scanForUpdates() {
         
         if (cancelToken && *cancelToken) return;
 
+        // Ports installed by the auto-installer get their own section. Their
+        // shortcuts (forwarder NSPs) are installed apps too: not listed twice.
+        {
+            std::unordered_set<uint64_t> forwarderTids;
+            for (const auto& p : installer::InstalledPorts::instance().list()) {
+                LibraryItem it;
+                it.isPort = true;
+                it.portKey = p.key;
+                it.portVariant = p.variant_title;
+                it.portInstalledAt = p.installed_at;
+                it.portForwarders = p.forwarder_tids;
+                it.titleId = p.forwarder_tids.empty() ? 0 : p.forwarder_tids.front();
+                const Game* g = nullptr;
+                if (catalog && !p.topic_id.empty()) {
+                    for (const auto& c : *catalog) {
+                        if (c.topic_id == p.topic_id) { g = &c; break; }
+                    }
+                }
+                if (g) {
+                    it.game = *g;
+                } else {
+                    it.game.title = p.title;
+                    it.game.topic_id = p.topic_id;
+                }
+                size_t existing = 0;
+                it.totalSizeBytes = installer::InstalledPorts::sizeOnDisk(p, &existing);
+                it.portFiles = existing;
+                for (uint64_t tid : p.forwarder_tids) forwarderTids.insert(tid);
+                displayItems.push_back(std::move(it));
+            }
+            displayItems.erase(std::remove_if(displayItems.begin(), displayItems.end(), [&](const LibraryItem& it) {
+                return !it.isPort && forwarderTids.count(it.titleId) > 0;
+            }), displayItems.end());
+        }
+
         // Sync with UI thread
         brls::sync([this, cancelToken, items = std::move(displayItems)]() mutable {
             if (cancelToken && *cancelToken) return;
@@ -1605,6 +1651,50 @@ void LibraryView::showGameActionMenu(const LibraryItem& item, int currentSection
 
     dialog->addButton("app/common/cancel"_i18n, []() {});
     dialog->open();
+}
+
+void LibraryView::showPortActionMenu(const LibraryItem& item, int currentSection, int currentRow) {
+    const std::string displayName = cleanTitle(item.game.title);
+    auto* box = new brls::Box(brls::Axis::COLUMN);
+    box->setWidth(640.0f);
+    box->setPadding(30, 36, 24, 36);
+    auto* label = new brls::Label();
+    label->setAutoAnimate(false);
+    label->setSingleLine(false);
+    label->setIsWrapping(true);
+    label->setFontSize(20);
+    label->setText(brls::getStr("app/ports/uninstall_confirm", displayName, std::to_string(item.portFiles)));
+    box->addView(label);
+    brls::Dialog* dialog = new brls::Dialog(box);
+    dialog->setCancelable(true);
+    dialog->addButton("app/ports/uninstall_btn"_i18n, [this, item, currentSection, currentRow]() {
+        uninstallPort(item, currentSection, currentRow);
+    });
+    dialog->addButton("app/common/cancel"_i18n, []() {});
+    dialog->open();
+}
+
+void LibraryView::uninstallPort(const LibraryItem& item, int currentSection, int currentRow) {
+    auto cancelToken = cancelToken_;
+    const std::string key = item.portKey;
+    const std::string displayName = cleanTitle(item.game.title);
+    brls::async([this, key, displayName, currentSection, currentRow, cancelToken]() {
+        size_t removed = 0;
+        std::string err;
+        bool ok = installer::InstalledPorts::instance().uninstall(key, removed, err);
+        brls::sync([this, key, displayName, currentSection, currentRow, cancelToken, ok, removed, err]() {
+            if (cancelToken && *cancelToken) return;
+            if (!ok) {
+                brls::Application::notify(err);
+                return;
+            }
+            rawItems_.erase(std::remove_if(rawItems_.begin(), rawItems_.end(), [&](const LibraryItem& it) {
+                return it.isPort && it.portKey == key;
+            }), rawItems_.end());
+            rebuildSections(currentSection, currentRow);
+            brls::Application::notify(displayName + ": " + brls::getStr("app/ports/uninstall_done", std::to_string(removed)));
+        });
+    });
 }
 
 void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods) {
@@ -2010,7 +2100,60 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
     try {
         std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
         cell->title->setText(displayName);
-        
+
+        if (item.isPort) {
+            // Homebrew port: files on the SD card plus its shortcuts.
+            std::string line = brls::getStr("app/ports/library_line", std::to_string(item.portFiles));
+            if (item.totalSizeBytes > 0) line += " • " + formatBytes(item.totalSizeBytes);
+            cell->titleId->setText(line);
+            if (cell->patchBadgeBox) cell->patchBadgeBox->setVisibility(brls::Visibility::GONE);
+            if (cell->dlcBadgeBox) cell->dlcBadgeBox->setVisibility(brls::Visibility::GONE);
+            if (cell->modBadgeBox) cell->modBadgeBox->setVisibility(brls::Visibility::GONE);
+            cell->currentVersion->setText(item.portVariant);
+            std::string when;
+            if (item.portInstalledAt > 0) {
+                char buf[32];
+                std::tm* t = std::localtime(&item.portInstalledAt);
+                if (t && std::strftime(buf, sizeof(buf), "%d.%m.%Y", t) > 0) when = buf;
+            }
+            cell->latestVersion->setText(when.empty() ? "" : brls::getStr("app/ports/library_installed_on", when));
+            cell->statusBadge->setText("app/ports/library_badge"_i18n);
+            cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
+            cell->statusBox->setBackgroundColor(nvgRGB(33, 150, 243)); // Blue
+
+            std::string localIconPath;
+#ifdef __SWITCH__
+            if (item.titleId != 0) {
+                char iconPath[128];
+                std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
+                struct stat st;
+                if (stat(iconPath, &st) == 0 && st.st_size > 0) localIconPath = iconPath;
+            }
+#endif
+            if (!localIconPath.empty()) {
+                cell->cover->setImageFromFile(localIconPath);
+            } else if (!item.game.cover.empty()) {
+                setImageFromHTTPS(cell->cover, item.game.cover, cell->imageToken, "romfs:/img/demo_icon.jpg", false, "");
+            } else {
+                cell->cover->setImageFromRes("img/demo_icon.jpg");
+            }
+
+            const int currentSection = static_cast<int>(index.section);
+            const int currentRow = index.row;
+            cell->registerClickAction([item](brls::View*) {
+                if (!item.game.magnet.empty()) brls::Application::pushActivity(new GameDetailView(item.game));
+                return true;
+            });
+            // No update switch for ports: keep the hint bar clean.
+            cell->registerAction("", brls::ControllerButton::BUTTON_X, [](brls::View*) { return false; }, true);
+            cell->registerAction("app/ports/uninstall_btn"_i18n, brls::ControllerButton::BUTTON_Y,
+                [parent = parent_, item, currentSection, currentRow](brls::View*) {
+                    parent->showPortActionMenu(item, currentSection, currentRow);
+                    return true;
+                });
+            return cell;
+        }
+
         char tidBuf[32];
         sprintf(tidBuf, "%016llX", (unsigned long long)item.titleId);
         std::string tidStrUpper(tidBuf);

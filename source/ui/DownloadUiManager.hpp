@@ -27,7 +27,8 @@ public:
                      unsigned long long initial_file_size = 0, const std::string& retro_target_mode = "");
     
     // Adds a homebrew port automatic installation to the queue
-    void addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index);
+    void addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index,
+                        bool with_optional = false);
     
     // Checks if game/torrent is already active in downloads queue
     bool hasActiveDownload(const std::string& topic_id, const std::string& magnet = "", int forced_file_index = -1) const;

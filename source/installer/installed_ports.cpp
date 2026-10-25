@@ -9,10 +9,13 @@
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <sys/stat.h>
 #include <borealis/extern/nlohmann/json.hpp>
 
 #ifdef __SWITCH__
 #include <switch.h>
+#include <mutex>
+extern std::recursive_mutex g_switch_service_mutex;
 #endif
 
 namespace installer {
@@ -71,6 +74,7 @@ bool InstalledPorts::load(const std::string& key, InstalledPort& out) const {
     out.topic_id = j.value("topic_id", "");
     out.title = j.value("title", "");
     out.variant_id = j.value("variant", "");
+    out.variant_title = j.value("variant_title", "");
     out.game = j.value("game", "");
     out.recipe_id = j.value("recipe", "");
     out.installed_at = static_cast<std::time_t>(j.value("installed_at", 0LL));
@@ -85,6 +89,33 @@ bool InstalledPorts::load(const std::string& key, InstalledPort& out) const {
         }
     }
     return true;
+}
+
+std::vector<InstalledPort> InstalledPorts::list() const {
+    std::vector<InstalledPort> out;
+    std::error_code ec;
+    const std::string dir = std::string(TSNX_DATA_DIR) + "/ports";
+    if (!std::filesystem::is_directory(dir, ec)) return out;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+        if (e.path().extension() != ".json") continue;
+        InstalledPort p;
+        if (load(e.path().stem().string(), p)) out.push_back(std::move(p));
+    }
+    return out;
+}
+
+uint64_t InstalledPorts::sizeOnDisk(const InstalledPort& port, size_t* existing_files) {
+    uint64_t total = 0;
+    size_t count = 0;
+    for (const auto& f : port.files) {
+        struct stat st;
+        if (stat(f.c_str(), &st) == 0) {
+            total += static_cast<uint64_t>(st.st_size);
+            ++count;
+        }
+    }
+    if (existing_files) *existing_files = count;
+    return total;
 }
 
 bool InstalledPorts::isInstalled(const std::string& topic_id, const std::string& title) {
@@ -133,6 +164,7 @@ size_t InstalledPorts::saveReplacing(const InstalledPort& port) {
     j["topic_id"] = fresh.topic_id;
     j["title"] = fresh.title;
     j["variant"] = fresh.variant_id;
+    j["variant_title"] = fresh.variant_title;
     j["game"] = fresh.game;
     j["recipe"] = fresh.recipe_id;
     j["installed_at"] = static_cast<long long>(fresh.installed_at ? fresh.installed_at : std::time(nullptr));
@@ -216,9 +248,19 @@ bool InstalledPorts::uninstall(const std::string& key, size_t& removed_files, st
     }
     removed_files = removeFilesAndEmptyDirs(withoutFilesOfOtherPorts(key, port.files));
 #ifdef __SWITCH__
-    for (uint64_t tid : port.forwarder_tids) {
-        Result rc = nsDeleteApplicationCompletely(tid);
-        util::logLine("installed_ports: delete forwarder " + std::to_string(tid) + " rc=" + std::to_string(rc));
+    if (!port.forwarder_tids.empty()) {
+        // ns has to be opened for the call (rc 58369 = closed service), like the library does.
+        std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+        Result nsRc = nsInitialize();
+        if (R_SUCCEEDED(nsRc)) {
+            for (uint64_t tid : port.forwarder_tids) {
+                Result rc = nsDeleteApplicationCompletely(tid);
+                util::logLine("installed_ports: delete forwarder " + std::to_string(tid) + " rc=" + std::to_string(rc));
+            }
+            nsExit();
+        } else {
+            util::logLine("installed_ports: nsInitialize failed rc=" + std::to_string(nsRc));
+        }
     }
 #endif
     std::error_code ec;

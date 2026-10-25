@@ -1170,6 +1170,7 @@ static void portInstallWorker(datasource::IDataSource* source,
                               const std::string& topic_id,
                               std::shared_ptr<installer::PortInstallPlan> plan,
                               int variant_index,
+                              bool with_optional,
                               const std::shared_ptr<std::atomic<bool>>& cancel,
                               const std::shared_ptr<std::atomic<bool>>& pause,
                               const std::shared_ptr<PortInstallProgressState>& st,
@@ -1311,7 +1312,8 @@ static void portInstallWorker(datasource::IDataSource* source,
         }
     }
 
-    std::vector<int> target_indices = plan->getFilesForVariant(variant_index);
+    std::vector<int> target_indices = plan->getFilesForVariant(variant_index, with_optional);
+    if (with_optional) util::logLine("port_installer: with optional extras (" + std::to_string(plan->optional_file_indices.size()) + " files)");
     if (target_indices.empty()) {
         st->failed = true;
         st->error = "app/ports/error_no_files"_i18n;
@@ -1319,7 +1321,7 @@ static void portInstallWorker(datasource::IDataSource* source,
     }
 
     // Refuse before downloading anything if an archive cannot be streamed.
-    auto archives = plan->getArchivesForVariant(variant_index);
+    auto archives = plan->getArchivesForVariant(variant_index, with_optional);
     for (const auto& a : archives) {
         if (!a.unsupported_reason.empty()) {
             st->failed = true;
@@ -1346,7 +1348,7 @@ static void portInstallWorker(datasource::IDataSource* source,
     }
 
     // Порядок: архивы, затем отдельные файлы поверх них (общие, потом файлы версии), затем ярлыки.
-    const std::vector<int> loose_indices = plan->getLooseFilesForVariant(variant_index);
+    const std::vector<int> loose_indices = plan->getLooseFilesForVariant(variant_index, with_optional);
     const std::vector<int> forwarder_indices = plan->forwardersForVariant(variant_index);
 
     int total_stages = 0;
@@ -1906,6 +1908,8 @@ static void portInstallWorker(datasource::IDataSource* source,
         record.title = release_title;
         record.key = installer::InstalledPorts::keyFor(topic_id, release_title);
         record.variant_id = variant.id;
+        record.variant_title = variant.title_key.empty() ? variant.title
+            : (variant.title_arg.empty() ? brls::getStr(variant.title_key) : brls::getStr(variant.title_key, variant.title_arg));
         record.game = plan->port_game_name;
         record.recipe_id = plan->recipe_id;
         record.installed_at = std::time(nullptr);
@@ -2135,7 +2139,8 @@ size_t DownloadManager::addToQueue(const std::string& title,
 size_t DownloadManager::addPortInstall(const std::string& title,
                                        const std::string& magnet,
                                        std::shared_ptr<installer::PortInstallPlan> plan,
-                                       int variant_index) {
+                                       int variant_index,
+                                       bool with_optional) {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     DownloadItem item;
     item.title = title;
@@ -2143,8 +2148,9 @@ size_t DownloadManager::addPortInstall(const std::string& title,
     item.is_port_auto_install = true;
     item.port_plan = plan;
     item.selected_variant_index = variant_index;
+    item.port_include_optional = with_optional;
     if (plan) {
-        item.selected_files = plan->getFilesForVariant(variant_index);
+        item.selected_files = plan->getFilesForVariant(variant_index, with_optional);
     }
     item.state = DownloadState::Queued;
     item.install_stage_label = "app/ports/stage_queued"_i18n;
@@ -3000,12 +3006,13 @@ void DownloadManager::handlePortAutoInstall(size_t index,
         const std::string topic_id = item.topic_id;
         auto plan = item.port_plan;
         const int variant_idx = item.selected_variant_index;
+        const bool with_optional = item.port_include_optional;
         if (!item.port_resume) item.port_resume = std::make_shared<PortInstallResume>();
         auto resume = item.port_resume;
 
         item.port_install_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, topic_id, plan, variant_idx, cancel, pause, st, resume]() {
-                portInstallWorker(source, hash, magnet, title, topic_id, plan, variant_idx, cancel, pause, st, resume);
+            std::async(std::launch::async, [source, hash, magnet, title, topic_id, plan, variant_idx, with_optional, cancel, pause, st, resume]() {
+                portInstallWorker(source, hash, magnet, title, topic_id, plan, variant_idx, with_optional, cancel, pause, st, resume);
             }));
         item.port_install_dispatched = true;
         util::logLine("download: port auto install started hash=" + hash +
@@ -3033,11 +3040,11 @@ void DownloadManager::handlePortAutoInstall(size_t index,
             const int rv = st->resolved_variant.load();
             if (rv >= 0 && rv != item.selected_variant_index) {
                 item.selected_variant_index = rv;
-                if (item.port_plan) item.selected_files = item.port_plan->getFilesForVariant(rv);
+                if (item.port_plan) item.selected_files = item.port_plan->getFilesForVariant(rv, item.port_include_optional);
             }
             if (!item.port_plan && st->resolved_plan) {
                 item.port_plan = st->resolved_plan;
-                item.selected_files = item.port_plan->getFilesForVariant(item.selected_variant_index);
+                item.selected_files = item.port_plan->getFilesForVariant(item.selected_variant_index, item.port_include_optional);
             }
             if (!st->stage_label.empty()) {
                 item.install_stage_label = st->stage_label;

@@ -19,6 +19,7 @@ struct InstalledPort {
     std::string topic_id;
     std::string title;
     std::string variant_id;
+    std::string variant_title;   // as shown when installing ("Русская версия (RUS)")
     std::string game;
     std::string recipe_id;
     std::time_t installed_at = 0;
@@ -33,6 +34,10 @@ public:
     static std::string keyFor(const std::string& topic_id, const std::string& title);
 
     bool load(const std::string& key, InstalledPort& out) const;
+    // Every installed port (reads all manifests; call off the UI thread).
+    std::vector<InstalledPort> list() const;
+    // Size of the port's files still on the SD card (stat of each file).
+    static uint64_t sizeOnDisk(const InstalledPort& port, size_t* existing_files = nullptr);
     // From an in-memory list of manifests (read once): cheap enough for list rendering.
     bool isInstalled(const std::string& topic_id, const std::string& title);
 
