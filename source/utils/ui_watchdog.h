@@ -3,7 +3,7 @@
 // UI stall watchdog.
 //
 // The UI thread calls beat() once per frame. A separate thread watches the
-// beat; when a frame takes longer than ~0.5 s it pauses the UI thread for a
+// beat; when a frame takes longer than ~70 ms it pauses the UI thread for a
 // few microseconds, copies its registers and the top of its stack, resumes it
 // and writes one "[uistall]" line per sample to log.txt:
 //

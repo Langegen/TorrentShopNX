@@ -678,8 +678,6 @@ void Label::onLayout()
         return;
     }
 
-    brls::Logger::info("Label \"{}\" onLayout: width={}, requiredWidth={}, animated={}, animating={}", this->fullText, width, this->requiredWidth, this->animated, this->animating);
-
     float effectiveFontSize = getEffectiveFontSize(this->fontSize, this->fullText);
 
     auto vg = Application::getNVGContext();

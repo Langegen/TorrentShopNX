@@ -17,10 +17,11 @@ extern char __rodata_start;   // switch.ld: end of executable code
 namespace uiwd {
 namespace {
 
-constexpr u64 kStallNs      = 500ULL * 1000 * 1000;   // frame gap that counts as a stall
-constexpr u64 kSampleNs     = 500ULL * 1000 * 1000;   // between samples of one stall
-constexpr int kMaxSamples   = 8;                      // per stall
-constexpr u64 kPollNs       = 100ULL * 1000 * 1000;
+constexpr u64 kStallNs      = 70ULL * 1000 * 1000;    // frame gap that counts as a stall (a visible hitch)
+constexpr u64 kSampleNs     = 40ULL * 1000 * 1000;    // between samples of one stall
+constexpr int kMaxSamples   = 4;                      // per stall
+constexpr int kMaxLines     = 600;                    // per session, keeps log.txt small
+constexpr u64 kPollNs       = 10ULL * 1000 * 1000;
 constexpr int kStackWords   = 1024;                   // 8 KB of stack scanned
 constexpr int kMaxFrames    = 14;
 
@@ -106,6 +107,7 @@ void threadMain(void*) {
     u64 stall_beat = 0;      // beat value the current stall started from
     int samples = 0;
     u64 next_sample = 0;
+    int lines = 0;
     while (g_running.load(std::memory_order_relaxed)) {
         svcSleepThread(kPollNs);
         u64 beat = g_last_beat_ns.load(std::memory_order_relaxed);
@@ -113,10 +115,14 @@ void threadMain(void*) {
         u64 now = nowNs();
         u64 gap = now > beat ? now - beat : 0;
         if (gap < kStallNs || gap > 60ULL * 1000 * 1000 * 1000) {
-            if (stall_beat != 0 && samples > 0) {
+            if (stall_beat != 0 && samples > 0 && lines < kMaxLines) {
+                // The frame that stalled ended at the new beat
+                u64 total_ms = beat > stall_beat ? (beat - stall_beat) / 1000000ULL : 0;
                 char buf[96];
-                std::snprintf(buf, sizeof(buf), "[uistall] end, %d samples", samples);
+                std::snprintf(buf, sizeof(buf), "[uistall] end, %d samples, frame=%llums", samples,
+                              (unsigned long long)total_ms);
                 util::logLine(buf);
+                lines++;
             }
             stall_beat = 0;
             samples = 0;
@@ -129,9 +135,10 @@ void threadMain(void*) {
             samples = 0;
             next_sample = now;
         }
-        if (samples < kMaxSamples && now >= next_sample) {
+        if (samples < kMaxSamples && now >= next_sample && lines < kMaxLines) {
             Sample s = sampleUi();
             logSample(gap / 1000000ULL, samples, s);
+            lines++;
             samples++;
             next_sample = now + kSampleNs;
         }

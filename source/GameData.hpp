@@ -1212,20 +1212,20 @@ inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_second
         std::time_t now = std::time(nullptr);
         if (now <= 0 || !std::filesystem::exists(dir, ec)) return;
         int removed = 0;
-        int seen = 0;
         for (const auto& entry : std::filesystem::directory_iterator(
                  dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
             if (g_cleanupCancelled.load()) break;
             std::error_code ec2;
             // One stat per file (is_regular_file() was a second one). Every
             // call is an fs IPC; fs, vi and bsd share the system core, and a
-            // burst of thousands of them stalled the UI's frame present
-            // ([uistall] in eglSwapBuffers during this sweep).
+            // burst of them stalls the UI's frame present ([uistall] in
+            // eglSwapBuffers: 100-250 ms frames for the whole sweep even at
+            // 5 ms per 32 files). A pause after every file keeps it to
+            // ~200 IPCs/s: slower, but this runs in the background once a day.
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
             struct stat st;
             if (stat(entry.path().string().c_str(), &st) != 0) continue;
             if (!S_ISREG(st.st_mode)) continue;
-            if ((++seen & 31) == 0)   // 5 ms per 32 files
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
             if ((now - st.st_mtime) > max_age_seconds) {
                 std::filesystem::remove(entry.path(), ec2);
                 if (!ec2) ++removed;
