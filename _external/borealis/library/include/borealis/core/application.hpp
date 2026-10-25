@@ -200,6 +200,25 @@ class Application
     static bool isInputBlocks();
 
     /**
+     * True while a held d-pad / stick direction keeps auto-repeating
+     * navigation. Scrolling frames use it to switch to constant-speed
+     * scrolling instead of a start-stop ease on every step.
+     */
+    static bool isNavigationRepeating()
+    {
+        return navigationRepeating;
+    }
+
+    /**
+     * Current auto-repeat interval of held navigation, in milliseconds
+     * (it gets shorter the longer the direction is held).
+     */
+    static float getNavigationRepeatInterval()
+    {
+        return navigationRepeatIntervalMs;
+    }
+
+    /**
      * Interceptor called at the beginning of processInput().
      * If the interceptor returns true, all inputs in this frame are consumed/blocked:
      * rawTouch is cleared, rawMouse is cleared, and controller buttons are not processed.
@@ -453,6 +472,16 @@ class Application
     inline static void updateFPS();
 
     inline static unsigned blockInputsTokens = 0; // any value > 0 means inputs are blocked
+
+    // Held navigation auto-repeat state (see isNavigationRepeating)
+    inline static bool navigationRepeating           = false;
+    inline static float navigationRepeatIntervalMs   = 0.0f;
+    inline static Time buttonPressStart[_BUTTON_MAX] = {};
+
+    // One button press that arrived while inputs were blocked (screen
+    // transition); replayed when the block ends so the press is not lost.
+    inline static int bufferedButton      = -1;
+    inline static Time bufferedButtonTime = 0;
     inline static bool muteSounds            = false;
     inline static InputInterceptor inputInterceptor = nullptr;
 

@@ -11,6 +11,7 @@
 #include "../datasource/custom_engine_client.h"
 #include "../net/http_client.h"
 #include "../utils/log.h"
+#include "../utils/thread_utils.h"
 #include "../utils/perf_stats.h"
 #include "../utils/switch_utils.h"
 #include "../engine/thread_cfg.h"
@@ -3757,9 +3758,9 @@ void DownloadManager::startLocalProbe(DownloadItem& item) {
     item.probe_retry_at = std::chrono::steady_clock::time_point{};
     has_open_pending_.store(true);   // progress loop polls every 100 ms meanwhile
     util::logLine("download: background probeFiles started hash=" + item.torrent_hash);
-    // Detached: the job is shared, so dropping the item never waits for it.
+    // Background: the job is shared, so dropping the item never waits for it.
     // CustomEngineClient::shutdown() waits for an in-flight probe itself.
-    std::thread([job, hash = item.torrent_hash, magnet = item.magnet]() {
+    bool started = util::runInBackground([job, hash = item.torrent_hash, magnet = item.magnet]() {
         tsnx_thread_pin_self(TSNX_CORE_NET, TSNX_PRIO_NET_BG);
         std::vector<datasource::CustomEngineFileInfo> files;
         std::string err;
@@ -3773,7 +3774,13 @@ void DownloadManager::startLocalProbe(DownloadItem& item) {
         job->error = std::move(err);
         job->ok = ok;
         job->done.store(true, std::memory_order_release);
-    }).detach();
+    }, "probe");
+    if (!started) {
+        // Finish the job as failed so the progress loop does not wait forever
+        job->error = "could not start probe thread";
+        job->ok = false;
+        job->done.store(true, std::memory_order_release);
+    }
 }
 
 bool DownloadManager::startHybridInstall(size_t index) {
@@ -4269,14 +4276,14 @@ bool DownloadManager::deleteFromQueue(size_t index) {
     if (failed_port && resume) {
         // A failed install left files for "Retry"; removing the item removes them
         // (in the background: this runs on the UI thread).
-        std::thread([resume]() {
+        util::runInBackground([resume]() {
             std::lock_guard<std::mutex> lk(resume->mtx);
             if (resume->journal.fileCount() > 0 || resume->journal.dirCount() > 0) {
                 util::logLine("download: removing " + std::to_string(resume->journal.fileCount()) +
                               " files of a failed port install");
                 resume->journal.rollback();
             }
-        }).detach();
+        }, "port-rollback");
     }
     return true;
 }

@@ -12,7 +12,9 @@
 #include <switch.h>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <array>
+#include "../engine/thread_cfg.h"
 extern std::recursive_mutex g_switch_service_mutex;
 #endif
 
@@ -157,18 +159,13 @@ static void ensureVibrationInit() {
     s_vibe_initialized = true;
 }
 
-static void sendNativeVibration(float amp_low, float freq_low, float amp_high, float freq_high, long duration_ms) {
+// Sends one vibration value to every connected player-1 controller (HID IPC).
+static void sendVibrationValue(const HidVibrationValue& val) {
     ensureVibrationInit();
 
     std::array<HidVibrationDeviceHandle, 4> active_handles{};
     std::array<HidVibrationValue, 4> active_vals{};
     int count = 0;
-
-    HidVibrationValue val;
-    val.amp_low   = amp_low;
-    val.freq_low  = freq_low;
-    val.amp_high  = amp_high;
-    val.freq_high = freq_high;
 
     u32 handheld_style = hidGetNpadStyleSet(HidNpadIdType_Handheld);
     if (handheld_style & HidNpadStyleTag_NpadHandheld) {
@@ -209,12 +206,73 @@ static void sendNativeVibration(float amp_low, float freq_low, float amp_high, f
     }
 
     hidSendVibrationValues(active_handles.data(), active_vals.data(), count);
+}
 
-    brls::delay(duration_ms, [active_handles, count]() {
-        HidVibrationValue zero_val = {0.0f, 160.0f, 0.0f, 320.0f};
-        std::array<HidVibrationValue, 4> zero_vals{zero_val, zero_val, zero_val, zero_val};
-        hidSendVibrationValues(active_handles.data(), zero_vals.data(), count);
-    });
+// Haptic pulses run on their own thread: the HID calls (and the wait before
+// the stop value) never hold up the UI thread on a focus change.
+struct HapticPulse {
+    HidVibrationValue value;
+    long duration_ms;
+};
+
+std::mutex s_haptic_mutex;
+std::condition_variable s_haptic_cv;
+HapticPulse s_haptic_pending{};
+bool s_haptic_has_pending = false;
+bool s_haptic_thread_started = false;
+bool s_haptic_thread_ok = false;
+
+static void hapticThreadMain() {
+    const HidVibrationValue zero_val = {0.0f, 160.0f, 0.0f, 320.0f};
+    std::unique_lock<std::mutex> lock(s_haptic_mutex);
+    while (!g_appExiting.load()) {
+        s_haptic_cv.wait_for(lock, std::chrono::milliseconds(500), [] { return s_haptic_has_pending || g_appExiting.load(); });
+        if (!s_haptic_has_pending) continue;
+        if (g_appExiting.load()) break;
+
+        HapticPulse pulse = s_haptic_pending;
+        s_haptic_has_pending = false;
+
+        lock.unlock();
+        sendVibrationValue(pulse.value);
+        lock.lock();
+
+        // Hold the pulse; a newer one replaces it without a stop in between
+        s_haptic_cv.wait_for(lock, std::chrono::milliseconds(pulse.duration_ms), [] { return s_haptic_has_pending || g_appExiting.load(); });
+        if (s_haptic_has_pending || g_appExiting.load()) continue;
+
+        lock.unlock();
+        sendVibrationValue(zero_val);
+        lock.lock();
+    }
+}
+
+static void sendNativeVibration(float amp_low, float freq_low, float amp_high, float freq_high, long duration_ms) {
+    if (g_appExiting.load()) return;
+
+    std::lock_guard<std::mutex> lock(s_haptic_mutex);
+    if (!s_haptic_thread_started) {
+        // A native libnx thread, not std::thread: std::thread::detach() can
+        // throw here, and the joinable temporary then calls std::terminate.
+        static Thread s_haptic_thread;
+        s_haptic_thread_started = true;   // one attempt only
+        if (R_FAILED(threadCreate(&s_haptic_thread, [](void*) { hapticThreadMain(); }, nullptr, nullptr, 0x4000,
+                                  TSNX_THREAD_ARGS(TSNX_CORE_WORK, 0x2C))) ||
+            R_FAILED(threadStart(&s_haptic_thread))) {
+            s_haptic_thread_ok = false;
+            util::logLine("switch_utils: haptic thread create failed, rumble disabled");
+            return;
+        }
+        s_haptic_thread_ok = true;
+    }
+    if (!s_haptic_thread_ok) return;   // no thread: skip haptics, never block the UI
+    s_haptic_pending.value.amp_low   = amp_low;
+    s_haptic_pending.value.freq_low  = freq_low;
+    s_haptic_pending.value.amp_high  = amp_high;
+    s_haptic_pending.value.freq_high = freq_high;
+    s_haptic_pending.duration_ms     = duration_ms;
+    s_haptic_has_pending = true;
+    s_haptic_cv.notify_one();
 }
 } // namespace
 #endif

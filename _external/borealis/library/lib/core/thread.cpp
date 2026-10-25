@@ -19,7 +19,12 @@
 #include <borealis/core/logger.hpp>
 #include <borealis/core/thread.hpp>
 #include <borealis/core/thread_pool.hpp>
+#include <chrono>
 #include <exception>
+#include <iterator>
+
+// Main-thread time per frame for brls::sync tasks (see performSyncTasks)
+#define SYNC_TASKS_BUDGET_US 5000
 
 #ifdef BOREALIS_USE_STD_THREAD
 #include <thread>
@@ -168,20 +173,36 @@ void Threading::cancelDelay(size_t iter)
 void Threading::performSyncTasks()
 {
     m_sync_mutex.lock();
-    auto local = m_sync_functions;
+    auto local = std::move(m_sync_functions);
     m_sync_functions.clear();
     m_sync_mutex.unlock();
 
-    for (auto& f : local)
+    // Time budget per frame: a burst of tasks (a screenful of covers turning
+    // into GPU textures at once) is spread over the next frames instead of
+    // stretching one frame. Order is kept; at least one task always runs.
+    const auto budgetStart = std::chrono::steady_clock::now();
+    size_t done            = 0;
+    for (; done < local.size(); done++)
     {
+        if (done > 0 && std::chrono::steady_clock::now() - budgetStart > std::chrono::microseconds(SYNC_TASKS_BUDGET_US))
+            break;
+
         try
         {
-            f();
+            local[done]();
         }
         catch (std::exception& e)
         {
             brls::Logger::error("error: performSyncTasks: {}", e.what());
         }
+    }
+
+    if (done < local.size())
+    {
+        std::lock_guard<std::mutex> guard(m_sync_mutex);
+        m_sync_functions.insert(m_sync_functions.begin(),
+            std::make_move_iterator(local.begin() + done),
+            std::make_move_iterator(local.end()));
     }
 
     m_delay_mutex.lock();

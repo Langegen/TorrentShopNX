@@ -395,6 +395,8 @@ int main(int argc, char** argv) {
             }
         }
         util::logLine("FATAL: " + err);
+        uiwd::logCurrentStack("terminate");
+        util::logFlush();
         std::abort();
     });
 
@@ -487,6 +489,8 @@ int main(int argc, char** argv) {
 
     // Snappy focus highlight and smooth scrolling transitions (down from sluggish 200ms default)
     brls::getStyle().addMetric("brls/animations/highlight", 100.0f);
+    // Screen push/pop fade: inputs wait for it, so keep it short (default 200ms)
+    brls::getStyle().addMetric("brls/animations/show", 140.0f);
 
     // Exit directly to Nintendo Switch Home Menu instead of Homebrew Menu (hbmenu)
     brls::Application::getPlatform()->exitToHomeMode(true);
@@ -592,12 +596,15 @@ int main(int argc, char** argv) {
     #endif
 
         // Load database games via fast binary cache (or fallback to JSON)
+        util::logLine("main: loading catalog cache");
         auto loadedGames = loadGamesCached(getCatalogPath(), getCatalogBinPath());
         setCatalogSnapshot(std::move(loadedGames));
         util::logLine("main: initially loaded g_games count=" + std::to_string(getCatalogSnapshot()->size()) + " (path=" + getCatalogPath() + ")");
 
         // Logger configuration
-        brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
+        // INFO: debug lines (every focus change, every recycled cell) cost
+        // formatting time on the UI thread and nothing reads them.
+        brls::Logger::setLogLevel(brls::LogLevel::LOG_INFO);
 
         // Bootstrap activity
 #ifndef __SWITCH__

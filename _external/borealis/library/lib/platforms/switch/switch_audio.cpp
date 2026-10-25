@@ -15,6 +15,10 @@
     limitations under the License.
 */
 
+// The old libpulsar player below no longer matches the stub header
+// (switch_audio.hpp). TorrentShopNX implements SwitchAudioPlayer in
+// source/utils/switch_audio.cpp, so this file is compiled out.
+#if 0
 #include <borealis/core/logger.hpp>
 #include <borealis/platforms/switch/switch_audio.hpp>
 
@@ -165,3 +169,4 @@ SwitchAudioPlayer::~SwitchAudioPlayer()
 }
 
 } // namespace brls
+#endif

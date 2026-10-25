@@ -120,10 +120,17 @@ class ScrollingFrame : public Box
 
     Animatable contentOffsetY = 0.0f;
 
+    // Held d-pad scrolling: constant speed while a direction is held,
+    // then a speed-matched ease to a stop once it is released
+    bool heldScroll        = false;
+    float heldScrollTarget = 0.0f;
+    float heldScrollSpeed  = 0.0f; // px per ms
+
     void prebakeScrolling();
     bool updateScrolling(bool animated);
     void startScrolling(bool animated, float newScroll);
-    void animateScrolling(float newScroll, float time);
+    void animateScrolling(float newScroll, float time, EasingFunction easing = EasingFunction::quadraticOut);
+    void finishHeldScroll();
     void scrollAnimationTick();
 
     float getScrollingAreaTopBoundary();

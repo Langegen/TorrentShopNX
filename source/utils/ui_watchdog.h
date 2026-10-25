@@ -19,4 +19,8 @@ void start();   // once, from main() before the main loop
 void beat();    // once per frame, from the UI thread
 void stop();    // before shutdown
 
+// Writes one "[uistall] gap=0ms <tag> ..." line with the calling thread's
+// stack (same format, same symbolize script). For fatal paths like terminate.
+void logCurrentStack(const char* tag);
+
 } // namespace uiwd

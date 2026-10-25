@@ -7,6 +7,7 @@
 #include "DownloadUiManager.hpp"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/thread_utils.h"
 #include "../utils/app_paths.h"
 #include "../utils/mod_utils.h"
 #include "../utils/file_ops.h"
@@ -33,8 +34,57 @@
 #ifdef __SWITCH__
 #include <switch.h>
 #include <mutex>
+#include <functional>
+#include <borealis/core/cache_helper.hpp>
+#include <borealis/extern/nanovg/stb_image.h>
 
 std::recursive_mutex g_switch_service_mutex;
+
+// Shows an icon cached on the SD card without stalling the UI thread while
+// scrolling: the file is read and decoded on a worker, only the texture
+// upload runs on the UI thread. onMissing (UI thread) runs when the file is
+// absent or cannot be decoded.
+static void setImageFromLocalFileAsync(brls::Image* img, const std::string& path,
+                                       std::shared_ptr<bool> token, const std::string& placeholder,
+                                       std::function<void()> onMissing) {
+    auto& cache = brls::TextureCache::instance();
+    if (int tex = cache.getCache(path); tex > 0) {
+        img->setImageFromFile(path);
+        cache.removeCache(tex);   // balance the lookup above
+        return;
+    }
+
+    img->setImageFromFile(placeholder);
+    brls::async([img, path, token, onMissing]() {
+        if (token && !*token) return;
+        int w = 0, h = 0, comp = 0;
+        stbi_uc* rgba = nullptr;
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0 && st.st_size > 0)
+            rgba = stbi_load(path.c_str(), &w, &h, &comp, 4);
+
+        brls::sync([img, path, token, onMissing, rgba, w, h]() {
+            if (g_appExiting.load() || (token && !*token)) {
+                if (rgba) stbi_image_free(rgba);
+                return;
+            }
+            auto& cache = brls::TextureCache::instance();
+            int tex = cache.getCache(path);
+            if (tex <= 0 && rgba) {
+                tex = nvgCreateImageRGBA(brls::Application::getNVGContext(), w, h, NVG_IMAGE_GENERATE_MIPMAPS, rgba);
+                if (tex > 0) cache.addCache(path, tex);
+            }
+            if (rgba) stbi_image_free(rgba);
+
+            if (tex > 0) {
+                img->setImageFromFile(path);
+                cache.removeCache(tex);   // the image now holds the only reference
+            } else if (onMissing) {
+                onMissing();
+            }
+        });
+    });
+}
 
 // Queries both patch version and running SDK version for installed titles in one NCM session.
 static void getInstalledTitleMetadata(
@@ -943,7 +993,7 @@ void LibraryView::updateAllGames() {
         if (g_updateAllRunning.exchange(true)) return;
         // Own thread, not a borealis pool worker: each game waits for its
         // torrent's metadata (seconds to a minute), and the pool has 3 workers.
-        std::thread([targets]() {
+        bool started = util::runInBackground([targets]() {
             int queued = 0;
             std::vector<std::string> failed;
             const size_t total = targets.size();
@@ -1010,7 +1060,8 @@ void LibraryView::updateAllGames() {
                 done->open();
             });
             g_updateAllRunning.store(false);
-        }).detach();
+        }, "update-all");
+        if (!started) g_updateAllRunning.store(false);
     });
     dialog->addButton("app/common/no"_i18n, []() {});
     dialog->open();
@@ -2121,22 +2172,25 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
             cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
             cell->statusBox->setBackgroundColor(nvgRGB(33, 150, 243)); // Blue
 
-            std::string localIconPath;
+            // Without a cached system icon: the catalog cover, else the stock icon
+            auto setRemoteCover = [cover = static_cast<brls::Image*>(cell->cover), token = cell->imageToken, gameCover = item.game.cover]() {
+                if (!gameCover.empty()) {
+                    setImageFromHTTPS(cover, gameCover, token, "romfs:/img/demo_icon.jpg", false, "");
+                } else {
+                    cover->setImageFromRes("img/demo_icon.jpg");
+                }
+            };
 #ifdef __SWITCH__
             if (item.titleId != 0) {
                 char iconPath[128];
                 std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
-                struct stat st;
-                if (stat(iconPath, &st) == 0 && st.st_size > 0) localIconPath = iconPath;
-            }
-#endif
-            if (!localIconPath.empty()) {
-                cell->cover->setImageFromFile(localIconPath);
-            } else if (!item.game.cover.empty()) {
-                setImageFromHTTPS(cell->cover, item.game.cover, cell->imageToken, "romfs:/img/demo_icon.jpg", false, "");
+                setImageFromLocalFileAsync(cell->cover, iconPath, cell->imageToken, "romfs:/img/demo_icon.jpg", setRemoteCover);
             } else {
-                cell->cover->setImageFromRes("img/demo_icon.jpg");
+                setRemoteCover();
             }
+#else
+            setRemoteCover();
+#endif
 
             const int currentSection = static_cast<int>(index.section);
             const int currentRow = index.row;
@@ -2234,27 +2288,23 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         }
 
         // Prefer the system icon cached from the installed game's NACP
-        std::string localIconPath;
-#ifdef __SWITCH__
         {
-            char iconPath[128];
-            std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
-            struct stat st;
-            if (stat(iconPath, &st) == 0 && st.st_size > 0) localIconPath = iconPath;
-        }
-#endif
-        if (!localIconPath.empty()) {
-            cell->cover->setImageFromFile(localIconPath);
-        } else {
             std::string coverUrl = item.game.cover;
             std::string fallbackUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
-            
             if (coverUrl.empty()) {
                 coverUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
                 fallbackUrl = "https://tinfoil.media/resources/images/icon/" + tidStrLower + ".png";
             }
-            
-            setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken, "romfs:/img/demo_icon.jpg", false, fallbackUrl);
+            auto setRemoteCover = [cover = static_cast<brls::Image*>(cell->cover), token = cell->imageToken, coverUrl, fallbackUrl]() {
+                setImageFromHTTPS(cover, coverUrl, token, "romfs:/img/demo_icon.jpg", false, fallbackUrl);
+            };
+#ifdef __SWITCH__
+            char iconPath[128];
+            std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
+            setImageFromLocalFileAsync(cell->cover, iconPath, cell->imageToken, "romfs:/img/demo_icon.jpg", setRemoteCover);
+#else
+            setRemoteCover();
+#endif
         }
 
         uint64_t tid = item.titleId;

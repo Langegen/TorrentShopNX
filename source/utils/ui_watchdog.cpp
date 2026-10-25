@@ -159,6 +159,40 @@ void beat() {
     g_last_beat_ns.store(nowNs(), std::memory_order_relaxed);
 }
 
+void logCurrentStack(const char* tag) {
+    const u64 lo = reinterpret_cast<u64>(&__code_start);
+    const u64 hi = reinterpret_cast<u64>(&__rodata_start);
+    auto off = [lo, hi](u64 a) -> unsigned long long {
+        return (a >= lo && a < hi) ? (unsigned long long)(a - lo) : 0ULL;
+    };
+
+    volatile u64 marker = 0;
+    u64 sp = reinterpret_cast<u64>(&marker);
+    MemoryInfo mi;
+    u32 pi = 0;
+    int nwords = 0;
+    if (R_SUCCEEDED(svcQueryMemory(&mi, &pi, sp)) && (mi.perm & Perm_R)) {
+        u64 end = mi.addr + mi.size;
+        u64 avail = (end > sp) ? (end - sp) / 8 : 0;
+        nwords = (int)(avail < (u64)(kStackWords * 4) ? avail : (u64)(kStackWords * 4));
+    }
+
+    char buf[1024];
+    int len = std::snprintf(buf, sizeof(buf), "[uistall] gap=0ms %s tid=0x%llx pc=0x0 lr=0x%llx stack=",
+                            tag, (unsigned long long)threadGetCurHandle(),
+                            off(reinterpret_cast<u64>(__builtin_return_address(0))));
+    int frames = 0;
+    const u64* words = reinterpret_cast<const u64*>(sp);
+    for (int i = 0; i < nwords && frames < 40 && len > 0 && len < (int)sizeof(buf) - 24; i++) {
+        u64 v = words[i];
+        if (v >= lo && v < hi && (v & 3) == 0) {
+            len += std::snprintf(buf + len, sizeof(buf) - len, "%s0x%llx", frames ? "," : "", off(v));
+            frames++;
+        }
+    }
+    util::logLine(buf);
+}
+
 void stop() {
     if (!g_running.exchange(false)) return;
     threadWaitForExit(&g_thread);
@@ -173,6 +207,7 @@ namespace uiwd {
 void start() {}
 void beat() {}
 void stop() {}
+void logCurrentStack(const char*) {}
 } // namespace uiwd
 
 #endif

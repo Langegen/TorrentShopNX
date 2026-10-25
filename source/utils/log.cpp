@@ -27,6 +27,11 @@ static const char* kLogPath = "log.txt";
 #endif
 static std::mutex g_log_mutex;
 
+// For the first seconds after logInit() every line goes straight to the SD
+// card: if startup hangs or the process dies, the log still shows where.
+static constexpr int kStartupSyncMs = 8000;
+static std::chrono::steady_clock::time_point g_sync_until{};
+
 // PC tests set TSNX_LOG_PATH so the same log lines the app writes to the SD
 // card land in a local file; on the console getenv() just returns NULL.
 static const char* logPath() {
@@ -94,6 +99,7 @@ void logInit() {
         file << "TorrentShopNX log start\n";
         file.close();
     }
+    g_sync_until = std::chrono::steady_clock::now() + std::chrono::milliseconds(kStartupSyncMs);
     startAsyncWriter();
 }
 
@@ -192,6 +198,14 @@ void logLine(const std::string& line) {
     {
         std::lock_guard<std::mutex> lk(l.mtx);
         if (l.running) {
+            if (std::chrono::steady_clock::now() < g_sync_until) {
+                l.pending += line;
+                l.pending += '\n';
+                std::string batch;
+                batch.swap(l.pending);
+                appendToFile(batch);
+                return;
+            }
             if (l.pending.size() + line.size() + 1 > kMaxPending) {
                 l.dropped++;
                 return;
