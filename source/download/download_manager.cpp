@@ -19,6 +19,8 @@
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/retro_layout.h"
 #include "../catalog/retro_readiness.h"
+#include "../catalog/installed_retro_games.h"
+#include "../utils/big_file.h"
 #include "../utils/archive_utils.h"
 #include "../utils/file_ops.h"
 #include "../datasource/file_data_source.h"
@@ -501,6 +503,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                            const std::string& release_title,
                            const std::string& title_id,
                            const std::string& cover_url,
+                           const std::string& topic_id,
                            int file_index,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
@@ -653,6 +656,179 @@ static void fileCopyWorker(datasource::IDataSource* source,
     std::string first_dest;
     bool all_ok = true;
 
+    // Ретро-игры: архивы, которые всё равно пришлось бы распаковывать, распаковываются
+    // прямо из торрента, без копии архива на карте. Оглавление zip/7z читается заранее
+    // (только хвост файла), чтобы решить, что с архивом делать.
+    if (retro_info && retro_info->route != catalog::RetroRoute::Vita3K && !cancel->load()) {
+        struct RetroStream {
+            std::vector<int> volumes;
+            std::string first_path;
+            bool flat = true;
+            uint64_t size = 0;
+            uint64_t unpacked = 0;
+            catalog::retro::ArchiveAction action = catalog::retro::ArchiveAction::Keep;
+            std::vector<std::string> entries;
+            std::map<std::string, uint64_t> entry_sizes;
+        };
+        std::map<std::string, RetroStream> sets;
+        for (int idx : target_indices) {
+            if (idx < 0 || idx >= n) continue;
+            const std::string path = files[idx].path;
+            if (!catalog::retro::isArchiveName(*retro_info, std::filesystem::path(path).filename().string())) continue;
+            RetroStream& rs = sets[catalog::retro::archiveSetKey(path)];
+            rs.volumes.push_back(idx);
+            rs.size += static_cast<uint64_t>(files[idx].size);
+        }
+
+        auto openSet = [&](const RetroStream& rs, std::unique_ptr<datasource::ConcatDataSource>& concat) -> datasource::IDataSource* {
+            concat.reset();
+            datasource::IDataSource* src = source;
+            if (rs.volumes.size() > 1) {
+                std::vector<datasource::ConcatDataSource::Volume> vols;
+                for (int vi : rs.volumes) vols.push_back({vi, static_cast<uint64_t>(files[vi].size)});
+                concat = std::make_unique<datasource::ConcatDataSource>(source, hash, vols);
+                src = concat.get();
+            }
+            source->setSchedulerEnabled(true);
+            source->setCancelFlag(cancel.get());
+            if (cancel->load() || !src->open(hash, rs.volumes.front())) return nullptr;
+            return src;
+        };
+
+        std::vector<RetroStream*> to_stream;
+        for (auto& kv : sets) {
+            RetroStream& rs = kv.second;
+            std::sort(rs.volumes.begin(), rs.volumes.end(), [&](int a, int b) {
+                return catalog::retro::archiveVolumeNumber(std::filesystem::path(files[a].path).filename().string()) <
+                       catalog::retro::archiveVolumeNumber(std::filesystem::path(files[b].path).filename().string());
+            });
+            rs.first_path = files[rs.volumes.front()].path;
+            std::vector<std::string> names;
+            for (int vi : rs.volumes) names.push_back(std::filesystem::path(files[vi].path).filename().string());
+            if (!catalog::retro::isStreamableArchiveSet(names)) continue;
+            auto dest = retro_plan.dest_rel.find(rs.first_path);
+            if (dest == retro_plan.dest_rel.end()) continue;
+            rs.flat = dest->second.find('/') == std::string::npos;
+
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = "app/ports/stage_listing"_i18n;
+            }
+            std::unique_ptr<datasource::ConcatDataSource> concat;
+            bool listed = false;
+            if (datasource::IDataSource* src = openSet(rs, concat)) {
+                util::ArchivePeek peek;
+                std::string perr;
+                listed = util::peekArchiveFromSource(src, rs.size, cancel, peek, perr);
+                src->close();
+                if (listed) {
+                    for (const auto& e : peek.entries) {
+                        if (e.is_dir) continue;
+                        rs.entries.push_back(e.path);
+                        rs.entry_sizes[e.path] = e.size;
+                    }
+                    rs.unpacked = peek.total_uncompressed;
+                } else {
+                    util::logLine("download: no listing for " + rs.first_path + ": " + perr);
+                }
+            }
+            if (cancel->load()) break;
+            rs.action = catalog::retro::chooseArchiveAction(*retro_info, rs.flat, listed ? &rs.entries : nullptr);
+            if (rs.action != catalog::retro::ArchiveAction::Keep) to_stream.push_back(&rs);
+        }
+
+        // Место на карте: распакованное содержимое (или сжатый размер) и остальные файлы.
+        if (!cancel->load()) {
+            uint64_t need = 0;
+            std::set<int> streamed;
+            for (const RetroStream* rs : to_stream) {
+                need += rs->unpacked > 0 ? rs->unpacked : rs->size;
+                streamed.insert(rs->volumes.begin(), rs->volumes.end());
+            }
+            for (int idx : target_indices) {
+                if (idx >= 0 && idx < n && !streamed.count(idx)) need += static_cast<uint64_t>(files[idx].size);
+            }
+            need += need / 50 + 32ULL * 1024 * 1024;
+            int64_t sd_free = 0;
+            if (util::getStorageFreeSpace(1, sd_free) && sd_free >= 0 && static_cast<uint64_t>(sd_free) < need) {
+                st->failed = true;
+                st->error = brls::getStr("app/retro/error_space", std::to_string(need / (1024 * 1024)) + " MB",
+                                         std::to_string(static_cast<uint64_t>(sd_free) / (1024 * 1024)) + " MB");
+                util::logLine("download: " + st->error);
+                return;
+            }
+        }
+
+        for (RetroStream* rs : to_stream) {
+            if (cancel->load() || g_appExiting.load()) break;
+            const std::string name = std::filesystem::path(rs->first_path).filename().string();
+            const std::string folder = rs->flat
+                ? (release_base / retro_plan.release_folder).string()
+                : (release_base / std::filesystem::path(retro_plan.dest_rel[rs->first_path]).parent_path()).string();
+            catalog::retro::ExtractTarget target = catalog::retro::makeExtractTarget(
+                *retro_info, rs->action, release_base.string(), folder, rs->entries, retro_naming);
+            if (rs->action == catalog::retro::ArchiveAction::ExtractToFolder && rs->flat) {
+                retro_plan.game_dir = retro_plan.release_folder;
+            }
+
+            // Файлы больше 4 ГБ на карте FAT32 создаются заранее как «большие».
+            auto inner = target.transform;
+            const std::string dest_dir = target.dest_dir;
+            const std::map<std::string, uint64_t>* sizes = &rs->entry_sizes;
+            auto transform = [inner, dest_dir, sizes](const std::string& entry, bool isDir) -> std::string {
+                std::string rel = inner(entry, isDir);
+                if (!rel.empty() && !isDir) {
+                    auto it = sizes->find(entry);
+                    if (it != sizes->end()) util::prepareBigFile(dest_dir + "/" + rel, it->second);
+                }
+                return rel;
+            };
+
+            std::unique_ptr<datasource::ConcatDataSource> concat;
+            datasource::IDataSource* src = openSet(*rs, concat);
+            if (!src) {
+                util::logLine("download: cannot open " + rs->first_path + " for streaming, it will be saved as a file");
+                continue;
+            }
+            const uint64_t arch_size = rs->size;
+            const uint64_t base_written = cumulative_written;
+            auto progressCb = [&](const util::ArchiveProgress& prog) {
+                float pct = std::clamp(prog.percentage, 0.0f, 100.0f);
+                st->written.store(base_written + static_cast<uint64_t>(pct / 100.0f * static_cast<double>(arch_size)));
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = brls::getStr("app/retro/stage_extracting", name, std::to_string(static_cast<int>(pct)));
+            };
+            {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = brls::getStr("app/retro/stage_extracting", name, "0");
+            }
+            util::logLine("download: unpacking " + rs->first_path + " from the torrent -> " + target.dest_dir);
+            util::safeCreateDirectories(target.dest_dir);
+            std::string err;
+            bool ok = util::extractArchiveFromSource(src, arch_size, target.dest_dir, progressCb, cancel, pause, err, transform);
+            src->notifyStreamingComplete(ok);
+            if (cancel->load() || g_appExiting.load()) {
+                st->failed = true;
+                st->error = "download cancelled";
+                return;
+            }
+            if (!ok) {
+                // Rare (damaged or unusual archive): fall back to saving it and unpacking from the card.
+                util::logLine("download: streaming unpack failed for " + rs->first_path + ": " + err);
+                continue;
+            }
+            cumulative_written += arch_size;
+            st->written.store(cumulative_written);
+            for (const auto& placed : *target.placed_top) retro_plan.placed_top.push_back(placed);
+            std::set<int> done(rs->volumes.begin(), rs->volumes.end());
+            target_indices.erase(std::remove_if(target_indices.begin(), target_indices.end(),
+                                                [&](int i) { return done.count(i) > 0; }),
+                                 target_indices.end());
+        }
+        std::lock_guard<std::mutex> lk(st->msg_mutex);
+        st->stage_label.clear();
+    }
+
     std::string effective_tid = title_id;
     if (effective_tid.empty()) {
         for (int i = 0; i < n; ++i) {
@@ -804,6 +980,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
             }
         }
         if (!f) {
+            if (retro_info) util::prepareBigFile(file_dest, file_size);
             f = std::fopen(file_dest.c_str(), "wb");
         }
         if (!f) {
@@ -973,12 +1150,37 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 catalog::retro::finalizeRelease(*retro_info, retro_plan, retro_naming, retro_cb, cancel);
 
             // One game per release gets the release cover, named after what Tico lists.
+            std::string cover_written;
             if (retro_info->route == catalog::RetroRoute::Tico && fin.launch_entries.size() == 1 &&
                 !cover_url.empty() && !cancel->load()) {
                 retro_cb.on_stage("app/retro/stage_cover");
-                catalog::retro::saveTicoCover(retro_info->tico_slug,
-                                              std::filesystem::path(fin.launch_entries.front()).stem().string(),
-                                              cover_url);
+                const std::string cover_name = std::filesystem::path(fin.launch_entries.front()).stem().string();
+                const std::string cover_path = std::string(TSNX_TICO_COVERS_DIR) + "/" + retro_info->tico_slug + "/" + cover_name + ".jpg";
+                std::error_code cec;
+                const bool had_cover = std::filesystem::exists(cover_path, cec);
+                if (catalog::retro::saveTicoCover(retro_info->tico_slug, cover_name, cover_url) && !had_cover) {
+                    cover_written = cover_path;
+                }
+            }
+
+            // Installed-games list: what this release left on the card (merged with an earlier download).
+            if (!fin.written.empty()) {
+                auto& installed = catalog::InstalledRetroGames::instance();
+                catalog::InstalledRetroGame g;
+                g.key = catalog::InstalledRetroGames::keyFor(topic_id, release_title);
+                installed.load(g.key, g);
+                g.key = catalog::InstalledRetroGames::keyFor(topic_id, release_title);
+                g.topic_id = topic_id;
+                g.title = cleanTitle(release_title);
+                g.console_id = retro_console_id;
+                g.installed_at = std::time(nullptr);
+                if (fin.launch_entries.size() == 1) g.launch_path = fin.launch_entries.front();
+                std::set<std::string> known(g.paths.begin(), g.paths.end());
+                for (const auto& w : fin.written) {
+                    if (known.insert(w).second) g.paths.push_back(w);
+                }
+                if (!cover_written.empty() && known.insert(cover_written).second) g.paths.push_back(cover_written);
+                installed.save(g);
             }
 
             catalog::RetroReadiness readiness = catalog::checkRetroReadiness(retro_console_id);
@@ -988,15 +1190,18 @@ static void fileCopyWorker(datasource::IDataSource* source,
             } else if (!readiness.emulatorReady()) {
                 st->result_key = "app/retro/ready_need_emulator";
             } else if (!readiness.systemFilesReady()) {
-                st->result_key = (retro_info->route == catalog::RetroRoute::Vita3K)
-                    ? "app/retro/ready_need_vita_fw" : "app/retro/ready_need_bios";
+                if (retro_info->route == catalog::RetroRoute::Vita3K) {
+                    st->result_key = fin.vita_staged > 0 ? "app/retro/ready_need_vita_fw" : "app/retro/ready_vita3k_need_fw";
+                } else {
+                    st->result_key = "app/retro/ready_need_bios";
+                }
             } else {
                 switch (retro_info->route) {
                     case catalog::RetroRoute::Tico:
                         st->result_key = "app/retro/ready_in_tico";
                         break;
                     case catalog::RetroRoute::Vita3K:
-                        st->result_key = "app/retro/ready_vita3k";
+                        st->result_key = fin.vita_staged > 0 ? "app/retro/ready_vita3k" : "app/retro/ready_vita3k_installed";
                         break;
                     case catalog::RetroRoute::Cemu:
                         st->result_key = "app/retro/ready_cemu";
@@ -2766,10 +2971,11 @@ void DownloadManager::handleFileDownload(size_t index,
         const std::string retro_cid = item.retro_console_id;
         const std::string title_id = item.title_id;
         const std::string cover_url = item.cover_url;
+        const std::string topic_id = item.topic_id;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, title_id, cover_url, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
-                fileCopyWorker(source, hash, magnet, title, title_id, cover_url, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
+            std::async(std::launch::async, [source, hash, magnet, title, title_id, cover_url, topic_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
+                fileCopyWorker(source, hash, magnet, title, title_id, cover_url, topic_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +

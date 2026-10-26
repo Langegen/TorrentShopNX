@@ -1061,7 +1061,10 @@
         "stage_install_runner": "Installing {0} ({1}%)",
         "ready_need_emulator": "Downloaded, but the emulator is not installed: Retro Games › Emulator Manager",
         "ready_need_bios": "Downloaded. A BIOS is needed to play: Retro Games › Emulator Manager",
-        "ready_need_vita_fw": "Downloaded. Open Vita3K: it installs the firmware, then the game from switch/vita3k/install"
+        "ready_need_vita_fw": "Downloaded. Open Vita3K: it installs the firmware, then the game from switch/vita3k/install",
+        "error_space": "Not enough space on the SD card: {0} needed, {1} free",
+        "ready_vita3k_installed": "Ready in Vita3K",
+        "ready_vita3k_need_fw": "Done. Open Vita3K: it will offer to download the PS Vita firmware"
     },
     "dashboard": {
         "catalog_title": "NEW & POPULAR GAMES",

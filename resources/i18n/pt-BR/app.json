@@ -1031,7 +1031,10 @@
         "stage_install_runner": "Instalando {0} ({1}%)",
         "ready_need_emulator": "Baixado, mas o emulador não está instalado: Jogos Retrô › Gerenciador de emuladores",
         "ready_need_bios": "Baixado. É preciso uma BIOS para jogar: Jogos Retrô › Gerenciador de emuladores",
-        "ready_need_vita_fw": "Baixado. Abra o Vita3K: ele instala o firmware e depois o jogo de switch/vita3k/install"
+        "ready_need_vita_fw": "Baixado. Abra o Vita3K: ele instala o firmware e depois o jogo de switch/vita3k/install",
+        "error_space": "Espaço insuficiente no cartão SD: são necessários {0}, livres {1}",
+        "ready_vita3k_installed": "Pronto no Vita3K",
+        "ready_vita3k_need_fw": "Pronto. Abra o Vita3K: ele vai oferecer o download do firmware do PS Vita"
     },
     "dashboard": {
         "catalog_title": "JOGOS NOVOS E POPULARES",

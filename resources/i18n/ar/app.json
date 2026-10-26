@@ -1056,7 +1056,10 @@
         "stage_install_runner": "جارٍ تثبيت {0} ({1}%)",
         "ready_need_emulator": "تم التنزيل، لكن المحاكي غير مثبّت: ألعاب ريترو › مدير المحاكيات",
         "ready_need_bios": "تم التنزيل. يلزم BIOS للتشغيل: ألعاب ريترو › مدير المحاكيات",
-        "ready_need_vita_fw": "تم التنزيل. افتح Vita3K: سيثبّت البرنامج الثابت ثم اللعبة من switch/vita3k/install"
+        "ready_need_vita_fw": "تم التنزيل. افتح Vita3K: سيثبّت البرنامج الثابت ثم اللعبة من switch/vita3k/install",
+        "error_space": "لا توجد مساحة كافية على بطاقة SD: المطلوب {0}، المتاح {1}",
+        "ready_vita3k_installed": "جاهزة في Vita3K",
+        "ready_vita3k_need_fw": "تم. افتح Vita3K وسيعرض تنزيل البرنامج الثابت لـ PS Vita"
     },
     "dashboard": {
         "catalog_title": "الألعاب الجديدة والشائعة",

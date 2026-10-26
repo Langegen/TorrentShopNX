@@ -1031,7 +1031,10 @@
         "stage_install_runner": "{0} をインストール中（{1}%）",
         "ready_need_emulator": "ダウンロード済みですが、エミュレータが未インストールです：レトロゲーム › エミュレータ管理",
         "ready_need_bios": "ダウンロード済み。プレイには BIOS が必要です：レトロゲーム › エミュレータ管理",
-        "ready_need_vita_fw": "ダウンロード済み。Vita3K を開くとファームウェア、次に switch/vita3k/install のゲームがインストールされます"
+        "ready_need_vita_fw": "ダウンロード済み。Vita3K を開くとファームウェア、次に switch/vita3k/install のゲームがインストールされます",
+        "error_space": "SD カードの空き容量が足りません：必要 {0}、空き {1}",
+        "ready_vita3k_installed": "Vita3K で起動できます",
+        "ready_vita3k_need_fw": "完了。Vita3K を開くと PS Vita ファームウェアのダウンロードを案内します"
     },
     "dashboard": {
         "catalog_title": "新作・人気ゲーム",

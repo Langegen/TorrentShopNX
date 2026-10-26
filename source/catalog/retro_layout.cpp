@@ -1,4 +1,5 @@
 #include "retro_layout.h"
+#include "retro_vita.h"
 
 #include "../config/config.h"
 #include "../net/http_client.h"
@@ -11,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
 
@@ -94,9 +96,71 @@ bool isJunkExt(const std::string& ext) {
     return junk.count(ext) > 0;
 }
 
-bool isArchiveFor(const RetroConsoleInfo& c, const std::string& path) {
-    // .gz and similar are game images for some emulators (NetherSX2 reads .gz).
-    return util::isArchiveFile(path) && !isLaunchExt(c, extOf(path));
+// Archive volumes: "x.7z.001" (byte split), "x.part2.rar", "x.r00" (old RAR),
+// "x.z01" (spanned ZIP), or a plain archive.
+enum class VolKind { None, Plain, Split, RarParts, RarOld, ZipSpan };
+
+struct VolumeName {
+    VolKind kind = VolKind::None;
+    std::string base;   // lower-case name shared by all volumes
+    int volume = 0;
+};
+
+bool allDigits(const std::string& s) {
+    return !s.empty() && std::all_of(s.begin(), s.end(), [](unsigned char c) { return std::isdigit(c); });
+}
+
+bool endsWith(const std::string& s, const std::string& suffix) {
+    return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+VolumeName parseVolumeName(const std::string& fileName) {
+    VolumeName v;
+    std::string lf = toLower(fileName);
+    size_t slash = lf.find_last_of("/\\");
+    if (slash != std::string::npos) lf = lf.substr(slash + 1);
+    const size_t n = lf.size();
+    if (n > 4 && lf[n - 4] == '.' && allDigits(lf.substr(n - 3))) {
+        std::string pre = lf.substr(0, n - 4);
+        if (endsWith(pre, ".7z") || endsWith(pre, ".zip") || endsWith(pre, ".rar")) {
+            v.kind = VolKind::Split;
+            v.base = pre;
+            v.volume = std::atoi(lf.substr(n - 3).c_str());
+            return v;
+        }
+    }
+    if (n > 4 && lf[n - 4] == '.' && allDigits(lf.substr(n - 2))) {
+        char k = lf[n - 3];
+        std::string pre = lf.substr(0, n - 4);
+        if (k == 'r') {
+            v.kind = VolKind::RarOld;
+            v.base = pre + ".rar";
+            v.volume = std::atoi(lf.substr(n - 2).c_str()) + 2;
+            return v;
+        }
+        if (k == 'z') {
+            v.kind = VolKind::ZipSpan;
+            v.base = pre + ".zip";
+            v.volume = std::atoi(lf.substr(n - 2).c_str());
+            return v;
+        }
+    }
+    if (endsWith(lf, ".rar")) {
+        std::string pre = lf.substr(0, n - 4);
+        size_t pp = pre.rfind(".part");
+        if (pp != std::string::npos && allDigits(pre.substr(pp + 5))) {
+            v.kind = VolKind::RarParts;
+            v.base = pre.substr(0, pp) + ".rar";
+            v.volume = std::atoi(pre.substr(pp + 5).c_str());
+            return v;
+        }
+    }
+    if (util::isArchiveFile(lf)) {
+        v.kind = VolKind::Plain;
+        v.base = lf;
+        v.volume = endsWith(lf, ".zip") ? 1000 : 1; // a spanned zip ends with .zip
+    }
+    return v;
 }
 
 // Lower is better when one disc exists in several formats.
@@ -244,24 +308,6 @@ bool writeFile(const fs::path& path, const std::string& data) {
 
 // ---------------------------------------------------------------- archives
 
-struct ArchiveSummary {
-    int launch_files = 0;
-    bool all_at_root = true;
-    bool readable = false;
-};
-
-ArchiveSummary inspectArchive(const RetroConsoleInfo& c, const fs::path& archive) {
-    ArchiveSummary s;
-    s.readable = util::iterateArchiveEntries(archive.string(), [&](const std::string& name, bool isDir) -> bool {
-        if (isDir) return true;
-        if (!isLaunchExt(c, extOf(name))) return true;
-        ++s.launch_files;
-        if (splitPath(name).size() > 1) s.all_at_root = false;
-        return true;
-    });
-    return s;
-}
-
 bool extractWith(const fs::path& archive, const fs::path& dest_dir,
                  const util::PathTransformFn& transform,
                  const FinalizeCallbacks& cb,
@@ -285,39 +331,27 @@ bool extractWith(const fs::path& archive, const fs::path& dest_dir,
     return ok;
 }
 
-// Keeps the folder structure of the archive, drops files no emulator reads.
-// A single folder wrapping the whole archive is dropped, so "Game.zip" with
-// "Game/Game.cue" inside does not end up as Game/Game/Game.cue.
-util::PathTransformFn keepStructureTransform(const RetroConsoleInfo& c, const PathNaming& naming,
-                                             const fs::path& archive) {
-    std::string top;
-    bool wrapped = true;
-    bool any = false;
-    util::iterateArchiveEntries(archive.string(), [&](const std::string& name, bool isDir) -> bool {
-        std::vector<std::string> segs = splitPath(name);
-        if (segs.empty()) return true;
-        if (!isDir && segs.size() < 2) {
-            wrapped = false;
-            return false;
-        }
-        if (!any) {
-            top = toLower(segs[0]);
-            any = true;
-        } else if (toLower(segs[0]) != top) {
-            wrapped = false;
-            return false;
-        }
+// Files inside an archive on the SD card (folders left out).
+bool listArchiveFiles(const fs::path& archive, std::vector<std::string>& out) {
+    out.clear();
+    return util::iterateArchiveEntries(archive.string(), [&](const std::string& name, bool isDir) -> bool {
+        if (!isDir) out.push_back(name);
         return true;
     });
-    size_t skip = (any && wrapped) ? 1 : 0;
+}
 
-    bool dropJunk = c.route != RetroRoute::Vita3K;
-    return [&naming, dropJunk, skip](const std::string& entry, bool isDir) -> std::string {
-        std::vector<std::string> segs = splitPath(entry);
-        if (segs.size() <= skip) return "";
-        if (!isDir && dropJunk && isJunkExt(extOf(segs.back()))) return "";
-        return joinSanitized(segs, skip, naming);
-    };
+// One folder wrapping every file of the archive ("Game/Game.cue") is dropped.
+size_t wrapperDepth(const std::vector<std::string>& entries) {
+    if (entries.empty()) return 0;
+    std::string top;
+    for (const auto& e : entries) {
+        std::vector<std::string> segs = splitPath(e);
+        if (segs.size() < 2) return 0;
+        std::string first = toLower(segs[0]);
+        if (top.empty()) top = first;
+        else if (first != top) return 0;
+    }
+    return 1;
 }
 
 // ------------------------------------------------------------- cue sheets
@@ -409,6 +443,107 @@ void fixCueSheets(const fs::path& dir, const PathNaming& naming) {
             }
             if (writeFile(cue, out)) util::logLine("retro: fixed track names in " + cue.string());
         }
+    }
+}
+
+// --------------------------------------------------------- disc images
+
+std::string msf(long lba) {
+    if (lba < 0) lba = 0;
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%02ld:%02ld:%02ld", lba / 75 / 60, (lba / 75) % 60, lba % 75);
+    return buf;
+}
+
+fs::path siblingWithExt(const fs::path& file, const std::string& ext) {
+    std::error_code ec;
+    std::string stem = toLower(file.stem().string());
+    for (const auto& e : fs::directory_iterator(file.parent_path(), ec)) {
+        if (toLower(e.path().stem().string()) == stem && extOf(e.path().filename().string()) == ext) return e.path();
+    }
+    return fs::path();
+}
+
+// CloneCD (.ccd + .img) -> .cue: DuckStation and Genesis Plus GX read cue sheets.
+void convertCcd(const fs::path& ccd, const std::string& dataMode) {
+    fs::path img = siblingWithExt(ccd, ".img");
+    if (img.empty() || !siblingWithExt(ccd, ".cue").empty()) return;
+    std::string body;
+    if (!readFile(ccd, body)) return;
+
+    struct Track {
+        int mode = -1;
+        long index0 = -1;
+        long index1 = -1;
+    };
+    std::map<int, Track> tracks;
+    int current = -1;
+    std::istringstream in(body);
+    std::string line;
+    while (std::getline(in, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        std::string l = toLower(line);
+        if (l.rfind("[track ", 0) == 0) {
+            current = std::atoi(l.substr(7).c_str());
+            continue;
+        }
+        if (!l.empty() && l[0] == '[') {
+            current = -1;
+            continue;
+        }
+        if (current <= 0) continue;
+        size_t eq = l.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = l.substr(0, eq), val = l.substr(eq + 1);
+        if (key == "mode") tracks[current].mode = std::atoi(val.c_str());
+        else if (key == "index 0") tracks[current].index0 = std::atol(val.c_str());
+        else if (key == "index 1") tracks[current].index1 = std::atol(val.c_str());
+    }
+
+    std::string cue = "FILE \"" + img.filename().string() + "\" BINARY\n";
+    if (tracks.empty()) {
+        cue += "  TRACK 01 " + dataMode + "\n    INDEX 01 00:00:00\n";
+    } else {
+        for (const auto& kv : tracks) {
+            char head[32];
+            std::snprintf(head, sizeof(head), "  TRACK %02d ", kv.first);
+            std::string mode = kv.second.mode == 0 ? "AUDIO" : kv.second.mode == 1 ? "MODE1/2352" : "MODE2/2352";
+            cue += head + mode + "\n";
+            if (kv.second.index0 >= 0) cue += "    INDEX 00 " + msf(kv.second.index0) + "\n";
+            cue += "    INDEX 01 " + msf(kv.second.index1 >= 0 ? kv.second.index1 : 0) + "\n";
+        }
+    }
+    fs::path out = ccd;
+    out.replace_extension(".cue");
+    if (writeFile(out, cue)) util::logLine("retro: made " + out.string() + " from the CloneCD image");
+}
+
+// Alcohol (.mds + .mdf): a cue for the data track, enough for most single-track discs.
+void convertMds(const fs::path& mds, const std::string& dataMode) {
+    fs::path mdf = siblingWithExt(mds, ".mdf");
+    if (mdf.empty() || !siblingWithExt(mds, ".cue").empty()) return;
+    std::error_code ec;
+    uintmax_t size = fs::file_size(mdf, ec);
+    if (ec || size == 0) return;
+    std::string mode;
+    if (size % 2352 == 0) mode = dataMode;
+    else if (size % 2048 == 0) mode = "MODE1/2048";
+    else return;
+    std::string cue = "FILE \"" + mdf.filename().string() + "\" BINARY\n  TRACK 01 " + mode + "\n    INDEX 01 00:00:00\n";
+    fs::path out = mds;
+    out.replace_extension(".cue");
+    if (writeFile(out, cue)) util::logLine("retro: made " + out.string() + " from the Alcohol image");
+}
+
+void convertDiscImages(const RetroConsoleInfo& c, const fs::path& dir) {
+    std::string dataMode;
+    if (c.id == "ps1") dataMode = "MODE2/2352";
+    else if (c.id == "sega_cd") dataMode = "MODE1/2352";
+    else return;
+    for (const auto& f : listFilesRecursive(dir)) {
+        std::string ext = extOf(f.filename().string());
+        if (ext == ".ccd") convertCcd(f, dataMode);
+        else if (ext == ".mds") convertMds(f, dataMode);
     }
 }
 
@@ -681,7 +816,7 @@ LayoutPlan planLayout(const RetroConsoleInfo& c,
         if (!it.segs.empty()) {
             it.ext = extOf(it.segs.back());
             it.launch = isLaunchExt(c, it.ext);
-            it.archive = isArchiveFor(c, it.segs.back());
+            it.archive = isArchiveName(c, it.segs.back());
         }
         return it;
     };
@@ -775,6 +910,102 @@ LayoutPlan planLayout(const RetroConsoleInfo& c,
     return plan;
 }
 
+bool isArchiveName(const RetroConsoleInfo& c, const std::string& name) {
+    if (isLaunchExt(c, extOf(name))) return false; // NetherSX2 reads .gz itself
+    return parseVolumeName(name).kind != VolKind::None;
+}
+
+std::string archiveSetKey(const std::string& torrent_path) {
+    std::string dir;
+    size_t slash = torrent_path.find_last_of("/\\");
+    if (slash != std::string::npos) dir = toLower(torrent_path.substr(0, slash));
+    VolumeName v = parseVolumeName(torrent_path);
+    std::string file = slash == std::string::npos ? torrent_path : torrent_path.substr(slash + 1);
+    return dir + "/" + (v.base.empty() ? toLower(file) : v.base);
+}
+
+int archiveVolumeNumber(const std::string& name) {
+    return parseVolumeName(name).volume;
+}
+
+bool isStreamableArchiveSet(const std::vector<std::string>& volume_names) {
+    if (volume_names.empty()) return false;
+    if (volume_names.size() == 1) {
+        VolKind k = parseVolumeName(volume_names[0]).kind;
+        return k == VolKind::Plain || k == VolKind::Split;
+    }
+    for (const auto& n : volume_names) {
+        if (parseVolumeName(n).kind != VolKind::Split) return false;
+    }
+    return true;
+}
+
+ArchiveAction chooseArchiveAction(const RetroConsoleInfo& c, bool archive_is_flat,
+                                  const std::vector<std::string>* entry_names) {
+    if (c.route == RetroRoute::Vita3K) return ArchiveAction::Keep; // Vita3K installs archives itself
+    if (c.keep_archives && archive_is_flat) {
+        if (!entry_names) return ArchiveAction::Keep;
+        int games = 0;
+        bool atRoot = true;
+        for (const auto& e : *entry_names) {
+            if (!isLaunchExt(c, extOf(e))) continue;
+            ++games;
+            if (splitPath(e).size() > 1) atRoot = false;
+        }
+        if (games == 0 || (games == 1 && atRoot)) return ArchiveAction::Keep;
+        return ArchiveAction::ExtractGamesFlat;
+    }
+    if (c.route == RetroRoute::Cemu || (c.disc_based && c.supports_m3u)) return ArchiveAction::ExtractToFolder;
+    return ArchiveAction::ExtractGamesFlat;
+}
+
+ExtractTarget makeExtractTarget(const RetroConsoleInfo& c, ArchiveAction action,
+                                const std::string& base_dir, const std::string& folder_dir,
+                                const std::vector<std::string>& entry_names, const PathNaming& naming) {
+    ExtractTarget t;
+    t.placed_top = std::make_shared<std::vector<std::string>>();
+    if (action == ArchiveAction::ExtractGamesFlat) {
+        t.dest_dir = base_dir;
+        auto taken = std::make_shared<std::set<std::string>>();
+        auto placed = t.placed_top;
+        RetroConsoleInfo cc = c;
+        PathNaming nm = naming;
+        std::string base = base_dir;
+        t.transform = [cc, nm, base, taken, placed](const std::string& entry, bool isDir) -> std::string {
+            if (isDir) return "";
+            std::vector<std::string> segs = splitPath(entry);
+            if (segs.empty() || !isLaunchExt(cc, extOf(segs.back()))) return "";
+            std::string name = nm.component ? nm.component(segs.back()) : segs.back();
+            if (name.empty()) return "";
+            if (taken->count(toLower(name))) {
+                // Same name twice in one archive (RUS/Game.nes and ENG/Game.nes).
+                std::string stem = fs::path(name).stem().string();
+                std::string ext = fs::path(name).extension().string();
+                std::string candidate = name;
+                for (int n = 2; taken->count(toLower(candidate)); ++n) {
+                    candidate = stem + " (" + std::to_string(n) + ")" + ext;
+                }
+                name = candidate;
+            }
+            taken->insert(toLower(name));
+            placed->push_back((fs::path(base) / name).string());
+            return name;
+        };
+    } else if (action == ArchiveAction::ExtractToFolder) {
+        t.dest_dir = folder_dir;
+        size_t skip = wrapperDepth(entry_names);
+        bool dropJunk = c.route != RetroRoute::Vita3K;
+        PathNaming nm = naming;
+        t.transform = [nm, skip, dropJunk](const std::string& entry, bool isDir) -> std::string {
+            std::vector<std::string> segs = splitPath(entry);
+            if (segs.size() <= skip) return "";
+            if (!isDir && dropJunk && isJunkExt(extOf(segs.back()))) return "";
+            return joinSanitized(segs, skip, nm);
+        };
+    }
+    return t;
+}
+
 FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
                                const LayoutPlan& plan,
                                const PathNaming& naming,
@@ -786,18 +1017,26 @@ FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
     std::vector<fs::path> top;
     auto cancelled = [&]() { return cancel && cancel->load(); };
 
-    struct Saved {
-        fs::path path;
-        bool flat;
+    for (const auto& placed : plan.placed_top) {
+        std::error_code e0;
+        if (fs::exists(placed, e0)) top.push_back(placed);
+    }
+
+    // Archives still on the SD card (not unpacked while downloading), grouped by volume set.
+    struct ArchiveSet {
+        std::vector<std::pair<int, fs::path>> volumes;
+        bool flat = true;
     };
-    std::vector<Saved> archives;
+    std::map<std::string, ArchiveSet> sets;
     std::error_code ec;
     for (const auto& kv : plan.dest_rel) {
         fs::path full = base / kv.second;
         if (!fs::exists(full, ec)) continue;
         bool flat = kv.second.find('/') == std::string::npos;
-        if (c.route != RetroRoute::Vita3K && isArchiveFor(c, kv.second)) {
-            archives.push_back({full, flat});
+        if (c.route != RetroRoute::Vita3K && isArchiveName(c, kv.second)) {
+            ArchiveSet& set = sets[archiveSetKey(kv.second)];
+            set.volumes.push_back({archiveVolumeNumber(kv.second), full});
+            set.flat = flat;
         } else if (flat) {
             top.push_back(full);
         }
@@ -806,48 +1045,32 @@ FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
     std::set<std::string> failedArchives;
 
     // 1. Archives.
-    for (const auto& a : archives) {
+    for (auto& kv : sets) {
         if (cancelled()) break;
+        ArchiveSet& set = kv.second;
+        std::sort(set.volumes.begin(), set.volumes.end());
+        const fs::path first = set.volumes.front().second;
 
-        if (c.keep_archives && a.flat) {
-            ArchiveSummary s = inspectArchive(c, a.path);
-            if (!s.readable || s.launch_files == 0 || (s.launch_files == 1 && s.all_at_root)) {
-                top.push_back(a.path); // the emulator reads it as is
-                continue;
-            }
-            // A collection or nested folders: unpack each game next to the others.
-            std::vector<fs::path> unpacked;
-            std::set<std::string> taken;
-            auto transform = [&](const std::string& entry, bool isDir) -> std::string {
-                if (isDir) return "";
-                std::vector<std::string> segs = splitPath(entry);
-                if (segs.empty() || !isLaunchExt(c, extOf(segs.back()))) return "";
-                std::string fn = naming.component ? naming.component(segs.back()) : segs.back();
-                if (fn.empty() || taken.count(toLower(fn))) return "";
-                std::error_code e2;
-                if (fs::exists(base / fn, e2)) return "";
-                taken.insert(toLower(fn));
-                unpacked.push_back(base / fn);
-                return fn;
-            };
-            if (extractWith(a.path, base, transform, cb, cancel)) {
-                top.insert(top.end(), unpacked.begin(), unpacked.end());
-            } else {
-                top.push_back(a.path);
+        std::vector<std::string> entries;
+        bool listed = listArchiveFiles(first, entries);
+        ArchiveAction action = chooseArchiveAction(c, set.flat, listed ? &entries : nullptr);
+        if (action == ArchiveAction::Keep) {
+            if (set.flat) {
+                for (const auto& v : set.volumes) top.push_back(v.second);
             }
             continue;
         }
-
-        fs::path destDir;
-        if (a.flat) {
-            gameDirName = plan.release_folder;
-            destDir = base / gameDirName;
+        if (action == ArchiveAction::ExtractToFolder && set.flat) gameDirName = plan.release_folder;
+        fs::path folder = set.flat ? base / plan.release_folder : first.parent_path();
+        ExtractTarget target = makeExtractTarget(c, action, base.string(), folder.string(), entries, naming);
+        if (extractWith(first, target.dest_dir, target.transform, cb, cancel)) {
+            for (const auto& v : set.volumes) fs::remove(v.second, ec);
+            for (const auto& placed : *target.placed_top) top.push_back(placed);
         } else {
-            destDir = a.path.parent_path();
-        }
-        if (!extractWith(a.path, destDir, keepStructureTransform(c, naming, a.path), cb, cancel)) {
-            failedArchives.insert(a.path.string());
-            if (a.flat) top.push_back(a.path);
+            failedArchives.insert(first.string());
+            if (set.flat) {
+                for (const auto& v : set.volumes) top.push_back(v.second);
+            }
         }
     }
 
@@ -858,8 +1081,12 @@ FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
     if (haveGameDir && c.route != RetroRoute::Vita3K && !cancelled()) {
         for (const auto& f : listFilesRecursive(gameDir)) {
             if (cancelled()) break;
-            if (isArchiveFor(c, f.filename().string()) && !failedArchives.count(f.string())) {
-                extractWith(f, f.parent_path(), keepStructureTransform(c, naming, f), cb, cancel);
+            if (isArchiveName(c, f.filename().string()) && !failedArchives.count(f.string())) {
+                std::vector<std::string> inner;
+                listArchiveFiles(f, inner);
+                ExtractTarget target = makeExtractTarget(c, ArchiveAction::ExtractToFolder, base.string(),
+                                                         f.parent_path().string(), inner, naming);
+                extractWith(f, target.dest_dir, target.transform, cb, cancel);
             }
         }
     }
@@ -877,7 +1104,10 @@ FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
                 }
             }
         }
-        if (c.route == RetroRoute::Tico) fixCueSheets(gameDir, naming);
+        if (c.route == RetroRoute::Tico) {
+            convertDiscImages(c, gameDir);
+            fixCueSheets(gameDir, naming);
+        }
 
         // A folder holding one self-contained file is not needed.
         if (c.route != RetroRoute::Vita3K) {
@@ -912,7 +1142,23 @@ FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
         }
     }
 
-    for (const auto& t : top) res.launch_entries.push_back(t.string());
+    if (c.route == RetroRoute::Vita3K && !cancelled()) {
+        std::vector<fs::path> candidates = top;
+        if (haveGameDir) candidates.push_back(gameDir);
+        VitaInstallSummary vita = installIntoVita3K(candidates, cancel);
+        res.vita_installed = vita.installed;
+        res.vita_staged = vita.staged;
+        res.written.insert(res.written.end(), vita.installed_dirs.begin(), vita.installed_dirs.end());
+        top.clear();
+        for (const auto& left : vita.left_paths) top.push_back(left);
+        haveGameDir = haveGameDir && fs::exists(gameDir, ec);
+    }
+
+    for (const auto& t : top) {
+        res.launch_entries.push_back(t.string());
+        res.written.push_back(t.string());
+    }
+    if (haveGameDir && fs::exists(gameDir, ec)) res.written.push_back(gameDir.string());
 
     if (c.route == RetroRoute::Tico) {
         bool playable = false;

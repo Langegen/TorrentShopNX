@@ -43,12 +43,49 @@ struct LayoutPlan {
     std::string release_folder; // folder name for this release, used when an archive needs unpacking
     std::vector<int> indices;                    // torrent files to download
     std::map<std::string, std::string> dest_rel; // torrent path -> path relative to base_dir
+    // Files an archive was unpacked into straight from the torrent, at the top
+    // of base_dir (set by the downloader, read by finalizeRelease).
+    std::vector<std::string> placed_top;
 };
 
 LayoutPlan planLayout(const RetroConsoleInfo& console,
                       const std::string& release_title,
                       const std::vector<TorrentFileRef>& files,
                       const PathNaming& naming);
+
+// ---- Archives ----------------------------------------------------------
+
+// An archive or a volume of one ("game.7z.002", "game.part2.rar", "game.r00"),
+// unless the emulator starts that extension itself (NetherSX2 reads .gz).
+bool isArchiveName(const RetroConsoleInfo& console, const std::string& name);
+// Volumes of one archive share this key; a plain archive is its own set.
+std::string archiveSetKey(const std::string& torrent_path);
+// Order of a volume in its set (plain archive = 1).
+int archiveVolumeNumber(const std::string& name);
+// Plain zip/7z/rar and byte-split .001/.002 sets can be unpacked while downloading;
+// multi-volume RAR and spanned ZIP need all volumes on the SD card first.
+bool isStreamableArchiveSet(const std::vector<std::string>& volume_names);
+
+enum class ArchiveAction {
+    Keep,             // the emulator reads the archive as it is
+    ExtractToFolder,  // unpack everything (minus notes) into the release folder
+    ExtractGamesFlat  // unpack only the games, each to the top of the console folder
+};
+
+// entry_names: files inside the archive, or nullptr when the listing is unknown.
+ArchiveAction chooseArchiveAction(const RetroConsoleInfo& console, bool archive_is_flat,
+                                  const std::vector<std::string>* entry_names);
+
+// Where and how an archive is unpacked. The transform keeps state, so one
+// target serves one extraction.
+struct ExtractTarget {
+    std::string dest_dir;
+    std::function<std::string(const std::string& entry, bool is_dir)> transform;
+    std::shared_ptr<std::vector<std::string>> placed_top; // games written to the top (ExtractGamesFlat)
+};
+ExtractTarget makeExtractTarget(const RetroConsoleInfo& console, ArchiveAction action,
+                                const std::string& base_dir, const std::string& folder_dir,
+                                const std::vector<std::string>& entry_names, const PathNaming& naming);
 
 struct FinalizeCallbacks {
     std::function<void(const std::string& i18n_key)> on_stage;
@@ -61,6 +98,12 @@ struct FinalizeResult {
     std::vector<std::string> launch_entries;
     // Files were saved but none of them is a format the emulator starts.
     bool unsupported_format = false;
+    // Everything this release left on the SD card (files and the release folder),
+    // for the installed-games list.
+    std::vector<std::string> written;
+    // PS Vita: games installed into Vita3K directly / left for Vita3K's own installer.
+    int vita_installed = 0;
+    int vita_staged = 0;
 };
 
 // Runs after every planned file is on the SD card.

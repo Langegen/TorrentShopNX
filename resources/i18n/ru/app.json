@@ -1061,7 +1061,10 @@
         "stage_install_runner": "Установка {0} ({1}%)",
         "ready_need_emulator": "Скачано, но эмулятор не установлен: Ретро-игры › Менеджер эмуляторов",
         "ready_need_bios": "Скачано. Для запуска нужен BIOS: Ретро-игры › Менеджер эмуляторов",
-        "ready_need_vita_fw": "Скачано. Откройте Vita3K: он установит прошивку, затем игру из switch/vita3k/install"
+        "ready_need_vita_fw": "Скачано. Откройте Vita3K: он установит прошивку, затем игру из switch/vita3k/install",
+        "error_space": "Не хватает места на карте: нужно {0}, свободно {1}",
+        "ready_vita3k_installed": "Готово к запуску в Vita3K",
+        "ready_vita3k_need_fw": "Готово. Откройте Vita3K: он предложит скачать прошивку PS Vita"
     },
     "dashboard": {
         "catalog_title": "НОВИНКИ И ПОПУЛЯРНЫЕ ИГРЫ КАТАЛОГА",

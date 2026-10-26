@@ -1031,7 +1031,10 @@
         "stage_install_runner": "{0} wird installiert ({1}%)",
         "ready_need_emulator": "Heruntergeladen, aber der Emulator ist nicht installiert: Retro-Spiele › Emulator-Manager",
         "ready_need_bios": "Heruntergeladen. Zum Spielen wird ein BIOS benötigt: Retro-Spiele › Emulator-Manager",
-        "ready_need_vita_fw": "Heruntergeladen. Vita3K öffnen: Es installiert die Firmware und dann das Spiel aus switch/vita3k/install"
+        "ready_need_vita_fw": "Heruntergeladen. Vita3K öffnen: Es installiert die Firmware und dann das Spiel aus switch/vita3k/install",
+        "error_space": "Nicht genug Platz auf der SD-Karte: {0} nötig, {1} frei",
+        "ready_vita3k_installed": "Bereit in Vita3K",
+        "ready_vita3k_need_fw": "Fertig. Vita3K öffnen: Es bietet an, die PS Vita-Firmware herunterzuladen"
     },
     "dashboard": {
         "catalog_title": "NEUE & BELIEBTE SPIELE",
