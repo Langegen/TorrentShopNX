@@ -194,7 +194,15 @@
         "action_peers": "Peers",
         "action_peers_short": "Peers",
         "peers_title": "Swarm & Peer Status",
-        "peers_no_active": "No active peer connections"
+        "peers_no_active": "No active peer connections",
+        "collapse": "Collapse",
+        "expand": "Expand",
+        "file_count_one": "{0} file",
+        "file_count_few": "{0} files",
+        "file_count_many": "{0} files",
+        "comp_base_game": "Base game",
+        "comp_patch": "Update {0}",
+        "comp_patch_plain": "Update"
     },
     "detail": {
         "developer": "Developer: {0}",
@@ -442,7 +450,10 @@
         "uninstall_game_only": "Delete Game Only",
         "badge_patch": "UPD",
         "badge_dlc": "DLC",
-        "badge_dlc_count": "DLC ({0})"
+        "badge_dlc_count": "DLC ({0})",
+        "badge_not_installed": "NOT INSTALLED",
+        "stats_not_installed": "Not installed: {0}",
+        "section_not_installed": "NOT INSTALLED (ON ANOTHER SD CARD OR ARCHIVED) — {0}"
     },
     "filter": {
         "title": "Filters & Sorting",

@@ -194,7 +194,15 @@
         "action_peers_short": "节点",
         "downloads_header_hints": "L - 节点  [-] 关闭屏幕",
         "state_connecting_peers": "正在连接节点...",
-        "state_resolving_meta": "正在解析元数据..."
+        "state_resolving_meta": "正在解析元数据...",
+        "collapse": "收起",
+        "expand": "展开",
+        "file_count_one": "{0} 个文件",
+        "file_count_few": "{0} 个文件",
+        "file_count_many": "{0} 个文件",
+        "comp_base_game": "游戏本体",
+        "comp_patch": "更新补丁 {0}",
+        "comp_patch_plain": "更新补丁"
     },
     "detail": {
         "unknown_publisher": "未知发行商",
@@ -442,7 +450,10 @@
         "update_all_failed": "以下游戏的发布中未找到更新：",
         "uninstall_both_game_and_mods": "删除游戏本体及模组",
         "uninstall_game_only": "仅删除游戏本体",
-        "uninstall_with_mods_prompt": "检测到“{0}”存在模组/补丁（{1}）。是否与游戏一同删除？"
+        "uninstall_with_mods_prompt": "检测到“{0}”存在模组/补丁（{1}）。是否与游戏一同删除？",
+        "badge_not_installed": "未安装",
+        "stats_not_installed": "未安装: {0}",
+        "section_not_installed": "未安装（在其他 SD 卡上或已归档）— {0}"
     },
     "filter": {
         "sort_label": "排序方式",

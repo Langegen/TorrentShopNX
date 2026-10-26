@@ -440,16 +440,40 @@ static void getInstalledComponentsAndSizes(
 //                DLC keys; it changes whenever anything of the game is
 //                installed, updated or removed;
 //   out_patches  application id -> highest installed patch version.
-static void collectInstalledContent(std::unordered_map<uint64_t, std::string>& out_sigs,
-                                    std::unordered_map<uint64_t, uint32_t>& out_patches) {
+// out_present: games with their base or update on the SD card, in system
+// memory or on an inserted game card. A game without either is only a record
+// left behind by an SD card that is not in the console (or an archived game).
+// Returns false when the content databases could not be read at all.
+static bool collectInstalledContent(std::unordered_map<uint64_t, std::string>& out_sigs,
+                                    std::unordered_map<uint64_t, uint32_t>& out_patches,
+                                    std::unordered_set<uint64_t>& out_present) {
     struct Key { uint64_t app; uint8_t type; uint64_t id; uint32_t version; uint8_t storage; };
     std::vector<Key> keys;
 
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
-    if (R_FAILED(ncmInitialize())) return;
+    if (R_FAILED(ncmInitialize())) return false;
+    bool anyDb = false;
+
+    // The game card only answers "is the game here"; it stays out of the
+    // content signatures so inserting a card does not invalidate the cache.
+    {
+        NcmContentMetaDatabase db;
+        if (R_SUCCEEDED(ncmOpenContentMetaDatabase(&db, NcmStorageId_GameCard))) {
+            std::vector<NcmContentMetaKey> buf(16);
+            s32 total = 0, written = 0;
+            if (R_SUCCEEDED(ncmContentMetaDatabaseList(&db, &total, &written, buf.data(), static_cast<s32>(buf.size()),
+                                                       NcmContentMetaType_Application, 0, 0, UINT64_MAX,
+                                                       NcmContentInstallType_Full))) {
+                for (s32 i = 0; i < written; ++i) out_present.insert(buf[static_cast<size_t>(i)].id & ~0x1FFFULL);
+            }
+            ncmContentMetaDatabaseClose(&db);
+        }
+    }
+
     for (NcmStorageId sid : {NcmStorageId_SdCard, NcmStorageId_BuiltInUser}) {
         NcmContentMetaDatabase db;
         if (R_FAILED(ncmOpenContentMetaDatabase(&db, sid))) continue;
+        anyDb = true;
         for (NcmContentMetaType type : {NcmContentMetaType_Application, NcmContentMetaType_Patch,
                                         NcmContentMetaType_AddOnContent}) {
             std::vector<NcmContentMetaKey> buf(512);
@@ -465,6 +489,7 @@ static void collectInstalledContent(std::unordered_map<uint64_t, std::string>& o
             for (s32 i = 0; i < written; ++i) {
                 const NcmContentMetaKey& k = buf[static_cast<size_t>(i)];
                 keys.push_back({k.id & ~0x1FFFULL, static_cast<uint8_t>(type), k.id, k.version, static_cast<uint8_t>(sid)});
+                if (type != NcmContentMetaType_AddOnContent) out_present.insert(k.id & ~0x1FFFULL);
                 if (type == NcmContentMetaType_Patch) {
                     uint32_t& v = out_patches[k.id & ~0x1FFFULL];
                     if (k.version > v) v = k.version;
@@ -486,6 +511,7 @@ static void collectInstalledContent(std::unordered_map<uint64_t, std::string>& o
         std::snprintf(buf, sizeof(buf), "%u:%llx:%u:%u;", k.type, (unsigned long long)k.id, k.version, k.storage);
         out_sigs[k.app] += buf;
     }
+    return anyDb;
 }
 
 // Per-game results of the expensive scan steps (NACP name/version, SDK,
@@ -834,12 +860,17 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     std::vector<LibraryItem> upToDateItems;
     std::vector<LibraryItem> otherItems;
     std::vector<LibraryItem> portItems;
+    std::vector<LibraryItem> notInstalledItems;
 
     auto& ignoredMgr = catalog::IgnoredUpdatesManager::instance();
 
     for (auto item : rawItems_) {
         if (item.isPort) {
             portItems.push_back(item);
+            continue;
+        }
+        if (item.status == GameUpdateStatus::NotInstalled) {
+            notInstalledItems.push_back(item);
             continue;
         }
         item.updateIgnored = ignoredMgr.isIgnored(item.titleId);
@@ -871,6 +902,7 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     sortAlpha(otherItems);
     sortAlpha(ignoredItems);
     sortAlpha(portItems);
+    sortAlpha(notInstalledItems);
 
     if (!modsUpdates.empty()) {
         std::string title = brls::getStr("app/library/section_mods_updates", std::to_string(modsUpdates.size()));
@@ -895,6 +927,10 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     if (!ignoredItems.empty()) {
         std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
         sections_.push_back({title, std::move(ignoredItems)});
+    }
+    if (!notInstalledItems.empty()) {
+        std::string title = brls::getStr("app/library/section_not_installed", std::to_string(notInstalledItems.size()));
+        sections_.push_back({title, std::move(notInstalledItems)});
     }
 
     if (recycler) {
@@ -1092,8 +1128,13 @@ void LibraryView::updateStatsAndSpace() {
     int modsCount = 0;
     int ignoredCount = 0;
     int totalCount = 0;
+    int notInstalledCount = 0;
 
     for (const auto& item : rawItems_) {
+        if (item.status == GameUpdateStatus::NotInstalled) {
+            notInstalledCount++;
+            continue;
+        }
         totalCount++;
         if (item.hasMods) modsCount++;
         if (item.updateIgnored) {
@@ -1110,6 +1151,9 @@ void LibraryView::updateStatsAndSpace() {
         }
         if (ignoredCount > 0) {
             s += " • " + brls::getStr("app/library/stats_ignored", std::to_string(ignoredCount));
+        }
+        if (notInstalledCount > 0) {
+            s += " • " + brls::getStr("app/library/stats_not_installed", std::to_string(notInstalledCount));
         }
         statsHint->setText(s);
     }
@@ -1184,6 +1228,7 @@ void LibraryView::scanForUpdates() {
             uint64_t titleId;
             std::string name;
             std::string currentVersionStr;
+            bool notInstalled = false;   // only a record: no base game or update anywhere
         };
         std::vector<InstalledItem> installedList;
         std::vector<uint64_t> baseTids;
@@ -1212,7 +1257,8 @@ void LibraryView::scanForUpdates() {
         // 2. Installed content of every game: a few batch ncm calls
         std::unordered_map<uint64_t, std::string> contentSigs;
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
-        collectInstalledContent(contentSigs, installedPatchVersions);
+        std::unordered_set<uint64_t> presentTids;
+        bool contentScanned = collectInstalledContent(contentSigs, installedPatchVersions, presentTids);
 
         // 3. Per-game data from the SD cache; only games whose installed
         //    content changed (or that are new) go through the slow queries.
@@ -1291,7 +1337,8 @@ void LibraryView::scanForUpdates() {
         std::unordered_map<uint64_t, GameComponentData> installedCompData;
         for (uint64_t tid : recordTids) {
             const ScanCacheEntry& e = scanCache[tid];
-            installedList.push_back({tid, e.name, e.displayVersion.empty() ? "1.0.0" : e.displayVersion});
+            installedList.push_back({tid, e.name, e.displayVersion.empty() ? "1.0.0" : e.displayVersion,
+                                     contentScanned && presentTids.count(tid) == 0});
             baseTids.push_back(tid);
             if (!e.sdk.empty()) installedSdkVersions[tid] = e.sdk;
             installedCompData[tid] = e.gcd;
@@ -1301,6 +1348,7 @@ void LibraryView::scanForUpdates() {
         installedList.push_back({0x0100000000010000ULL, "Super Mario Odyssey", "1.0.0"});
         installedList.push_back({0x01007ef00011e000ULL, "The Legend of Zelda: Breath of the Wild", "1.0.0"});
         installedList.push_back({0x0100000000020000ULL, "Unmatched Dummy Game", "1.1.0"});
+        installedList.push_back({0x0100000000030000ULL, "Game On Another SD Card", "1.2.3", true});
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
         std::unordered_map<uint64_t, std::string> installedSdkVersions;
         installedSdkVersions[0x0100000000010000ULL] = "17.0.0";
@@ -1542,7 +1590,14 @@ void LibraryView::scanForUpdates() {
             if (isIgnored) {
                 status = GameUpdateStatus::UpdateIgnored;
             }
-            
+            // Only a record is left (e.g. installed to another SD card): the
+            // NACP version is from the missing install and there is nothing
+            // to update.
+            if (inst.notInstalled) {
+                status = GameUpdateStatus::NotInstalled;
+                currentVerStr = "—";
+            }
+
             // Match by Title ID (indexed): the explicit title_id field from the
             // catalog JSON, or the [0100...] bracket in the title.
             bool foundInCatalog = false;
@@ -2263,7 +2318,11 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         cell->latestVersion->setText(item.latestVersion);
 
         // Configure status badge dynamically
-        if (item.updateIgnored) {
+        if (item.status == GameUpdateStatus::NotInstalled) {
+            cell->statusBadge->setText("app/library/badge_not_installed"_i18n);
+            cell->statusBadge->setTextColor(nvgRGB(220, 220, 220));
+            cell->statusBox->setBackgroundColor(nvgRGB(75, 85, 99)); // Slate, like ignored
+        } else if (item.updateIgnored) {
             cell->statusBadge->setText("app/library/badge_ignored"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(220, 220, 220));
             cell->statusBox->setBackgroundColor(nvgRGB(75, 85, 99)); // Slate

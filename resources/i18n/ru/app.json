@@ -194,7 +194,15 @@
         "action_peers": "Пиры",
         "action_peers_short": "Пиры",
         "peers_title": "Состояние сети и пиры",
-        "peers_no_active": "Нет активных подключений к пирам"
+        "peers_no_active": "Нет активных подключений к пирам",
+        "collapse": "Свернуть",
+        "expand": "Развернуть",
+        "file_count_one": "{0} файл",
+        "file_count_few": "{0} файла",
+        "file_count_many": "{0} файлов",
+        "comp_base_game": "Базовая игра",
+        "comp_patch": "Патч {0}",
+        "comp_patch_plain": "Патч"
     },
     "detail": {
         "developer": "Разработчик: {0}",
@@ -442,7 +450,10 @@
         "comp_delete_success": "«{0}» успешно удалено",
         "comp_mgr_title": "Управление компонентами: {0}",
         "badge_dlc": "DLC",
-        "action_manage_components": "Управление компонентами"
+        "action_manage_components": "Управление компонентами",
+        "badge_not_installed": "НЕ УСТАНОВЛЕНА",
+        "stats_not_installed": "Не установлено: {0}",
+        "section_not_installed": "НЕ УСТАНОВЛЕНЫ (НА ДРУГОЙ SD-КАРТЕ ИЛИ В АРХИВЕ) — {0}"
     },
     "filter": {
         "title": "Фильтры и сортировка",

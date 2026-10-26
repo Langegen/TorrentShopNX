@@ -1892,10 +1892,8 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                     if (files_[idx].size > 0) extraTotalBytes += static_cast<unsigned long long>(files_[idx].size);
                 }
 
+                // The downloads screen adds the file count in the interface language
                 auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
-                if (extraFiles.size() > 1) {
-                    comp.cleanName += " (" + std::to_string(extraFiles.size()) + " ф.)";
-                }
 
                 std::string extraTitle = cleanTitle(game_.title);
                 Game extraGame = game_;

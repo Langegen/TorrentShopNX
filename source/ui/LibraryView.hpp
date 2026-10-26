@@ -15,6 +15,7 @@ enum class GameUpdateStatus {
     UpToDate,
     UpdateAvailable,
     UpdateIgnored,
+    NotInstalled,   // record only: base game and update are on a missing SD card or archived
     Unknown
 };
 

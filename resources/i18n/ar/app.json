@@ -194,7 +194,15 @@
         "action_peers_short": "أقران",
         "peers_title": "حالة الشبكة والأقران",
         "peers_no_active": "لا توجد اتصالات نشطة بالأقران",
-        "count_badge": "{0}/{1} مكتمل"
+        "count_badge": "{0}/{1} مكتمل",
+        "collapse": "طي",
+        "expand": "توسيع",
+        "file_count_one": "{0} ملف",
+        "file_count_few": "{0} ملفات",
+        "file_count_many": "{0} ملفات",
+        "comp_base_game": "اللعبة الأساسية",
+        "comp_patch": "تحديث {0}",
+        "comp_patch_plain": "تحديث"
     },
     "detail": {
         "developer": "المطور: {0}",
@@ -442,7 +450,10 @@
         "update_all_failed": "لم يُعثر على تحديث في إصدارات:",
         "uninstall_both_game_and_mods": "حذف اللعبة والتعديلات",
         "uninstall_game_only": "حذف اللعبة فقط",
-        "uninstall_with_mods_prompt": "تم العثور على تعديلات/ترجمات ({1}) للعبة \"{0}\". هل تريد حذفها مع اللعبة؟"
+        "uninstall_with_mods_prompt": "تم العثور على تعديلات/ترجمات ({1}) للعبة \"{0}\". هل تريد حذفها مع اللعبة؟",
+        "badge_not_installed": "غير مثبتة",
+        "stats_not_installed": "غير مثبتة: {0}",
+        "section_not_installed": "غير مثبتة (على بطاقة SD أخرى أو مؤرشفة) — {0}"
     },
     "filter": {
         "title": "التصفية والفرز",

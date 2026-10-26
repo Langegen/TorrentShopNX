@@ -194,7 +194,15 @@
         "action_peers_short": "ピア",
         "downloads_header_hints": "L - ピア  [-] 画面を消灯",
         "state_connecting_peers": "ピアに接続中...",
-        "state_resolving_meta": "メタデータを取得中..."
+        "state_resolving_meta": "メタデータを取得中...",
+        "collapse": "折りたたむ",
+        "expand": "展開",
+        "file_count_one": "{0} ファイル",
+        "file_count_few": "{0} ファイル",
+        "file_count_many": "{0} ファイル",
+        "comp_base_game": "ゲーム本編",
+        "comp_patch": "更新データ {0}",
+        "comp_patch_plain": "更新データ"
     },
     "detail": {
         "unknown_publisher": "発売元不明",
@@ -442,7 +450,10 @@
         "update_all_failed": "リリースに更新が見つかりませんでした:",
         "uninstall_both_game_and_mods": "ゲームとMODを削除",
         "uninstall_game_only": "ゲームのみ削除",
-        "uninstall_with_mods_prompt": "「{0}」のMOD/翻訳（{1}）が見つかりました。ゲームと一緒に削除しますか？"
+        "uninstall_with_mods_prompt": "「{0}」のMOD/翻訳（{1}）が見つかりました。ゲームと一緒に削除しますか？",
+        "badge_not_installed": "未インストール",
+        "stats_not_installed": "未インストール: {0}",
+        "section_not_installed": "未インストール (別のSDカードまたはアーカイブ済み) — {0}"
     },
     "filter": {
         "sort_label": "並び替え",

@@ -194,7 +194,15 @@
         "action_peers_short": "Peer",
         "downloads_header_hints": "L - Peer  [-] Spegni schermo",
         "state_connecting_peers": "Connessione ai peer...",
-        "state_resolving_meta": "Risoluzione dei metadati..."
+        "state_resolving_meta": "Risoluzione dei metadati...",
+        "collapse": "Comprimi",
+        "expand": "Espandi",
+        "file_count_one": "{0} file",
+        "file_count_few": "{0} file",
+        "file_count_many": "{0} file",
+        "comp_base_game": "Gioco base",
+        "comp_patch": "Aggiornamento {0}",
+        "comp_patch_plain": "Aggiornamento"
     },
     "detail": {
         "unknown_publisher": "Editore sconosciuto",
@@ -442,7 +450,10 @@
         "update_all_failed": "Nessun aggiornamento trovato nelle release di:",
         "uninstall_both_game_and_mods": "Elimina gioco e mod",
         "uninstall_game_only": "Elimina solo il gioco",
-        "uninstall_with_mods_prompt": "Trovate mod/traduzioni ({1}) per \"{0}\". Eliminarle insieme al gioco?"
+        "uninstall_with_mods_prompt": "Trovate mod/traduzioni ({1}) per \"{0}\". Eliminarle insieme al gioco?",
+        "badge_not_installed": "NON INSTALLATO",
+        "stats_not_installed": "Non installati: {0}",
+        "section_not_installed": "NON INSTALLATI (SU UN'ALTRA SCHEDA SD O ARCHIVIATI) — {0}"
     },
     "filter": {
         "sort_label": "Ordina per",
