@@ -57,6 +57,10 @@ std::string variantTitle(const installer::PortVariant& v) {
     return v.title_arg.empty() ? brls::getStr(v.title_key) : brls::getStr(v.title_key, v.title_arg);
 }
 
+// Width of brls::Dialog (fixed in borealis dialog.cpp). Content boxes use the
+// full width; a narrower box sits at the left edge and looks off-center.
+constexpr float kDialogWidth = 720.0f;
+
 // Dialog body: one wrapping label per line. brls::Dialog(text) draws a
 // multi-line text as one line that runs past the dialog edges.
 struct TextLine {
@@ -67,7 +71,7 @@ struct TextLine {
 
 brls::Box* makeTextBox(const std::vector<TextLine>& lines) {
     auto* box = new brls::Box(brls::Axis::COLUMN);
-    box->setWidth(640.0f);
+    box->setWidth(kDialogWidth);
     box->setPadding(30, 36, 24, 36);
     for (const auto& l : lines) {
         auto* label = new brls::Label();
@@ -231,8 +235,9 @@ void startPortInstallFlow(const Game& game) {
     auto ui = std::make_shared<ProbeUi>();
     auto* box = new brls::Box(brls::Axis::COLUMN);
     box->setAlignItems(brls::AlignItems::CENTER);
-    box->setWidth(640.0f);
+    box->setWidth(kDialogWidth);
     box->setPadding(40, 40, 30, 40);
+    const float textWidth = kDialogWidth - 80.0f;
     auto* spinner = new brls::ProgressSpinner(brls::ProgressSpinnerSize::LARGE);
     spinner->setWidth(64);
     spinner->setHeight(64);
@@ -249,12 +254,14 @@ void startPortInstallFlow(const Game& game) {
     hint->setIsWrapping(true);
     hint->setText("app/ports/probe_wait"_i18n);
     hint->setFontSize(18);
+    hint->setWidth(textWidth);
     hint->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     hint->setMarginBottom(12);
     box->addView(hint);
     ui->status = new brls::Label();
     ui->status->setText("app/fileselect/probing"_i18n);
     ui->status->setFontSize(16);
+    ui->status->setWidth(textWidth);
     ui->status->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     box->addView(ui->status);
 

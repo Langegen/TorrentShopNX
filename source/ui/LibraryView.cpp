@@ -1762,7 +1762,7 @@ void LibraryView::showGameActionMenu(const LibraryItem& item, int currentSection
 void LibraryView::showPortActionMenu(const LibraryItem& item, int currentSection, int currentRow) {
     const std::string displayName = cleanTitle(item.game.title);
     auto* box = new brls::Box(brls::Axis::COLUMN);
-    box->setWidth(640.0f);
+    box->setWidth(720.0f);   // full brls::Dialog width, otherwise the box sits off-center
     box->setPadding(30, 36, 24, 36);
     auto* label = new brls::Label();
     label->setAutoAnimate(false);
