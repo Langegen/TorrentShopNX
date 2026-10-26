@@ -18,6 +18,8 @@
 #include <filesystem>
 #include <curl/curl.h>
 #include <atomic>
+#include <chrono>
+#include <memory>
 #ifdef __SWITCH__
 #include <switch.h>
 #include <unistd.h>
@@ -430,6 +432,78 @@ brls::View* SettingsTab::buildGeneralTab() {
     return scroll;
 }
 
+// Release list of the same repository as the update URL
+// (".../releases/latest" -> ".../releases?per_page=20").
+static std::string testReleasesUrl(const std::string& latestUrl) {
+    const std::string suffix = "/releases/latest";
+    std::string base = latestUrl;
+    if (base.size() < suffix.size() || base.compare(base.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        base = config::ConfigManager::DEFAULT_APP_UPDATE_URL;
+    }
+    return base.substr(0, base.size() - suffix.size()) + "/releases?per_page=20";
+}
+
+// Hidden: newest pre-release or release built from the "test" branch that has
+// an .nro. releases/latest skips pre-releases, so regular users never get it.
+static void openTestBuildInstaller(const std::string& latestUrl) {
+    brls::Application::notify("app/settings/test_build_fetch"_i18n);
+    std::string listUrl = testReleasesUrl(latestUrl);
+    brls::async([listUrl]() {
+        util::logLine("testBuild: fetching " + listUrl);
+        net::HttpClient http;
+        auto res = http.httpGet(listUrl);
+        bool fetched = res.status_code == 200 && !res.body.empty();
+        std::string version, url, date;
+        if (fetched) {
+            try {
+                auto list = nlohmann::json::parse(res.body);
+                if (list.is_array()) {
+                    for (const auto& r : list) {
+                        if (r.value("draft", false)) continue;
+                        bool isTest = r.value("prerelease", false) || r.value("target_commitish", "") == "test";
+                        if (!isTest || !r.contains("assets") || !r["assets"].is_array()) continue;
+                        for (const auto& asset : r["assets"]) {
+                            std::string name = asset.value("name", "");
+                            if (name.size() >= 4 && name.compare(name.size() - 4, 4, ".nro") == 0) {
+                                url = asset.value("browser_download_url", "");
+                                break;
+                            }
+                        }
+                        if (url.empty()) continue;
+                        version = r.value("tag_name", "test");
+                        std::string iso = r.value("published_at", "");
+                        if (iso.size() >= 10) date = iso.substr(8, 2) + "." + iso.substr(5, 2) + "." + iso.substr(0, 4);
+                        break;
+                    }
+                }
+            } catch (const std::exception& e) {
+                util::logLine("testBuild: parse error: " + std::string(e.what()));
+                fetched = false;
+            }
+        } else {
+            util::logLine("testBuild: fetch failed, status=" + std::to_string(res.status_code));
+        }
+        util::logLine("testBuild: " + (url.empty() ? std::string("none") : version + " " + url));
+
+        brls::sync([fetched, version, url, date]() {
+            if (url.empty()) {
+                brls::Dialog* d = new brls::Dialog(fetched ? "app/settings/test_build_none"_i18n
+                                                           : "app/settings/update_check_failed"_i18n);
+                d->addButton("app/common/ok"_i18n, []() {});
+                d->open();
+                return;
+            }
+            brls::Dialog* dialog = new brls::Dialog(brls::getStr("app/settings/test_build_confirm", version, date));
+            dialog->addButton("app/common/yes"_i18n, [url, version]() {
+                util::updateJournal("test build chosen: " + version);
+                downloadAndInstallAppUpdate(url, version);
+            });
+            dialog->addButton("app/common/no"_i18n, []() {});
+            dialog->open();
+        });
+    });
+}
+
 brls::View* SettingsTab::buildUpdatesTab() {
     auto& cfg = config::ConfigManager::instance();
     brls::Box* box = nullptr;
@@ -506,6 +580,20 @@ brls::View* SettingsTab::buildUpdatesTab() {
         });
         return true;
     });
+    // Hidden: ZR pressed 5 times within 2.5 s on this cell offers the test build.
+    auto zrTaps = std::make_shared<std::pair<int, std::chrono::steady_clock::time_point>>(0, std::chrono::steady_clock::time_point{});
+    forceAppUpdateCell->registerAction("", brls::ControllerButton::BUTTON_RT, [zrTaps, &cfg](brls::View*) {
+        auto now = std::chrono::steady_clock::now();
+        if (zrTaps->first == 0 || now - zrTaps->second > std::chrono::milliseconds(2500)) {
+            zrTaps->first = 0;
+            zrTaps->second = now;
+        }
+        if (++zrTaps->first >= 5) {
+            zrTaps->first = 0;
+            openTestBuildInstaller(cfg.getEffectiveAppUpdateUrl());
+        }
+        return true;
+    }, true);
     box->addView(forceAppUpdateCell);
 
     // ── Каталог игр ─────────────────────────────────────────────────
