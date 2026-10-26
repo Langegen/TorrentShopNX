@@ -764,7 +764,9 @@
         "sec_app_update": "Application",
         "sec_catalog_update": "Game Catalog",
         "sec_retro_update": "Retro Catalogs",
-        "sound_effects_desc": "Button clicks, navigation sounds and alerts"
+        "sound_effects_desc": "Button clicks, navigation sounds and alerts",
+        "retro_folder_auto": "Automatic (Tico, Vita3K, Cemu)",
+        "retro_folder_hint": "Automatic: games go to Tico folders (sdmc:/tico/roms/<console>), PS Vita to Vita3K, Wii U to Cemu. Custom folder: <folder>/<console>/ — add it in Tico under Settings › General › Game folders."
     },
     "applet": {
         "title": "Applet Mode Not Supported",
@@ -1027,7 +1029,15 @@
         "tico_card_hint": "Automatic disc extraction and boxart caching",
         "tico_card_hint_unsupported": "Tico cores do not support this console yet",
         "standalone_badge_recommended": "Recommended",
-        "standalone_card_hint": "Standard folder for standalone emulators and RetroArch"
+        "standalone_card_hint": "Standard folder for standalone emulators and RetroArch",
+        "ready_check_format": "Downloaded, but Tico may not open this format",
+        "ready_vita3k": "Done: install the game in Vita3K (switch/vita3k/install folder)",
+        "ready_cemu": "Ready in Cemu",
+        "legacy_move_title": "PS Vita and Wii U games in old folders",
+        "legacy_move_desc": "Found in old folders: PS Vita — {0}, Wii U — {1}. Vita3K and Cemu don't look there. Move them to the emulator folders (switch/vita3k/install and switch/cemu/games)?",
+        "legacy_move_btn": "Move",
+        "legacy_keep_btn": "Leave as is",
+        "legacy_moved_notify": "Moved: {0}"
     },
     "dashboard": {
         "catalog_title": "NEW & POPULAR GAMES",

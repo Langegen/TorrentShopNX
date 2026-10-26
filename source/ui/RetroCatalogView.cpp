@@ -143,8 +143,7 @@ RetroCatalogView::~RetroCatalogView() {
 void RetroCatalogView::updateEmulatorBadge() {
     if (!emuBadge || !emuBadgeText) return;
 
-    bool isTicoMode = config::ConfigManager::instance().isTicoMode();
-    if (isTicoMode && consoleInfo_.is_tico_supported) {
+    if (consoleInfo_.route == catalog::RetroRoute::Tico) {
         bool ticoInstalled = catalog::RetroEmulatorManager::instance().isInstalled("tico");
         emuBadge->setVisibility(brls::Visibility::VISIBLE);
         bool isLight = ThemeManager::instance().isCurrentThemeLight();
@@ -204,8 +203,7 @@ void RetroCatalogView::updateEmulatorBadge() {
 }
 
 void RetroCatalogView::triggerEmulatorAction() {
-    bool isTicoMode = config::ConfigManager::instance().isTicoMode();
-    if (isTicoMode && consoleInfo_.is_tico_supported) {
+    if (consoleInfo_.route == catalog::RetroRoute::Tico) {
         const auto* ticoPkg = catalog::RetroEmulatorManager::instance().findPackage("tico");
         if (ticoPkg) {
             bool ticoInstalled = catalog::RetroEmulatorManager::instance().isInstalled("tico");

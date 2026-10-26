@@ -764,7 +764,9 @@
         "sec_app_update": "Приложение",
         "sec_catalog_update": "Каталог игр",
         "sec_retro_update": "Ретро-каталоги",
-        "sound_effects_desc": "Звуки кнопок, навигации по меню и уведомлений"
+        "sound_effects_desc": "Звуки кнопок, навигации по меню и уведомлений",
+        "retro_folder_auto": "Автоматически (Tico, Vita3K, Cemu)",
+        "retro_folder_hint": "Автоматически: игры ложатся в папки Tico (sdmc:/tico/roms/<консоль>), PS Vita — в Vita3K, Wii U — в Cemu. Своя папка: <папка>/<консоль>/ — добавьте её в Tico: Настройки › Общие › Папки с играми."
     },
     "applet": {
         "title": "Режим апплета не поддерживается",
@@ -1027,7 +1029,15 @@
         "tico_card_hint": "Автоматическая распаковка образов и загрузка обложки в кэш",
         "tico_card_hint_unsupported": "Ядро Tico пока не поддерживает запуск игр этой консоли",
         "standalone_badge_recommended": "Рекомендуется",
-        "standalone_card_hint": "Стандартная папка для автономных эмуляторов и RetroArch"
+        "standalone_card_hint": "Стандартная папка для автономных эмуляторов и RetroArch",
+        "ready_check_format": "Скачано, но Tico может не открыть этот формат",
+        "ready_vita3k": "Готово: установите игру в Vita3K (папка switch/vita3k/install)",
+        "ready_cemu": "Готово к запуску в Cemu",
+        "legacy_move_title": "Игры PS Vita и Wii U в старых папках",
+        "legacy_move_desc": "Найдено в старых папках: PS Vita — {0}, Wii U — {1}. Vita3K и Cemu их там не видят. Перенести в папки эмуляторов (switch/vita3k/install и switch/cemu/games)?",
+        "legacy_move_btn": "Перенести",
+        "legacy_keep_btn": "Оставить как есть",
+        "legacy_moved_notify": "Перенесено: {0}"
     },
     "dashboard": {
         "catalog_title": "НОВИНКИ И ПОПУЛЯРНЫЕ ИГРЫ КАТАЛОГА",

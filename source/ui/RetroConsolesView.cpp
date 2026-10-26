@@ -4,6 +4,7 @@
 #include "RetroEmulatorsView.hpp"
 #include "ThemeManager.hpp"
 #include "../catalog/retro_emulator_manager.h"
+#include "../catalog/retro_layout.h"
 #include "../config/config.h"
 #include "../utils/app_paths.h"
 #include "../utils/log.h"
@@ -80,28 +81,39 @@ void RetroConsolesView::onContentAvailable() {
     rebuildGrid();
     refreshGameCounts();
 
-    static bool s_checkedTicoPrompt = false;
-    if (!s_checkedTicoPrompt) {
-        s_checkedTicoPrompt = true;
-        auto& cfg = config::ConfigManager::instance();
-        std::error_code ec;
-        std::string ticoNro = catalog::RetroEmulatorManager::resolvePlatformPath(TSNX_TICO_NRO_PATH);
-        std::string ticoDir = catalog::RetroEmulatorManager::resolvePlatformPath(TSNX_TICO_BASE_DIR);
-        if (cfg.getRetroRomsMode() == "retroarch" && (std::filesystem::exists(ticoNro, ec) || std::filesystem::exists(ticoDir, ec))) {
-            std::string promptMsg = "app/retro/tico_detect_title"_i18n + "\n\n" +
-                                    "app/retro/tico_detect_desc"_i18n;
-            auto* prompt = new brls::Dialog(promptMsg);
-            prompt->setCancelable(true);
-            prompt->addButton("app/retro/tico_detect_switch"_i18n, [&cfg]() {
-                cfg.setRetroRomsMode("tico");
-                cfg.save();
-                tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
-                tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
-                brls::Application::notify("app/retro/tico_mode_active_notify"_i18n);
+    // Once per launch: bring folders written by older versions to the current
+    // layout, and offer to move PS Vita / Wii U games to their emulators.
+    static bool s_checkedLegacyLayout = false;
+    if (!s_checkedLegacyLayout) {
+        s_checkedLegacyLayout = true;
+        std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
+        brls::async([flag]() {
+            catalog::retro::migrateLegacyTicoLayout();
+            if (catalog::retro::wasLegacyStandaloneOfferAnswered()) return;
+            catalog::retro::LegacyStandaloneGames legacy = catalog::retro::findLegacyStandaloneGames();
+            if (legacy.total() == 0) return;
+            brls::sync([flag, legacy]() {
+                if (!flag->load()) return;
+                std::string msg = "app/retro/legacy_move_title"_i18n + "\n\n" +
+                                  brls::getStr("app/retro/legacy_move_desc",
+                                               std::to_string(legacy.vita), std::to_string(legacy.wiiu));
+                auto* dialog = new brls::Dialog(msg);
+                dialog->setCancelable(true);
+                dialog->addButton("app/retro/legacy_move_btn"_i18n, []() {
+                    brls::async([]() {
+                        int moved = catalog::retro::moveLegacyStandaloneGames();
+                        catalog::retro::markLegacyStandaloneOfferAnswered();
+                        brls::sync([moved]() {
+                            brls::Application::notify(brls::getStr("app/retro/legacy_moved_notify", std::to_string(moved)));
+                        });
+                    });
+                });
+                dialog->addButton("app/retro/legacy_keep_btn"_i18n, []() {
+                    catalog::retro::markLegacyStandaloneOfferAnswered();
+                });
+                dialog->open();
             });
-            prompt->addButton("app/retro/tico_detect_later"_i18n, []() {});
-            prompt->open();
-        }
+        });
     }
 }
 
@@ -195,9 +207,9 @@ void RetroConsolesView::rebuildGrid() {
             int cached = mgr.getCachedGameCount(c.id);
             std::string countStr = (cached > 0) ? (std::to_string(cached) + " " + "app/retro/unit_games"_i18n) : "app/retro/catalog_badge"_i18n;
 
-            bool emuInstalled = !c.recommended_emulator_id.empty() &&
-                                catalog::RetroEmulatorManager::instance().isInstalled(c.recommended_emulator_id);
-            std::string desc = c.release_year + " • " + c.recommended_emulator;
+            bool emuInstalled = catalog::RetroEmulatorManager::instance().isInstalled(mgr.getRunnerPackageId(c.id));
+            std::string runner = (c.route == catalog::RetroRoute::Tico) ? std::string("Tico") : mgr.getRunnerLabel(c.id);
+            std::string desc = c.release_year + " • " + runner;
             if (emuInstalled) {
                 desc += "app/retro/emu_ready_badge"_i18n;
             }

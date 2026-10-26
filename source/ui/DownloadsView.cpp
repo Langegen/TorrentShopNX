@@ -929,7 +929,7 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
             }
             if (g.retro_console_id.empty() && !itm.retro_console_id.empty()) {
                 g.retro_console_id = itm.retro_console_id;
-                g.retro_target_mode = itm.retro_target_mode;
+                g.retro_result_key = itm.retro_result_key;
             }
             if (itm.start_time.time_since_epoch().count() > 0) {
                 if (g.start_time.time_since_epoch().count() == 0 || itm.start_time < g.start_time) {
@@ -1197,11 +1197,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (group.state == download::DownloadState::Completed) {
         if (!group.retro_console_id.empty()) {
-            if (group.retro_target_mode == "tico" || (group.retro_target_mode.empty() && config::ConfigManager::instance().isTicoMode())) {
-                cell->statsText->setText("app/retro/ready_in_tico"_i18n);
-            } else {
-                cell->statsText->setText("app/retro/ready_to_play"_i18n);
-            }
+            cell->statsText->setText(group.retro_result_key.empty()
+                ? "app/retro/ready_to_play"_i18n : brls::getStr(group.retro_result_key));
         } else {
             cell->statsText->setText("app/downloads/installed"_i18n);
         }

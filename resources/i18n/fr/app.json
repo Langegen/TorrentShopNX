@@ -739,7 +739,9 @@
         "sec_retro_update": "Catalogues rétro",
         "sound_effects_desc": "Sons des boutons, navigation et alertes",
         "retro_folder_prompt": "Demander avant de télécharger",
-        "retro_folder_tico": "Frontend Tico (sdmc:/tico/roms/)"
+        "retro_folder_tico": "Frontend Tico (sdmc:/tico/roms/)",
+        "retro_folder_auto": "Automatique (Tico, Vita3K, Cemu)",
+        "retro_folder_hint": "Automatique : les jeux vont dans les dossiers de Tico (sdmc:/tico/roms/<console>), PS Vita dans Vita3K, Wii U dans Cemu. Dossier personnalisé : <dossier>/<console>/ — ajoutez-le dans Tico sous Paramètres › Général › Dossiers de jeux."
     },
     "applet": {
         "title": "Mode Applet détecté",
@@ -997,7 +999,15 @@
         "tico_mode_active_notify": "Dossier cible basculé vers Tico (sdmc:/tico/roms/) !",
         "tico_save_standalone": "Enregistrer pour {1}",
         "tico_unsupported_desc": "Le frontend Tico ne dispose pas encore de cœur natif pour {0}. Le jeu sera enregistré dans le dossier de l'émulateur autonome {1} (sdmc:/roms/). Continuer ?",
-        "tico_unsupported_title": "Plateforme non prise en charge par Tico"
+        "tico_unsupported_title": "Plateforme non prise en charge par Tico",
+        "ready_check_format": "Téléchargé, mais Tico risque de ne pas ouvrir ce format",
+        "ready_vita3k": "Terminé : installez le jeu dans Vita3K (dossier switch/vita3k/install)",
+        "ready_cemu": "Prêt dans Cemu",
+        "legacy_move_title": "Jeux PS Vita et Wii U dans d'anciens dossiers",
+        "legacy_move_desc": "Trouvés dans d'anciens dossiers : PS Vita — {0}, Wii U — {1}. Vita3K et Cemu n'y cherchent pas. Les déplacer dans les dossiers des émulateurs (switch/vita3k/install et switch/cemu/games) ?",
+        "legacy_move_btn": "Déplacer",
+        "legacy_keep_btn": "Laisser tel quel",
+        "legacy_moved_notify": "Déplacés : {0}"
     },
     "dashboard": {
         "catalog_title": "JEUX NOUVEAUX ET POPULAIRES",

@@ -733,11 +733,6 @@ void RetroEmulatorManager::recordInstalledVersion(const std::string& emu_id, con
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
         tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
-        if (config::ConfigManager::instance().getRetroRomsMode() == "retroarch") {
-            config::ConfigManager::instance().setRetroRomsMode("tico");
-            config::ConfigManager::instance().save();
-            util::logLine("RetroEmulatorManager: Tico installed, automatically switched retro_roms_mode to 'tico'");
-        }
     } else if (emu_id == "tico_bios") {
         tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
     }

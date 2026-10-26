@@ -739,7 +739,9 @@
         "sec_retro_update": "Retro-Kataloge",
         "sound_effects_desc": "Tastentöne, Navigationsgeräusche und Hinweise",
         "retro_folder_prompt": "Vor dem Download fragen",
-        "retro_folder_tico": "Tico-Frontend (sdmc:/tico/roms/)"
+        "retro_folder_tico": "Tico-Frontend (sdmc:/tico/roms/)",
+        "retro_folder_auto": "Automatisch (Tico, Vita3K, Cemu)",
+        "retro_folder_hint": "Automatisch: Spiele landen in den Tico-Ordnern (sdmc:/tico/roms/<Konsole>), PS Vita in Vita3K, Wii U in Cemu. Eigener Ordner: <Ordner>/<Konsole>/ — in Tico unter Einstellungen › Allgemein › Spielordner hinzufügen."
     },
     "applet": {
         "title": "Applet-Modus erkannt",
@@ -997,7 +999,15 @@
         "tico_mode_active_notify": "Zielordner auf Tico (sdmc:/tico/roms/) umgestellt!",
         "tico_save_standalone": "Für {1} speichern",
         "tico_unsupported_desc": "Das Tico-Frontend verfügt noch über keinen nativen Core für {0}. Das Spiel wird im eigenständigen Emulator-Ordner {1} (sdmc:/roms/) gespeichert. Fortfahren?",
-        "tico_unsupported_title": "Plattform wird von Tico nicht unterstützt"
+        "tico_unsupported_title": "Plattform wird von Tico nicht unterstützt",
+        "ready_check_format": "Heruntergeladen, aber Tico kann dieses Format eventuell nicht öffnen",
+        "ready_vita3k": "Fertig: Spiel in Vita3K installieren (Ordner switch/vita3k/install)",
+        "ready_cemu": "Bereit in Cemu",
+        "legacy_move_title": "PS Vita- und Wii U-Spiele in alten Ordnern",
+        "legacy_move_desc": "In alten Ordnern gefunden: PS Vita — {0}, Wii U — {1}. Vita3K und Cemu suchen dort nicht. In die Emulator-Ordner verschieben (switch/vita3k/install und switch/cemu/games)?",
+        "legacy_move_btn": "Verschieben",
+        "legacy_keep_btn": "So lassen",
+        "legacy_moved_notify": "Verschoben: {0}"
     },
     "dashboard": {
         "catalog_title": "NEUE & BELIEBTE SPIELE",

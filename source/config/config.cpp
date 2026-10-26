@@ -264,7 +264,7 @@ ConfigManager::ConfigManager() {
     last_app_update_check_date_.clear();
     last_emulator_manifest_check_date_.clear();
     language_ = "auto";
-    retro_roms_mode_ = "prompt";
+    retro_roms_mode_ = "auto";
     retro_custom_path_.clear();
     retro_auto_extract_ = false;
     retro_romset_mode_ = "full";
@@ -292,8 +292,8 @@ void ConfigManager::load() {
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
-        if (retro_roms_mode_ != "prompt" && retro_roms_mode_ != "retroarch" && retro_roms_mode_ != "tico" && retro_roms_mode_ != "downloads" && retro_roms_mode_ != "custom") {
-            retro_roms_mode_ = "prompt";
+        if (retro_roms_mode_ != "custom") {
+            retro_roms_mode_ = "auto";
         }
         if (retro_romset_mode_ != "full" && retro_romset_mode_ != "select") {
             retro_romset_mode_ = "full";
@@ -328,8 +328,8 @@ void ConfigManager::load() {
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
-        if (retro_roms_mode_ != "prompt" && retro_roms_mode_ != "retroarch" && retro_roms_mode_ != "tico" && retro_roms_mode_ != "downloads" && retro_roms_mode_ != "custom") {
-            retro_roms_mode_ = "prompt";
+        if (retro_roms_mode_ != "custom") {
+            retro_roms_mode_ = "auto";
         }
         if (retro_romset_mode_ != "full" && retro_romset_mode_ != "select") {
             retro_romset_mode_ = "full";
@@ -728,18 +728,14 @@ const std::string& ConfigManager::getRetroRomsMode() const {
 }
 
 void ConfigManager::setRetroRomsMode(const std::string& mode) {
-    if (mode == "prompt" || mode == "retroarch" || mode == "tico" || mode == "downloads" || mode == "custom") {
+    if (mode == "auto" || mode == "custom") {
         retro_roms_mode_ = mode;
         save();
     }
 }
 
-bool ConfigManager::isTicoMode() const {
-    return retro_roms_mode_ == "tico";
-}
-
-bool ConfigManager::isPromptMode() const {
-    return retro_roms_mode_ == "prompt" || retro_roms_mode_.empty();
+bool ConfigManager::isRetroCustomFolder() const {
+    return retro_roms_mode_ == "custom";
 }
 
 const std::string& ConfigManager::getRetroCustomPath() const {
@@ -748,15 +744,6 @@ const std::string& ConfigManager::getRetroCustomPath() const {
 
 void ConfigManager::setRetroCustomPath(const std::string& path) {
     retro_custom_path_ = path;
-    save();
-}
-
-bool ConfigManager::getRetroAutoExtract() const {
-    return retro_auto_extract_;
-}
-
-void ConfigManager::setRetroAutoExtract(bool enabled) {
-    retro_auto_extract_ = enabled;
     save();
 }
 
@@ -771,23 +758,6 @@ void ConfigManager::setRetroRomsetMode(const std::string& mode) {
     }
 }
 
-std::string ConfigManager::getEffectiveRetroRomsDir(const std::string& console_default_subfolder) const {
-    std::string base;
-    if (retro_roms_mode_ == "tico") {
-        base = TSNX_TICO_ROMS_DIR;
-    } else if (retro_roms_mode_ == "downloads") {
-        base = TSNX_DOWNLOADS_DIR "/retro";
-    } else if (retro_roms_mode_ == "custom" && !retro_custom_path_.empty()) {
-        base = retro_custom_path_;
-    } else {
-        base = TSNX_ROMS_BASE_DIR;
-    }
-    if (!console_default_subfolder.empty()) {
-        if (!base.empty() && base.back() != '/') base += '/';
-        base += console_default_subfolder;
-    }
-    return base;
-}
 
 const std::string& ConfigManager::getTheme() const {
     return theme_;

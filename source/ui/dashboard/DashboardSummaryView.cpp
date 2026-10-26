@@ -809,12 +809,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3->registerClickAction(openRetro);
 
     auto& cfg = config::ConfigManager::instance();
-    std::string romsMode = cfg.getRetroRomsMode();
-    std::string modeTag = "RetroArch";
-    if (romsMode == "tico") modeTag = "Tico";
-    else if (romsMode == "prompt") modeTag = "Tico / Standalone";
-    else if (romsMode == "downloads") modeTag = "app/dashboard/retro_mode_downloads"_i18n;
-    else if (romsMode == "custom") modeTag = "app/dashboard/retro_mode_custom"_i18n;
+    std::string modeTag = cfg.isRetroCustomFolder() ? "app/dashboard/retro_mode_custom"_i18n : std::string("Tico");
 
     brls::Box* c3Top = new brls::Box();
     c3Top->setAxis(brls::Axis::ROW);
@@ -839,7 +834,8 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3Mid->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c3Val = new brls::Label();
-    std::string effDir = cfg.getEffectiveRetroRomsDir();
+    std::string effDir = (cfg.isRetroCustomFolder() && !cfg.getRetroCustomPath().empty())
+        ? cfg.getRetroCustomPath() : std::string("sdmc:/tico/roms/");
     if (effDir.length() > 22) {
         effDir = effDir.substr(0, 19) + "...";
     }
@@ -848,19 +844,6 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c3Val->setTextColor(themeTextPrimary());
     c3Mid->addView(c3Val);
 
-    if (cfg.getRetroAutoExtract()) {
-        brls::Box* c3Badge = new brls::Box();
-        c3Badge->setPadding(3.0f, 6.0f, 3.0f, 6.0f);
-        c3Badge->setCornerRadius(4.0f);
-        c3Badge->setBackgroundColor(nvgRGBA(255, 180, 50, 32));
-        c3Badge->setMarginLeft(8.0f);
-        brls::Label* c3BadgeLbl = new brls::Label();
-        c3BadgeLbl->setText("Auto-ZIP");
-        c3BadgeLbl->setFontSize(11.0f);
-        c3BadgeLbl->setTextColor(nvgRGBA(255, 200, 80, 255));
-        c3Badge->addView(c3BadgeLbl);
-        c3Mid->addView(c3Badge);
-    }
     c3->addView(c3Mid);
 
     brls::Label* c3Sub = new brls::Label();

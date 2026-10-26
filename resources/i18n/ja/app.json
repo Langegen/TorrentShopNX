@@ -739,7 +739,9 @@
         "sec_retro_update": "レトロカタログ",
         "sound_effects_desc": "ボタン、メニュー操作および通知の効果音",
         "retro_folder_prompt": "ダウンロード前に確認",
-        "retro_folder_tico": "Tico フロントエンド (sdmc:/tico/roms/)"
+        "retro_folder_tico": "Tico フロントエンド (sdmc:/tico/roms/)",
+        "retro_folder_auto": "自動（Tico、Vita3K、Cemu）",
+        "retro_folder_hint": "自動：ゲームは Tico のフォルダ（sdmc:/tico/roms/<機種>）に、PS Vita は Vita3K に、Wii U は Cemu に保存されます。カスタムフォルダ：<フォルダ>/<機種>/ — Tico の 設定 › 一般 › ゲームフォルダ で追加してください。"
     },
     "applet": {
         "title": "アプレットモードを検出しました",
@@ -997,7 +999,15 @@
         "tico_mode_active_notify": "保存先フォルダを Tico (sdmc:/tico/roms/) に切り替えました！",
         "tico_save_standalone": "{1} 用に保存",
         "tico_unsupported_desc": "Tico フロントエンドには {0} のネイティブコアがまだありません。ゲームはスタンドアロンエミュレータ {1} のフォルダ (sdmc:/roms/) に保存されます。続行しますか？",
-        "tico_unsupported_title": "Tico 非対応のプラットフォーム"
+        "tico_unsupported_title": "Tico 非対応のプラットフォーム",
+        "ready_check_format": "ダウンロード済みですが、Tico がこの形式を開けない可能性があります",
+        "ready_vita3k": "完了：Vita3K でゲームをインストールしてください（switch/vita3k/install フォルダ）",
+        "ready_cemu": "Cemu で起動できます",
+        "legacy_move_title": "古いフォルダにある PS Vita / Wii U のゲーム",
+        "legacy_move_desc": "古いフォルダで見つかりました：PS Vita — {0}、Wii U — {1}。Vita3K と Cemu はそこを参照しません。エミュレータのフォルダ（switch/vita3k/install と switch/cemu/games）に移動しますか？",
+        "legacy_move_btn": "移動",
+        "legacy_keep_btn": "そのままにする",
+        "legacy_moved_notify": "移動しました：{0}"
     },
     "dashboard": {
         "catalog_title": "新作・人気ゲーム",

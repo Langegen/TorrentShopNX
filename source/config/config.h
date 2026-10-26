@@ -94,21 +94,17 @@ public:
     void setLanguage(const std::string& lang);
 
     // Retro Games settings
-    const std::string& getRetroRomsMode() const; // "prompt" (default), "tico", "retroarch", "downloads", "custom"
+    // "auto" (default): Tico folders, Vita3K and Cemu folders; "custom": <custom path>/<console>/.
+    // Older values (prompt, tico, retroarch, downloads) are read as "auto".
+    const std::string& getRetroRomsMode() const;
     void setRetroRomsMode(const std::string& mode);
-    bool isTicoMode() const;
-    bool isPromptMode() const;
+    bool isRetroCustomFolder() const;
 
     const std::string& getRetroCustomPath() const;
     void setRetroCustomPath(const std::string& path);
 
-    bool getRetroAutoExtract() const; // default false
-    void setRetroAutoExtract(bool enabled);
-
     const std::string& getRetroRomsetMode() const; // "full" (default), "select"
     void setRetroRomsetMode(const std::string& mode);
-
-    std::string getEffectiveRetroRomsDir(const std::string& console_default_subfolder = "") const;
 
     // Appearance / Theme settings
     const std::string& getTheme() const; // "light" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "graphite"

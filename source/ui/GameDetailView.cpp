@@ -1,4 +1,3 @@
-#include "RetroTargetPrompt.hpp"
 #include "GameDetailView.hpp"
 #include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
@@ -161,14 +160,8 @@ void GameDetailView::onContentAvailable() {
 
         badgesBox->addView(cBadge);
 
-        bool isTico = config::ConfigManager::instance().isTicoMode();
-        std::string emuText;
-        if (isTico && cInfo && cInfo->is_tico_supported) {
-            std::string core = catalog::RetroCatalogManager::instance().getTicoCoreName(retro_console_id_);
-            emuText = "Tico • " + core;
-        } else if (cInfo && !cInfo->recommended_emulator.empty()) {
-            emuText = cInfo->recommended_emulator;
-        }
+        bool isTico = catalog::RetroCatalogManager::instance().getRoute(retro_console_id_) == catalog::RetroRoute::Tico;
+        std::string emuText = catalog::RetroCatalogManager::instance().getRunnerLabel(retro_console_id_);
 
         if (!emuText.empty()) {
             brls::Box* emuBadge = new brls::Box();
@@ -361,21 +354,12 @@ void GameDetailView::onContentAvailable() {
                 auto* dialog = new brls::Dialog(cleanTitle(game_.title));
                 dialog->setCancelable(true);
 
-                // 1. Скачать полностью
+                // 1. Скачать полностью (папка и формат выбираются по консоли автоматически)
                 dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
-                    if (!retro_console_id_.empty()) {
-                        promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
-                            ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, target_mode);
-                            brls::sync([]() {
-                                brls::Application::pushActivity(new ui::DownloadsView());
-                            });
-                        });
-                    } else {
-                        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-                        brls::sync([]() {
-                            brls::Application::pushActivity(new ui::DownloadsView());
-                        });
-                    }
+                    ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+                    brls::sync([]() {
+                        brls::Application::pushActivity(new ui::DownloadsView());
+                    });
                 });
 
                 // 2. Выбрать файлы
@@ -388,26 +372,6 @@ void GameDetailView::onContentAvailable() {
 
                 dialog->open();
             };
-
-            // Предупреждение для платформ, не поддерживаемых Tico нативно (PS2, PS Vita, Wii U)
-            if (!retro_console_id_.empty() && config::ConfigManager::instance().isTicoMode() &&
-                !catalog::RetroCatalogManager::instance().isTicoSupported(retro_console_id_)) {
-                const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
-                std::string cName = cInfo ? cInfo->name : retro_console_id_;
-                std::string emuName = cInfo ? cInfo->recommended_emulator : "Standalone";
-
-                std::string warnMsg = "app/retro/tico_unsupported_title"_i18n + "\n\n" +
-                                      brls::getStr("app/retro/tico_unsupported_desc", cName, emuName);
-                auto* warnDialog = new brls::Dialog(warnMsg);
-                warnDialog->setCancelable(true);
-
-                warnDialog->addButton("app/retro/tico_save_standalone"_i18n, [openOptionsDialog]() {
-                    openOptionsDialog();
-                });
-                warnDialog->addButton("app/common/cancel"_i18n, []() {});
-                warnDialog->open();
-                return true;
-            }
 
             openOptionsDialog();
             return true;

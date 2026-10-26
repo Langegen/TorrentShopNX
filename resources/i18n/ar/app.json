@@ -764,7 +764,9 @@
         "sec_retro_update": "أدلة الألعاب الكلاسيكية",
         "sound_effects_desc": "أصوات الأزرار والتنقل والتنبيهات",
         "retro_folder_prompt": "السؤال قبل التنزيل",
-        "retro_folder_tico": "واجهة Tico (sdmc:/tico/roms/)"
+        "retro_folder_tico": "واجهة Tico (sdmc:/tico/roms/)",
+        "retro_folder_auto": "تلقائي (Tico و Vita3K و Cemu)",
+        "retro_folder_hint": "تلقائي: تُحفظ الألعاب في مجلدات Tico (sdmc:/tico/roms/<الجهاز>)، وألعاب PS Vita في Vita3K، وألعاب Wii U في Cemu. مجلد مخصص: <المجلد>/<الجهاز>/ — أضفه في Tico من الإعدادات › عام › مجلدات الألعاب."
     },
     "applet": {
         "title": "وضع التطبيق المصغر غير مدعوم",
@@ -1022,7 +1024,15 @@
         "tico_mode_active_notify": "تم تبديل المجلد الهدف إلى Tico (sdmc:/tico/roms/)!",
         "tico_save_standalone": "حفظ لـ {1}",
         "tico_unsupported_desc": "واجهة Tico لا تمتلك حالياً نواة أصلية لـ {0}. سيتم حفظ اللعبة في مجلد المحاكي المستقل {1} (sdmc:/roms/). هل تريد المتابعة؟",
-        "tico_unsupported_title": "المنصة غير مدعومة في Tico"
+        "tico_unsupported_title": "المنصة غير مدعومة في Tico",
+        "ready_check_format": "تم التنزيل، لكن قد لا يفتح Tico هذه الصيغة",
+        "ready_vita3k": "تم: ثبّت اللعبة في Vita3K (المجلد switch/vita3k/install)",
+        "ready_cemu": "جاهزة في Cemu",
+        "legacy_move_title": "ألعاب PS Vita و Wii U في مجلدات قديمة",
+        "legacy_move_desc": "تم العثور عليها في مجلدات قديمة: PS Vita — {0}، Wii U — {1}. لا يبحث Vita3K و Cemu هناك. هل تريد نقلها إلى مجلدات المحاكيات (switch/vita3k/install و switch/cemu/games)؟",
+        "legacy_move_btn": "نقل",
+        "legacy_keep_btn": "اتركها كما هي",
+        "legacy_moved_notify": "تم النقل: {0}"
     },
     "dashboard": {
         "catalog_title": "الألعاب الجديدة والشائعة",

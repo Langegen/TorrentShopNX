@@ -739,7 +739,9 @@
         "sec_retro_update": "Catálogos retrô",
         "sound_effects_desc": "Sons de botões, navegação e alertas",
         "retro_folder_prompt": "Perguntar antes de baixar",
-        "retro_folder_tico": "Frontend Tico (sdmc:/tico/roms/)"
+        "retro_folder_tico": "Frontend Tico (sdmc:/tico/roms/)",
+        "retro_folder_auto": "Automático (Tico, Vita3K, Cemu)",
+        "retro_folder_hint": "Automático: os jogos vão para as pastas do Tico (sdmc:/tico/roms/<console>), PS Vita para o Vita3K, Wii U para o Cemu. Pasta personalizada: <pasta>/<console>/ — adicione-a no Tico em Configurações › Geral › Pastas de jogos."
     },
     "applet": {
         "title": "Modo Applet detectado",
@@ -997,7 +999,15 @@
         "tico_mode_active_notify": "Pasta de destino alterada para Tico (sdmc:/tico/roms/)!",
         "tico_save_standalone": "Salvar para {1}",
         "tico_unsupported_desc": "O frontend Tico ainda não possui um núcleo nativo para {0}. O jogo será salvo na pasta do emulador independente {1} (sdmc:/roms/). Continuar?",
-        "tico_unsupported_title": "Plataforma não suportada pelo Tico"
+        "tico_unsupported_title": "Plataforma não suportada pelo Tico",
+        "ready_check_format": "Baixado, mas o Tico pode não abrir este formato",
+        "ready_vita3k": "Pronto: instale o jogo no Vita3K (pasta switch/vita3k/install)",
+        "ready_cemu": "Pronto no Cemu",
+        "legacy_move_title": "Jogos de PS Vita e Wii U em pastas antigas",
+        "legacy_move_desc": "Encontrados em pastas antigas: PS Vita — {0}, Wii U — {1}. O Vita3K e o Cemu não procuram lá. Mover para as pastas dos emuladores (switch/vita3k/install e switch/cemu/games)?",
+        "legacy_move_btn": "Mover",
+        "legacy_keep_btn": "Deixar como está",
+        "legacy_moved_notify": "Movidos: {0}"
     },
     "dashboard": {
         "catalog_title": "JOGOS NOVOS E POPULARES",

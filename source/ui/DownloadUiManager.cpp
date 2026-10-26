@@ -78,7 +78,7 @@ bool DownloadManager::hasActiveDownload(const std::string& topic_id, const std::
 
 void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id,
                                  const std::string& group_id, const std::string& group_title, const std::string& component_label, const std::string& component_name, int component_type,
-                                 unsigned long long initial_file_size, const std::string& retro_target_mode) {
+                                 unsigned long long initial_file_size) {
     if (hasActiveDownload(game.topic_id, game.magnet, forced_file_index)) {
         util::logLine("download_ui: game " + game.title + " (topic_id=" + game.topic_id + ") is already in download queue, ignoring duplicate");
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
@@ -90,7 +90,7 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         const uint64_t lock_wait_start = perf::nowUs();
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
         perf::LockTimer lock_timer(perf::LockSite::UiAdd, lock_wait_start);
-        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id, retro_target_mode);
+        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id);
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
@@ -100,7 +100,6 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         item.cover_url = game.cover;
         item.is_homebrew = isHomebrewGame(game);
         item.retro_console_id = retro_console_id;
-        item.retro_target_mode = retro_target_mode;
 
         item.download_total_bytes = initial_file_size;
         item.install_total = initial_file_size;

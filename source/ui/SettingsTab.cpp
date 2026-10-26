@@ -904,21 +904,12 @@ brls::View* SettingsTab::buildRetroTab() {
     brls::Box* box = nullptr;
     brls::ScrollingFrame* scroll = makeTabBox(&box);
 
-    // 1. Base ROMs folder selection
+    // 1. Where games go: automatically (Tico, Vita3K, Cemu folders) or a custom folder
     std::vector<std::string> folderOptions = {
-        "app/settings/retro_folder_prompt"_i18n,
-        "app/settings/retro_folder_tico"_i18n,
-        "app/settings/retro_folder_retroarch"_i18n,
-        "app/settings/retro_folder_downloads"_i18n,
+        "app/settings/retro_folder_auto"_i18n,
         "app/settings/retro_folder_custom"_i18n
     };
-    int initialFolderIdx = 0;
-    std::string currentMode = cfg.getRetroRomsMode();
-    if (currentMode == "tico") initialFolderIdx = 1;
-    else if (currentMode == "retroarch") initialFolderIdx = 2;
-    else if (currentMode == "downloads") initialFolderIdx = 3;
-    else if (currentMode == "custom") initialFolderIdx = 4;
-    else initialFolderIdx = 0;
+    int initialFolderIdx = cfg.isRetroCustomFolder() ? 1 : 0;
 
     auto* customFolderCell = new brls::DetailCell();
     customFolderCell->setText("app/settings/retro_custom_folder"_i18n);
@@ -952,38 +943,25 @@ brls::View* SettingsTab::buildRetroTab() {
 
     auto* folderCell = new brls::SelectorCell();
     folderCell->init("app/settings/retro_roms_folder"_i18n, folderOptions, initialFolderIdx, [](int selected) {}, [&cfg, customFolderCell](int selected) {
-        if (selected == 1) {
-            cfg.setRetroRomsMode("tico");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-            tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
-            tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
-        } else if (selected == 2) {
-            cfg.setRetroRomsMode("retroarch");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-        } else if (selected == 3) {
-            cfg.setRetroRomsMode("downloads");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-        } else if (selected == 4) {
-            cfg.setRetroRomsMode("custom");
-            customFolderCell->setVisibility(brls::Visibility::VISIBLE);
-        } else {
-            cfg.setRetroRomsMode("prompt");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-        }
+        cfg.setRetroRomsMode(selected == 1 ? "custom" : "auto");
+        customFolderCell->setVisibility(selected == 1 ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
         cfg.save();
     });
     box->addView(folderCell);
 
-    customFolderCell->setVisibility((initialFolderIdx == 4) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    customFolderCell->setVisibility((initialFolderIdx == 1) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     box->addView(customFolderCell);
 
-    // 2. Auto-extract toggle
-    auto* autoExtractCell = new brls::BooleanCell();
-    autoExtractCell->init("app/settings/retro_auto_extract"_i18n, cfg.getRetroAutoExtract(), [&cfg](bool value) {
-        cfg.setRetroAutoExtract(value);
-        cfg.save();
-    });
-    box->addView(autoExtractCell);
+    // 2. How the folder is used (shown under the selector)
+    auto* folderHint = new brls::Label();
+    folderHint->setText("app/settings/retro_folder_hint"_i18n);
+    folderHint->setFontSize(13.0f);
+    folderHint->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    folderHint->setMarginTop(6.0f);
+    folderHint->setMarginBottom(14.0f);
+    folderHint->setMarginLeft(16.0f);
+    folderHint->setMarginRight(16.0f);
+    box->addView(folderHint);
 
     // 3. Update retro game databases
     auto* updateCatalogsCell = new brls::DetailCell();

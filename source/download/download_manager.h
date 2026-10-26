@@ -47,6 +47,7 @@ struct FileDownloadState {
     std::string stage_label;
     std::string error;
     std::string dest;              // итоговый путь на диске
+    std::string result_key;        // ретро-игры: i18n-ключ итога ("готово в Tico", "установите в Vita3K")
     unsigned long long size = 0;   // размер исходного файла
 };
 
@@ -185,7 +186,7 @@ struct DownloadItem {
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
     bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
     std::string retro_console_id;
-    std::string retro_target_mode;
+    std::string retro_result_key;   // i18n key of the finished retro download
 
     // Автоматическая установка портов хоумбрю
     bool is_port_auto_install = false;
@@ -219,8 +220,7 @@ public:
                       int forced_file_index = -1,
                       const std::string& forced_stream_name = "",
                       bool is_homebrew = false,
-                      const std::string& retro_console_id = "",
-                      const std::string& retro_target_mode = "");
+                      const std::string& retro_console_id = "");
     size_t addPortInstall(const std::string& title,
                           const std::string& magnet,
                           std::shared_ptr<installer::PortInstallPlan> plan,
