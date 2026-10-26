@@ -13,6 +13,31 @@
 
 namespace catalog {
 
+namespace {
+
+// "0.8.0" < "0.8.1", "3.0.2" < "3.0.10"; non-numeric parts compare as text.
+bool versionLess(const std::string& a, const std::string& b) {
+    std::istringstream sa(a), sb(b);
+    std::string pa, pb;
+    while (true) {
+        bool ha = static_cast<bool>(std::getline(sa, pa, '.'));
+        bool hb = static_cast<bool>(std::getline(sb, pb, '.'));
+        if (!ha && !hb) return false;
+        if (!ha) return true;
+        if (!hb) return false;
+        bool na = !pa.empty() && std::all_of(pa.begin(), pa.end(), ::isdigit);
+        bool nb = !pb.empty() && std::all_of(pb.begin(), pb.end(), ::isdigit);
+        if (na && nb) {
+            long va = std::stol(pa), vb = std::stol(pb);
+            if (va != vb) return va < vb;
+        } else if (pa != pb) {
+            return pa < pb;
+        }
+    }
+}
+
+} // namespace
+
 RetroEmulatorManager& RetroEmulatorManager::instance() {
     static RetroEmulatorManager inst;
     return inst;
@@ -43,15 +68,15 @@ void RetroEmulatorManager::initPackages() {
             "tico",
             "Tico Frontend",
             "ticohq",
-            "0.7.2",
-            "Современный ретро-лаунчер (17 платформ: NES, SNES, N64, GB, GBA, NDS, 3DS, GC, Wii, PS1, PSP, Sega, DC)",
+            "0.8.0",
+            "Ретро-лаунчер: запускает игры всех консолей каталога, кроме PS Vita и Wii U, через модули эмуляторов",
             "tico",
             "https://github.com/ticohq/tico/releases/latest/download/tico.nro",
             "tico.nro",
             "sdmc:/switch/tico/tico.nro",
             "",
             false,
-            25 * 1024 * 1024,
+            42588986,
             {"nes", "snes", "n64", "gbc", "gba", "nds", "3ds", "gamecube", "wii", "ps1", "psp", "sega_ms", "sega_gg", "sega_md", "sega_cd", "sega_32x", "dreamcast"},
             nvgRGBA(124, 77, 255, 255),
             "tico_bios"
@@ -365,7 +390,87 @@ void RetroEmulatorManager::initPackages() {
         }
     };
 
+    addTicoModulePackages();
     applyPackageDefaults();
+}
+
+bool RetroEmulatorManager::isVersionLess(const std::string& a, const std::string& b) {
+    return versionLess(a, b);
+}
+
+std::string RetroEmulatorManager::ticoModulePackageId(const std::string& module_id) {
+    return "tico_module_" + module_id;
+}
+
+// Since Tico 0.8 every emulator is a module: a folder in sdmc:/tico/modules/<id>/
+// with module.json and the emulator .nro, published as tico-<name>-module.zip
+// on GitHub. Sizes and versions below are the releases of October 2026;
+// refreshGithubReleases() replaces them with the latest ones.
+void RetroEmulatorManager::addTicoModulePackages() {
+    struct ModuleDef {
+        const char* id;
+        const char* name;
+        const char* repo;
+        const char* asset;
+        const char* version;
+        int64_t size;
+        std::vector<std::string> consoles;
+    };
+    static const std::vector<ModuleDef> modules = {
+        {"fceumm",          "FCEUmm",          "ticohq/tico-fceumm",         "tico-fceumm-module.zip",        "3.0.2", 12307291, {"nes"}},
+        {"snes9x",          "Snes9x",          "ticohq/tico-snes9x",         "tico-snes9x-module.zip",        "3.0.2", 12238312, {"snes"}},
+        {"mupen64plus",     "Mupen64Plus",     "ticohq/tico-mupen64plus",    "tico-mupen64plus-module.zip",   "3.0.2", 17212902, {"n64"}},
+        {"gambatte",        "Gambatte",        "ticohq/tico-gambatte",       "tico-gambatte-module.zip",      "3.0.2", 11668346, {"gbc"}},
+        {"mgba",            "mGBA",            "ticohq/tico-mgba",           "tico-mgba-module.zip",          "3.0.2", 11648673, {"gba"}},
+        {"drastic",         "DraStic",         "ticohq/tico-drasticDS",      "tico-drastic-module.zip",       "3.0.0", 14590150, {"nds"}},
+        {"dekopon",         "Dekopon",         "danfromtico/tico-dekopon",   "tico-dekopon-module.zip",       "3.0.0", 17332757, {"3ds"}},
+        {"dolphin",         "Dolphin",         "ticohq/tico-dolphin",        "tico-dolphin-module.zip",       "3.0.0", 19858293, {"gamecube", "wii"}},
+        {"duckstation",     "DuckStation",     "ticohq/tico-duckstation",    "tico-duckstation-module.zip",   "3.0.0", 26414001, {"ps1"}},
+        {"nethersx2",       "NetherSX2",       "ticohq/tico-NetherSX2",      "tico-nethersx2-module.zip",     "3.0.0", 30452100, {"ps2"}},
+        {"ppsspp",          "PPSSPP",          "ticohq/tico-ppsspp",         "tico-ppsspp-module.zip",        "3.0.0", 26796853, {"psp"}},
+        {"genesis_plus_gx", "Genesis Plus GX", "ticohq/tico-genesisplusgx",  "tico-genesisplusgx-module.zip", "3.0.2", 12545520, {"sega_md", "sega_ms", "sega_gg", "sega_cd"}},
+        {"picodrive",       "PicoDrive",       "ticohq/tico-picodrive",      "tico-picodrive-module.zip",     "3.0.2", 11364290, {"sega_32x"}},
+        {"flycast",         "Flycast",         "ticohq/tico-flycast",        "tico-flycast-module.zip",       "3.0.0", 14923038, {"dreamcast"}},
+    };
+
+    for (const auto& m : modules) {
+        EmulatorPackage p;
+        p.id = ticoModulePackageId(m.id);
+        p.name = m.name;
+        p.author = m.repo;
+        p.version = m.version;
+        p.description = std::string("Tico module: ") + m.name;
+        p.category = "tico_module";
+        p.download_url = std::string("https://github.com/") + m.repo + "/releases/latest/download/" + m.asset;
+        p.filename = m.asset;
+        p.install_path = std::string("sdmc:/tico/modules/") + m.id + "/module.json";
+        p.extract_dir = "sdmc:/tico/modules";
+        p.is_archive = true;
+        p.file_size = m.size;
+        p.supported_console_ids = m.consoles;
+        p.color = nvgRGBA(124, 77, 255, 255);
+        p.github_repo = m.repo;
+        p.github_asset = m.asset;
+        packages_.push_back(p);
+    }
+
+    for (auto& p : packages_) {
+        if (p.id == "tico") {
+            p.github_repo = "ticohq/tico";
+            p.github_asset = "tico.nro";
+        }
+    }
+}
+
+bool RetroEmulatorManager::getPackageCopy(const std::string& emu_id, EmulatorPackage& out) const {
+    std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
+    for (const auto& p : packages_) {
+        if (p.id == emu_id) {
+            out = p;
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() const {
@@ -698,6 +803,7 @@ bool RetroEmulatorManager::isInstalled(const std::string& emu_id) const {
 }
 
 std::string RetroEmulatorManager::getInstalledVersion(const std::string& emu_id) const {
+    std::lock_guard<std::mutex> lock(versions_mutex_);
     auto it = installed_versions_.find(emu_id);
     if (it != installed_versions_.end()) {
         return it->second;
@@ -719,7 +825,8 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
     }
 
     std::string installedVer = getInstalledVersion(emu_id);
-    if (!installedVer.empty() && installedVer != p->version && p->version != "latest") {
+    if (!installedVer.empty() && p->version != "latest" && installedVer != p->version &&
+        (p->github_repo.empty() || versionLess(installedVer, p->version))) {
         return EmulatorInstallStatus::UPDATE_AVAILABLE;
     }
 
@@ -727,8 +834,11 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
 }
 
 void RetroEmulatorManager::recordInstalledVersion(const std::string& emu_id, const std::string& version) {
-    installed_versions_[emu_id] = version;
-    saveInstalledVersions();
+    {
+        std::lock_guard<std::mutex> lock(versions_mutex_);
+        installed_versions_[emu_id] = version;
+        saveInstalledVersions();
+    }
     if (emu_id == "tico") {
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
@@ -739,6 +849,7 @@ void RetroEmulatorManager::recordInstalledVersion(const std::string& emu_id, con
 }
 
 void RetroEmulatorManager::loadInstalledVersions() {
+    std::lock_guard<std::mutex> lock(versions_mutex_);
     installed_versions_.clear();
     std::string path = resolvePlatformPath(TSNX_DATA_DIR "/installed_emulators.txt");
 
@@ -815,8 +926,11 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
         }
     }
 
-    installed_versions_.erase(emu_id);
-    saveInstalledVersions();
+    {
+        std::lock_guard<std::mutex> lock(versions_mutex_);
+        installed_versions_.erase(emu_id);
+        saveInstalledVersions();
+    }
     util::logLine("RetroEmulatorManager: uninstalled " + emu_id);
     return true;
 }
@@ -836,6 +950,7 @@ std::string RetroEmulatorManager::getLocalManifestPath() const {
 }
 
 bool RetroEmulatorManager::saveLocalManifest() {
+    std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
     std::string finalPath = getLocalManifestPath();
     tsnx_ensure_parent_dirs(finalPath.c_str());
 
@@ -895,6 +1010,7 @@ bool RetroEmulatorManager::saveLocalManifest() {
 }
 
 bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
+    std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
     try {
         auto j = nlohmann::json::parse(json_str);
         if (!j.is_array()) return false;
@@ -905,6 +1021,20 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
 
             auto it = std::find_if(packages_.begin(), packages_.end(),
                 [&id](const EmulatorPackage& p) { return p.id == id; });
+
+            if (it != packages_.end() && !it->github_repo.empty()) {
+                // Tico and its modules: the built-in definition is authoritative; a cached
+                // entry may only bring a newer release (never roll the version back).
+                std::string v = item.value("version", "");
+                if (!v.empty() && !versionLess(v, it->version)) {
+                    it->version = v;
+                    std::string url = item.value("download_url", "");
+                    if (!url.empty()) it->download_url = url;
+                    int64_t size = item.value("file_size", (int64_t)0);
+                    if (size > 0) it->file_size = size;
+                }
+                continue;
+            }
 
             if (it != packages_.end()) {
                 if (item.contains("name") && !item["name"].get<std::string>().empty())
@@ -1055,7 +1185,7 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
         util::logLine("RetroEmulatorManager: failed to download manifest from " + url);
         std::error_code ec;
         std::filesystem::remove(tmpPath, ec);
-        return false;
+        return refreshGithubReleases();
     }
 
     if (progress_cb) progress_cb(0.7f, "Разбор данных манифеста...");
@@ -1080,12 +1210,75 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
         return false;
     }
 
+    // Tico and its modules come from GitHub releases rather than the manifest.
+    refreshGithubReleases();
+
     // Save the fully merged manifest to disk so all BIOSes are preserved
     saveLocalManifest();
 
     if (progress_cb) progress_cb(1.0f, "Манифест успешно обновлен");
     util::logLine("RetroEmulatorManager: manifest successfully refreshed and cached at " + finalPath);
     return true;
+}
+
+bool RetroEmulatorManager::refreshGithubReleases() {
+    struct Target {
+        std::string id, repo, asset;
+    };
+    std::vector<Target> targets;
+    {
+        std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
+        for (const auto& p : packages_) {
+            if (!p.github_repo.empty()) targets.push_back({p.id, p.github_repo, p.github_asset});
+        }
+    }
+
+    int updated = 0;
+    for (const auto& t : targets) {
+        if (g_appExiting.load()) break;
+        net::HttpClient client;
+        client.setTimeout(20);
+        net::HttpResponse r = client.httpGet("https://api.github.com/repos/" + t.repo + "/releases/latest",
+                                             {"Accept: application/vnd.github+json"});
+        if (r.status_code != 200 || r.body.empty()) {
+            util::logLine("RetroEmulatorManager: GitHub release check failed for " + t.repo +
+                          " (HTTP " + std::to_string(r.status_code) + ")");
+            if (r.status_code == 403 || r.status_code == 429) break; // rate limited: try again tomorrow
+            continue;
+        }
+        try {
+            auto j = nlohmann::json::parse(r.body);
+            std::string tag = j.value("tag_name", "");
+            if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) tag = tag.substr(1);
+            int64_t size = 0;
+            std::string url;
+            if (j.contains("assets") && j["assets"].is_array()) {
+                for (const auto& a : j["assets"]) {
+                    if (a.value("name", "") == t.asset) {
+                        size = a.value("size", (int64_t)0);
+                        url = a.value("browser_download_url", "");
+                        break;
+                    }
+                }
+            }
+            if (tag.empty()) continue;
+            std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
+            for (auto& p : packages_) {
+                if (p.id != t.id) continue;
+                p.version = tag;
+                if (size > 0) p.file_size = size;
+                if (!url.empty()) p.download_url = url;
+                ++updated;
+                break;
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("RetroEmulatorManager: bad GitHub response: ") + e.what());
+        }
+    }
+    util::logLine("RetroEmulatorManager: GitHub releases checked, " + std::to_string(updated) + " of " +
+                  std::to_string(targets.size()) + " updated");
+    if (updated > 0) saveLocalManifest();
+    return updated > 0;
 }
 
 void RetroEmulatorManager::healInstalledEmulators() {
@@ -1174,8 +1367,11 @@ void RetroEmulatorManager::healInstalledEmulators() {
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
         tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
+        // Tico 0.8 keeps its settings in tico/data/tico.vault; older ones need an update for modules.
+        std::lock_guard<std::mutex> lock(versions_mutex_);
         if (installed_versions_.find("tico") == installed_versions_.end()) {
-            installed_versions_["tico"] = "0.7.2";
+            bool v08 = std::filesystem::exists(resolvePlatformPath("sdmc:/tico/data/tico.vault"), ec);
+            installed_versions_["tico"] = v08 ? "0.8.0" : "0.7.2";
             saveInstalledVersions();
         }
     }
@@ -1184,6 +1380,7 @@ void RetroEmulatorManager::healInstalledEmulators() {
     std::string ticoDuckstation = resolvePlatformPath("sdmc:/tico/system/duckstation/scph5501.bin");
     std::string ticoFlycast = resolvePlatformPath("sdmc:/tico/system/flycast/dc_boot.bin");
     if (std::filesystem::exists(ticoDuckstation, ec) || std::filesystem::exists(ticoFlycast, ec)) {
+        std::lock_guard<std::mutex> lock(versions_mutex_);
         if (installed_versions_.find("tico_bios") == installed_versions_.end()) {
             installed_versions_["tico_bios"] = "1.0";
             saveInstalledVersions();

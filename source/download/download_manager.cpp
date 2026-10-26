@@ -18,6 +18,7 @@
 #include "../utils/app_paths.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/retro_layout.h"
+#include "../catalog/retro_readiness.h"
 #include "../utils/archive_utils.h"
 #include "../utils/file_ops.h"
 #include "../datasource/file_data_source.h"
@@ -621,6 +622,24 @@ static void fileCopyWorker(datasource::IDataSource* source,
         return p;
     };
 
+    // Ретро-игры: сначала ставим то, чем игра запускается (Tico и его модуль,
+    // Vita3K или Cemu), если этого ещё нет. Без сети игра всё равно скачается.
+    if (retro_info) {
+        std::string install_err;
+        bool installed = catalog::ensureRunnerInstalled(retro_console_id,
+            [&](const std::string& package_name, const catalog::InstallProgress& p) {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = brls::getStr("app/retro/stage_install_runner", package_name,
+                                               std::to_string(static_cast<int>(p.fraction * 100.0f)));
+            },
+            cancel, install_err);
+        if (!installed) {
+            util::logLine("download: emulator for " + retro_console_id + " was not installed: " + install_err);
+        }
+        std::lock_guard<std::mutex> lk(st->msg_mutex);
+        st->stage_label.clear();
+    }
+
     uint64_t total_size = 0;
     for (int idx : target_indices) {
         if (idx >= 0 && idx < n) {
@@ -962,17 +981,27 @@ static void fileCopyWorker(datasource::IDataSource* source,
                                               cover_url);
             }
 
+            catalog::RetroReadiness readiness = catalog::checkRetroReadiness(retro_console_id);
             std::lock_guard<std::mutex> lk(st->msg_mutex);
-            switch (retro_info->route) {
-                case catalog::RetroRoute::Tico:
-                    st->result_key = fin.unsupported_format ? "app/retro/ready_check_format" : "app/retro/ready_in_tico";
-                    break;
-                case catalog::RetroRoute::Vita3K:
-                    st->result_key = "app/retro/ready_vita3k";
-                    break;
-                case catalog::RetroRoute::Cemu:
-                    st->result_key = "app/retro/ready_cemu";
-                    break;
+            if (fin.unsupported_format) {
+                st->result_key = "app/retro/ready_check_format";
+            } else if (!readiness.emulatorReady()) {
+                st->result_key = "app/retro/ready_need_emulator";
+            } else if (!readiness.systemFilesReady()) {
+                st->result_key = (retro_info->route == catalog::RetroRoute::Vita3K)
+                    ? "app/retro/ready_need_vita_fw" : "app/retro/ready_need_bios";
+            } else {
+                switch (retro_info->route) {
+                    case catalog::RetroRoute::Tico:
+                        st->result_key = "app/retro/ready_in_tico";
+                        break;
+                    case catalog::RetroRoute::Vita3K:
+                        st->result_key = "app/retro/ready_vita3k";
+                        break;
+                    case catalog::RetroRoute::Cemu:
+                        st->result_key = "app/retro/ready_cemu";
+                        break;
+                }
             }
             st->stage_label = brls::getStr(st->result_key);
         }
