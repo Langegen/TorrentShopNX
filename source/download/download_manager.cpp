@@ -1167,10 +1167,12 @@ static void fileCopyWorker(datasource::IDataSource* source,
             if (!fin.written.empty()) {
                 auto& installed = catalog::InstalledRetroGames::instance();
                 catalog::InstalledRetroGame g;
-                g.key = catalog::InstalledRetroGames::keyFor(topic_id, release_title);
+                // Picked files of a release come as "<topic>_<file>" / "<topic>_romset": one entry per release.
+                const std::string release_topic = topic_id.substr(0, topic_id.find('_'));
+                g.key = catalog::InstalledRetroGames::keyFor(release_topic, release_title);
                 installed.load(g.key, g);
-                g.key = catalog::InstalledRetroGames::keyFor(topic_id, release_title);
-                g.topic_id = topic_id;
+                g.key = catalog::InstalledRetroGames::keyFor(release_topic, release_title);
+                g.topic_id = release_topic;
                 g.title = cleanTitle(release_title);
                 g.console_id = retro_console_id;
                 g.installed_at = std::time(nullptr);

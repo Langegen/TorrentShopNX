@@ -7,6 +7,7 @@
 #include "RetroEmulatorsView.hpp"
 #include "../catalog/retro_emulator_manager.h"
 #include "../catalog/game_stats_manager.h"
+#include "../catalog/installed_retro_games.h"
 #include "../config/config.h"
 #include "../utils/log.h"
 #include <algorithm>
@@ -504,11 +505,12 @@ void RetroCatalogView::filterCatalog() {
         std::sort(filteredStandalone_.begin(), filteredStandalone_.end(), sortFunc);
     }
 
-    if (!filteredRomsets_.empty()) {
-        sections_.push_back({ "app/retro/sec_romsets"_i18n, true, &filteredRomsets_ });
-    }
+    // Single games first: collections are large and rarely what people look for.
     if (!filteredStandalone_.empty()) {
         sections_.push_back({ "app/retro/sec_standalone"_i18n, false, &filteredStandalone_ });
+    }
+    if (!filteredRomsets_.empty()) {
+        sections_.push_back({ "app/retro/sec_romsets"_i18n, true, &filteredRomsets_ });
     }
 
     if (statsHint) {
@@ -548,6 +550,10 @@ void RetroCatalogView::resetFilters() {
 void RetroCatalogView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     updateEmulatorBadge();
+    // A game may have been downloaded or removed meanwhile: redraw its "on SD" mark.
+    if (recycler && !sections_.empty() && recycler->getVisibility() == brls::Visibility::VISIBLE) {
+        recycler->reloadData();
+    }
 }
 
 void RetroCatalogView::willDisappear(bool resetState) {
@@ -572,8 +578,8 @@ int RetroCatalogView::RetroDataSource::numberOfRows(brls::RecyclerFrame* recycle
 
 std::string RetroCatalogView::RetroDataSource::titleForHeader(brls::RecyclerFrame* recycler, int section) {
     if (section < 0 || section >= static_cast<int>(parent_->sections_.size())) return "";
-    if (parent_->sections_.size() == 1 && !parent_->sections_[0].isRomset) {
-        return ""; // No header needed if catalog has no romsets
+    if (parent_->sections_.size() == 1) {
+        return ""; // one kind of release: no header needed
     }
     return parent_->sections_[section].title;
 }
@@ -646,9 +652,13 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cell->lang->setVisibility(brls::Visibility::GONE);
         }
 
-        // Action Tag styling: Romset vs Standalone
+        // Action Tag styling: on the SD card / Romset / Standalone
         bool isRom = isRomsetGame(game);
-        if (isRom) {
+        if (catalog::InstalledRetroGames::instance().isInstalled(game.topic_id)) {
+            cell->actionBox->setBackgroundColor(nvgRGBA(38, 166, 91, 40));
+            cell->actionLabel->setTextColor(ThemeManager::instance().isCurrentThemeLight() ? nvgRGB(22, 128, 61) : nvgRGB(46, 204, 113));
+            cell->actionLabel->setText("app/retro/on_sd"_i18n);
+        } else if (isRom) {
             cell->actionBox->setBackgroundColor(nvgRGBA(255, 170, 0, 35));
             cell->actionLabel->setTextColor(nvgRGBA(255, 170, 0, 255));
             cell->actionLabel->setText("app/retro/btn_download_set"_i18n);
@@ -810,7 +820,13 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                 cards[i].lang->setVisibility(brls::Visibility::GONE);
             }
 
-            cards[i].stats->setVisibility(brls::Visibility::GONE);
+            if (catalog::InstalledRetroGames::instance().isInstalled(game.topic_id)) {
+                cards[i].stats->setVisibility(brls::Visibility::VISIBLE);
+                cards[i].stats->setText("  " + "app/retro/on_sd"_i18n + "  ");
+                cards[i].stats->setBackgroundColor(nvgRGBA(38, 166, 91, 230));
+            } else {
+                cards[i].stats->setVisibility(brls::Visibility::GONE);
+            }
 
             cards[i].size->setText(game.size);
             cards[i].size->setTextColor(nvgRGB(140, 140, 140));

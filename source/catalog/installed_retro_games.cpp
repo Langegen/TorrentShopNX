@@ -148,11 +148,13 @@ std::vector<InstalledRetroGame> InstalledRetroGames::list() const {
 
 bool InstalledRetroGames::isInstalled(const std::string& topic_id) const {
     if (topic_id.empty()) return false;
+    std::lock_guard<std::mutex> lk(mutex_);
+    return keys_.count(keyFor(topic_id, "")) > 0;
+}
+
+bool InstalledRetroGames::isPresentOnCard(const std::string& topic_id) const {
+    if (!isInstalled(topic_id)) return false;
     std::string key = keyFor(topic_id, "");
-    {
-        std::lock_guard<std::mutex> lk(mutex_);
-        if (!keys_.count(key)) return false;
-    }
     InstalledRetroGame g;
     if (!load(key, g) || g.paths.empty()) return false;
     std::error_code ec;

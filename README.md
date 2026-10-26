@@ -39,7 +39,7 @@
   <br/>
 
   <img src="docs/screenshots/retro_games.jpg" alt="Каталог ретро-игр" width="95%"/>
-  <p><em>Каталог ретро-игр: более 8 200 игр для 20 систем (Nintendo, Sony PlayStation, Sega) с загрузкой в папку RetroArch</em></p>
+  <p><em>Каталог ретро-игр: более 8 200 игр для 20 систем (Nintendo, Sony PlayStation, Sega) — скачанные игры сразу появляются в Tico, Vita3K и Cemu</em></p>
 </div>
 
 ---
@@ -64,11 +64,12 @@
   - Огромная база: более **8 200+ игр для 20 платформ**:
     - **Nintendo (10 систем)**: NES / Famicom, Super Nintendo (SNES), Nintendo 64, Game Boy / Color, Game Boy Advance, Nintendo DS, Nintendo 3DS, GameCube, Wii, Wii U.
     - **Sony (4 системы)**: PlayStation 1, PlayStation 2, PlayStation Portable (PSP), PlayStation Vita.
-    - **Sega (6 систем)**: Mega Drive / Genesis, Master System, Game Gear, Dreamcast, Saturn, SG-1000.
+    - **Sega (6 систем)**: Mega Drive / Genesis, Master System, Game Gear, Sega CD / Mega CD, Sega 32X, Dreamcast.
   - Включает оригинальные дампы, качественные русификации и популярные фанатские хаки.
-  - **Менеджер эмуляторов и BIOS**: загрузка и обновление автономных эмуляторов (RetroArch, pSNES, mGBA, PPSSPP и др.) и необходимых файлов BIOS в один клик.
+  - **Без ручной настройки**: игры всех консолей, кроме PS Vita и Wii U, запускаются в [Tico](https://ticoverse.com). Программа сама ставит Tico и нужный модуль эмулятора, раскладывает игры по папкам Tico (`sdmc:/tico/roms/<консоль>/`), распаковывает архивы прямо из торрента, собирает плейлисты `.m3u` для многодисковых игр, приводит `.ccd`/`.mds` к `.cue` и сохраняет обложки. Расшифрованные игры PS Vita ставятся в Vita3K, игры Wii U кладутся в папку Cemu.
+  - **Менеджер эмуляторов**: Tico и его модули, Vita3K и Cemu с обновлениями из GitHub; проверка BIOS и прошивок с подсказкой, какой файл и куда положить.
   - **Древовидный проводник (Folder Tree Explorer)**: навигация по папкам внутри раздач ромсетов без лимита на количество файлов (снято ограничение в 256 файлов) с возможностью выборочной загрузки.
-  - Автоматическое сохранение в папку эмуляторов (по умолчанию `sdmc:/roms/<консоль>/`) или пользовательский путь.
+  - Отметка «На SD» в каталоге и удаление игры с карты вместе со всеми её файлами.
   - Онлайн-обновление баз ретро-игр напрямую с GitHub по нажатию кнопки `-`.
 
 - 🗂️ **Встроенный двухпанельный файловый менеджер и утилиты**:
@@ -209,10 +210,8 @@ auto_app_update=true
 language=ru
 
 # Настройки каталога ретро-игр
-retro_roms_mode=retroarch
+retro_roms_mode=auto
 retro_custom_path=
-retro_auto_extract=false
-retro_romset_mode=full
 
 # Внешний вид и темы
 theme=light
@@ -244,10 +243,8 @@ show_bottom_dashboard=true
 | `background_blur` | `0` (выкл), `1` (слабый), `2` (средний), `3` (сильный) | Степень размытия фонового изображения. |
 | `background_dim` | `0` (0%), `1` (15%), `2` (28%), `3` (45%), `4` (65%) | Степень затемнения фонового изображения для контрастности. |
 | `show_bottom_dashboard` | `true` / `false` | Отображение нижней информационной панели статистики дашборда. |
-| `retro_roms_mode` | `retroarch` / `downloads` / `custom` | Папка для сохранения ромов: стандартная RetroArch (`sdmc:/roms/<консоль>/`), общая папка загрузок или пользовательская. |
-| `retro_custom_path` | `sdmc:/...` | Пользовательский путь для ромов (при `retro_roms_mode=custom`). |
-| `retro_auto_extract` | `true` / `false` | Автоматически распаковывать архивы с ромами после загрузки. |
-| `retro_romset_mode` | `full` / `select` | Режим загрузки ромсетов: скачивать весь архив целиком (`full`) или открыть древовидный выбор файлов (`select`). |
+| `retro_roms_mode` | `auto` / `custom` | Куда сохранять ретро-игры: автоматически (папки Tico, Vita3K и Cemu) или в свою папку как `<папка>/<консоль>/` — её нужно добавить в Tico: Настройки › Общие › Папки с играми. |
+| `retro_custom_path` | `sdmc:/...` | Своя папка для ретро-игр (при `retro_roms_mode=custom`). |
 
 ---
 

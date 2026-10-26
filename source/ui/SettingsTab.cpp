@@ -597,31 +597,6 @@ brls::View* SettingsTab::buildUpdatesTab() {
     });
     box->addView(catalogUpdateCell);
 
-    // ── Ретро-каталоги ──────────────────────────────────────────────
-    addSettingsSectionHeader(box, "app/settings/sec_retro_update"_i18n);
-
-    auto* updateRetroCatalogsCell = new brls::DetailCell();
-    updateRetroCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
-    auto updateRetroDetailText = [updateRetroCatalogsCell, alive = aliveToken_]() {
-        if (!alive || !*alive) return;
-        int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
-        if (count > 0) {
-            updateRetroCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
-        } else {
-            updateRetroCatalogsCell->setDetailText("app/settings/retro_update_catalogs_empty"_i18n);
-        }
-    };
-    updateRetroDetailText();
-    updateRetroCatalogsCell->registerClickAction([updateRetroDetailText, alive = aliveToken_](brls::View* view) {
-        showRetroCatalogUpdateDialog([updateRetroDetailText, alive](int updatedCount) {
-            if (alive && *alive) {
-                updateRetroDetailText();
-            }
-        });
-        return true;
-    });
-    box->addView(updateRetroCatalogsCell);
-
     return scroll;
 }
 

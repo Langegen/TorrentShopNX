@@ -32,8 +32,10 @@ public:
     bool load(const std::string& key, InstalledRetroGame& out) const;
     std::vector<InstalledRetroGame> list() const;   // reads every manifest
 
-    // Cheap check for the catalog: a manifest exists and its first path is still there.
+    // Cheap check for catalog cells: a manifest exists (no disk access).
     bool isInstalled(const std::string& topic_id) const;
+    // The manifest exists and what the emulator lists is still on the card.
+    bool isPresentOnCard(const std::string& topic_id) const;
 
     // Deletes the game's files and folders and the manifest.
     bool uninstall(const std::string& key, std::string& out_error);

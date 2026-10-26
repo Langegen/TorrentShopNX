@@ -103,8 +103,6 @@ public:
     const std::string& getRetroCustomPath() const;
     void setRetroCustomPath(const std::string& path);
 
-    const std::string& getRetroRomsetMode() const; // "full" (default), "select"
-    void setRetroRomsetMode(const std::string& mode);
 
     // Appearance / Theme settings
     const std::string& getTheme() const; // "light" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "graphite"
@@ -157,8 +155,6 @@ private:
     std::string language_;
     std::string retro_roms_mode_;
     std::string retro_custom_path_;
-    bool retro_auto_extract_;
-    std::string retro_romset_mode_;
     std::string theme_;
     std::string background_mode_;
     std::string custom_background_path_;

@@ -5,6 +5,7 @@
 #include "../../utils/switch_utils.h"
 #include "../../utils/app_paths.h"
 #include "../../config/config.h"
+#include "../../catalog/retro_catalog_manager.h"
 #include "../../utils/log.h"
 #include "../../net/image_downloader.h"
 #include <cstdio>
@@ -696,7 +697,14 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c1Top->addView(c1Title);
 
     brls::Label* c1TopTag = new brls::Label();
-    c1TopTag->setText("app/dashboard/retro_c1_tag"_i18n);
+    auto& retroCatalog = catalog::RetroCatalogManager::instance();
+    const std::string retroSystems = std::to_string(retroCatalog.consoles().size());
+    const int retroGames = retroCatalog.getTotalCachedGamesCount();
+    int ticoSystems = 0;
+    for (const auto& c : retroCatalog.consoles()) {
+        if (c.route == catalog::RetroRoute::Tico) ++ticoSystems;
+    }
+    c1TopTag->setText(brls::getStr("app/dashboard/retro_c1_tag_fmt", retroSystems));
     c1TopTag->setFontSize(11.5f);
     c1TopTag->setTextColor(themeCardSub());
     c1Top->addView(c1TopTag);
@@ -707,7 +715,8 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c1Mid->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c1Val = new brls::Label();
-    c1Val->setText("app/dashboard/retro_c1_val"_i18n);
+    c1Val->setText(retroGames > 0 ? brls::getStr("app/dashboard/retro_c1_val_fmt", std::to_string(retroGames))
+                                  : "app/dashboard/retro_c1_val_empty"_i18n);
     c1Val->setFontSize(22.0f);
     c1Val->setTextColor(themeTextPrimary());
     c1Mid->addView(c1Val);
@@ -758,7 +767,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c2Top->addView(c2Title);
 
     brls::Label* c2TopTag = new brls::Label();
-    c2TopTag->setText("RetroArch / Core");
+    c2TopTag->setText("Tico / Vita3K / Cemu");
     c2TopTag->setFontSize(11.5f);
     c2TopTag->setTextColor(themeCardSub());
     c2Top->addView(c2TopTag);
@@ -769,7 +778,7 @@ void DashboardSummaryView::buildRetroGamesSection() {
     c2Mid->setAlignItems(brls::AlignItems::CENTER);
 
     brls::Label* c2Val = new brls::Label();
-    c2Val->setText("app/dashboard/retro_c2_val"_i18n);
+    c2Val->setText(brls::getStr("app/dashboard/retro_c2_val_fmt", std::to_string(ticoSystems), retroSystems));
     c2Val->setFontSize(22.0f);
     c2Val->setTextColor(themeTextPrimary());
     c2Mid->addView(c2Val);
