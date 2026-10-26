@@ -1543,6 +1543,10 @@ void LibraryView::scanForUpdates() {
                 if (bit != availableVersions.end()) {
                     latestVer = bit->second;
                     foundVersionInDb = true;
+                } else {
+                    // nx-versions lists only patches: a game with no update
+                    // is recognised through versions.json.
+                    foundVersionInDb = titledb::knownGame(baseTid, &latestVer);
                 }
             }
             

@@ -1,9 +1,11 @@
 #pragma once
 
-// titledb (github.com/blawar/titledb) data used by the game manager:
-//   versions.txt  - "id|rightsId|version": latest version of every title;
-//   versions.json - {"<app id>": {"<version>": "YYYY-MM-DD", ...}}: release
-//                   date of every update.
+// Version data used by the game manager:
+//   versions.txt  - "id|version" from github.com/16BitWonder/nx-versions:
+//                   latest version of every patch and DLC (updated daily;
+//                   base games are not listed);
+//   versions.json - {"<app id>": {"<version>": "YYYY-MM-DD", ...}} from
+//                   github.com/blawar/titledb: release date of every update.
 // Both are refreshed at most once a day and parsed once per file change.
 //
 // Nintendo numbers updates as N << 16 (65536 = 1st update, 1441792 = 22nd),
@@ -35,6 +37,10 @@ uint32_t latestUpdateVersion(uint64_t appId);
 
 // Release date "YYYY-MM-DD" of `version` of the game `appId`, "" if unknown.
 std::string updateDate(uint64_t appId, uint32_t version);
+
+// Game is listed in versions.json (it knows games without any update too);
+// `latestVersion` gets its newest update there, 0 if none.
+bool knownGame(uint64_t appId, uint32_t* latestVersion = nullptr);
 
 inline uint32_t updateOrdinal(uint32_t version) { return version >> 16; }
 

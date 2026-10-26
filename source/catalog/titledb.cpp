@@ -137,17 +137,20 @@ time_t g_latestMtime = -1;
 std::shared_ptr<const std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>> g_dates;
 time_t g_datesMtime = -1;
 
-bool downloadIfStale(const char* path, const char* name) {
+// `force` refetches a fresh file too (the old copy stays as a fallback).
+bool downloadIfStale(const char* path, const char* name, const std::vector<std::string>& urls,
+                     bool force = false) {
     struct stat st;
     bool exists = (stat(path, &st) == 0 && st.st_size > 0);
-    if (exists && std::time(nullptr) - st.st_mtime < 24 * 3600) return true;
+    if (exists && !force && std::time(nullptr) - st.st_mtime < 24 * 3600) return true;
 
-    std::string cdn = std::string("https://cdn.jsdelivr.net/gh/blawar/titledb@master/") + name;
-    std::string raw = std::string("https://raw.githubusercontent.com/blawar/titledb/master/") + name;
     util::logLine(std::string("titledb: downloading ") + name);
     net::HttpClient http;
-    auto res = http.httpGet(cdn);
-    if (res.status_code != 200 || res.body.empty()) res = http.httpGet(raw);
+    net::HttpResponse res;
+    for (const auto& url : urls) {
+        res = http.httpGet(url);
+        if (res.status_code == 200 && !res.body.empty()) break;
+    }
     if (res.status_code == 200 && !res.body.empty()) {
         std::string tmp = std::string(path) + ".tmp";
         if (FILE* f = std::fopen(tmp.c_str(), "wb")) {
@@ -167,11 +170,48 @@ bool downloadIfStale(const char* path, const char* name) {
     return exists;
 }
 
+// versions.txt cached before 2.18 came from blawar/titledb ("id|rightsId|version").
+bool isBlawarVersionsTxt(const char* path) {
+    char head[32] = {0};
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return false;
+    size_t n = std::fread(head, 1, sizeof(head) - 1, f);
+    std::fclose(f);
+    head[n] = 0;
+    return std::strncmp(head, "id|rightsId|", 12) == 0;
+}
+
+using DatesMap = std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>;
+
+std::shared_ptr<const DatesMap> versionDates() {
+    time_t mt = fileMtime(TSNX_VERSION_DATES_PATH);
+    {
+        std::lock_guard<std::mutex> lock(g_mtx);
+        if (g_dates && mt == g_datesMtime) return g_dates;
+    }
+    std::string text;
+    auto parsed = std::make_shared<DatesMap>();
+    if (readFile(TSNX_VERSION_DATES_PATH, text)) *parsed = parseVersionsJson(text);
+    util::logLine("titledb: parsed versions.json, " + std::to_string(parsed->size()) + " titles");
+    std::lock_guard<std::mutex> lock(g_mtx);
+    g_dates = parsed;
+    g_datesMtime = mt;
+    return g_dates;
+}
+
 }  // namespace
 
 bool ensureDownloaded() {
-    bool ok = downloadIfStale(TSNX_VERSIONS_PATH, "versions.txt");
-    downloadIfStale(TSNX_VERSION_DATES_PATH, "versions.json");   // optional: dates only
+    // Latest versions: 16BitWonder/nx-versions, refreshed daily from Nintendo's
+    // CDN (patches and DLC only, base games are not listed).
+    bool ok = downloadIfStale(TSNX_VERSIONS_PATH, "versions.txt",
+        {"https://raw.githubusercontent.com/16BitWonder/nx-versions/master/versions.txt",
+         "https://cdn.jsdelivr.net/gh/16BitWonder/nx-versions@master/versions.txt"},
+        isBlawarVersionsTxt(TSNX_VERSIONS_PATH));
+    // Release dates (optional) and the list of known base games: blawar/titledb.
+    downloadIfStale(TSNX_VERSION_DATES_PATH, "versions.json",
+        {"https://cdn.jsdelivr.net/gh/blawar/titledb@master/versions.json",
+         "https://raw.githubusercontent.com/blawar/titledb/master/versions.json"});
     return ok;
 }
 
@@ -199,22 +239,7 @@ uint32_t latestUpdateVersion(uint64_t appId) {
 
 std::string updateDate(uint64_t appId, uint32_t version) {
     if (version == 0) return "";
-    time_t mt = fileMtime(TSNX_VERSION_DATES_PATH);
-    std::shared_ptr<const std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>> dates;
-    {
-        std::lock_guard<std::mutex> lock(g_mtx);
-        if (g_dates && mt == g_datesMtime) dates = g_dates;
-    }
-    if (!dates) {
-        std::string text;
-        auto parsed = std::make_shared<std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, uint32_t>>>>();
-        if (readFile(TSNX_VERSION_DATES_PATH, text)) *parsed = parseVersionsJson(text);
-        util::logLine("titledb: parsed versions.json, " + std::to_string(parsed->size()) + " titles");
-        std::lock_guard<std::mutex> lock(g_mtx);
-        g_dates = parsed;
-        g_datesMtime = mt;
-        dates = g_dates;
-    }
+    auto dates = versionDates();
     auto it = dates->find(appId & ~0x1FFFULL);
     if (it == dates->end()) return "";
     for (const auto& vd : it->second) {
@@ -225,6 +250,18 @@ std::string updateDate(uint64_t appId, uint32_t version) {
         }
     }
     return "";
+}
+
+bool knownGame(uint64_t appId, uint32_t* latestVersion) {
+    auto dates = versionDates();
+    auto it = dates->find(appId & ~0x1FFFULL);
+    if (it == dates->end()) return false;
+    if (latestVersion) {
+        uint32_t best = 0;
+        for (const auto& vd : it->second) best = vd.first > best ? vd.first : best;
+        *latestVersion = best;
+    }
+    return true;
 }
 
 #endif  // TITLEDB_NO_APP
