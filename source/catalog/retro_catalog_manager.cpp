@@ -242,7 +242,7 @@ RetroRoute RetroCatalogManager::getRoute(const std::string& console_id) const {
 std::string RetroCatalogManager::getTargetDir(const std::string& console_id) const {
     const auto* info = findConsole(console_id);
     RetroRoute route = info ? info->route : RetroRoute::Tico;
-    if (route == RetroRoute::Vita3K) return TSNX_VITA3K_INSTALL_DIR;
+    if (route == RetroRoute::Vita3K) return TSNX_VITA_ROMS_DIR;
     if (route == RetroRoute::Cemu) return TSNX_CEMU_GAMES_DIR;
 
     std::string slug = getTicoSlug(console_id);

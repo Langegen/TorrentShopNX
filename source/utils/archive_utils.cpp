@@ -1,4 +1,5 @@
 #include "archive_utils.h"
+#include "big_file.h"
 #include "file_ops.h"
 #include "log.h"
 #include "sevenzip_utils.h"
@@ -1020,7 +1021,8 @@ bool createZipArchive(
     const std::string& baseDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    bool store_only
 ) {
     ScopedCpuBoost boostGuard;
     if (sourcePaths.empty()) {
@@ -1160,7 +1162,13 @@ bool createZipArchive(
     }
 
     archive_write_set_format_zip(a);
-    archive_write_zip_set_compression_deflate(a);
+    if (store_only) {
+        archive_write_zip_set_compression_store(a);
+    } else {
+        archive_write_zip_set_compression_deflate(a);
+    }
+    // Over 4 GB on a FAT32 card the file must be a Horizon "big file".
+    prepareBigFile(tmpArchivePath, totalBytes);
 
     int r = archive_write_open_filename(a, tmpArchivePath.c_str());
     if (r != ARCHIVE_OK) {

@@ -66,7 +66,7 @@
     - **Sony (4 systems)**: PlayStation 1, PlayStation 2, PlayStation Portable (PSP), PlayStation Vita.
     - **Sega (6 systems)**: Mega Drive / Genesis, Master System, Game Gear, Sega CD / Mega CD, Sega 32X, Dreamcast.
   - Includes original clean dumps, localized releases, and popular fan hacks.
-  - **No manual setup**: games of every console except PS Vita and Wii U run in [Tico](https://ticoverse.com). The app installs Tico and the emulator module it needs, puts games into Tico's folders (`sdmc:/tico/roms/<console>/`), unpacks archives straight from the torrent, writes `.m3u` playlists for multi-disc games, turns `.ccd`/`.mds` images into `.cue` and saves cover art. Decrypted PS Vita games are installed into Vita3K, Wii U games go to Cemu's folder.
+  - **No manual setup**: games of every console except PS Vita and Wii U run in [Tico](https://ticoverse.com). The app installs Tico and the emulator module it needs, puts games into Tico's folders (`sdmc:/tico/roms/<console>/`), unpacks archives straight from the torrent, writes `.m3u` playlists for multi-disc games, turns `.ccd`/`.mds` images into `.cue` and saves cover art. PS Vita games are saved to `sdmc:/roms/vita` (a release that comes as a folder is packed into one zip) and installed from Vita3K's file manager; Wii U games go to Cemu's folder.
   - **Emulator manager**: Tico and its modules, Vita3K and Cemu with updates from GitHub; BIOS and firmware checks that say which file goes where.
   - **Folder Tree Explorer**: browse nested folder structures inside torrents without file limits (256-file restriction removed) with selective downloading support for romsets.
   - "On SD" marks in the catalog and removing a game from the card with all its files.

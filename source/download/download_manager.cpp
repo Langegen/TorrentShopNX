@@ -656,6 +656,20 @@ static void fileCopyWorker(datasource::IDataSource* source,
     std::string first_dest;
     bool all_ok = true;
 
+    // PS Vita: a release that comes as a folder is packed into a zip afterwards,
+    // so for a while it takes the space twice.
+    if (retro_info && retro_info->route == catalog::RetroRoute::Vita3K && !retro_plan.game_dir.empty()) {
+        uint64_t need = total_size * 2 + 32ULL * 1024 * 1024;
+        int64_t sd_free = 0;
+        if (util::getStorageFreeSpace(1, sd_free) && sd_free >= 0 && static_cast<uint64_t>(sd_free) < need) {
+            st->failed = true;
+            st->error = brls::getStr("app/retro/error_space", std::to_string(need / (1024 * 1024)) + " MB",
+                                     std::to_string(static_cast<uint64_t>(sd_free) / (1024 * 1024)) + " MB");
+            util::logLine("download: " + st->error);
+            return;
+        }
+    }
+
     // Ретро-игры: архивы, которые всё равно пришлось бы распаковывать, распаковываются
     // прямо из торрента, без копии архива на карте. Оглавление zip/7z читается заранее
     // (только хвост файла), чтобы решить, что с архивом делать.
@@ -1146,6 +1160,10 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 std::lock_guard<std::mutex> lk(st->msg_mutex);
                 st->stage_label = brls::getStr("app/retro/stage_extracting", archive_name, std::to_string(percent));
             };
+            retro_cb.on_pack = [&](const std::string& archive_name, int percent) {
+                std::lock_guard<std::mutex> lk(st->msg_mutex);
+                st->stage_label = brls::getStr("app/retro/stage_packing", archive_name, std::to_string(percent));
+            };
             catalog::retro::FinalizeResult fin =
                 catalog::retro::finalizeRelease(*retro_info, retro_plan, retro_naming, retro_cb, cancel);
 
@@ -1193,7 +1211,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 st->result_key = "app/retro/ready_need_emulator";
             } else if (!readiness.systemFilesReady()) {
                 if (retro_info->route == catalog::RetroRoute::Vita3K) {
-                    st->result_key = fin.vita_staged > 0 ? "app/retro/ready_need_vita_fw" : "app/retro/ready_vita3k_need_fw";
+                    st->result_key = "app/retro/ready_need_vita_fw";
                 } else {
                     st->result_key = "app/retro/ready_need_bios";
                 }
@@ -1203,7 +1221,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                         st->result_key = "app/retro/ready_in_tico";
                         break;
                     case catalog::RetroRoute::Vita3K:
-                        st->result_key = fin.vita_staged > 0 ? "app/retro/ready_vita3k" : "app/retro/ready_vita3k_installed";
+                        st->result_key = "app/retro/ready_vita3k";
                         break;
                     case catalog::RetroRoute::Cemu:
                         st->result_key = "app/retro/ready_cemu";

@@ -90,6 +90,7 @@ ExtractTarget makeExtractTarget(const RetroConsoleInfo& console, ArchiveAction a
 struct FinalizeCallbacks {
     std::function<void(const std::string& i18n_key)> on_stage;
     std::function<void(const std::string& archive_name, int percent)> on_extract;
+    std::function<void(const std::string& archive_name, int percent)> on_pack;
 };
 
 struct FinalizeResult {
@@ -101,9 +102,6 @@ struct FinalizeResult {
     // Everything this release left on the SD card (files and the release folder),
     // for the installed-games list.
     std::vector<std::string> written;
-    // PS Vita: games installed into Vita3K directly / left for Vita3K's own installer.
-    int vita_installed = 0;
-    int vita_staged = 0;
 };
 
 // Runs after every planned file is on the SD card.

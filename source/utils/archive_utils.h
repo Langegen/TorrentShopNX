@@ -109,13 +109,15 @@ bool extractSingleFileFromArchive(
 // Runs synchronously — caller should invoke via background thread (e.g. brls::async or ArchiveProgressDialog).
 // Periodic progress callback is fired during packing.
 // Archiving can be cancelled via cancelToken.
+// store_only: no compression (fast; for game images that do not shrink anyway).
 bool createZipArchive(
     const std::string& archivePath,
     const std::vector<std::string>& sourcePaths,
     const std::string& baseDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    bool store_only = false
 );
 
 } // namespace util

@@ -58,8 +58,9 @@
 #define TSNX_CEMU_DIR            "./switch/cemu"
 #endif
 
-// Vita3K-nx installs whatever is placed here; Cemu-nx scans games/ by default.
-#define TSNX_VITA3K_INSTALL_DIR  TSNX_VITA3K_DIR "/install"
+// PS Vita games are saved as .vpk/.zip that Vita3K-nx installs from its file
+// manager; Cemu-nx scans games/ by default.
+#define TSNX_VITA_ROMS_DIR       TSNX_ROMS_BASE_DIR "/vita"
 #define TSNX_CEMU_GAMES_DIR      TSNX_CEMU_DIR "/games"
 
 #define TSNX_TICO_ROMS_DIR       TSNX_TICO_BASE_DIR "/roms"

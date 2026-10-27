@@ -1,5 +1,4 @@
 #include "retro_layout.h"
-#include "retro_vita.h"
 
 #include "../config/config.h"
 #include "../net/http_client.h"
@@ -1142,16 +1141,50 @@ FinalizeResult finalizeRelease(const RetroConsoleInfo& c,
         }
     }
 
-    if (c.route == RetroRoute::Vita3K && !cancelled()) {
-        std::vector<fs::path> candidates = top;
-        if (haveGameDir) candidates.push_back(gameDir);
-        VitaInstallSummary vita = installIntoVita3K(candidates, cancel);
-        res.vita_installed = vita.installed;
-        res.vita_staged = vita.staged;
-        res.written.insert(res.written.end(), vita.installed_dirs.begin(), vita.installed_dirs.end());
-        top.clear();
-        for (const auto& left : vita.left_paths) top.push_back(left);
-        haveGameDir = haveGameDir && fs::exists(gameDir, ec);
+    // PS Vita: Vita3K installs .vpk / .zip / .7z from its file manager and decrypts
+    // NoNpDrm dumps itself. A release that came as a folder is packed into one zip.
+    if (c.route == RetroRoute::Vita3K && haveGameDir && !cancelled()) {
+        std::vector<fs::path> files = listFilesRecursive(gameDir);
+        bool isContent = std::any_of(files.begin(), files.end(), [](const fs::path& f) {
+            std::string name = toLower(f.filename().string());
+            std::string ext = extOf(name);
+            return (name == "param.sfo" && toLower(f.parent_path().filename().string()) == "sce_sys") ||
+                   ext == ".pkg" || ext == ".rif" || name == "work.bin";
+        });
+        if (isContent) {
+            fs::path zip = uniquePath(base, gameDirName + ".zip");
+            std::vector<std::string> sources;
+            for (const auto& e : fs::directory_iterator(gameDir, ec)) sources.push_back(e.path().string());
+            std::string zipName = zip.filename().string();
+            if (cb.on_pack) cb.on_pack(zipName, 0);
+            std::string err;
+            bool ok = util::createZipArchive(zip.string(), sources, gameDir.string(),
+                [&](const util::ArchiveProgress& p) {
+                    if (cb.on_pack) cb.on_pack(zipName, static_cast<int>(std::clamp(p.percentage, 0.0f, 100.0f)));
+                },
+                cancel, err, /*store_only=*/true);
+            if (ok) {
+                fs::remove_all(gameDir, ec);
+                haveGameDir = false;
+                top.push_back(zip);
+                util::logLine("retro: packed " + gameDir.string() + " into " + zip.string());
+            } else {
+                util::logLine("retro: could not pack " + gameDir.string() + ": " + err);
+            }
+        } else {
+            // Only ready archives inside (e.g. Game/Game.vpk + notes): bring them up.
+            for (const auto& f : files) {
+                std::string ext = extOf(f.filename().string());
+                if (ext != ".vpk" && ext != ".zip" && ext != ".7z" && ext != ".rar") continue;
+                fs::path dst = uniquePath(base, f.filename().string());
+                if (moveFile(f, dst)) top.push_back(dst);
+            }
+            std::vector<fs::path> left = listFilesRecursive(gameDir);
+            if (std::all_of(left.begin(), left.end(), [](const fs::path& f) { return isJunkExt(extOf(f.filename().string())); })) {
+                fs::remove_all(gameDir, ec);
+                haveGameDir = false;
+            }
+        }
     }
 
     for (const auto& t : top) {
@@ -1250,7 +1283,7 @@ LegacyStandaloneGames findLegacyStandaloneGames() {
 
 int moveLegacyStandaloneGames() {
     int moved = 0;
-    for (const auto& d : legacyDirs("psvita")) moved += moveDirContents(d, TSNX_VITA3K_INSTALL_DIR);
+    for (const auto& d : legacyDirs("psvita")) moved += moveDirContents(d, TSNX_VITA_ROMS_DIR);
     for (const auto& d : legacyDirs("wiiu")) moved += moveDirContents(d, TSNX_CEMU_GAMES_DIR);
     util::logLine("retro: moved " + std::to_string(moved) + " PS Vita / Wii U item(s) to emulator folders");
     return moved;
