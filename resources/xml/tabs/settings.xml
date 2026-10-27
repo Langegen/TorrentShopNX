@@ -4,11 +4,11 @@
     height="auto"
     axis="column"
     paddingTop="20"
-    paddingRight="20"
-    paddingBottom="20"
-    paddingLeft="20">
+    paddingRight="32"
+    paddingBottom="12"
+    paddingLeft="32">
 
-    <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="20">
+    <brls:Box width="auto" height="56px" axis="row" alignItems="center" marginBottom="8">
         <brls:Label text="@i18n/app/settings/title" fontSize="28" />
     </brls:Box>
 

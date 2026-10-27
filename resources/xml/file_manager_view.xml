@@ -4,22 +4,22 @@
         height="auto"
         grow="1.0"
         axis="column"
-        paddingTop="12"
-        paddingRight="16"
-        paddingBottom="8"
-        paddingLeft="16">
+        paddingTop="20"
+        paddingRight="32"
+        paddingBottom="12"
+        paddingLeft="32">
 
         <!-- Top Header Bar: App Title & Navigation Hints -->
         <brls:Box
             id="topHeaderBar"
             width="auto"
-            height="36px"
+            height="56px"
             axis="row"
             alignItems="center"
             justifyContent="spaceBetween"
-            marginBottom="4">
+            marginBottom="8">
 
-            <brls:Label text="@i18n/app/file_manager/title" fontSize="22" />
+            <brls:Label text="@i18n/app/file_manager/title" fontSize="28" />
 
             <!-- Top Right Hints Box -->
             <brls:Box
@@ -33,14 +33,14 @@
                 <brls:Label
                     id="splitToggleHint"
                     text=""
-                    fontSize="14"
+                    fontSize="15"
                     textColor="@theme/brls/header/subtitle" />
 
                 <!-- Navigation hint when in split mode -->
                 <brls:Label
                     id="splitNavHint"
                     text="@i18n/app/file_manager/switch_pane_hint"
-                    fontSize="14"
+                    fontSize="15"
                     textColor="@theme/brls/header/subtitle"
                     marginLeft="16"
                     visibility="gone" />
@@ -116,7 +116,7 @@
                     cornerRadius="5"
                     backgroundColor="#203a43">
                     <brls:Label id="selectionText" text="" fontSize="14" textColor="#00e676" />
-                    <brls:Label id="selectionHint" text="@i18n/app/file_manager/selection_actions_hint" fontSize="14" textColor="@theme/brls/header/subtitle" />
+                    <brls:Label id="selectionHint" text="" fontSize="14" textColor="@theme/brls/header/subtitle" />
                 </brls:Box>
 
                 <!-- Column Headers Left -->
@@ -228,7 +228,7 @@
                     cornerRadius="5"
                     backgroundColor="#203a43">
                     <brls:Label id="selectionTextRight" text="" fontSize="14" textColor="#00e676" />
-                    <brls:Label id="selectionHintRight" text="@i18n/app/file_manager/selection_actions_hint" fontSize="14" textColor="@theme/brls/header/subtitle" />
+                    <brls:Label id="selectionHintRight" text="" fontSize="14" textColor="@theme/brls/header/subtitle" />
                 </brls:Box>
 
                 <!-- Column Headers Right -->

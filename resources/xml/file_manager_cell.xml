@@ -40,6 +40,7 @@
         width="130px"
         height="auto"
         horizontalAlign="right"
+        singleLine="true"
         fontSize="14"
         textColor="@theme/brls/header/subtitle"
         marginRight="12" />

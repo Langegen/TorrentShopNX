@@ -1,10 +1,25 @@
 #include "CollectionCard.hpp"
 #include "ui/ThemeManager.hpp"
 #include <cmath>
+#include "style/UiTokens.hpp"
 
 using namespace brls::literals;
 
 namespace ui {
+
+// Turns line breaks from translations into spaces: one paragraph.
+static std::string flattenLines(std::string text) {
+    for (char& c : text) {
+        if (c == '\n' || c == '\r') c = ' ';
+    }
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text) {
+        if (c == ' ' && !out.empty() && out.back() == ' ') continue;
+        out += c;
+    }
+    return out;
+}
 
 CollectionCard::CollectionCard(const std::string& icon_type,
                                const std::string& title,
@@ -18,7 +33,7 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     this->setFocusable(true);
     this->setHideHighlight(true); // Custom glass border
     this->setWidth(274.0f);
-    this->setHeight(98.0f);
+    this->setHeight(108.0f);
     this->setAxis(brls::Axis::ROW);
     this->setPadding(8.0f, 12.0f, 8.0f, 12.0f);
     this->setCornerRadius(14.0f);
@@ -36,7 +51,7 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     infoCol->setAxis(brls::Axis::COLUMN);
     infoCol->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     infoCol->setGrow(1.0f);
-    infoCol->setHeight(72.0f);
+    infoCol->setHeight(88.0f);
 
     // Top block: Title + Desc
     brls::Box* topBox = new brls::Box();
@@ -45,18 +60,22 @@ CollectionCard::CollectionCard(const std::string& icon_type,
 
     title_label_ = new brls::Label();
     title_label_->setText(title);
-    title_label_->setFontSize(14.0f);
+    title_label_->setFontSize(16.0f);
     title_label_->setTextColor(ThemeManager::instance().getCardTitleColor());
     title_label_->setSingleLine(true);
     topBox->addView(title_label_);
 
+    // At most two lines; manual line breaks from translations are dropped so
+    // the text wraps to the card width instead of overflowing onto the badge.
     desc_label_ = new brls::Label();
-    desc_label_->setText(desc);
+    desc_label_->setText(flattenLines(desc));
     desc_label_->setFontSize(14.0f);
-    desc_label_->setLineHeight(1.22f);
-    desc_label_->setTextColor(ThemeManager::instance().getCardSubColor());
-    desc_label_->setMarginTop(3.0f);
+    desc_label_->setLineHeight(1.2f);
+    desc_label_->setTextColor(style::textSecondary());
+    desc_label_->setMarginTop(2.0f);
     desc_label_->setSingleLine(false);
+    desc_label_->setMaxLines(2);
+    desc_label_->setAutoAnimate(false);
     topBox->addView(desc_label_);
     infoCol->addView(topBox);
 
@@ -100,7 +119,7 @@ void CollectionCard::setCountText(const std::string& text) {
 }
 
 void CollectionCard::setDesc(const std::string& text) {
-    if (desc_label_) desc_label_->setText(text);
+    if (desc_label_) desc_label_->setText(flattenLines(text));
 }
 
 void CollectionCard::setDescColor(NVGcolor color) {

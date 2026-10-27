@@ -1,7 +1,9 @@
 #include "DashboardSummaryView.hpp"
 #include "SpeedSparklineView.hpp"
+#include "DashboardIcon.hpp"
 #include "../ThemeManager.hpp"
 #include "../style/UiTokens.hpp"
+#include "../../utils/string_utils.h"
 #include "../GameDetailView.hpp"
 #include "../../utils/switch_utils.h"
 #include "../../utils/app_paths.h"
@@ -35,6 +37,8 @@ static constexpr float kCaptionFont  = style::kFontCaption;
 static constexpr float kValueFont    = style::kFontValue;
 static constexpr float kValueFontMid = style::kFontValueMid;
 static constexpr float kSubFont      = style::kFontSub;
+static constexpr float kCardCaptionFont = 16.0f; // caption at the top of a panel card
+static constexpr float kCardSubFont     = 17.0f; // line at the bottom of a panel card
 static constexpr float kCoverW       = 88.0f;
 static constexpr float kCoverH       = 140.0f;
 
@@ -84,30 +88,6 @@ static int countWaiting(const std::vector<download::DownloadItem>& items) {
     return n;
 }
 
-// Splits a title into two lines that fit `width`; the second line is left
-// whole so its single-line label ends it with an ellipsis.
-static std::pair<std::string, std::string> splitTwoLines(const std::string& text, float width, float fontSize) {
-    NVGcontext* vg = brls::Application::getNVGContext();
-    if (!vg || text.empty()) return { text, "" };
-    float eff = fontSize;
-    if (fontSize <= 18.0f) eff *= config::ConfigManager::instance().getFontScaleMultiplier();
-
-    nvgSave(vg);
-    nvgFontSize(vg, eff);
-    nvgFontFaceId(vg, brls::Application::getDefaultFont());
-    nvgTextLineHeight(vg, 1.0f);
-    NVGtextRow rows[2];
-    int n = nvgTextBreakLines(vg, text.c_str(), nullptr, width, rows, 2);
-    nvgRestore(vg);
-
-    if (n <= 1) return { text, "" };
-    std::string first(rows[0].start, rows[0].end);
-    std::string rest(rows[1].start);
-    size_t p = rest.find_first_not_of(' ');
-    rest = (p == std::string::npos) ? "" : rest.substr(p);
-    return { first, rest };
-}
-
 static brls::Label* makeLabel(const std::string& text, float size, NVGcolor color) {
     brls::Label* l = new brls::Label();
     l->setText(text);
@@ -145,7 +125,7 @@ static void addCaption(brls::Box* card, const std::string& caption, const std::s
     brls::Box* row = makeRow();
     row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     row->setWidthPercentage(100.0f);
-    row->addView(makeLabel(caption, kCaptionFont, style::textSecondary()));
+    row->addView(makeLabel(caption, kCardCaptionFont, style::textSecondary()));
     if (!meta.empty()) {
         brls::Label* m = makeLabel(meta, kCaptionFont, style::textSecondary());
         m->setMarginLeft(12.0f);
@@ -156,16 +136,49 @@ static void addCaption(brls::Box* card, const std::string& caption, const std::s
 
 static brls::Label* addValue(brls::Box* card, const std::string& text, NVGcolor color, float size = kValueFont) {
     brls::Label* v = makeLabel(text, size, color);
-    v->setWidth(kCardInnerW);
+    v->setWidthPercentage(100.0f);
     card->addView(v);
     return v;
 }
 
 static brls::Label* addSub(brls::Box* card, const std::string& text, NVGcolor color) {
-    brls::Label* s = makeLabel(text, kSubFont, color);
-    s->setWidth(kCardInnerW);
+    brls::Label* s = makeLabel(text, kCardSubFont, color);
+    s->setWidthPercentage(100.0f);
     card->addView(s);
     return s;
+}
+
+using Icon = DashboardIcon::Kind;
+
+static constexpr float kEmblem    = 56.0f;
+static constexpr float kEmblemGap = 14.0f;
+
+// Middle row of a panel card: illustrated icon, then the large value.
+static brls::Label* addIconValue(brls::Box* card, Icon kind, const std::string& text, NVGcolor color,
+                                 float size = kValueFont) {
+    brls::Box* row = makeRow();
+    row->setWidthPercentage(100.0f);
+    DashboardIcon* ic = new DashboardIcon(kind, kEmblem);
+    ic->setMarginRight(kEmblemGap);
+    row->addView(ic);
+    brls::Label* v = makeLabel(text, size, color);
+    v->setWidth(kCardInnerW - kEmblem - kEmblemGap);
+    row->addView(v);
+    card->addView(row);
+    return v;
+}
+
+// Strips torrent tags ("[NRO][RUS/Multi12]") and tidies "(port )" for display.
+static std::string displayTitle(const std::string& title) {
+    std::string t = cleanTitle(title);
+    std::string out;
+    out.reserve(t.size());
+    for (size_t i = 0; i < t.size(); ++i) {
+        if (t[i] == ' ' && i + 1 < t.size() && t[i + 1] == ')') continue;
+        if (t[i] == ' ' && !out.empty() && out.back() == ' ') continue;
+        out += t[i];
+    }
+    return out;
 }
 
 // Progress / storage bar. Returns the fill box so callers can update it.
@@ -234,17 +247,11 @@ public:
         infoCol->setWidth(infoW);
         infoCol->setHeight(kCoverH);
 
-        const float titleFont = 18.0f;
-        auto lines = splitTwoLines(game.title, infoW, titleFont);
-        titleLbl1_ = makeLabel(lines.first, titleFont, style::textPrimary());
+        // One line; the full title is on the game page
+        titleLbl1_ = makeLabel(displayTitle(game.title), 18.0f, style::textPrimary());
         titleLbl1_->setWidth(infoW);
+        titleLbl1_->setAutoAnimate(false);
         infoCol->addView(titleLbl1_);
-        if (!lines.second.empty()) {
-            titleLbl2_ = makeLabel(lines.second, titleFont, style::textPrimary());
-            titleLbl2_->setWidth(infoW);
-            titleLbl2_->setMarginTop(2.0f);
-            infoCol->addView(titleLbl2_);
-        }
 
         std::string metaText = game.size.empty() ? "NSP" : game.size;
         if (!game.year.empty()) metaText += "  ·  " + game.year;
@@ -253,11 +260,26 @@ public:
         meta->setMarginTop(8.0f);
         infoCol->addView(meta);
 
-        if (!game.genre.empty()) {
+        if (!util::isPlaceholderValue(game.genre)) {
             brls::Label* genre = makeLabel(game.genre, kSubFont, style::textSecondary());
             genre->setWidth(infoW);
             genre->setMarginTop(4.0f);
             infoCol->addView(genre);
+        }
+
+        // Interface language, pinned to the bottom of the column
+        GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
+        if (!badge.text.empty()) {
+            brls::Box* spacer = new brls::Box();
+            spacer->setGrow(1.0f);
+            infoCol->addView(spacer);
+            brls::Box* pill = new brls::Box();
+            pill->setPadding(2.0f, 8.0f, 2.0f, 8.0f);
+            pill->setCornerRadius(style::kRadiusChip);
+            pill->setBackgroundColor(badge.color);
+            pill->setAlignSelf(brls::AlignSelf::FLEX_START);
+            pill->addView(makeLabel(badge.text, 13.0f, nvgRGB(255, 255, 255)));
+            infoCol->addView(pill);
         }
         this->addView(infoCol);
 
@@ -696,17 +718,19 @@ void DashboardSummaryView::buildRetroGamesSection() {
 
     // Games in the database
     brls::Box* c1 = makeCard(kCardWidth, openRetro);
-    addCaption(c1, "app/dashboard/retro_c1_title"_i18n, util::pluralize("app/plural/systems", systems));
-    if (retroGames > 0) addValue(c1, std::to_string(retroGames), style::textPrimary());
-    else addValue(c1, "app/dashboard/retro_c1_val_empty"_i18n, style::textSecondary(), kValueFontMid);
-    addSub(c1, "NES · SNES · GBA · N64 · PS1 · PS2 · PSP…", style::textSecondary());
+    brls::Box* b1 = c1;
+    addCaption(b1, "app/dashboard/retro_c1_title"_i18n);
+    if (retroGames > 0) addIconValue(b1, Icon::Gamepad, std::to_string(retroGames), style::textPrimary());
+    else addIconValue(b1, Icon::Gamepad, "app/dashboard/retro_c1_val_empty"_i18n, style::textSecondary(), kValueFontMid);
+    addSub(b1, util::pluralize("app/plural/systems", systems), style::textSecondary());
     cardsRow->addView(c1);
 
     // Platforms handled by Tico
     brls::Box* c2 = makeCard(kCardWidth, openRetro);
-    addCaption(c2, "app/dashboard/retro_c2_title"_i18n, "Tico · Vita3K · Cemu");
-    addValue(c2, ofStr(std::to_string(ticoSystems), std::to_string(systems)), style::textPrimary());
-    addSub(c2, "app/dashboard/retro_c2_sub"_i18n, style::textSecondary());
+    brls::Box* b2 = c2;
+    addCaption(b2, "app/dashboard/retro_c2_title"_i18n);
+    addIconValue(b2, Icon::Puzzle, ofStr(std::to_string(ticoSystems), std::to_string(systems)), style::textPrimary());
+    addSub(b2, "app/dashboard/retro_c2_sub"_i18n, style::textSecondary());
     cardsRow->addView(c2);
 
     // ROM folder
@@ -715,9 +739,10 @@ void DashboardSummaryView::buildRetroGamesSection() {
     std::string effDir = (cfg.isRetroCustomFolder() && !cfg.getRetroCustomPath().empty())
         ? cfg.getRetroCustomPath() : std::string("sdmc:/tico/roms/");
     brls::Box* c3 = makeCard(kCardWidth, openRetro);
-    addCaption(c3, "app/dashboard/retro_c3_title"_i18n, modeTag);
-    addValue(c3, effDir, style::textPrimary(), kValueFontMid);
-    addSub(c3, "app/dashboard/retro_c3_sub"_i18n, style::textSecondary());
+    brls::Box* b3 = c3;
+    addCaption(b3, "app/dashboard/retro_c3_title"_i18n + "  \u00B7  " + modeTag);
+    addIconValue(b3, Icon::Folder, effDir, style::textPrimary(), kValueFontMid);
+    addSub(b3, "app/dashboard/retro_c3_sub"_i18n, style::textSecondary());
     cardsRow->addView(c3);
 
     wireCard(c1);
@@ -738,31 +763,45 @@ void DashboardSummaryView::buildLibrarySection() {
     brls::Box* cardsRow = addCardsRow();
 
     brls::Box* c1 = makeCard(kCardWidth, openLib);
-    addCaption(c1, "app/dashboard/library_inst_title"_i18n, "app/dashboard/library_inst_storage"_i18n);
-    addValue(c1, util::pluralize("app/plural/games", installed_count_), style::textPrimary());
-    addSub(c1, "app/dashboard/library_inst_sub"_i18n, style::textSecondary());
+    brls::Box* b1 = c1;
+    addCaption(b1, "app/dashboard/library_inst_title"_i18n);
+    addIconValue(b1, Icon::GameCards, util::pluralize("app/plural/games", installed_count_), style::textPrimary());
+    addSub(b1, "app/dashboard/library_inst_sub"_i18n, style::textSecondary());
     cardsRow->addView(c1);
 
     brls::Box* c2 = makeCard(kCardWidth, openLib);
-    addCaption(c2, "app/dashboard/library_upd_title"_i18n, "app/dashboard/library_upd_sync"_i18n);
     if (updates_count_ > 0) {
         c2->setBorderColor(style::stateWarnBorder());
-        addValue(c2, util::pluralize("app/plural/updates", updates_count_), style::stateWarn());
-        addSub(c2, "app/dashboard/library_upd_sub"_i18n, style::textSecondary());
+        brls::Box* b2 = c2;
+        addCaption(b2, "app/dashboard/library_upd_title"_i18n);
+        addIconValue(b2, Icon::Update, util::pluralize("app/plural/updates", updates_count_), style::stateWarn());
+        addSub(b2, "app/dashboard/library_upd_sub"_i18n, style::textSecondary());
     } else {
-        addValue(c2, "app/dashboard/library_upd_all_updated"_i18n, style::stateOk(), kValueFontMid);
-        addSub(c2, "app/dashboard/library_upd_sub_ok"_i18n, style::textSecondary());
+        brls::Box* b2 = c2;
+        addCaption(b2, "app/dashboard/library_upd_title"_i18n);
+        addIconValue(b2, Icon::Done, "app/dashboard/library_upd_all_updated"_i18n, style::stateOk(), kValueFontMid);
+        addSub(b2, "app/dashboard/library_upd_sub_ok"_i18n, style::textSecondary());
     }
     cardsRow->addView(c2);
 
-    brls::Box* c3 = makeCard(kCardWidth, openLib);
-    c3->setJustifyContent(brls::JustifyContent::FLEX_START);
-    addCaption(c3, "app/dashboard/library_free_title"_i18n);
+    brls::Box* c3card = makeCard(kCardWidth, openLib);
+    addCaption(c3card, "app/dashboard/library_free_title"_i18n);
+    brls::Box* c3row = makeRow();
+    c3row->setWidthPercentage(100.0f);
+    DashboardIcon* c3icon = new DashboardIcon(Icon::SdCard, kEmblem);
+    c3icon->setMarginRight(kEmblemGap);
+    c3row->addView(c3icon);
+    brls::Box* c3 = new brls::Box();
+    c3->setAxis(brls::Axis::COLUMN);
+    c3->setWidth(kCardInnerW - kEmblem - kEmblemGap);
+    c3row->addView(c3);
+    c3card->addView(c3row);
+    c3card->addView(new brls::Box()); // keeps the bars centered between caption and bottom
     auto addStorageRow = [&](const std::string& name, brls::Label*& valOut, brls::Box*& fillOut) {
         brls::Box* labels = makeRow();
         labels->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         labels->setWidthPercentage(100.0f);
-        labels->setMarginTop(14.0f);
+
         labels->addView(makeLabel(name, kSubFont, style::textPrimary()));
         valOut = makeLabel("—", kSubFont, style::textSecondary());
         labels->addView(valOut);
@@ -771,17 +810,18 @@ void DashboardSummaryView::buildLibrarySection() {
         brls::Box* barRow = makeRow();
         barRow->setWidthPercentage(100.0f);
         barRow->setMarginTop(6.0f);
+        barRow->setMarginBottom(10.0f);
         fillOut = makeBar(barRow, 8.0f, 0.0f);
         c3->addView(barRow);
     };
     addStorageRow("app/dashboard/library_free_sd"_i18n, lib_sdVal_, lib_sdFill_);
     addStorageRow("NAND", lib_nandVal_, lib_nandFill_);
-    cardsRow->addView(c3);
+    cardsRow->addView(c3card);
     updateStorageWidgets();
 
     wireCard(c1);
     wireCard(c2);
-    wireCard(c3);
+    wireCard(c3card);
 }
 
 // -------------------------------------------------------------
@@ -908,30 +948,36 @@ void DashboardSummaryView::buildDownloadsSection() {
     brls::Box* cardsRow = addCardsRow();
 
     brls::Box* c1 = makeCard(kCardWidth, openDl);
-    addCaption(c1, "app/dashboard/downloads_active_title"_i18n, queueMeta);
-    addValue(c1, "app/dashboard/downloads_none"_i18n, style::textPrimary());
-    addSub(c1, "app/dashboard/downloads_none_sub"_i18n, style::textSecondary());
+    brls::Box* b1 = c1;
+    addCaption(b1, "app/dashboard/downloads_active_title"_i18n);
+    addIconValue(b1, Icon::Download, "app/dashboard/downloads_none"_i18n, style::textPrimary());
+    addSub(b1, countWaiting(cached_downloads_) > 0 ? queueMeta : "app/dashboard/downloads_none_sub"_i18n,
+           style::textSecondary());
     cardsRow->addView(c1);
 
     brls::Box* c2 = makeCard(kCardWidth, openDl);
-    addCaption(c2, "app/dashboard/downloads_last_title"_i18n);
     if (const download::DownloadItem* last = findLastCompleted(cached_downloads_)) {
-        addValue(c2, cleanTitle(last->title), style::textPrimary(), kValueFontMid);
+        brls::Box* b2 = c2;
+        addCaption(b2, "app/dashboard/downloads_last_title"_i18n);
+        addIconValue(b2, Icon::Done, displayTitle(last->title), style::textPrimary(), kValueFontMid);
         std::string sub = "app/dashboard/downloads_last_done"_i18n;
         if (last->download_total_bytes > 0) sub += "  ·  " + formatBytes(last->download_total_bytes);
-        addSub(c2, sub, style::stateOk());
+        addSub(b2, sub, style::stateOk());
     } else {
-        addValue(c2, "app/dashboard/downloads_last_none"_i18n, style::textSecondary(), kValueFontMid);
-        addSub(c2, "app/dashboard/downloads_last_none_sub"_i18n, style::textSecondary());
+        brls::Box* b2 = c2;
+        addCaption(b2, "app/dashboard/downloads_last_title"_i18n);
+        addIconValue(b2, Icon::Clock, "app/dashboard/downloads_last_none"_i18n, style::textSecondary(), kValueFontMid);
+        addSub(b2, "app/dashboard/downloads_last_none_sub"_i18n, style::textSecondary());
     }
     cardsRow->addView(c2);
 
     auto& cfg = config::ConfigManager::instance();
     const std::string engine = (cfg.getDataMode() == "local_client") ? "Custom Engine" : "TorrServer";
     brls::Box* c3 = makeCard(kCardWidth, openDl);
-    addCaption(c3, "app/dashboard/downloads_net_title"_i18n, engine);
-    addValue(c3, brls::getStr("app/dashboard/port_fmt", std::to_string(cfg.getListenPort())), style::textPrimary());
-    addSub(c3, "DHT  ·  " + (cfg.getKeepAwakeDuringDownloads() ? "app/dashboard/keep_awake_on"_i18n
+    brls::Box* b3 = c3;
+    addCaption(b3, "app/dashboard/downloads_net_title"_i18n + "  \u00B7  " + engine);
+    addIconValue(b3, Icon::Router, brls::getStr("app/dashboard/port_fmt", std::to_string(cfg.getListenPort())), style::textPrimary());
+    addSub(b3, "DHT  ·  " + (cfg.getKeepAwakeDuringDownloads() ? "app/dashboard/keep_awake_on"_i18n
                                                                : "app/dashboard/keep_awake_off"_i18n), style::textSecondary());
     cardsRow->addView(c3);
 
@@ -954,29 +1000,34 @@ void DashboardSummaryView::buildToolsSection() {
 
     auto& cfg = config::ConfigManager::instance();
     brls::Box* c1 = makeCard(kCardWidth, openTools);
-    addCaption(c1, "app/dashboard/tools_c1_title"_i18n);
-    addValue(c1, engine_mode_, style::textPrimary());
-    addSub(c1, brls::getStr("app/dashboard/port_fmt", std::to_string(cfg.getListenPort())) + "  ·  " +
+    brls::Box* b1 = c1;
+    addCaption(b1, "app/dashboard/tools_c1_title"_i18n);
+    addIconValue(b1, Icon::Chip, engine_mode_, style::textPrimary(), kValueFontMid + 4.0f);
+    addSub(b1, brls::getStr("app/dashboard/port_fmt", std::to_string(cfg.getListenPort())) + "  ·  " +
                (cfg.getKeepAwakeDuringDownloads() ? "app/dashboard/keep_awake_on"_i18n
                                                   : "app/dashboard/keep_awake_off"_i18n),
            style::textSecondary());
     cardsRow->addView(c1);
 
     brls::Box* c2 = makeCard(kCardWidth, openTools);
-    addCaption(c2, "app/dashboard/tools_c2_title"_i18n);
-    addValue(c2, formatBytes(cache_size_bytes_), style::textPrimary());
-    addSub(c2, "app/dashboard/tools_c2_sub"_i18n, style::textSecondary());
+    brls::Box* b2 = c2;
+    addCaption(b2, "app/dashboard/tools_c2_title"_i18n);
+    addIconValue(b2, Icon::Database, formatBytes(cache_size_bytes_), style::textPrimary());
+    addSub(b2, "app/dashboard/tools_c2_sub"_i18n, style::textSecondary());
     cardsRow->addView(c2);
 
     brls::Box* c3 = makeCard(kCardWidth, openTools);
-    addCaption(c3, "app/dashboard/tools_c3_title"_i18n);
     if (leftover_size_bytes_ > 0) {
         c3->setBorderColor(style::stateWarnBorder());
-        addValue(c3, formatBytes(leftover_size_bytes_), style::stateWarn());
-        addSub(c3, "app/dashboard/tools_c3_sub"_i18n, style::textSecondary());
+        brls::Box* b3 = c3;
+        addCaption(b3, "app/dashboard/tools_c3_title"_i18n);
+        addIconValue(b3, Icon::Trash, formatBytes(leftover_size_bytes_), style::stateWarn());
+        addSub(b3, "app/dashboard/tools_c3_sub"_i18n, style::textSecondary());
     } else {
-        addValue(c3, "app/dashboard/tools_c3_clean"_i18n, style::stateOk());
-        addSub(c3, "app/dashboard/tools_c3_sub_clean"_i18n, style::textSecondary());
+        brls::Box* b3 = c3;
+        addCaption(b3, "app/dashboard/tools_c3_title"_i18n);
+        addIconValue(b3, Icon::Done, "app/dashboard/tools_c3_clean"_i18n, style::stateOk());
+        addSub(b3, "app/dashboard/tools_c3_sub_clean"_i18n, style::textSecondary());
     }
     cardsRow->addView(c3);
 

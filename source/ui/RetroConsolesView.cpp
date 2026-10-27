@@ -158,7 +158,7 @@ void RetroConsolesView::updateHeader() {
     std::string text = games > 0
         ? brls::getStr("app/retro/consoles_stats_fmt", systems, std::to_string(games))
         : brls::getStr("app/retro/consoles_count_fmt", systems);
-    statsHint->setText(text + "app/retro/consoles_stats_suffix"_i18n);
+    statsHint->setText(text);
 }
 
 // What each console still needs, shown under its name. Reads the SD card, so off the UI thread.

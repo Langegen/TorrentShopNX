@@ -3,13 +3,13 @@
     width="auto"
     height="auto"
     axis="column"
-    paddingTop="16"
-    paddingRight="36"
-    paddingBottom="10"
-    paddingLeft="36">
+    paddingTop="20"
+    paddingRight="32"
+    paddingBottom="12"
+    paddingLeft="32">
 
     <!-- Topbar -->
-    <brls:Box width="auto" height="48px" axis="row" alignItems="center" marginBottom="10">
+    <brls:Box width="auto" height="56px" axis="row" alignItems="center" marginBottom="8">
         <brls:Label text="@i18n/app/collections/title" fontSize="28" />
     </brls:Box>
 

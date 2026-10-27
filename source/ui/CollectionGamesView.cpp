@@ -375,17 +375,22 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                 cardBox->setVisibility(brls::Visibility::VISIBLE);
                 cardBox->setFocusable(true);
 
-                // Full title, at most two lines (maxLines in collection_grid_cell.xml)
-                cards[i].title->setText(entry.title);
+                // One line with an ellipsis; scrolls in full while the card is focused
+                brls::Label* titleLabel = cards[i].title;
+                titleLabel->setText(entry.title);
 
                 cardBox->getFocusEvent()->clear();
                 cardBox->getFocusLostEvent()->clear();
 
-                cardBox->getFocusEvent()->subscribe([row, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([titleLabel, row, i](brls::View* v) {
                     if (v->isFocused()) {
                         CollectionGameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
                     }
+                    titleLabel->setAnimated(true);
+                });
+                cardBox->getFocusLostEvent()->subscribe([titleLabel](brls::View*) {
+                    titleLabel->setAnimated(false);
                 });
 
                 // Metacritic badge (top-right of the cover)

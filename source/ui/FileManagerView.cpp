@@ -1,4 +1,5 @@
 #include "FileManagerView.hpp"
+#include "style/HeaderHints.hpp"
 #include "ui/ThemeManager.hpp"
 #include "ArchiveProgressDialog.hpp"
 #include "InstallProgressDialog.hpp"
@@ -164,6 +165,13 @@ void FileManagerView::initPanelBindings() {
     panels_[0].spaceInfo = spaceInfo;
     panels_[0].selectionBar = selectionBar;
     panels_[0].selectionText = selectionText;
+    // Y / X / A as the footer binds them (the old translated string had them swapped in some languages)
+    const std::string selectionActions = ui::style::headerMeta("", {
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_Y, "app/header_hint/select"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_X, "app/header_hint/actions"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_A, "app/header_hint/open"_i18n)});
+    if (selectionHint) selectionHint->setText(selectionActions);
+    if (selectionHintRight) selectionHintRight->setText(selectionActions);
     panels_[0].selectionHint = selectionHint;
     panels_[0].colHeaders = leftColHeaders;
     panels_[0].colSize = leftColSize;
@@ -563,9 +571,9 @@ void FileManagerView::toggleSplitMode() {
 void FileManagerView::updateSplitHints() {
     if (splitToggleHint) {
         if (isSplitMode_) {
-            splitToggleHint->setText("[-] " + brls::getStr("app/file_manager/split_mode_disable"));
+            splitToggleHint->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, brls::getStr("app/file_manager/split_mode_disable")));
         } else {
-            splitToggleHint->setText("[-] " + brls::getStr("app/file_manager/split_toggle"));
+            splitToggleHint->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, brls::getStr("app/file_manager/split_toggle")));
         }
     }
     if (splitNavHint) {

@@ -1035,7 +1035,7 @@ brls::View* SettingsTab::buildRetroTab() {
         if (!alive || !*alive) return;
         int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
         if (count > 0) {
-            updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", util::pluralize("app/plural/games", count)));
+            updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", util::pluralize("app/plural/games", count), brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_A)));
         } else {
             updateCatalogsCell->setDetailText("app/settings/retro_update_catalogs_empty"_i18n);
         }
@@ -1179,7 +1179,7 @@ brls::View* SettingsTab::buildAboutTab() {
         card->addView(urlBox);
 
         brls::Label* hintAction = new brls::Label();
-        hintAction->setText("app/settings/qr_press_hint"_i18n);
+        hintAction->setText(brls::getStr("app/settings/qr_press_hint", brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_A)));
         hintAction->setFontSize(14.0f);
         hintAction->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         hintAction->setHorizontalAlign(brls::HorizontalAlign::CENTER);
