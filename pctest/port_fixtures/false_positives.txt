@@ -1,0 +1,16 @@
+# title: Virus Crusader Modern Engine (port) [NRO]
+# source: синтетика (rus/eng/mod внутри других слов не делают вариантов)
+10000000	Virus Crusader/switch/vcrusader/vcrusader.nro
+500000000	Virus Crusader/engine.7z
+300000000	Virus Crusader/models.7z
+200000000	Virus Crusader/Modern Levels/switch/vcrusader/levels.pak
+300000	Virus Crusader/Virus Crusader (port) [0100CCCCDDDD0000].nsp
+
+## expect
+game vcrusader
+variants default
+extract engine.7z => sdmc:/
+extract models.7z => sdmc:/
+dest Modern Levels/switch/vcrusader/levels.pak => sdmc:/switch/vcrusader/levels.pak
+in default engine.7z
+in default models.7z

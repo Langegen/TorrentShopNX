@@ -1,4 +1,3 @@
-#include "RetroTargetPrompt.hpp"
 #include "GameDetailView.hpp"
 #include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
@@ -7,8 +6,10 @@
 #include "FavoritesManager.hpp"
 #include "ScreenshotViewer.hpp"
 #include "QrCodeView.hpp"
+#include "PortInstallFlow.hpp"
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
+#include "../catalog/installed_retro_games.h"
 #include "../config/config.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../utils/file_ops.h"
@@ -160,14 +161,8 @@ void GameDetailView::onContentAvailable() {
 
         badgesBox->addView(cBadge);
 
-        bool isTico = config::ConfigManager::instance().isTicoMode();
-        std::string emuText;
-        if (isTico && cInfo && cInfo->is_tico_supported) {
-            std::string core = catalog::RetroCatalogManager::instance().getTicoCoreName(retro_console_id_);
-            emuText = "Tico • " + core;
-        } else if (cInfo && !cInfo->recommended_emulator.empty()) {
-            emuText = cInfo->recommended_emulator;
-        }
+        bool isTico = catalog::RetroCatalogManager::instance().getRoute(retro_console_id_) == catalog::RetroRoute::Tico;
+        std::string emuText = catalog::RetroCatalogManager::instance().getRunnerLabel(retro_console_id_);
 
         if (!emuText.empty()) {
             brls::Box* emuBadge = new brls::Box();
@@ -206,6 +201,11 @@ void GameDetailView::onContentAvailable() {
         } else {
             btnDownload->setText("app/detail/download_rom"_i18n);
         }
+    }
+
+    // Port installed by the auto-installer (has a manifest)
+    if ((isHomebrewGame(game_) || isHomebrewPort(game_)) && ui::isPortInstalled(game_)) {
+        btnDownload->setText("app/ports/installed_btn"_i18n);
     }
 
     // Add language badge
@@ -323,71 +323,53 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Buttons Actions
-    btnDownload->registerClickAction([this](brls::View* view) {
-        if (!retro_console_id_.empty() || isHomebrewGame(game_) || isHomebrewPort(game_)) {
-            auto openOptionsDialog = [this]() {
-                auto* dialog = new brls::Dialog(cleanTitle(game_.title));
-                dialog->setCancelable(true);
+    const bool isPortRelease = retro_console_id_.empty() && (isHomebrewGame(game_) || isHomebrewPort(game_));
+    if (isPortRelease || !retro_console_id_.empty()) {
+        // Ports and retro games: picking files by hand is the advanced path, kept on X.
+        btnDownload->registerAction("app/detail/select_files_btn"_i18n, brls::ControllerButton::BUTTON_X,
+                                    [this](brls::View*) {
+            brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
+            return true;
+        });
+    }
 
-                // 1. Автоматическая установка (только для хоумбрю / портов)
-                if (isHomebrewGame(game_) || isHomebrewPort(game_)) {
-                    dialog->addButton("app/detail/auto_install_btn"_i18n, [this]() {
-                        ui::DownloadManager::instance().addPortInstall(game_, nullptr, 0);
-                        brls::sync([]() {
-                            brls::Application::pushActivity(new ui::DownloadsView());
-                        });
-                    });
-                }
-
-                // 2. Скачать полностью
-                dialog->addButton("app/detail/download_full_btn"_i18n, [this]() {
-                    if (!retro_console_id_.empty()) {
-                        promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
-                            ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, target_mode);
-                            brls::sync([]() {
-                                brls::Application::pushActivity(new ui::DownloadsView());
-                            });
-                        });
-                    } else {
-                        ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-                        brls::sync([]() {
-                            brls::Application::pushActivity(new ui::DownloadsView());
-                        });
-                    }
-                });
-
-                // 3. Выбрать файлы
-                dialog->addButton("app/detail/select_files_btn"_i18n, [this]() {
-                    brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
-                });
-
-                // 4. Отмена
-                dialog->addButton("app/common/cancel"_i18n, []() {});
-
-                dialog->open();
-            };
-
-            // Предупреждение для платформ, не поддерживаемых Tico нативно (PS2, PS Vita, Wii U)
-            if (!retro_console_id_.empty() && config::ConfigManager::instance().isTicoMode() &&
-                !catalog::RetroCatalogManager::instance().isTicoSupported(retro_console_id_)) {
-                const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
-                std::string cName = cInfo ? cInfo->name : retro_console_id_;
-                std::string emuName = cInfo ? cInfo->recommended_emulator : "Standalone";
-
-                std::string warnMsg = "app/retro/tico_unsupported_title"_i18n + "\n\n" +
-                                      brls::getStr("app/retro/tico_unsupported_desc", cName, emuName);
-                auto* warnDialog = new brls::Dialog(warnMsg);
-                warnDialog->setCancelable(true);
-
-                warnDialog->addButton("app/retro/tico_save_standalone"_i18n, [openOptionsDialog]() {
-                    openOptionsDialog();
-                });
-                warnDialog->addButton("app/common/cancel"_i18n, []() {});
-                warnDialog->open();
+    btnDownload->registerClickAction([this, isPortRelease](brls::View* view) {
+        // Ports: "Download" starts the installer straight away (file list ->
+        // version -> where files go). "Files only" is offered in that preview.
+        if (isPortRelease) {
+            if (!ui::isPortInstalled(game_)) {
+                ui::startPortInstallFlow(game_);
                 return true;
             }
+            auto* dialog = new brls::Dialog(cleanTitle(game_.title));
+            dialog->setCancelable(true);
+            dialog->addButton("app/ports/update_btn"_i18n, [this]() { ui::startPortInstallFlow(game_); });
+            dialog->addButton("app/ports/uninstall_btn"_i18n, [this]() { ui::confirmPortUninstall(game_); });
+            dialog->addButton("app/common/cancel"_i18n, []() {});
+            dialog->open();
+            return true;
+        }
 
-            openOptionsDialog();
+        if (!retro_console_id_.empty()) {
+            // Retro games: one button. Folder, format and emulator are chosen by the console.
+            auto startDownload = [this]() {
+                ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+                brls::sync([]() {
+                    brls::Application::pushActivity(new ui::DownloadsView());
+                });
+            };
+            if (!catalog::InstalledRetroGames::instance().isPresentOnCard(game_.topic_id)) {
+                startDownload();
+                return true;
+            }
+            auto* dialog = new brls::Dialog(cleanTitle(game_.title) + "\n\n" + "app/retro/game_on_sd"_i18n);
+            dialog->setCancelable(true);
+            dialog->addButton("app/retro/btn_download_again"_i18n, startDownload);
+            dialog->addButton("app/retro/btn_remove_from_sd"_i18n, [this]() {
+                brls::sync([this]() { confirmRetroRemoval(); });
+            });
+            dialog->addButton("app/common/cancel"_i18n, []() {});
+            dialog->open();
             return true;
         }
 
@@ -466,10 +448,37 @@ brls::View* GameDetailView::create() {
 void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
-    if (!retro_console_id_.empty() && isRomsetGame(game_)) {
-        btnDownload->setText("app/detail/download_romset_btn"_i18n);
-    }
+    updateRetroDownloadButton();
     brls::Application::giveFocus(btnDownload);
+}
+
+void GameDetailView::updateRetroDownloadButton() {
+    if (retro_console_id_.empty()) return;
+    if (catalog::InstalledRetroGames::instance().isPresentOnCard(game_.topic_id)) {
+        btnDownload->setText("app/retro/detail_on_sd_btn"_i18n);
+    } else if (isRomsetGame(game_)) {
+        btnDownload->setText("app/detail/download_romset_btn"_i18n);
+    } else {
+        btnDownload->setText("app/detail/download_btn"_i18n);
+    }
+}
+
+void GameDetailView::confirmRetroRemoval() {
+    std::string title = cleanTitle(game_.title);
+    auto* confirm = new brls::Dialog(brls::getStr("app/retro/confirm_remove_from_sd", title));
+    confirm->setCancelable(true);
+    confirm->addButton("app/retro/btn_remove_from_sd"_i18n, [this, title]() {
+        std::string key = catalog::InstalledRetroGames::keyFor(game_.topic_id, game_.title);
+        std::string err;
+        if (catalog::InstalledRetroGames::instance().uninstall(key, err)) {
+            brls::Application::notify(brls::getStr("app/retro/removed_from_sd", title));
+        } else {
+            brls::Application::notify("app/retro/emu_delete_error"_i18n + err);
+        }
+        updateRetroDownloadButton();
+    });
+    confirm->addButton("app/common/cancel"_i18n, []() {});
+    confirm->open();
 }
 
 void GameDetailView::willDisappear(bool resetState) {

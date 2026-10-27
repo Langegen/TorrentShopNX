@@ -2,17 +2,30 @@
 #include "ThemeManager.hpp"
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
+#include "ReleaseChooser.hpp"
+#include "FileSelectView.hpp"
+#include "DownloadUiManager.hpp"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/thread_utils.h"
 #include "../utils/app_paths.h"
 #include "../utils/mod_utils.h"
 #include "../utils/file_ops.h"
 #include "../catalog/IgnoredUpdatesManager.hpp"
+#include "../catalog/game_stats_manager.h"
+#include "../catalog/release_picker.hpp"
+#include "../catalog/titledb.h"
+#include "../installer/installed_ports.h"
+#include <borealis/extern/nlohmann/json.hpp>
+#include <cstdlib>
 #include "../installer/ncz_parser.h"
 #include <exception>
+#include <thread>
+#include <atomic>
 #include <memory>
 #include <fstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <sys/stat.h>
 #include <ctime>
 #include <algorithm>
@@ -21,8 +34,57 @@
 #ifdef __SWITCH__
 #include <switch.h>
 #include <mutex>
+#include <functional>
+#include <borealis/core/cache_helper.hpp>
+#include <borealis/extern/nanovg/stb_image.h>
 
 std::recursive_mutex g_switch_service_mutex;
+
+// Shows an icon cached on the SD card without stalling the UI thread while
+// scrolling: the file is read and decoded on a worker, only the texture
+// upload runs on the UI thread. onMissing (UI thread) runs when the file is
+// absent or cannot be decoded.
+static void setImageFromLocalFileAsync(brls::Image* img, const std::string& path,
+                                       std::shared_ptr<bool> token, const std::string& placeholder,
+                                       std::function<void()> onMissing) {
+    auto& cache = brls::TextureCache::instance();
+    if (int tex = cache.getCache(path); tex > 0) {
+        img->setImageFromFile(path);
+        cache.removeCache(tex);   // balance the lookup above
+        return;
+    }
+
+    img->setImageFromFile(placeholder);
+    brls::async([img, path, token, onMissing]() {
+        if (token && !*token) return;
+        int w = 0, h = 0, comp = 0;
+        stbi_uc* rgba = nullptr;
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0 && st.st_size > 0)
+            rgba = stbi_load(path.c_str(), &w, &h, &comp, 4);
+
+        brls::sync([img, path, token, onMissing, rgba, w, h]() {
+            if (g_appExiting.load() || (token && !*token)) {
+                if (rgba) stbi_image_free(rgba);
+                return;
+            }
+            auto& cache = brls::TextureCache::instance();
+            int tex = cache.getCache(path);
+            if (tex <= 0 && rgba) {
+                tex = nvgCreateImageRGBA(brls::Application::getNVGContext(), w, h, NVG_IMAGE_GENERATE_MIPMAPS, rgba);
+                if (tex > 0) cache.addCache(path, tex);
+            }
+            if (rgba) stbi_image_free(rgba);
+
+            if (tex > 0) {
+                img->setImageFromFile(path);
+                cache.removeCache(tex);   // the image now holds the only reference
+            } else if (onMissing) {
+                onMissing();
+            }
+        });
+    });
+}
 
 // Queries both patch version and running SDK version for installed titles in one NCM session.
 static void getInstalledTitleMetadata(
@@ -350,7 +412,7 @@ static void getInstalledComponentsAndSizes(
                             gcd.components.push_back(comp);
                         } else if (cms.meta_type == NcmContentMetaType_Patch) {
                             comp.type = InstalledComponent::Type::Patch;
-                            comp.displayName = brls::getStr("app/library/comp_patch", "v" + std::to_string(cms.version));
+                            comp.displayName = brls::getStr("app/library/comp_patch", "#" + std::to_string(titledb::updateOrdinal(cms.version)));
                             if (comp.sizeBytes == 0) comp.sizeBytes = gcd.patchSize;
                             gcd.components.push_back(comp);
                         } else if (cms.meta_type == NcmContentMetaType_AddOnContent) {
@@ -370,6 +432,178 @@ static void getInstalledComponentsAndSizes(
     if (hasNandDb) ncmContentMetaDatabaseClose(&dbNand);
     if (R_SUCCEEDED(ncmRc)) ncmExit();
     if (R_SUCCEEDED(nsRc)) nsExit();
+}
+
+// Everything installed, from a handful of batch ncm List calls (3 content
+// types x SD/NAND) instead of per-game queries:
+//   out_sigs     application id -> signature of its installed base, patch and
+//                DLC keys; it changes whenever anything of the game is
+//                installed, updated or removed;
+//   out_patches  application id -> highest installed patch version.
+// out_present: games with their base or update on the SD card, in system
+// memory or on an inserted game card. A game without either is only a record
+// left behind by an SD card that is not in the console (or an archived game).
+// Returns false when the content databases could not be read at all.
+static bool collectInstalledContent(std::unordered_map<uint64_t, std::string>& out_sigs,
+                                    std::unordered_map<uint64_t, uint32_t>& out_patches,
+                                    std::unordered_set<uint64_t>& out_present) {
+    struct Key { uint64_t app; uint8_t type; uint64_t id; uint32_t version; uint8_t storage; };
+    std::vector<Key> keys;
+
+    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+    if (R_FAILED(ncmInitialize())) return false;
+    bool anyDb = false;
+
+    // The game card only answers "is the game here"; it stays out of the
+    // content signatures so inserting a card does not invalidate the cache.
+    {
+        NcmContentMetaDatabase db;
+        if (R_SUCCEEDED(ncmOpenContentMetaDatabase(&db, NcmStorageId_GameCard))) {
+            std::vector<NcmContentMetaKey> buf(16);
+            s32 total = 0, written = 0;
+            if (R_SUCCEEDED(ncmContentMetaDatabaseList(&db, &total, &written, buf.data(), static_cast<s32>(buf.size()),
+                                                       NcmContentMetaType_Application, 0, 0, UINT64_MAX,
+                                                       NcmContentInstallType_Full))) {
+                for (s32 i = 0; i < written; ++i) out_present.insert(buf[static_cast<size_t>(i)].id & ~0x1FFFULL);
+            }
+            ncmContentMetaDatabaseClose(&db);
+        }
+    }
+
+    for (NcmStorageId sid : {NcmStorageId_SdCard, NcmStorageId_BuiltInUser}) {
+        NcmContentMetaDatabase db;
+        if (R_FAILED(ncmOpenContentMetaDatabase(&db, sid))) continue;
+        anyDb = true;
+        for (NcmContentMetaType type : {NcmContentMetaType_Application, NcmContentMetaType_Patch,
+                                        NcmContentMetaType_AddOnContent}) {
+            std::vector<NcmContentMetaKey> buf(512);
+            s32 total = 0, written = 0;
+            Result rc = ncmContentMetaDatabaseList(&db, &total, &written, buf.data(), static_cast<s32>(buf.size()),
+                                                   type, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
+            if (R_SUCCEEDED(rc) && total > written) {
+                buf.resize(static_cast<size_t>(total));
+                rc = ncmContentMetaDatabaseList(&db, &total, &written, buf.data(), static_cast<s32>(buf.size()),
+                                                type, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
+            }
+            if (R_FAILED(rc)) continue;
+            for (s32 i = 0; i < written; ++i) {
+                const NcmContentMetaKey& k = buf[static_cast<size_t>(i)];
+                keys.push_back({k.id & ~0x1FFFULL, static_cast<uint8_t>(type), k.id, k.version, static_cast<uint8_t>(sid)});
+                if (type != NcmContentMetaType_AddOnContent) out_present.insert(k.id & ~0x1FFFULL);
+                if (type == NcmContentMetaType_Patch) {
+                    uint32_t& v = out_patches[k.id & ~0x1FFFULL];
+                    if (k.version > v) v = k.version;
+                }
+            }
+        }
+        ncmContentMetaDatabaseClose(&db);
+    }
+    ncmExit();
+
+    std::sort(keys.begin(), keys.end(), [](const Key& a, const Key& b) {
+        if (a.app != b.app) return a.app < b.app;
+        if (a.id != b.id) return a.id < b.id;
+        if (a.version != b.version) return a.version < b.version;
+        return a.storage < b.storage;
+    });
+    char buf[64];
+    for (const Key& k : keys) {
+        std::snprintf(buf, sizeof(buf), "%u:%llx:%u:%u;", k.type, (unsigned long long)k.id, k.version, k.storage);
+        out_sigs[k.app] += buf;
+    }
+    return anyDb;
+}
+
+// Per-game results of the expensive scan steps (NACP name/version, SDK,
+// occupied sizes, component list), kept on the SD card and reused while the
+// game's content signature is unchanged. Without it every library open ran
+// several ns/ncm calls and an NCA header read per installed game.
+struct ScanCacheEntry {
+    std::string sig;
+    std::string name;
+    std::string displayVersion;
+    std::string sdk;
+    GameComponentData gcd;
+};
+
+static std::string scanCachePath() { return std::string(TSNX_CACHE_DIR) + "/library_scan.json"; }
+
+static std::string componentLabel(InstalledComponent::Type type, uint32_t version, int dlcIndex) {
+    switch (type) {
+        case InstalledComponent::Type::BaseGame: return "app/library/comp_base_game"_i18n;
+        case InstalledComponent::Type::Patch:
+            return brls::getStr("app/library/comp_patch", "#" + std::to_string(titledb::updateOrdinal(version)));
+        case InstalledComponent::Type::Dlc: return brls::getStr("app/library/comp_dlc", std::to_string(dlcIndex));
+        default: return "";
+    }
+}
+
+static std::unordered_map<uint64_t, ScanCacheEntry> loadScanCache() {
+    std::unordered_map<uint64_t, ScanCacheEntry> out;
+    std::ifstream in(scanCachePath());
+    if (!in) return out;
+    nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+    if (j.is_discarded() || !j.is_object() || j.value("v", 0) != 1 || !j.contains("titles")) return out;
+    for (auto it = j["titles"].begin(); it != j["titles"].end(); ++it) {
+        const auto& t = it.value();
+        if (!t.is_object()) continue;
+        uint64_t tid = std::strtoull(it.key().c_str(), nullptr, 16);
+        ScanCacheEntry e;
+        e.sig = t.value("sig", "");
+        e.name = t.value("name", "");
+        e.displayVersion = t.value("ver", "");
+        e.sdk = t.value("sdk", "");
+        e.gcd.totalSize = t.value("total", 0ULL);
+        e.gcd.appSize = t.value("app", 0ULL);
+        e.gcd.patchSize = t.value("patch", 0ULL);
+        e.gcd.dlcSize = t.value("dlc", 0ULL);
+        e.gcd.dlcCount = t.value("dlcCount", 0);
+        int dlcIdx = 1;
+        if (t.contains("comps") && t["comps"].is_array()) {
+            for (const auto& c : t["comps"]) {
+                InstalledComponent comp;
+                comp.type = static_cast<InstalledComponent::Type>(c.value("t", 0));
+                comp.titleId = std::strtoull(c.value("id", "0").c_str(), nullptr, 16);
+                comp.version = c.value("v", 0u);
+                comp.sizeBytes = c.value("sz", 0ULL);
+                comp.storageId = static_cast<uint8_t>(c.value("s", 0));
+                comp.displayName = componentLabel(comp.type, comp.version,
+                                                  comp.type == InstalledComponent::Type::Dlc ? dlcIdx++ : 0);
+                e.gcd.components.push_back(std::move(comp));
+            }
+        }
+        out[tid] = std::move(e);
+    }
+    return out;
+}
+
+static void saveScanCache(const std::unordered_map<uint64_t, ScanCacheEntry>& cache) {
+    nlohmann::json titles = nlohmann::json::object();
+    char key[32];
+    for (const auto& kv : cache) {
+        const ScanCacheEntry& e = kv.second;
+        nlohmann::json comps = nlohmann::json::array();
+        for (const auto& c : e.gcd.components) {
+            char id[32];
+            std::snprintf(id, sizeof(id), "%016llX", (unsigned long long)c.titleId);
+            comps.push_back({{"t", static_cast<int>(c.type)}, {"id", id}, {"v", c.version},
+                             {"sz", c.sizeBytes}, {"s", c.storageId}});
+        }
+        std::snprintf(key, sizeof(key), "%016llX", (unsigned long long)kv.first);
+        titles[key] = {{"sig", e.sig}, {"name", e.name}, {"ver", e.displayVersion}, {"sdk", e.sdk},
+                       {"total", e.gcd.totalSize}, {"app", e.gcd.appSize}, {"patch", e.gcd.patchSize},
+                       {"dlc", e.gcd.dlcSize}, {"dlcCount", e.gcd.dlcCount}, {"comps", comps}};
+    }
+    nlohmann::json root = {{"v", 1}, {"titles", titles}};
+    std::string tmp = scanCachePath() + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out) return;
+        out << root.dump();
+        if (!out) return;
+    }
+    std::remove(scanCachePath().c_str());
+    std::rename(tmp.c_str(), scanCachePath().c_str());
 }
 #endif
 
@@ -576,101 +810,6 @@ static bool tokensMatchGame(const std::vector<std::string>& instTokens, const st
     return true;
 }
 
-static bool downloadVersionsDatabaseIfNeeded() {
-    std::string path = TSNX_VERSIONS_PATH;
-    struct stat st;
-    bool exists = (stat(path.c_str(), &st) == 0);
-    
-    // If it exists and is less than 24 hours old, don't download
-    if (exists) {
-        time_t now = time(nullptr);
-        if (now - st.st_mtime < 24 * 3600) {
-            util::logLine("versions: database is up-to-date");
-            return true;
-        }
-    }
-    
-    util::logLine("versions: downloading versions.txt from titledb (jsdelivr)");
-    net::HttpClient http;
-    auto res = http.httpGet("https://cdn.jsdelivr.net/gh/blawar/titledb@master/versions.txt");
-    if (res.status_code != 200 || res.body.empty()) {
-        util::logLine("versions: jsdelivr failed, trying raw github");
-        res = http.httpGet("https://raw.githubusercontent.com/blawar/titledb/master/versions.txt");
-    }
-    
-    if (res.status_code == 200 && !res.body.empty()) {
-        try {
-            std::filesystem::path p(path);
-            if (p.has_parent_path()) {
-                std::error_code ec;
-                std::filesystem::create_directories(p.parent_path(), ec);
-            }
-        } catch (...) {}
-
-        std::ofstream out(path, std::ios::binary);
-        if (out) {
-            out.write(res.body.data(), res.body.size());
-            util::logLine("versions: database updated successfully");
-            return true;
-        }
-    }
-    
-    util::logLine("versions: failed to download database, status=" + std::to_string(res.status_code));
-    return exists; // return true if we can fall back to old file
-}
-
-static std::unordered_map<uint64_t, uint32_t> parseVersionsDatabase() {
-    std::string path = TSNX_VERSIONS_PATH;
-
-    // Reuse the parsed database in memory unless the file changed on disk
-    // (versions.txt updates at most daily; reparsing 3+ MB on every library
-    // open is wasted work).
-    static std::unordered_map<uint64_t, uint32_t> cached;
-    static time_t cachedMtime = 0;
-    struct stat st;
-    time_t mtime = 0;
-    if (stat(path.c_str(), &st) == 0) mtime = st.st_mtime;
-    if (!cached.empty() && mtime == cachedMtime) {
-        util::logLine("versions: using in-memory cache (" + std::to_string(cached.size()) + " entries)");
-        return cached;
-    }
-
-    std::unordered_map<uint64_t, uint32_t> database;
-    std::ifstream in(path);
-    if (!in) {
-        util::logLine("versions: cannot open versions.txt");
-        return database;
-    }
-    
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty()) continue;
-        
-        size_t firstPipe = line.find('|');
-        if (firstPipe == std::string::npos) continue;
-        
-        size_t lastPipe = line.rfind('|');
-        if (lastPipe == std::string::npos) continue;
-        
-        std::string tidStr = line.substr(0, firstPipe);
-        std::string verStr = line.substr(lastPipe + 1);
-        
-        while (!verStr.empty() && (verStr.back() == '\r' || std::isspace(static_cast<unsigned char>(verStr.back())))) {
-            verStr.pop_back();
-        }
-        
-        try {
-            uint64_t tid = std::stoull(tidStr, nullptr, 16);
-            uint32_t ver = static_cast<uint32_t>(std::stoul(verStr));
-            database[tid] = ver;
-        } catch (...) {}
-    }
-    util::logLine("versions: parsed " + std::to_string(database.size()) + " entries");
-
-    cached = database;
-    cachedMtime = mtime;
-    return database;
-}
 
 LibraryView::LibraryView() {
     cancelToken_ = std::make_shared<bool>(false);
@@ -687,6 +826,15 @@ void LibraryView::onContentAvailable() {
         recycler->registerCell("Row", []() { return LibraryRowCell::create(); });
         recycler->setDataSource(new LibraryDataSource(this));
     }
+
+    this->registerAction("app/library/update_all"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View*) {
+        if (isScanning_) {
+            brls::Application::notify("app/library/scanning_games"_i18n);
+            return true;
+        }
+        updateAllGames();
+        return true;
+    });
 
     updateSpaceHint();
     scanForUpdates();
@@ -711,10 +859,20 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     std::vector<LibraryItem> ignoredItems;
     std::vector<LibraryItem> upToDateItems;
     std::vector<LibraryItem> otherItems;
+    std::vector<LibraryItem> portItems;
+    std::vector<LibraryItem> notInstalledItems;
 
     auto& ignoredMgr = catalog::IgnoredUpdatesManager::instance();
 
     for (auto item : rawItems_) {
+        if (item.isPort) {
+            portItems.push_back(item);
+            continue;
+        }
+        if (item.status == GameUpdateStatus::NotInstalled) {
+            notInstalledItems.push_back(item);
+            continue;
+        }
         item.updateIgnored = ignoredMgr.isIgnored(item.titleId);
         if (item.updateIgnored) {
             item.status = GameUpdateStatus::UpdateIgnored;
@@ -743,6 +901,8 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     sortAlpha(upToDateItems);
     sortAlpha(otherItems);
     sortAlpha(ignoredItems);
+    sortAlpha(portItems);
+    sortAlpha(notInstalledItems);
 
     if (!modsUpdates.empty()) {
         std::string title = brls::getStr("app/library/section_mods_updates", std::to_string(modsUpdates.size()));
@@ -756,6 +916,10 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
         std::string title = brls::getStr("app/library/section_uptodate", std::to_string(upToDateItems.size()));
         sections_.push_back({title, std::move(upToDateItems)});
     }
+    if (!portItems.empty()) {
+        std::string title = brls::getStr("app/ports/library_section", std::to_string(portItems.size()));
+        sections_.push_back({title, std::move(portItems)});
+    }
     if (!otherItems.empty()) {
         std::string title = brls::getStr("app/library/section_other", std::to_string(otherItems.size()));
         sections_.push_back({title, std::move(otherItems)});
@@ -763,6 +927,10 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
     if (!ignoredItems.empty()) {
         std::string title = brls::getStr("app/library/section_ignored", std::to_string(ignoredItems.size()));
         sections_.push_back({title, std::move(ignoredItems)});
+    }
+    if (!notInstalledItems.empty()) {
+        std::string title = brls::getStr("app/library/section_not_installed", std::to_string(notInstalledItems.size()));
+        sections_.push_back({title, std::move(notInstalledItems)});
     }
 
     if (recycler) {
@@ -801,31 +969,150 @@ void LibraryView::toggleUpdateIgnored(uint64_t titleId, const std::string& displ
     }
 }
 
+void LibraryView::openRelease(const LibraryItem& item) {
+    std::string rawName = item.rawName;
+    uint64_t tid = item.titleId;
+    auto openGame = [rawName, tid](const Game& game) {
+        if (!game.magnet.empty()) {
+            brls::Application::pushActivity(new GameDetailView(game));
+            return;
+        }
+        std::string query;
+        if (tid != 0) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
+            query = buf;
+        } else {
+            query = getFirstTwoWords(rawName);
+            if (query.empty()) query = rawName;
+        }
+        brls::Application::pushActivity(new CatalogView(query));
+    };
+
+    if (item.releases.size() <= 1) {
+        openGame(item.releases.empty() ? item.game : item.releases.front());
+        return;
+    }
+
+    // Several releases: let the user pick, best one on top
+    showReleaseChooser(item.releases, openGame);
+}
+
+namespace {
+std::atomic<bool> g_updateAllRunning{false};
+}
+
+void LibraryView::updateAllGames() {
+    if (g_updateAllRunning.load()) {
+        brls::Application::notify("app/library/update_all_running"_i18n);
+        return;
+    }
+
+    std::vector<LibraryItem> targets;
+    int withMods = 0;
+    for (const auto& it : rawItems_) {
+        bool ignored = catalog::IgnoredUpdatesManager::instance().isIgnored(it.titleId);
+        if (it.status == GameUpdateStatus::UpdateAvailable && !ignored && !it.releases.empty()) {
+            targets.push_back(it);
+            if (it.hasMods) ++withMods;
+        }
+    }
+    if (targets.empty()) {
+        brls::Application::notify("app/library/update_all_none"_i18n);
+        return;
+    }
+
+    std::string msg = brls::getStr("app/library/update_all_confirm", std::to_string(targets.size()));
+    if (withMods > 0) msg += "\n\n" + brls::getStr("app/library/update_all_mods_note", std::to_string(withMods));
+    auto* dialog = new brls::Dialog(msg);
+    dialog->addButton("app/common/yes"_i18n, [targets]() {
+        if (g_updateAllRunning.exchange(true)) return;
+        // Own thread, not a borealis pool worker: each game waits for its
+        // torrent's metadata (seconds to a minute), and the pool has 3 workers.
+        bool started = util::runInBackground([targets]() {
+            int queued = 0;
+            std::vector<std::string> failed;
+            const size_t total = targets.size();
+            for (size_t n = 0; n < total && !g_appExiting.load(); ++n) {
+                const LibraryItem& item = targets[n];
+                std::string name = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
+                brls::sync([n, total, name]() {
+                    brls::Application::notify(brls::getStr("app/library/update_all_progress",
+                                                           std::to_string(n + 1), std::to_string(total), name));
+                });
+
+                // Newest update package in the best release; if the best one
+                // has none newer than installed, try the runner-up.
+                const uint64_t patchId = (item.titleId & ~0x1FFFULL) | 0x800ULL;
+                bool done = false;
+                const size_t tries = std::min<size_t>(item.releases.size(), 2);
+                for (size_t r = 0; r < tries && !done && !g_appExiting.load(); ++r) {
+                    const Game& rel = item.releases[r];
+                    if (rel.magnet.empty()) continue;
+                    // The catalog already says this release has nothing newer
+                    if (rel.update_version && rel.update_version <= item.installedPatchVersion) continue;
+                    std::vector<torrent::TorrentFileInfo> files;
+                    std::string err;
+                    if (!ui::DownloadManager::instance().getImpl().probeTorrentFiles(rel.magnet, files, &err)) {
+                        util::logLine("update_all: probe failed for " + rel.topic_id + ": " + err);
+                        continue;
+                    }
+                    const torrent::TorrentFileInfo* best = nullptr;
+                    uint32_t bestVer = 0;
+                    for (const auto& f : files) {
+                        if (!isSwitchPackageFile(f.name)) continue;
+                        if (torrentFileTitleId(f.name, rel.title_id) != patchId) continue;
+                        uint32_t v = util::parseVersionFromFileName(f.name);
+                        if (v > item.installedPatchVersion && v >= bestVer) {
+                            best = &f;
+                            bestVer = v;
+                        }
+                    }
+                    if (best) {
+                        util::logLine("update_all: " + name + " -> topic " + rel.topic_id + " file '" + best->name +
+                                      "' v" + std::to_string(bestVer));
+                        Game g = rel;
+                        torrent::TorrentFileInfo f = *best;
+                        brls::sync([g, f]() { queueSwitchPackage(g, f); });
+                        done = true;
+                    } else {
+                        util::logLine("update_all: topic " + rel.topic_id + " has no update newer than installed v" +
+                                      std::to_string(item.installedPatchVersion));
+                    }
+                }
+                if (done) ++queued;
+                else failed.push_back(name);
+            }
+
+            brls::sync([queued, failed]() {
+                std::string text = brls::getStr("app/library/update_all_done", std::to_string(queued));
+                if (!failed.empty()) {
+                    text += "\n\n" + "app/library/update_all_failed"_i18n;
+                    for (size_t i = 0; i < failed.size() && i < 6; ++i) text += "\n• " + failed[i];
+                    if (failed.size() > 6) text += "\n…";
+                }
+                auto* done = new brls::Dialog(text);
+                done->addButton("app/common/ok"_i18n, []() {});
+                done->open();
+            });
+            g_updateAllRunning.store(false);
+        }, "update-all");
+        if (!started) g_updateAllRunning.store(false);
+    });
+    dialog->addButton("app/common/no"_i18n, []() {});
+    dialog->open();
+}
+
 void LibraryView::showModWarningDialog(const LibraryItem& item) {
     std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
     std::string modStr = item.modDetails.empty() ? "RomFS" : item.modDetails;
     std::string msg = brls::getStr("app/library/mod_warn_dialog_msg", displayName, modStr);
 
     brls::Dialog* dialog = new brls::Dialog(msg);
-    Game game = item.game;
-    std::string rawName = item.rawName;
     uint64_t tid = item.titleId;
 
-    dialog->addButton("app/library/mod_warn_btn_proceed"_i18n, [game, rawName, tid]() {
-        if (!game.magnet.empty()) {
-            brls::Application::pushActivity(new GameDetailView(game));
-        } else {
-            std::string query;
-            if (tid != 0) {
-                char buf[32];
-                std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
-                query = buf;
-            } else {
-                query = getFirstTwoWords(rawName);
-                if (query.empty()) query = rawName;
-            }
-            brls::Application::pushActivity(new CatalogView(query));
-        }
+    dialog->addButton("app/library/mod_warn_btn_proceed"_i18n, [this, item]() {
+        openRelease(item);
     });
 
     dialog->addButton("app/library/mod_warn_btn_freeze"_i18n, [this, tid, displayName]() {
@@ -841,8 +1128,13 @@ void LibraryView::updateStatsAndSpace() {
     int modsCount = 0;
     int ignoredCount = 0;
     int totalCount = 0;
+    int notInstalledCount = 0;
 
     for (const auto& item : rawItems_) {
+        if (item.status == GameUpdateStatus::NotInstalled) {
+            notInstalledCount++;
+            continue;
+        }
         totalCount++;
         if (item.hasMods) modsCount++;
         if (item.updateIgnored) {
@@ -859,6 +1151,9 @@ void LibraryView::updateStatsAndSpace() {
         }
         if (ignoredCount > 0) {
             s += " • " + brls::getStr("app/library/stats_ignored", std::to_string(ignoredCount));
+        }
+        if (notInstalledCount > 0) {
+            s += " • " + brls::getStr("app/library/stats_not_installed", std::to_string(notInstalledCount));
         }
         statsHint->setText(s);
     }
@@ -904,7 +1199,7 @@ void LibraryView::scanForUpdates() {
     brls::async([this, cancelToken]() {
         if (cancelToken && *cancelToken) return;
 
-        bool dbOk = downloadVersionsDatabaseIfNeeded();
+        bool dbOk = titledb::ensureDownloaded();
         if (cancelToken && *cancelToken) return;
 
         if (!dbOk) {
@@ -925,88 +1220,135 @@ void LibraryView::scanForUpdates() {
             }
         });
         
-        auto availableVersions = parseVersionsDatabase();
+        auto availableVersionsPtr = titledb::latestVersions();
+        const auto& availableVersions = *availableVersionsPtr;
         if (cancelToken && *cancelToken) return;
         
         struct InstalledItem {
             uint64_t titleId;
             std::string name;
             std::string currentVersionStr;
+            bool notInstalled = false;   // only a record: no base game or update anywhere
         };
         std::vector<InstalledItem> installedList;
         std::vector<uint64_t> baseTids;
 
 #ifdef __SWITCH__
-        std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
-        Result rc = nsInitialize();
-        if (R_SUCCEEDED(rc)) {
-            s32 offset = 0;
-            s32 entry_count = 0;
-            std::vector<NsApplicationRecord> records;
-            
-            do {
-                std::vector<NsApplicationRecord> batch(50);
-                rc = nsListApplicationRecord(batch.data(), 50, offset, &entry_count);
-                if (R_FAILED(rc)) break;
-                
-                for (s32 i = 0; i < entry_count; ++i) {
-                    records.push_back(batch[i]);
-                }
-                offset += entry_count;
-            } while (entry_count == 50);
-            
-            for (const auto& rec : records) {
-                if (cancelToken && *cancelToken) break;
+        // g_switch_service_mutex is taken per step below, never across the
+        // whole scan: the installer and the dashboard need it too.
 
-                uint64_t tid = rec.application_id;
-                auto ctrl = std::make_unique<NsApplicationControlData>();
-                size_t ctrl_size = 0;
-                rc = nsGetApplicationControlData(
-                    NsApplicationControlSource_Storage,
-                    tid,
-                    ctrl.get(),
-                    sizeof(NsApplicationControlData),
-                    &ctrl_size);
-                
-                std::string curVer = "1.0.0";
-                std::string name = "";
-                if (R_SUCCEEDED(rc) && ctrl_size >= sizeof(ctrl->nacp)) {
-                    curVer = ctrl->nacp.display_version;
-                    
-                    // Try to get English name first (index 1 in NACP language array)
-                    if (ctrl->nacp.lang[1].name[0] != '\0') {
-                        name = ctrl->nacp.lang[1].name;
-                    }
-                    
-                    // Fallback to system language if English is not available
-                    if (name.empty()) {
-                        NacpLanguageEntry* lang = nullptr;
-                        if (R_SUCCEEDED(nacpGetLanguageEntry(&ctrl->nacp, &lang)) && lang) {
-                            name = lang->name;
-                        }
-                    }
-
-                    // Cache the system icon (the one the home menu shows)
-                    saveInstalledIcon(tid, *ctrl, ctrl_size);
-                }
-                installedList.push_back({tid, name, curVer});
-                baseTids.push_back(tid);
+        // 1. Installed applications
+        std::vector<uint64_t> recordTids;
+        {
+            std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+            if (R_SUCCEEDED(nsInitialize())) {
+                s32 offset = 0;
+                s32 entry_count = 0;
+                do {
+                    std::vector<NsApplicationRecord> batch(50);
+                    if (R_FAILED(nsListApplicationRecord(batch.data(), 50, offset, &entry_count))) break;
+                    for (s32 i = 0; i < entry_count; ++i) recordTids.push_back(batch[i].application_id);
+                    offset += entry_count;
+                } while (entry_count == 50);
+                nsExit();
             }
-            nsExit();
         }
 
-        // Query installed patch versions, running SDK versions, occupied sizes and components
+        // 2. Installed content of every game: a few batch ncm calls
+        std::unordered_map<uint64_t, std::string> contentSigs;
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
-        std::unordered_map<uint64_t, std::string> installedSdkVersions;
-        getInstalledTitleMetadata(baseTids, installedPatchVersions, installedSdkVersions);
+        std::unordered_set<uint64_t> presentTids;
+        bool contentScanned = collectInstalledContent(contentSigs, installedPatchVersions, presentTids);
 
+        // 3. Per-game data from the SD cache; only games whose installed
+        //    content changed (or that are new) go through the slow queries.
+        auto scanCache = loadScanCache();
+        std::vector<uint64_t> dirty;
+        for (uint64_t tid : recordTids) {
+            auto cit = scanCache.find(tid);
+            if (cit == scanCache.end() || cit->second.sig != contentSigs[tid] || cit->second.name.empty()) {
+                dirty.push_back(tid);
+            }
+        }
+        util::logLine("library: " + std::to_string(recordTids.size()) + " games, " +
+                      std::to_string(dirty.size()) + " rescanned, the rest from cache");
+
+        if (!dirty.empty()) {
+            bool nsOk = false;
+            {
+                std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                nsOk = R_SUCCEEDED(nsInitialize());
+            }
+            for (uint64_t tid : dirty) {
+                if (!nsOk || (cancelToken && *cancelToken)) break;
+                ScanCacheEntry& e = scanCache[tid];
+                auto ctrl = std::make_unique<NsApplicationControlData>();
+                size_t ctrl_size = 0;
+                Result rc;
+                {
+                    std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                    rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, tid, ctrl.get(),
+                                                     sizeof(NsApplicationControlData), &ctrl_size);
+                }
+                if (R_SUCCEEDED(rc) && ctrl_size >= sizeof(ctrl->nacp)) {
+                    e.displayVersion = ctrl->nacp.display_version;
+                    // English name first (index 1 in the NACP language array),
+                    // then the system language
+                    e.name.clear();
+                    if (ctrl->nacp.lang[1].name[0] != '\0') e.name = ctrl->nacp.lang[1].name;
+                    if (e.name.empty()) {
+                        NacpLanguageEntry* lang = nullptr;
+                        if (R_SUCCEEDED(nacpGetLanguageEntry(&ctrl->nacp, &lang)) && lang) e.name = lang->name;
+                    }
+                    saveInstalledIcon(tid, *ctrl, ctrl_size);   // the icon the home menu shows
+                }
+            }
+            if (nsOk) {
+                std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                nsExit();
+            }
+            if (cancelToken && *cancelToken) return;
+
+            std::unordered_map<uint64_t, uint32_t> unusedPatch;
+            std::unordered_map<uint64_t, std::string> sdks;
+            getInstalledTitleMetadata(dirty, unusedPatch, sdks);
+            std::unordered_map<uint64_t, GameComponentData> comps;
+            getInstalledComponentsAndSizes(dirty, comps);
+            for (uint64_t tid : dirty) {
+                ScanCacheEntry& e = scanCache[tid];
+                e.sig = contentSigs[tid];
+                e.sdk = sdks[tid];
+                e.gcd = comps[tid];
+            }
+        }
+        if (cancelToken && *cancelToken) return;
+
+        // Forget uninstalled games, then persist
+        {
+            std::unordered_set<uint64_t> live(recordTids.begin(), recordTids.end());
+            size_t before = scanCache.size();
+            for (auto it = scanCache.begin(); it != scanCache.end();) {
+                it = live.count(it->first) ? std::next(it) : scanCache.erase(it);
+            }
+            if (!dirty.empty() || scanCache.size() != before) saveScanCache(scanCache);
+        }
+
+        std::unordered_map<uint64_t, std::string> installedSdkVersions;
         std::unordered_map<uint64_t, GameComponentData> installedCompData;
-        getInstalledComponentsAndSizes(baseTids, installedCompData);
+        for (uint64_t tid : recordTids) {
+            const ScanCacheEntry& e = scanCache[tid];
+            installedList.push_back({tid, e.name, e.displayVersion.empty() ? "1.0.0" : e.displayVersion,
+                                     contentScanned && presentTids.count(tid) == 0});
+            baseTids.push_back(tid);
+            if (!e.sdk.empty()) installedSdkVersions[tid] = e.sdk;
+            installedCompData[tid] = e.gcd;
+        }
 #else
         // Mock data for PC testing
         installedList.push_back({0x0100000000010000ULL, "Super Mario Odyssey", "1.0.0"});
         installedList.push_back({0x01007ef00011e000ULL, "The Legend of Zelda: Breath of the Wild", "1.0.0"});
         installedList.push_back({0x0100000000020000ULL, "Unmatched Dummy Game", "1.1.0"});
+        installedList.push_back({0x0100000000030000ULL, "Game On Another SD Card", "1.2.3", true});
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
         std::unordered_map<uint64_t, std::string> installedSdkVersions;
         installedSdkVersions[0x0100000000010000ULL] = "17.0.0";
@@ -1059,7 +1401,9 @@ void LibraryView::scanForUpdates() {
         // re-running the expensive normalization for every catalog entry.
         auto catalog = getCatalogSnapshot();
         struct CatalogIndex {
-            std::unordered_map<uint64_t, const Game*> byTid;
+            // Every release of a title ID, not just the first one met: the
+            // catalog often holds several (official dump, mods, old uploads).
+            std::unordered_map<uint64_t, std::vector<const Game*>> byTid;
             std::vector<std::pair<std::string, const Game*>> byCleanName;
             std::vector<std::pair<std::vector<std::string>, const Game*>> byTokens;
         };
@@ -1070,17 +1414,58 @@ void LibraryView::scanForUpdates() {
         for (const auto& g : *catalog) {
             uint64_t tid = parseTitleIdFromGame(g);
             if (tid != 0) {
-                if (catIndex.byTid.find(tid) == catIndex.byTid.end()) catIndex.byTid.emplace(tid, &g);
-                uint64_t patchTid = tid | 0x800ULL;
-                if (patchTid != tid && catIndex.byTid.find(patchTid) == catIndex.byTid.end()) {
-                    catIndex.byTid.emplace(patchTid, &g);
-                }
+                // Releases are indexed under the application ID. Application
+                // IDs have the low 13 bits clear; the patch is |0x800 and DLCs
+                // are +0x1000.., so masking maps any content ID of a release
+                // to its game. The catalog does carry such IDs: the scraper
+                // takes the first ID from the torrent's file list, e.g. Zelda
+                // BotW NSZ (6702315) is filed under its DLC 01007EF00011F000.
+                catIndex.byTid[tid & ~0x1FFFULL].push_back(&g);
             }
             std::string cn = cleanNameForMatching(g.title);
             if (!cn.empty()) catIndex.byCleanName.emplace_back(std::move(cn), &g);
             auto tokens = tokenizeNameForMatching(g.title);
             if (!tokens.empty()) catIndex.byTokens.emplace_back(std::move(tokens), &g);
         }
+
+        // Best release among several candidates of the same game (see
+        // catalog/release_picker.hpp): plain game over mods/ports, then the
+        // most recently re-registered torrent, which carries the newest update.
+        auto rankReleases = [](const std::vector<const Game*>& cands, const std::string& installedName) -> std::vector<const Game*> {
+            if (cands.size() <= 1) return cands;
+            std::vector<catalog::ReleaseInfo> infos;
+            infos.reserve(cands.size());
+            for (const Game* g : cands) {
+                catalog::ReleaseInfo ri;
+                ri.title = g->title;
+                ri.topic_id = g->topic_id;
+                ri.homebrew = isHomebrewGame(*g);
+                ri.nameMatch = installedName.empty() || catalog::releaseNameMatches(installedName, g->title);
+                ri.updateVersion = g->update_version;
+                catalog::GameStats st;
+                if (catalog::GameStatsManager::instance().copySwitchStats(g->topic_id, st)) {
+                    ri.registered = st.latest_timestamp;
+                    ri.seeds = st.seeds;
+                }
+                infos.push_back(std::move(ri));
+            }
+            auto order = catalog::rankReleases(infos);
+            std::vector<const Game*> ranked;
+            ranked.reserve(order.size());
+            for (size_t i : order) ranked.push_back(cands[i]);
+            std::string log = "library: " + std::to_string(cands.size()) + " releases for '" + ranked.front()->title +
+                              "', picked topic " + ranked.front()->topic_id + " (others:";
+            for (size_t i = 1; i < ranked.size(); ++i) log += " " + ranked[i]->topic_id;
+            util::logLine(log + ")");
+            return ranked;
+        };
+        // Adds the item for the best release and remembers all of them.
+        auto pushMatched = [&](std::vector<LibraryItem>& out, const std::vector<const Game*>& ranked,
+                               LibraryItem&& item, uint32_t latestPatchVer) {
+            item.latestPatchVersion = latestPatchVer;
+            for (const Game* g : ranked) item.releases.push_back(*g);
+            out.push_back(std::move(item));
+        };
 
         auto makeItem = [](const Game& g, const std::string& currentVer,
                            const std::string& latestVer, GameUpdateStatus status,
@@ -1158,6 +1543,10 @@ void LibraryView::scanForUpdates() {
                 if (bit != availableVersions.end()) {
                     latestVer = bit->second;
                     foundVersionInDb = true;
+                } else {
+                    // nx-versions lists only patches: a game with no update
+                    // is recognised through versions.json.
+                    foundVersionInDb = titledb::knownGame(baseTid, &latestVer);
                 }
             }
             
@@ -1167,20 +1556,24 @@ void LibraryView::scanForUpdates() {
                 currentVer = iv->second;
             }
             
-            // The raw titledb value (e.g. 196608) is a Nintendo "update number"
-            // that cannot be reliably converted to real semver (1.2.0 style),
-            // so display it honestly as v<number> — same convention tinfoil uses.
+            // titledb numbers updates as N << 16 (1441792 = 22nd update); that
+            // can't be turned into the game's "1.2.3", so the installed side
+            // shows the NACP display version and the latest side the update
+            // ordinal plus its release date from versions.json.
             bool hasVersionInfo = (latestVer > 0) || foundVersionInDb;
             GameUpdateStatus status = GameUpdateStatus::Unknown;
             std::string latestVerStr = "—";
             std::string currentVerStr = inst.currentVersionStr;
             if (currentVer > 0) {
-                currentVerStr = "v" + std::to_string(currentVer);
+                currentVerStr += " (#" + std::to_string(titledb::updateOrdinal(currentVer)) + ")";
             }
-            
+
             if (hasVersionInfo) {
                 if (latestVer > 0) {
-                    latestVerStr = "v" + std::to_string(latestVer);
+                    std::string date = titledb::formatDate(titledb::updateDate(baseTid, latestVer));
+                    std::string ord = std::to_string(titledb::updateOrdinal(latestVer));
+                    latestVerStr = date.empty() ? brls::getStr("app/library/update_label", ord)
+                                                : brls::getStr("app/library/update_label_date", ord, date);
                     bool needsUpdate = false;
                     if (currentVer > 0) {
                         needsUpdate = (latestVer > currentVer);
@@ -1201,37 +1594,50 @@ void LibraryView::scanForUpdates() {
             if (isIgnored) {
                 status = GameUpdateStatus::UpdateIgnored;
             }
-            
+            // Only a record is left (e.g. installed to another SD card): the
+            // NACP version is from the missing install and there is nothing
+            // to update.
+            if (inst.notInstalled) {
+                status = GameUpdateStatus::NotInstalled;
+                currentVerStr = "—";
+            }
+
             // Match by Title ID (indexed): the explicit title_id field from the
             // catalog JSON, or the [0100...] bracket in the title.
             bool foundInCatalog = false;
             {
-                auto mit = catIndex.byTid.find(baseTid);
-                if (mit == catIndex.byTid.end()) mit = catIndex.byTid.find(patchTid);
-                if (mit != catIndex.byTid.end()) {
-                    displayItems.push_back(makeItem(*mit->second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
+                auto mit = catIndex.byTid.find(baseTid & ~0x1FFFULL);
+                if (mit != catIndex.byTid.end() && !mit->second.empty()) {
+                    auto ranked = rankReleases(mit->second, inst.name);
+                    pushMatched(displayItems, ranked,
+                                makeItem(*ranked.front(), currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer),
+                                latestVer);
                     foundInCatalog = true;
                 }
             }
-            
+
             // Fallback to name matching if Title ID match failed
             if (!foundInCatalog) {
                 std::string instClean = cleanNameForMatching(inst.name);
                 auto instTokens = tokenizeNameForMatching(inst.name);
                 if (!instClean.empty()) {
-                    // 1. Try exact clean name match first
+                    // 1. Exact clean name match: all releases with that name, best one wins
+                    std::vector<const Game*> sameName;
                     for (const auto& entry : catIndex.byCleanName) {
-                        if (entry.first == instClean) {
-                            displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
-                            foundInCatalog = true;
-                            break;
-                        }
+                        if (entry.first == instClean) sameName.push_back(entry.second);
+                    }
+                    if (!sameName.empty()) {
+                        auto ranked = rankReleases(sameName, inst.name);
+                        pushMatched(displayItems, ranked,
+                                    makeItem(*ranked.front(), currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer),
+                                    latestVer);
+                        foundInCatalog = true;
                     }
                     // 2. Try token-based matching (e.g. multi-packs like Shovel Knight: Treasure Trove)
                     if (!foundInCatalog && !instTokens.empty()) {
                         for (const auto& entry : catIndex.byTokens) {
                             if (tokensMatchGame(instTokens, entry.first)) {
-                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
+                                pushMatched(displayItems, {entry.second}, makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer), latestVer);
                                 foundInCatalog = true;
                                 break;
                             }
@@ -1242,7 +1648,7 @@ void LibraryView::scanForUpdates() {
                         for (const auto& entry : catIndex.byCleanName) {
                             const std::string& catClean = entry.first;
                             if (catClean.length() >= 4 && (catClean.find(instClean) != std::string::npos || (catClean.length() >= 8 && instClean.find(catClean) != std::string::npos))) {
-                                displayItems.push_back(makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
+                                pushMatched(displayItems, {entry.second}, makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer), latestVer);
                                 foundInCatalog = true;
                                 break;
                             }
@@ -1258,10 +1664,46 @@ void LibraryView::scanForUpdates() {
                 dummy.cover = "";
                 dummy.size = "";
                 displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
+                displayItems.back().latestPatchVersion = latestVer;
             }
         }
         
         if (cancelToken && *cancelToken) return;
+
+        // Ports installed by the auto-installer get their own section. Their
+        // shortcuts (forwarder NSPs) are installed apps too: not listed twice.
+        {
+            std::unordered_set<uint64_t> forwarderTids;
+            for (const auto& p : installer::InstalledPorts::instance().list()) {
+                LibraryItem it;
+                it.isPort = true;
+                it.portKey = p.key;
+                it.portVariant = p.variant_title;
+                it.portInstalledAt = p.installed_at;
+                it.portForwarders = p.forwarder_tids;
+                it.titleId = p.forwarder_tids.empty() ? 0 : p.forwarder_tids.front();
+                const Game* g = nullptr;
+                if (catalog && !p.topic_id.empty()) {
+                    for (const auto& c : *catalog) {
+                        if (c.topic_id == p.topic_id) { g = &c; break; }
+                    }
+                }
+                if (g) {
+                    it.game = *g;
+                } else {
+                    it.game.title = p.title;
+                    it.game.topic_id = p.topic_id;
+                }
+                size_t existing = 0;
+                it.totalSizeBytes = installer::InstalledPorts::sizeOnDisk(p, &existing);
+                it.portFiles = existing;
+                for (uint64_t tid : p.forwarder_tids) forwarderTids.insert(tid);
+                displayItems.push_back(std::move(it));
+            }
+            displayItems.erase(std::remove_if(displayItems.begin(), displayItems.end(), [&](const LibraryItem& it) {
+                return !it.isPort && forwarderTids.count(it.titleId) > 0;
+            }), displayItems.end());
+        }
 
         // Sync with UI thread
         brls::sync([this, cancelToken, items = std::move(displayItems)]() mutable {
@@ -1319,6 +1761,50 @@ void LibraryView::showGameActionMenu(const LibraryItem& item, int currentSection
 
     dialog->addButton("app/common/cancel"_i18n, []() {});
     dialog->open();
+}
+
+void LibraryView::showPortActionMenu(const LibraryItem& item, int currentSection, int currentRow) {
+    const std::string displayName = cleanTitle(item.game.title);
+    auto* box = new brls::Box(brls::Axis::COLUMN);
+    box->setWidth(720.0f);   // full brls::Dialog width, otherwise the box sits off-center
+    box->setPadding(30, 36, 24, 36);
+    auto* label = new brls::Label();
+    label->setAutoAnimate(false);
+    label->setSingleLine(false);
+    label->setIsWrapping(true);
+    label->setFontSize(20);
+    label->setText(brls::getStr("app/ports/uninstall_confirm", displayName, std::to_string(item.portFiles)));
+    box->addView(label);
+    brls::Dialog* dialog = new brls::Dialog(box);
+    dialog->setCancelable(true);
+    dialog->addButton("app/ports/uninstall_btn"_i18n, [this, item, currentSection, currentRow]() {
+        uninstallPort(item, currentSection, currentRow);
+    });
+    dialog->addButton("app/common/cancel"_i18n, []() {});
+    dialog->open();
+}
+
+void LibraryView::uninstallPort(const LibraryItem& item, int currentSection, int currentRow) {
+    auto cancelToken = cancelToken_;
+    const std::string key = item.portKey;
+    const std::string displayName = cleanTitle(item.game.title);
+    brls::async([this, key, displayName, currentSection, currentRow, cancelToken]() {
+        size_t removed = 0;
+        std::string err;
+        bool ok = installer::InstalledPorts::instance().uninstall(key, removed, err);
+        brls::sync([this, key, displayName, currentSection, currentRow, cancelToken, ok, removed, err]() {
+            if (cancelToken && *cancelToken) return;
+            if (!ok) {
+                brls::Application::notify(err);
+                return;
+            }
+            rawItems_.erase(std::remove_if(rawItems_.begin(), rawItems_.end(), [&](const LibraryItem& it) {
+                return it.isPort && it.portKey == key;
+            }), rawItems_.end());
+            rebuildSections(currentSection, currentRow);
+            brls::Application::notify(displayName + ": " + brls::getStr("app/ports/uninstall_done", std::to_string(removed)));
+        });
+    });
 }
 
 void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods) {
@@ -1724,7 +2210,63 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
     try {
         std::string displayName = item.rawName.empty() ? cleanTitle(item.game.title) : item.rawName;
         cell->title->setText(displayName);
-        
+
+        if (item.isPort) {
+            // Homebrew port: files on the SD card plus its shortcuts.
+            std::string line = brls::getStr("app/ports/library_line", std::to_string(item.portFiles));
+            if (item.totalSizeBytes > 0) line += " • " + formatBytes(item.totalSizeBytes);
+            cell->titleId->setText(line);
+            if (cell->patchBadgeBox) cell->patchBadgeBox->setVisibility(brls::Visibility::GONE);
+            if (cell->dlcBadgeBox) cell->dlcBadgeBox->setVisibility(brls::Visibility::GONE);
+            if (cell->modBadgeBox) cell->modBadgeBox->setVisibility(brls::Visibility::GONE);
+            cell->currentVersion->setText(item.portVariant);
+            std::string when;
+            if (item.portInstalledAt > 0) {
+                char buf[32];
+                std::tm* t = std::localtime(&item.portInstalledAt);
+                if (t && std::strftime(buf, sizeof(buf), "%d.%m.%Y", t) > 0) when = buf;
+            }
+            cell->latestVersion->setText(when.empty() ? "" : brls::getStr("app/ports/library_installed_on", when));
+            cell->statusBadge->setText("app/ports/library_badge"_i18n);
+            cell->statusBadge->setTextColor(nvgRGB(255, 255, 255));
+            cell->statusBox->setBackgroundColor(nvgRGB(33, 150, 243)); // Blue
+
+            // Without a cached system icon: the catalog cover, else the stock icon
+            auto setRemoteCover = [cover = static_cast<brls::Image*>(cell->cover), token = cell->imageToken, gameCover = item.game.cover]() {
+                if (!gameCover.empty()) {
+                    setImageFromHTTPS(cover, gameCover, token, "romfs:/img/demo_icon.jpg", false, "");
+                } else {
+                    cover->setImageFromRes("img/demo_icon.jpg");
+                }
+            };
+#ifdef __SWITCH__
+            if (item.titleId != 0) {
+                char iconPath[128];
+                std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
+                setImageFromLocalFileAsync(cell->cover, iconPath, cell->imageToken, "romfs:/img/demo_icon.jpg", setRemoteCover);
+            } else {
+                setRemoteCover();
+            }
+#else
+            setRemoteCover();
+#endif
+
+            const int currentSection = static_cast<int>(index.section);
+            const int currentRow = index.row;
+            cell->registerClickAction([item](brls::View*) {
+                if (!item.game.magnet.empty()) brls::Application::pushActivity(new GameDetailView(item.game));
+                return true;
+            });
+            // No update switch for ports: keep the hint bar clean.
+            cell->registerAction("", brls::ControllerButton::BUTTON_X, [](brls::View*) { return false; }, true);
+            cell->registerAction("app/ports/uninstall_btn"_i18n, brls::ControllerButton::BUTTON_Y,
+                [parent = parent_, item, currentSection, currentRow](brls::View*) {
+                    parent->showPortActionMenu(item, currentSection, currentRow);
+                    return true;
+                });
+            return cell;
+        }
+
         char tidBuf[32];
         sprintf(tidBuf, "%016llX", (unsigned long long)item.titleId);
         std::string tidStrUpper(tidBuf);
@@ -1780,7 +2322,11 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         cell->latestVersion->setText(item.latestVersion);
 
         // Configure status badge dynamically
-        if (item.updateIgnored) {
+        if (item.status == GameUpdateStatus::NotInstalled) {
+            cell->statusBadge->setText("app/library/badge_not_installed"_i18n);
+            cell->statusBadge->setTextColor(nvgRGB(220, 220, 220));
+            cell->statusBox->setBackgroundColor(nvgRGB(75, 85, 99)); // Slate, like ignored
+        } else if (item.updateIgnored) {
             cell->statusBadge->setText("app/library/badge_ignored"_i18n);
             cell->statusBadge->setTextColor(nvgRGB(220, 220, 220));
             cell->statusBox->setBackgroundColor(nvgRGB(75, 85, 99)); // Slate
@@ -1805,31 +2351,25 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         }
 
         // Prefer the system icon cached from the installed game's NACP
-        std::string localIconPath;
-#ifdef __SWITCH__
         {
-            char iconPath[128];
-            std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
-            struct stat st;
-            if (stat(iconPath, &st) == 0 && st.st_size > 0) localIconPath = iconPath;
-        }
-#endif
-        if (!localIconPath.empty()) {
-            cell->cover->setImageFromFile(localIconPath);
-        } else {
             std::string coverUrl = item.game.cover;
             std::string fallbackUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
-            
             if (coverUrl.empty()) {
                 coverUrl = "https://tinfoil.io/resources/images/icon/" + tidStrLower + ".png";
                 fallbackUrl = "https://tinfoil.media/resources/images/icon/" + tidStrLower + ".png";
             }
-            
-            setImageFromHTTPS(cell->cover, coverUrl, cell->imageToken, "romfs:/img/demo_icon.jpg", false, fallbackUrl);
+            auto setRemoteCover = [cover = static_cast<brls::Image*>(cell->cover), token = cell->imageToken, coverUrl, fallbackUrl]() {
+                setImageFromHTTPS(cover, coverUrl, token, "romfs:/img/demo_icon.jpg", false, fallbackUrl);
+            };
+#ifdef __SWITCH__
+            char iconPath[128];
+            std::snprintf(iconPath, sizeof(iconPath), TSNX_CACHE_ICONS "/%016llX.jpg", (unsigned long long)item.titleId);
+            setImageFromLocalFileAsync(cell->cover, iconPath, cell->imageToken, "romfs:/img/demo_icon.jpg", setRemoteCover);
+#else
+            setRemoteCover();
+#endif
         }
 
-        Game game = item.game;
-        std::string rawName = item.rawName;
         uint64_t tid = item.titleId;
 
         // Click action (A button)
@@ -1839,21 +2379,8 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
                 return true;
             });
         } else {
-            cell->registerClickAction([game, rawName, tid](brls::View* view) {
-                if (!game.magnet.empty()) {
-                    brls::Application::pushActivity(new GameDetailView(game));
-                } else {
-                    std::string query;
-                    if (tid != 0) {
-                        char buf[32];
-                        std::snprintf(buf, sizeof(buf), "%016llX", (unsigned long long)tid);
-                        query = buf;
-                    } else {
-                        query = getFirstTwoWords(rawName);
-                        if (query.empty()) query = rawName;
-                    }
-                    brls::Application::pushActivity(new CatalogView(query));
-                }
+            cell->registerClickAction([parent = parent_, item](brls::View* view) {
+                parent->openRelease(item);
                 return true;
             });
         }

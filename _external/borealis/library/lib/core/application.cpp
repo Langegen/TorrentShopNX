@@ -70,11 +70,35 @@ namespace util {
 #include <cmath>
 #include <stb_image.h>
 
-#define BUTTOM_REPEAT_TRIGGER 250000 // 250ms
+#define BUTTOM_REPEAT_TRIGGER 220000 // 220ms
 #define BUTTON_REPEAT_DELAY   100000 // 100 ms
+
+// Held navigation: 90 ms steps, speeding up to 55 ms between 1 s and 2 s of hold
+#define NAV_REPEAT_DELAY       90000
+#define NAV_REPEAT_DELAY_FAST  55000
+#define NAV_REPEAT_ACCEL_START 1000000
+#define NAV_REPEAT_ACCEL_END   2000000
+
+// A press buffered during a screen transition is replayed only if it is this fresh
+#define BUFFERED_PRESS_MAX_AGE 350000
 
 namespace brls
 {
+
+static bool isNavigationButton(ControllerButton button)
+{
+    return button == BUTTON_NAV_UP || button == BUTTON_NAV_DOWN || button == BUTTON_NAV_LEFT || button == BUTTON_NAV_RIGHT;
+}
+
+static Time navRepeatInterval(Time heldFor)
+{
+    if (heldFor <= NAV_REPEAT_ACCEL_START)
+        return NAV_REPEAT_DELAY;
+    if (heldFor >= NAV_REPEAT_ACCEL_END)
+        return NAV_REPEAT_DELAY_FAST;
+    float t = (float)(heldFor - NAV_REPEAT_ACCEL_START) / (float)(NAV_REPEAT_ACCEL_END - NAV_REPEAT_ACCEL_START);
+    return (Time)(NAV_REPEAT_DELAY + (NAV_REPEAT_DELAY_FAST - NAV_REPEAT_DELAY) * t);
+}
 
 static std::string s_globalWallpaperPath;
 static int s_globalWallpaperImage = 0;
@@ -626,23 +650,63 @@ void Application::processInput()
     bool repeating                  = false;
     Time cpuTime = getCPUTimeUsec();
 
+    // Replay a press that came in during a screen transition
+    if (bufferedButton >= 0 && blockInputsTokens == 0)
+    {
+        int button     = bufferedButton;
+        bufferedButton = -1;
+        if (cpuTime - bufferedButtonTime <= BUFFERED_PRESS_MAX_AGE)
+            Application::onControllerButtonPressed((enum ControllerButton)button, false);
+    }
+
     for (int i = 0; i < _BUTTON_MAX; i++)
     {
         if (controllerState.buttons[i])
         {
-            repeating = controllerState.repeatingButtonStop[i] > 0 && cpuTime > controllerState.repeatingButtonStop[i];
-
-            if (repeating)
-                controllerState.repeatingButtonStop[i] = cpuTime + BUTTON_REPEAT_DELAY;
-
             if (!oldControllerState.buttons[i])
+            {
+                buttonPressStart[i]                    = cpuTime;
                 controllerState.repeatingButtonStop[i] = cpuTime + BUTTOM_REPEAT_TRIGGER;
+                Application::onControllerButtonPressed((enum ControllerButton)i, false);
+                continue;
+            }
 
-            if (!oldControllerState.buttons[i] || repeating)
-                Application::onControllerButtonPressed((enum ControllerButton)i, repeating);
-        } else {
+            repeating = controllerState.repeatingButtonStop[i] > 0 && cpuTime > controllerState.repeatingButtonStop[i];
+            if (!repeating)
+                continue;
+
+            Time interval = isNavigationButton((ControllerButton)i)
+                ? navRepeatInterval(cpuTime - buttonPressStart[i])
+                : BUTTON_REPEAT_DELAY;
+
+            // Advance from the scheduled time, not from "now": a fixed cadence
+            // instead of one rounded up to whole frames. After a long frame
+            // restart the cadence rather than firing several repeats at once.
+            Time next = controllerState.repeatingButtonStop[i] + interval;
+            if (next <= cpuTime)
+                next = cpuTime + interval;
+            controllerState.repeatingButtonStop[i] = next;
+
+            if (isNavigationButton((ControllerButton)i))
+                navigationRepeatIntervalMs = interval / 1000.0f;
+
+            Application::onControllerButtonPressed((enum ControllerButton)i, true);
+        }
+        else
+        {
             controllerState.repeatingButtonStop[i] = 0;
         }
+    }
+
+    // Held navigation ends as soon as no direction is held anymore
+    if (navigationRepeating)
+    {
+        bool held = false;
+        for (int i = 0; i < _BUTTON_MAX; i++)
+            if (controllerState.buttons[i] && isNavigationButton((ControllerButton)i))
+                held = true;
+        if (!held)
+            navigationRepeating = false;
     }
 
     oldControllerState = controllerState;
@@ -765,6 +829,7 @@ void Application::navigate(FocusDirection direction, bool repeating)
         return;
 
     Application::repetitionOldFocus = Application::currentFocus;
+    Application::navigationRepeating = repeating;
 
     // Dismiss navigation if input type was changed
     if (Application::setInputType(InputType::GAMEPAD))
@@ -836,9 +901,14 @@ void Application::onControllerButtonPressed(enum ControllerButton button, bool r
 {
     if (Application::blockInputsTokens != 0)
     {
-        Logger::debug("button press blocked (tokens={})", Application::blockInputsTokens);
-        if (!muteSounds)
-            Application::getAudioPlayer()->play(Sound::SOUND_CLICK_ERROR);
+        // A fresh press during a screen transition is kept and replayed by
+        // processInput once the transition ends, so quick B/A presses are not
+        // swallowed. Repeats of held buttons are simply dropped.
+        if (!repeating)
+        {
+            Application::bufferedButton     = (int)button;
+            Application::bufferedButtonTime = getCPUTimeUsec();
+        }
         return;
     }
 
@@ -1247,6 +1317,12 @@ void Application::giveFocus(View* view)
 
     if (oldFocus != newFocus)
     {
+        // Within one screen the highlight moves with the focus at the
+        // brightness it already had (a new screen still fades it in)
+        float carriedHighlight = 0.0f;
+        if (oldFocus && newFocus && oldFocus->getParentActivity() == newFocus->getParentActivity())
+            carriedHighlight = oldFocus->getHighlightAlpha();
+
         if (oldFocus)
             oldFocus->onFocusLost();
 
@@ -1256,7 +1332,10 @@ void Application::giveFocus(View* view)
         if (newFocus)
         {
             newFocus->onFocusGained();
-            Logger::debug("Giving focus to {}", newFocus->describe());
+            if (carriedHighlight > 0.0f && Application::currentFocus == newFocus)
+                newFocus->continueHighlightFrom(carriedHighlight);
+            if (Logger::getLogLevel() >= LogLevel::LOG_DEBUG)
+                Logger::debug("Giving focus to {}", newFocus->describe());
         }
 
         Application::globalHintsUpdateEvent.fire();
@@ -1542,7 +1621,8 @@ void Application::blockInputs(bool muteSounds)
 
 void Application::unblockInputs()
 {
-    Application::blockInputsTokens -= 1;
+    if (Application::blockInputsTokens > 0)
+        Application::blockInputsTokens -= 1;
 
     if (Application::blockInputsTokens <= 0)
         muteSounds = false;

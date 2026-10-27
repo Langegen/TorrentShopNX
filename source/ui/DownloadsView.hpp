@@ -80,7 +80,7 @@ struct DownloadGroup {
     std::string failed_error;
     bool has_port_install = false;
     std::string retro_console_id;
-    std::string retro_target_mode;
+    std::string retro_result_key;
 };
 
 class DownloadsView : public brls::Activity {

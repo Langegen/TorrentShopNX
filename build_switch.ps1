@@ -6,6 +6,16 @@ $env:PATH = "C:\devkitPro\devkitA64\bin;C:\devkitPro\tools\bin;C:\devkitPro\msys
 Write-Host "Starting Nintendo Switch build..."
 Write-Host "DEVKITPRO = $env:DEVKITPRO"
 
+# libarchive with 7z ARM64 filter support (see scripts/build_libarchive_switch.sh)
+if (-not (Test-Path "_external/libarchive-switch/lib/libarchive.a")) {
+    Write-Host "Building libarchive for Switch (one-time)..."
+    & "C:\devkitPro\msys2\usr\bin\bash.exe" -lc "cd '$($PWD.Path -replace '\\','/')' && bash scripts/build_libarchive_switch.sh"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "libarchive build FAILED" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+}
+
 $nproc = 2
 Write-Host "Parallel jobs: $nproc"
 & make -j $nproc

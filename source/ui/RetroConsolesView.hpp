@@ -23,6 +23,8 @@ private:
     void rebuildGrid();
     void showUpdateDialog();
     void refreshGameCounts();
+    void refreshStatuses();
+    void updateHeader();
 
     std::shared_ptr<std::atomic<bool>> alive_flag_;
     std::unordered_map<std::string, CollectionCard*> console_cards_;

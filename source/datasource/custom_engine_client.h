@@ -69,6 +69,7 @@ public:
     /* Download took over the torrent: it survives probe cleanup. */
     void markInUse(const std::string& hash);
     void unmarkInUse(const std::string& hash);
+    bool isInUse(const std::string& hash) const;
 
     /* Kept probe torrent hash (or empty if none). */
     std::string keptHash() const;

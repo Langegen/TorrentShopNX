@@ -16,6 +16,7 @@
 #include <fstream>
 #include <vector>
 #include <borealis.hpp>
+#include <borealis/core/thread_pool.hpp>
 #include <nanovg.h>
 
 #if __has_include(<curl/curl.h>)
@@ -40,6 +41,10 @@
 #include "catalog/retro_catalog_manager.h"
 #include "config/config.h"
 #include "utils/log.h"
+#include "utils/update_journal.h"
+#include "utils/perf_stats.h"
+#include "utils/ui_watchdog.h"
+#include "engine/engine_log.h"
 #include "utils/switch_utils.h"
 #include "utils/screen_sleep_manager.h"
 #include "net/http_client.h"
@@ -63,29 +68,28 @@ static bool checkAppletMode() {
 
 #ifdef __SWITCH__
 extern "C" {
-    u32 __nx_socket_mem_size = 0x02000000; // Default to 32MB for Title Mode
-    size_t __nx_socket_tcp_tx_buf_size = 0x10000; // Default to 64KB TCP send buffer
-    size_t __nx_socket_tcp_rx_buf_size = 0x10000; // Default to 64KB TCP recv buffer
-
     Result g_socket_init_result = 0xFFFFFFFF;
-    u32 g_socket_mem_size_used = 0;
+    u32 g_socket_mem_size_used = 0;   // BSD transfer memory actually handed to bsd:u
+    u32 g_socket_sb_efficiency = 0;
     int g_applet_type_detected = -1;
+
+    // Size of the BSD transfer memory libnx allocates for a config. This memory
+    // is the WHOLE socket-buffer pool of the process (every TCP/UDP socket,
+    // curl included), not a per-socket budget. Same formula as libnx
+    // bsdInitialize(): sb_efficiency * page_round(tx_max + rx_max + udp_tx + udp_rx).
+    static u32 socketPoolBytes(const SocketInitConfig& c) {
+        u32 tx = c.tcp_tx_buf_max_size ? c.tcp_tx_buf_max_size : c.tcp_tx_buf_size;
+        u32 rx = c.tcp_rx_buf_max_size ? c.tcp_rx_buf_max_size : c.tcp_rx_buf_size;
+        u32 sum = tx + rx + c.udp_tx_buf_size + c.udp_rx_buf_size;
+        sum = (sum + 0xFFF) & ~0xFFFu;
+        return c.sb_efficiency * sum;
+    }
 
     void userAppInit(void) {
         appletLockExit();
         AppletType applet_type = appletGetAppletType();
         g_applet_type_detected = static_cast<int>(applet_type);
         bool is_applet = (applet_type == AppletType_LibraryApplet || applet_type == AppletType_OverlayApplet);
-
-        if (is_applet) {
-            __nx_socket_mem_size = 0x00100000;        // 1MB minimal socket pool for Applet Mode
-            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB default send buffer
-            __nx_socket_tcp_rx_buf_size = 0x4000;      // 16KB default recv buffer
-        } else {
-            __nx_socket_mem_size = 0x02000000;        // 32MB socket pool for Title Mode
-            __nx_socket_tcp_tx_buf_size = 0x4000;      // 16KB initial send buffer
-            __nx_socket_tcp_rx_buf_size = 0x8000;      // 32KB initial recv buffer
-        }
 
         SocketInitConfig cfg = *(socketGetDefaultInitConfig());
         if (is_applet) {
@@ -98,25 +102,37 @@ extern "C" {
             cfg.udp_rx_buf_size = 8192;
             cfg.udp_tx_buf_size = 8192;
         } else {
-            // Switch BSD buffer pool is fixed (32MB in Title mode).
-            // BitTorrent is downstream-heavy: large RX buffers (512KB) support 25+ MB/s
-            // speeds from fast seeders, while minimal TX buffers (32KB) prevent mbuf waste.
-            // sb_efficiency = 2 (standard Switch libnx factor) keeps (512+32)*2 ~ 1.08MB per socket,
-            // allowing 20-25 parallel peers with plenty of headroom for UDP/trackers without ENOBUFS.
+            // The pool is sb_efficiency * (tx_max + rx_max + udp_tx + udp_rx) for the
+            // whole process (see socketPoolBytes). The old config (2 * 592 KB) gave
+            // ~1.2 MB: socket() failed with ENOBUFS after a few dozen sockets, so the
+            // engine held 15-20 peers out of hundreds known, UDP trackers failed with
+            // errno 105 and image fetches failed mid-download.
+            //
+            // 8 * (1.5 MB + 64 KB + 16 KB + 32 KB) ~= 12.9 MB: room for ~64 peers,
+            // dials in flight, trackers, DHT and HTTP. sb_efficiency stays within the
+            // documented 1..8; the size comes from rx_max, which is only the autotune
+            // ceiling of one socket (the engine sets SO_RCVBUF explicitly anyway).
             cfg.num_bsd_sessions = 16;
-            cfg.sb_efficiency = 2;
-            cfg.tcp_tx_buf_size = 0x4000;       // 16 KB initial
-            cfg.tcp_rx_buf_size = 0x8000;       // 32 KB initial
-            cfg.tcp_tx_buf_max_size = 0x8000;   // 32 KB max (only small 17-byte BT requests)
-            cfg.tcp_rx_buf_max_size = 0x80000;  // 512 KB max (high throughput receive window)
-            cfg.udp_rx_buf_size = 0x8000;       // 32 KB
-            cfg.udp_tx_buf_size = 0x4000;       // 16 KB
+            cfg.sb_efficiency = 8;
+            cfg.tcp_tx_buf_size = 0x4000;        // 16 KB initial
+            cfg.tcp_rx_buf_size = 0x8000;        // 32 KB initial
+            cfg.tcp_tx_buf_max_size = 0x10000;   // 64 KB max (we also upload pieces)
+            cfg.tcp_rx_buf_max_size = 0x180000;  // 1.5 MB max
+            cfg.udp_rx_buf_size = 0x8000;        // 32 KB
+            cfg.udp_tx_buf_size = 0x4000;        // 16 KB
         }
         g_socket_init_result = socketInitialize(&cfg);
+        if (R_FAILED(g_socket_init_result) && !is_applet) {
+            // Smaller pool (~6.4 MB) if the service refused the big one.
+            cfg.sb_efficiency = 4;
+            g_socket_init_result = socketInitialize(&cfg);
+        }
         if (R_FAILED(g_socket_init_result)) {
+            cfg = *(socketGetDefaultInitConfig());
             g_socket_init_result = socketInitializeDefault();
         }
-        g_socket_mem_size_used = __nx_socket_mem_size;
+        g_socket_mem_size_used = socketPoolBytes(cfg);
+        g_socket_sb_efficiency = cfg.sb_efficiency;
 
         // Note: romfsInit() is deliberately NOT called here in userAppInit().
         // Calling romfsInit() here locks the running .nro file on SD card before main()
@@ -280,7 +296,33 @@ static bool replaceNroFile(const std::string& srcPath, const std::string& dstPat
 extern "C" u32 __nx_applet_exit_mode;
 #endif
 
-static bool checkAndApplyPendingUpdate() {
+// How the process leaves after an update was applied.
+//   relaunch=true  (start of main, nothing but the main thread is running):
+//                  hand the new NRO to hbloader via envSetNextLoad.
+//   relaunch=false (end of a normal session): only replace the file and keep
+//                  the normal exit to the HOME menu. Returning to hbloader from
+//                  a full session is unsafe: engine/curl/image threads may still
+//                  be alive in the shared process, and once hbloader maps the
+//                  next NRO over their code they crash the whole title.
+static void prepareExitAfterUpdate(const std::string& nroPath, bool relaunch) {
+#ifdef __SWITCH__
+    if (relaunch && envHasNextLoad()) {
+        std::string quotedArg = "\"" + nroPath + "\"";
+        envSetNextLoad(nroPath.c_str(), quotedArg.c_str());
+        __nx_applet_exit_mode = 0;
+        util::updateJournal("relaunching updated NRO via envSetNextLoad: " + nroPath);
+    } else {
+        __nx_applet_exit_mode = 1; // straight to the HOME menu, process is torn down
+        util::updateJournal(relaunch ? "loader has no next-load support, exiting to HOME"
+                                     : "update applied at exit, closing to HOME");
+    }
+#else
+    (void)nroPath;
+    (void)relaunch;
+#endif
+}
+
+static bool checkAndApplyPendingUpdate(bool relaunch) {
 #ifdef __SWITCH__
     // Ensure RomFS is not mounted while we manipulate NRO files
     util::unmountRomfs();
@@ -289,23 +331,14 @@ static bool checkAndApplyPendingUpdate() {
     // 1. If we are running AS the .update file (e.g. TorrentShopNX.nro.update)
     if (g_nroPath.find(".update") != std::string::npos) {
         std::string mainNroPath = g_nroPath.substr(0, g_nroPath.find(".update"));
-        util::logLine("main: running as update NRO (" + g_nroPath + "). Overwriting main NRO: " + mainNroPath);
-        
+        util::updateJournal("running as update NRO (" + g_nroPath + "), overwriting " + mainNroPath);
+
         bool ok = replaceNroFile(g_nroPath, mainNroPath);
-        util::logLine("main: replace result=" + std::to_string(ok));
-        
+        util::updateJournal(std::string("replace result=") + (ok ? "ok" : "FAILED"));
+
         std::remove(g_nroPath.c_str());
-        
-#ifdef __SWITCH__
-        if (envHasNextLoad()) {
-            std::string quotedArg = "\"" + mainNroPath + "\"";
-            envSetNextLoad(mainNroPath.c_str(), quotedArg.c_str());
-            __nx_applet_exit_mode = 0;
-            util::logLine("main: relaunching main NRO via envSetNextLoad: " + mainNroPath);
-            return true; // Signal main to exit so HBL chainloads mainNroPath
-        }
-#endif
-        return ok;
+        prepareExitAfterUpdate(mainNroPath, relaunch);
+        return true;
     }
 
     // 2. We are running as regular TorrentShopNX.nro. Check for pending .update files.
@@ -318,7 +351,7 @@ static bool checkAndApplyPendingUpdate() {
     for (const auto& upPath : possibleUpdates) {
         struct stat st;
         if (stat(upPath.c_str(), &st) == 0) {
-            if (st.st_size >= 100 * 1024) {
+            if (util::isValidNroFile(upPath)) {
                 // Determine target NRO path for this update file
                 std::string targetNro = upPath;
                 if (targetNro.size() > 7 && targetNro.rfind(".update") == targetNro.size() - 7) {
@@ -327,27 +360,20 @@ static bool checkAndApplyPendingUpdate() {
                     targetNro = g_nroPath;
                 }
 
-                util::logLine("main: found pending update at " + upPath + " (" + std::to_string(st.st_size) + " bytes), target=" + targetNro);
-                
+                util::updateJournal(std::string(relaunch ? "start" : "exit") + ": found pending update " +
+                                    upPath + " (" + std::to_string(st.st_size) + " bytes), target=" + targetNro);
+
                 bool ok = replaceNroFile(upPath, targetNro);
-                util::logLine("main: replaceNroFile to " + targetNro + " result=" + std::to_string(ok));
-                
+                util::updateJournal("replaceNroFile to " + targetNro + (ok ? " ok" : " FAILED"));
+
                 if (ok) {
                     g_nroPath = targetNro;
-#ifdef __SWITCH__
-                    if (envHasNextLoad()) {
-                        std::string quotedArg = "\"" + g_nroPath + "\"";
-                        envSetNextLoad(g_nroPath.c_str(), quotedArg.c_str());
-                        __nx_applet_exit_mode = 0;
-                        util::logLine("main: relaunching updated NRO via envSetNextLoad: " + g_nroPath);
-                    }
-#endif
-                    return true; // Signal main to exit so HBL chainloads the freshly updated NRO
-                } else {
-                    util::logLine("main: failed to replace NRO with update from " + upPath);
+                    prepareExitAfterUpdate(g_nroPath, relaunch);
+                    return true;
                 }
             } else {
-                util::logLine("main: removing invalid/small update file at " + upPath + " (" + std::to_string(st.st_size) + " bytes)");
+                util::updateJournal("removing invalid update file " + upPath + " (" + std::to_string(st.st_size) +
+                                    " bytes, no NRO0 header)");
                 std::remove(upPath.c_str());
             }
         }
@@ -369,6 +395,8 @@ int main(int argc, char** argv) {
             }
         }
         util::logLine("FATAL: " + err);
+        uiwd::logCurrentStack("terminate");
+        util::logFlush();
         std::abort();
     });
 
@@ -386,17 +414,24 @@ int main(int argc, char** argv) {
     util::logLine("main: start g_nroPath=" + g_nroPath);
 
 #ifdef __SWITCH__
-    if (checkAndApplyPendingUpdate()) {
+    if (checkAndApplyPendingUpdate(/*relaunch=*/true)) {
+        // borealis creates its global ThreadPool (3 workers) in a static
+        // initializer, before main(). Returning to hbloader with those threads
+        // still parked in the process crashed the title as soon as the next NRO
+        // was mapped over their code ("closed because of an error", update
+        // applied only on the launch after). Join them first.
+        brls::ThreadPool::shutdownGlobal();
         util::logLine("main: exiting for update relaunch");
+        util::logClose();   // drain the async writer before committing
         fsdevCommitDevice("sdmc");
-        util::logClose();
         _exit(0);
     }
 #endif
 
 #ifdef __SWITCH__
     util::logLine("main: socketInit result=" + std::to_string(g_socket_init_result) +
-                  " mem_size=" + std::to_string(g_socket_mem_size_used) +
+                  " pool=" + std::to_string(g_socket_mem_size_used / 1024) + "KB" +
+                  " sb_eff=" + std::to_string(g_socket_sb_efficiency) +
                   " applet_type=" + std::to_string(g_applet_type_detected));
     bool startupBoostActive = false;
     if (!checkAppletMode()) {
@@ -454,6 +489,8 @@ int main(int argc, char** argv) {
 
     // Snappy focus highlight and smooth scrolling transitions (down from sluggish 200ms default)
     brls::getStyle().addMetric("brls/animations/highlight", 100.0f);
+    // Screen push/pop fade: inputs wait for it, so keep it short (default 200ms)
+    brls::getStyle().addMetric("brls/animations/show", 140.0f);
 
     // Exit directly to Nintendo Switch Home Menu instead of Homebrew Menu (hbmenu)
     brls::Application::getPlatform()->exitToHomeMode(true);
@@ -559,12 +596,15 @@ int main(int argc, char** argv) {
     #endif
 
         // Load database games via fast binary cache (or fallback to JSON)
+        util::logLine("main: loading catalog cache");
         auto loadedGames = loadGamesCached(getCatalogPath(), getCatalogBinPath());
         setCatalogSnapshot(std::move(loadedGames));
         util::logLine("main: initially loaded g_games count=" + std::to_string(getCatalogSnapshot()->size()) + " (path=" + getCatalogPath() + ")");
 
         // Logger configuration
-        brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
+        // INFO: debug lines (every focus change, every recycled cell) cost
+        // formatting time on the UI thread and nothing reads them.
+        brls::Logger::setLogLevel(brls::LogLevel::LOG_INFO);
 
         // Bootstrap activity
 #ifndef __SWITCH__
@@ -611,11 +651,14 @@ int main(int argc, char** argv) {
     util::ScreenSleepManager::instance().init();
 
     util::logLine("main: entering mainLoop");
+    uiwd::start();
     // Execute Borealis main loop
     try {
         int frameCount = 0;
         while (brls::Application::mainLoop()) {
             frameCount++;
+            perf::frame();
+            uiwd::beat();
             if (frameCount <= 3 || frameCount == 10 || frameCount == 30 || frameCount == 60) {
                 util::logLine("main: mainLoop frame=" + std::to_string(frameCount));
                 if (frameCount == 60) {
@@ -656,6 +699,7 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
+    uiwd::stop();
     util::ScreenSleepManager::instance().shutdown();
 
     // Signal background tasks and network transfers to cancel immediately
@@ -691,8 +735,10 @@ int main(int argc, char** argv) {
     // This releases the file lock on g_nroPath so any pending update can be applied right now!
     util::unmountRomfs();
 
-    // Apply pending update if one was downloaded during this session
-    if (checkAndApplyPendingUpdate()) {
+    // Apply pending update if one was downloaded during this session.
+    // Only the file is replaced here; the process still exits to HOME (see
+    // prepareExitAfterUpdate), the next launch runs the new version.
+    if (checkAndApplyPendingUpdate(/*relaunch=*/false)) {
         util::logLine("main: pending update applied during shutdown");
     }
 #endif
@@ -705,9 +751,10 @@ int main(int argc, char** argv) {
     //   - With exitToHomeMode(true), _appletCleanup() exits directly to the Switch Home Menu
     //     (or chainloads via envSetNextLoad when __nx_applet_exit_mode == 0 for updates).
 #ifdef __SWITCH__
-    fsdevCommitDevice("sdmc");
     util::logLine("main: closing log and exiting via _exit(0). Goodbye!");
-    util::logClose();  // close log file before __appExit calls fsExit
+    engine_log_flush();  // applet mode skips the engine shutdown: drain its log ring
+    util::logClose();    // drains the async log writer; before __appExit calls fsExit
+    fsdevCommitDevice("sdmc");
     _exit(0);
 #else
     util::logLine("main: closing log and exiting. Goodbye!");

@@ -1,6 +1,7 @@
 #ifndef TSNX_LISTEN_H
 #define TSNX_LISTEN_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <switch.h>   // Mutex (pctest/compat on PC)
@@ -22,10 +23,15 @@ typedef struct torrentfs torrentfs;
 // "BitTorrent protocol" preamble, and is dropped. Most clients accept
 // plaintext incoming by default; the MSE responder side can be added later.
 
-typedef torrentfs *(*listen_find_fn)(const uint8_t info_hash[20]);
+// Hands an accepted connection (its 68-byte handshake already read) to the
+// torrent with this info_hash. The engine looks the torrent up and queues the
+// socket in one step under its registry lock, so the torrent cannot be closed
+// in between. Returns false when no such torrent is open (the caller closes fd).
+typedef bool (*listen_route_fn)(const uint8_t info_hash[20], int fd,
+                                const uint8_t hs68[68]);
 
 // Returns 0 on success, -1 if the socket could not be created/bound.
-int  torrent_listener_start(int port, listen_find_fn find);
+int  torrent_listener_start(int port, listen_route_fn route);
 void torrent_listener_stop(void);
 
 // The port actually bound (0 if the listener is not running). Announce this

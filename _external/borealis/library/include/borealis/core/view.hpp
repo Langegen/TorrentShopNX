@@ -941,6 +941,18 @@ class View
         this->highlightAlpha = progress;
     }
 
+    inline float getHighlightAlpha()
+    {
+        return this->highlightAlpha;
+    }
+
+    /**
+     * Starts the focus highlight from the given alpha instead of from zero:
+     * when focus moves between views the highlight stays fully visible
+     * instead of fading in again on every step.
+     */
+    void continueHighlightFrom(float alpha);
+
     // -----------------------------------------------------------
 
     /**

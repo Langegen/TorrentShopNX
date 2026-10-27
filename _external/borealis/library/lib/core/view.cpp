@@ -1329,6 +1329,23 @@ void View::onFocusGained()
         this->getParent()->onChildFocusGained(this, this);
 }
 
+void View::continueHighlightFrom(float alpha)
+{
+    if (!this->focused || alpha <= this->highlightAlpha)
+        return;
+
+    if (alpha >= 0.999f)
+    {
+        this->highlightAlpha = 1.0f; // stops the fade-in
+        return;
+    }
+
+    Style style = Application::getStyle();
+    this->highlightAlpha.reset(alpha);
+    this->highlightAlpha.addStep(1.0f, style["brls/animations/highlight"] * (1.0f - alpha), EasingFunction::quadraticOut);
+    this->highlightAlpha.start();
+}
+
 GenericEvent* View::getFocusEvent()
 {
     return &this->focusEvent;

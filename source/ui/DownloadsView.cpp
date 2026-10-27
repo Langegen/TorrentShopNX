@@ -8,6 +8,7 @@
 #include "../utils/app_paths.h"
 #include "../utils/file_ops.h"
 #include <engine/engine.h>
+#include <algorithm>
 #include <iomanip>
 #include <chrono>
 #include <cmath>
@@ -403,13 +404,61 @@ static std::string formatKbps(float speed_kbps, bool is_download) {
     }
 }
 
+// "one/few/many" plural forms; languages without them repeat the same text.
 static std::string formatFileCount(int n) {
     int n10 = n % 10;
     int n100 = n % 100;
-    if (n100 >= 11 && n100 <= 19) return std::to_string(n) + " файлов";
-    if (n10 == 1) return std::to_string(n) + " файл";
-    if (n10 >= 2 && n10 <= 4) return std::to_string(n) + " файла";
-    return std::to_string(n) + " файлов";
+    std::string num = std::to_string(n);
+    if (n100 >= 11 && n100 <= 19) return brls::getStr("app/downloads/file_count_many", num);
+    if (n10 == 1) return brls::getStr("app/downloads/file_count_one", num);
+    if (n10 >= 2 && n10 <= 4) return brls::getStr("app/downloads/file_count_few", num);
+    return brls::getStr("app/downloads/file_count_many", num);
+}
+
+// Component name in the interface language. The queue stores the name built
+// when the download was added (older builds saved it in Russian), so base game
+// and update names are rebuilt from the file name on every redraw.
+static std::string componentDisplayName(const download::DownloadItem& itm) {
+    std::string name = itm.component_name;
+
+    // Bundle of extra files (FileSelectView queues them as "<topic>_extras");
+    // older builds appended " (N ф.)" to the stored name.
+    static const std::string kBundleTopic = "_extras";
+    bool isBundle = itm.topic_id.size() > kBundleTopic.size() &&
+                    itm.topic_id.compare(itm.topic_id.size() - kBundleTopic.size(), kBundleTopic.size(), kBundleTopic) == 0;
+    int bundleCount = static_cast<int>(itm.selected_files.size());
+    static const std::string kLegacySuffix = " ф.)";
+    if (name.size() > kLegacySuffix.size() &&
+        name.compare(name.size() - kLegacySuffix.size(), kLegacySuffix.size(), kLegacySuffix) == 0) {
+        size_t open = name.rfind(" (");
+        if (open != std::string::npos) {
+            try {
+                bundleCount = std::max(bundleCount, std::stoi(name.substr(open + 2)));
+            } catch (...) {}
+            name.erase(open);
+            isBundle = true;
+        }
+    }
+
+    bool fromFileName = name.empty() || itm.component_type == 0 || itm.component_type == 1;
+    if (fromFileName) {
+        std::string fname = getDownloadFileName(itm);
+        auto comp = util::classifyDownloadComponent(fname, itm.title);
+        if (comp.type == 0) {
+            name = brls::getStr("app/downloads/comp_base_game") + " [v0]";
+        } else if (comp.type == 1) {
+            name = comp.version.empty() ? brls::getStr("app/downloads/comp_patch_plain")
+                                        : brls::getStr("app/downloads/comp_patch", comp.version);
+        } else if (name.empty()) {
+            name = comp.cleanName.empty() ? fname : comp.cleanName;
+        }
+    }
+
+    if (isBundle && bundleCount > 1) {
+        name += " (" + formatFileCount(bundleCount) + ")";
+    }
+    if (name.empty()) name = itm.title;
+    return name;
 }
 
 static std::string formatEta(float speed_kbps, unsigned long long remaining_bytes) {
@@ -880,7 +929,7 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
             }
             if (g.retro_console_id.empty() && !itm.retro_console_id.empty()) {
                 g.retro_console_id = itm.retro_console_id;
-                g.retro_target_mode = itm.retro_target_mode;
+                g.retro_result_key = itm.retro_result_key;
             }
             if (itm.start_time.time_since_epoch().count() > 0) {
                 if (g.start_time.time_since_epoch().count() == 0 || itm.start_time < g.start_time) {
@@ -956,7 +1005,7 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
                 has_failed = true;
                 if (g.failed_item_idx < 0) {
                     g.failed_item_idx = static_cast<int>(qidx);
-                    g.failed_name = !itm.component_name.empty() ? itm.component_name : itm.title;
+                    g.failed_name = componentDisplayName(itm);
                     g.failed_error = itm.error_message;
                 }
             } else if (itm.state == download::DownloadState::Downloading ||
@@ -1116,7 +1165,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     // Status description
     std::string statusStr = getStatusString(group.state);
     if (group.state == download::DownloadState::Failed && !group.failed_name.empty()) {
-        statusStr = "Ошибка (" + group.failed_name + ")";
+        statusStr = brls::getStr("app/downloads/state_failed") + " (" + group.failed_name + ")";
     }
     cell->statusText->setText(statusStr);
     cell->statusText->setTextColor(getDownloadStateColor(group.state, isLight));
@@ -1148,11 +1197,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (group.state == download::DownloadState::Completed) {
         if (!group.retro_console_id.empty()) {
-            if (group.retro_target_mode == "tico" || (group.retro_target_mode.empty() && config::ConfigManager::instance().isTicoMode())) {
-                cell->statsText->setText("app/retro/ready_in_tico"_i18n);
-            } else {
-                cell->statsText->setText("app/retro/ready_to_play"_i18n);
-            }
+            cell->statsText->setText(group.retro_result_key.empty()
+                ? "app/retro/ready_to_play"_i18n : brls::getStr(group.retro_result_key));
         } else {
             cell->statsText->setText("app/downloads/installed"_i18n);
         }
@@ -1202,7 +1248,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
     // Expand hint toggle label
     if (group.total_count > 1) {
-        cell->expandHint->setText(group.is_expanded ? "▲ Свернуть" : ("▼ " + formatFileCount(group.total_count)));
+        cell->expandHint->setText(group.is_expanded ? "▲ " + brls::getStr("app/downloads/collapse")
+                                                    : "▼ " + formatFileCount(group.total_count));
         cell->expandHint->setTextColor(isLight ? nvgRGB(0, 140, 225) : nvgRGB(0, 200, 245));
         cell->expandHint->setVisibility(brls::Visibility::VISIBLE);
     } else {
@@ -1468,17 +1515,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             // 0. Info Box: Name
             auto* nameLabel = dynamic_cast<brls::Label*>(infoBox->getChildren()[1]);
             if (nameLabel) {
-                std::string cname = itm.component_name;
-                if (cname.empty() || cname == "Патч" || cname.rfind("Патч v", 0) == 0) {
-                    std::string fname = getDownloadFileName(itm);
-                    auto comp = util::classifyDownloadComponent(fname, itm.title);
-                    if (!comp.cleanName.empty()) {
-                        cname = comp.cleanName;
-                    } else if (cname.empty()) {
-                        cname = fname;
-                    }
-                }
-                nameLabel->setText(cname);
+                nameLabel->setText(componentDisplayName(itm));
                 nameLabel->setTextColor(primaryText);
             }
 
@@ -1760,7 +1797,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             });
 
             if (group.total_count > 1) {
-                cell->headerBox->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
+                cell->headerBox->registerAction(brls::getStr(group.is_expanded ? "app/downloads/collapse" : "app/downloads/expand"), brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
                     if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
                         groups_[row].has_manual_toggle = true;
                         groups_[row].is_expanded = !groups_[row].is_expanded;
@@ -1797,7 +1834,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             });
 
             if (group.total_count > 1) {
-                cell->headerBox->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_X, [this, row](brls::View* view) {
+                cell->headerBox->registerAction(brls::getStr(group.is_expanded ? "app/downloads/collapse" : "app/downloads/expand"), brls::ControllerButton::BUTTON_X, [this, row](brls::View* view) {
                     if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
                         groups_[row].has_manual_toggle = true;
                         groups_[row].is_expanded = !groups_[row].is_expanded;
@@ -1837,7 +1874,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             });
 
             if (group.total_count > 1) {
-                cell->headerBox->registerAction(group.is_expanded ? "Свернуть" : "Развернуть", brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
+                cell->headerBox->registerAction(brls::getStr(group.is_expanded ? "app/downloads/collapse" : "app/downloads/expand"), brls::ControllerButton::BUTTON_A, [this, row](brls::View* view) {
                     if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
                         groups_[row].has_manual_toggle = true;
                         groups_[row].is_expanded = !groups_[row].is_expanded;

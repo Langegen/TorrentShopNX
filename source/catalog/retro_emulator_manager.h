@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <atomic>
+#include <mutex>
 #include <nanovg.h>
 
 namespace catalog {
@@ -40,6 +41,10 @@ struct EmulatorPackage {
 
     std::string bios_id;                                // ID of associated BIOS package (e.g. "ps2_bios")
     std::vector<CompanionDownload> companion_downloads; // For multi-file packages (e.g. BIOS sets)
+
+    // GitHub release to take the latest version from ("owner/repo" + asset name).
+    std::string github_repo;
+    std::string github_asset;
 };
 
 class RetroEmulatorManager {
@@ -48,6 +53,13 @@ public:
 
     const std::vector<EmulatorPackage>& getPackages() const { return packages_; }
     const EmulatorPackage* findPackage(const std::string& emu_id) const;
+    // Thread-safe copy of a package (for installs running off the UI thread).
+    bool getPackageCopy(const std::string& emu_id, EmulatorPackage& out) const;
+
+    // Package id of a Tico module ("duckstation" -> "tico_module_duckstation").
+    static std::string ticoModulePackageId(const std::string& module_id);
+    // "0.7.2" < "0.8.0" (numeric parts compared as numbers).
+    static bool isVersionLess(const std::string& a, const std::string& b);
     const EmulatorPackage* getPackageForConsole(const std::string& console_id) const;
 
     EmulatorInstallStatus getInstallStatus(const std::string& emu_id) const;
@@ -58,12 +70,15 @@ public:
     bool uninstallEmulator(const std::string& emu_id, std::string& out_err);
 
     const EmulatorPackage* getBiosPackageForEmulator(const std::string& emu_id) const;
+    const EmulatorPackage* getBiosPackageForConsole(const std::string& console_id) const;
 
     std::string getManifestDownloadUrl() const;
     std::string getLocalManifestPath() const;
     bool loadLocalManifest();
     bool saveLocalManifest();
     bool refreshManifest(std::function<void(float progress, const std::string& status)> progress_cb = nullptr);
+    // Takes the latest version, size and download link of Tico and its modules from GitHub.
+    bool refreshGithubReleases();
     bool parseManifestFromJson(const std::string& json_str);
     void applyPackageDefaults();
     std::vector<EmulatorPackage> getBuiltinBiosPackages() const;
@@ -76,11 +91,14 @@ public:
 private:
     RetroEmulatorManager();
     void initPackages();
+    void addTicoModulePackages();
     void loadInstalledVersions();
-    void saveInstalledVersions();
+    void saveInstalledVersions(); // caller holds versions_mutex_
 
     std::vector<EmulatorPackage> packages_;
     std::unordered_map<std::string, std::string> installed_versions_;
+    mutable std::recursive_mutex packages_mutex_;
+    mutable std::mutex versions_mutex_;
 };
 
 } // namespace catalog

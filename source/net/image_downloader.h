@@ -27,6 +27,8 @@ struct ImageTask {
     int col = -1;
     int priorityOverride = 0;
     int retryCount = 0;
+    // When the image was first requested, for the [perf] load-latency metric.
+    std::chrono::steady_clock::time_point enqueuedAt{};
 };
 
 /// Синглтон очереди скачивания изображений с ограничением параллелизма.

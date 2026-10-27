@@ -102,6 +102,11 @@ SRes SzAr_DecodeFolder(const CSzAr *p, UInt32 folderIndex,
     Byte *outBuffer, size_t outSize,
     ISzAllocPtr allocMain);
 
+/* TorrentShopNX additions: parse a folder's coder chain and check whether
+   SzAr_DecodeFolder supports it, without decoding any data. */
+SRes SzAr_GetFolder(const CSzAr *p, UInt32 folderIndex, CSzFolder *folder);
+SRes SzFolder_CheckSupported(const CSzFolder *f);
+
 typedef struct
 {
   CSzAr db;

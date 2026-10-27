@@ -1,5 +1,10 @@
 #include "sevenzip_utils.h"
+#include "archive_peek.h"
+#include "extraction_journal.h"
 #include "file_ops.h"
+#include "../datasource/i_data_source.h"
+#include <thread>
+#include <chrono>
 #include "log.h"
 
 #include "../7zsdk/7z.h"
@@ -19,6 +24,198 @@
 namespace util {
 
 static const size_t kInputBufSize = (size_t)1 << 20;
+
+const char* const k7zRequiresStreaming = "requires_streaming";
+
+// The SDK decodes a whole folder into RAM; bigger folders go to libarchive.
+static const UInt64 kSdkMaxFolderSize = 64ULL * 1024 * 1024;
+
+namespace {
+
+// 7z method IDs (7-Zip DOC/Methods.txt).
+enum : UInt32 {
+    kMethodCopy    = 0,
+    kMethodDelta   = 0x03,
+    kMethodARM64   = 0x0A,
+    kMethodRISCV   = 0x0B,
+    kMethodLZMA2   = 0x21,
+    kMethodLZMA    = 0x030101,
+    kMethodPPMD    = 0x030401,
+    kMethodBCJ     = 0x03030103,
+    kMethodBCJ2    = 0x0303011B,
+    kMethodPPC     = 0x03030205,
+    kMethodIA64    = 0x03030401,
+    kMethodARM     = 0x03030501,
+    kMethodARMT    = 0x03030701,
+    kMethodSPARC   = 0x03030805,
+    kMethodDeflate = 0x040108,
+    kMethodBZip2   = 0x040202,
+    kMethodZstd    = 0x04F71101,
+};
+
+bool isCryptoMethod(UInt32 id) {
+    return (id & 0xFFFF0000u) == 0x06F10000u; // 06F1xxxx: 7zAES, ZipCrypto, RAR AES
+}
+
+std::string methodName(UInt32 id) {
+    switch (id) {
+    case kMethodCopy:    return "Copy";
+    case kMethodDelta:   return "Delta";
+    case kMethodARM64:   return "ARM64";
+    case kMethodRISCV:   return "RISCV";
+    case kMethodLZMA2:   return "LZMA2";
+    case kMethodLZMA:    return "LZMA";
+    case kMethodPPMD:    return "PPMd";
+    case kMethodBCJ:     return "BCJ";
+    case kMethodBCJ2:    return "BCJ2";
+    case kMethodPPC:     return "PPC";
+    case kMethodIA64:    return "IA64";
+    case kMethodARM:     return "ARM";
+    case kMethodARMT:    return "ARMT";
+    case kMethodSPARC:   return "SPARC";
+    case kMethodDeflate: return "Deflate";
+    case kMethodBZip2:   return "BZip2";
+    case kMethodZstd:    return "Zstd";
+    default: break;
+    }
+    if (isCryptoMethod(id)) return "AES";
+    char buf[16];
+    snprintf(buf, sizeof(buf), "0x%X", (unsigned)id);
+    return buf;
+}
+
+std::string describeChain(const CSzFolder& f) {
+    std::string s;
+    for (UInt32 i = 0; i < f.NumCoders; i++) {
+        if (i) s += "+";
+        s += methodName(f.Coders[i].MethodID);
+    }
+    return s;
+}
+
+bool hasCrypto(const CSzFolder& f) {
+    for (UInt32 i = 0; i < f.NumCoders; i++) {
+        if (isCryptoMethod(f.Coders[i].MethodID)) return true;
+    }
+    return false;
+}
+
+// Mirrors libarchive's 7z reader (init_decompression / setup_decode_folder,
+// 3.8.x): coders[0] is the main method, coders[1] an optional filter, or the
+// 4-coder BCJ2 layout.
+bool libarchiveCanDecode(const CSzFolder& f) {
+    auto isMain = [](UInt32 id) {
+        return id == kMethodCopy || id == kMethodLZMA || id == kMethodLZMA2 || id == kMethodPPMD ||
+               id == kMethodDeflate || id == kMethodBZip2 || id == kMethodZstd;
+    };
+    const UInt32 main = f.Coders[0].MethodID;
+    if (f.NumCoders == 1) return isMain(main);
+    if (f.NumCoders == 4) {
+        return f.Coders[3].MethodID == kMethodBCJ2 && isMain(main) &&
+               isMain(f.Coders[1].MethodID) && isMain(f.Coders[2].MethodID);
+    }
+    if (f.NumCoders != 2 || !isMain(main)) return false;
+
+    const UInt32 filter = f.Coders[1].MethodID;
+    if (main == kMethodLZMA || main == kMethodLZMA2) {
+        switch (filter) {
+        case kMethodBCJ: case kMethodBCJ2: case kMethodDelta: case kMethodPPC:
+        case kMethodIA64: case kMethodARM: case kMethodARMT: case kMethodSPARC:
+            return true;
+        case kMethodARM64: case kMethodRISCV:
+            // Goes through liblzma's filter, compiled in only with a new enough
+            // liblzma. RISCV (xz 5.6) is assumed to follow ARM64 (xz 5.4).
+            return libarchiveSupports7zArm64Lzma();
+        default:
+            return false;
+        }
+    }
+    switch (filter) {
+    case kMethodBCJ: case kMethodBCJ2: case kMethodARM: case kMethodARM64:
+    case kMethodPPC: case kMethodSPARC:
+        return true;
+    default:
+        return false;
+    }
+}
+
+enum class DecodePlan { Sdk, Libarchive, Unsupported };
+
+// Decides who decodes the archive using only the header, before any payload
+// is read. Fills outError for Libarchive/Unsupported.
+DecodePlan plan7zDecode(const CSzArEx& db, UInt64 maxFolderSize, std::string& outError) {
+    struct ChainInfo { size_t count = 0; bool sdk = true; bool la = true; UInt64 maxSize = 0; };
+    std::vector<std::pair<std::string, ChainInfo>> chains; // insertion order, few distinct entries
+    bool sdkAll = maxFolderSize <= kSdkMaxFolderSize;
+    bool laAll = true;
+    bool encrypted = false;
+
+    for (UInt32 fi = 0; fi < db.db.NumFolders; fi++) {
+        CSzFolder f;
+        const bool parsed = SzAr_GetFolder(&db.db, fi, &f) == SZ_OK && f.NumCoders > 0;
+        const std::string chain = parsed ? describeChain(f) : "?";
+        const bool sdk = parsed && SzFolder_CheckSupported(&f) == SZ_OK;
+        const bool la = parsed && libarchiveCanDecode(f);
+        if (parsed && hasCrypto(f)) encrypted = true;
+        sdkAll = sdkAll && sdk;
+        laAll = laAll && la;
+
+        auto it = std::find_if(chains.begin(), chains.end(),
+                               [&](const auto& c) { return c.first == chain; });
+        if (it == chains.end()) {
+            chains.push_back({chain, ChainInfo{}});
+            it = chains.end() - 1;
+        }
+        it->second.count++;
+        it->second.sdk = it->second.sdk && sdk;
+        it->second.la = it->second.la && la;
+        it->second.maxSize = std::max<UInt64>(it->second.maxSize, SzAr_GetFolderUnpackSize(&db.db, fi));
+    }
+
+    std::string summary;
+    for (const auto& c : chains) {
+        if (!summary.empty()) summary += ", ";
+        summary += c.first + " x" + std::to_string(c.second.count) +
+                   " (max " + std::to_string(c.second.maxSize / (1024 * 1024)) + " MB, sdk=" +
+                   (c.second.sdk ? "1" : "0") + " libarchive=" + (c.second.la ? "1" : "0") + ")";
+    }
+    util::logLine("sevenzip: coder chains: " + summary);
+
+    if (sdkAll) return DecodePlan::Sdk;
+
+    if (laAll) {
+        if (maxFolderSize > kSdkMaxFolderSize) {
+            util::logLine("sevenzip: archive has large unpack folder (" + std::to_string(maxFolderSize / (1024 * 1024)) +
+                          " MB > " + std::to_string(kSdkMaxFolderSize / (1024 * 1024)) +
+                          " MB), deferring to streaming libarchive");
+        } else {
+            util::logLine("sevenzip: archive uses a method the SDK lacks, deferring to libarchive");
+        }
+        outError = k7zRequiresStreaming;
+        return DecodePlan::Libarchive;
+    }
+
+    // Neither decoder can do the whole archive: report the chains libarchive
+    // rejects (the SDK can't take over once any folder is too big for RAM).
+    std::string bad;
+    for (const auto& c : chains) {
+        if (c.second.la) continue;
+        if (!bad.empty()) bad += ", ";
+        bad += c.first;
+    }
+    if (encrypted) {
+        outError = "Архив 7z зашифрован паролем, такие архивы не поддерживаются";
+    } else if (maxFolderSize > kSdkMaxFolderSize) {
+        outError = "Неподдерживаемый метод сжатия 7z: " + bad + " (архив слишком большой для встроенного декодера, " +
+                   std::to_string(maxFolderSize / (1024 * 1024)) + " МБ в одном блоке)";
+    } else {
+        outError = "Неподдерживаемый метод сжатия 7z: " + bad;
+    }
+    util::logLine("sevenzip: unsupported archive, aborting before reading data: " + outError);
+    return DecodePlan::Unsupported;
+}
+
+} // namespace
 
 static void* sdkAlloc(ISzAllocPtr /*p*/, size_t size) { return SzAlloc(nullptr, size); }
 static void sdkFree(ISzAllocPtr /*p*/, void* addr) { SzFree(nullptr, addr); }
@@ -88,7 +285,7 @@ static const char* sresToMessage(SRes res) {
     case SZ_ERROR_MEM:          return "Не хватает оперативной памяти (RAM)";
     case SZ_ERROR_NO_ARCHIVE:   return "Файл не является архивом 7z";
     case SZ_ERROR_ARCHIVE:      return "Архив повреждён или имеет неверный формат";
-    case SZ_ERROR_CRC:          return "Ошибка контрольной суммы в заголовке архива";
+    case SZ_ERROR_CRC:          return "Ошибка контрольной суммы: архив повреждён";
     case SZ_ERROR_UNSUPPORTED:  return "Архив использует неподдерживаемые возможности (например, шифрование)";
     case SZ_ERROR_INPUT_EOF:    return "Архив повреждён (неожиданный конец файла)";
     case SZ_ERROR_FAIL:         return "Не удалось прочитать архив";
@@ -97,59 +294,106 @@ static const char* sresToMessage(SRes res) {
     }
 }
 
-bool extract7zArchive(
-    const std::string& archivePath,
+struct DataSourceInStream {
+    ISeekInStream vt;
+    datasource::IDataSource* source = nullptr;
+    uint64_t totalSize = 0;
+    uint64_t currentOffset = 0;
+    std::shared_ptr<std::atomic<bool>> cancelToken;
+    std::shared_ptr<std::atomic<bool>> pauseToken;
+    WRes wres = 0;
+};
+
+static SRes DataSourceInStream_Read(ISeekInStreamPtr pp, void *buf, size_t *size) {
+    auto* p = const_cast<DataSourceInStream*>(reinterpret_cast<const DataSourceInStream*>(pp));
+    if (!p || !p->source || !buf || !size) return SZ_ERROR_FAIL;
+    if (p->cancelToken && p->cancelToken->load()) return SZ_ERROR_FAIL;
+
+    if (p->totalSize > 0 && p->currentOffset >= p->totalSize) {
+        *size = 0;
+        return SZ_OK;
+    }
+
+    size_t want = *size;
+    if (p->totalSize > 0 && p->currentOffset + want > p->totalSize) {
+        want = static_cast<size_t>(p->totalSize - p->currentOffset);
+    }
+    if (want == 0) {
+        *size = 0;
+        return SZ_OK;
+    }
+
+    size_t got = 0;
+    while (!got && !g_appExiting.load()) {
+        if (p->cancelToken && p->cancelToken->load()) return SZ_ERROR_FAIL;
+        if (p->pauseToken && p->pauseToken->load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
+        got = p->source->read(p->currentOffset, buf, want);
+        if (got == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            continue;
+        }
+    }
+
+    if (got > 0) {
+        p->currentOffset += got;
+        *size = got;
+        return SZ_OK;
+    }
+
+    return SZ_ERROR_READ;
+}
+
+static SRes DataSourceInStream_Seek(ISeekInStreamPtr pp, Int64 *pos, ESzSeek origin) {
+    auto* p = const_cast<DataSourceInStream*>(reinterpret_cast<const DataSourceInStream*>(pp));
+    if (!p || !pos) return SZ_ERROR_FAIL;
+    if (p->cancelToken && p->cancelToken->load()) return SZ_ERROR_FAIL;
+
+    int64_t newOffset = 0;
+    if (origin == SZ_SEEK_SET) {
+        newOffset = *pos;
+    } else if (origin == SZ_SEEK_CUR) {
+        newOffset = static_cast<int64_t>(p->currentOffset) + *pos;
+    } else if (origin == SZ_SEEK_END) {
+        newOffset = static_cast<int64_t>(p->totalSize) + *pos;
+    } else {
+        return SZ_ERROR_FAIL;
+    }
+
+    if (newOffset < 0 || (p->totalSize > 0 && static_cast<uint64_t>(newOffset) > p->totalSize)) {
+        return SZ_ERROR_FAIL;
+    }
+
+    p->currentOffset = static_cast<uint64_t>(newOffset);
+    *pos = static_cast<Int64>(p->currentOffset);
+    return SZ_OK;
+}
+
+static void DataSourceInStream_CreateVTable(DataSourceInStream *p) {
+    p->vt.Read = DataSourceInStream_Read;
+    p->vt.Seek = DataSourceInStream_Seek;
+}
+
+static bool extract7zInternal(
+    ISeekInStreamPtr inStream,
+    uint64_t totalFileSize,
     const std::string& destinationDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
     std::string& outError,
     uint64_t* outKnownUncompressedSize,
     size_t* outKnownTotalEntries,
-    PathTransformFn pathTransform
+    PathTransformFn pathTransform,
+    ExtractionJournal* journal,
+    bool* outNoFallback
 ) {
-    util::logLine("sevenzip: extractArchive start: " + archivePath + " -> " + destinationDir);
-
-    std::error_code ec;
-    uint64_t totalFileSize = 0;
-    try {
-        if (!std::filesystem::exists(archivePath, ec)) {
-            outError = "Файл архива не найден: " + archivePath;
-            util::logLine("sevenzip: archive does not exist: " + archivePath);
-            return false;
-        }
-        totalFileSize = std::filesystem::file_size(archivePath, ec);
-        safeCreateDirectories(destinationDir);
-    } catch (const std::exception& e) {
-        outError = e.what();
-        util::logLine("sevenzip: exception preparing destination: " + std::string(e.what()));
-        return false;
-    }
-
-    CFileInStream archiveStream;
     CLookToRead2 lookStream;
     CSzArEx db;
     SRes res;
-
-    File_Construct(&archiveStream.file);
-    archiveStream.wres = 0;
-
-    {
-        WRes wres;
-#ifdef _WIN32
-        std::wstring wpath = std::filesystem::u8path(archivePath).native();
-        wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
-#else
-        wres = InFile_Open(&archiveStream.file, archivePath.c_str());
-#endif
-        if (wres != 0) {
-            outError = "Не удалось открыть архив для чтения";
-            util::logLine("sevenzip: InFile_Open failed, wres=" + std::to_string((int)wres));
-            return false;
-        }
-    }
-
-    FileInStream_CreateVTable(&archiveStream);
-    archiveStream.wres = 0;
 
     LookToRead2_CreateVTable(&lookStream, False);
     lookStream.buf = nullptr;
@@ -175,7 +419,7 @@ bool extract7zArchive(
         res = SZ_ERROR_MEM;
     } else {
         lookStream.bufSize = kInputBufSize;
-        lookStream.realStream = &archiveStream.vt;
+        lookStream.realStream = inStream;
         LookToRead2_INIT(&lookStream);
     }
 
@@ -206,15 +450,18 @@ bool extract7zArchive(
         if (outKnownUncompressedSize) *outKnownUncompressedSize = totalUncompressed;
         if (outKnownTotalEntries) *outKnownTotalEntries = db.NumFiles;
 
-        if (maxFolderSize > 64ULL * 1024 * 1024) {
-            util::logLine("sevenzip: archive has large unpack folder (" + std::to_string(maxFolderSize / (1024*1024)) +
-                          " MB > 64 MB), deferring to streaming libarchive");
-            outError = "requires_streaming";
+        const DecodePlan plan = plan7zDecode(db, maxFolderSize, outError);
+        if (plan != DecodePlan::Sdk) {
+            if (plan == DecodePlan::Unsupported && outNoFallback) *outNoFallback = true;
             SzFree(nullptr, lookStream.buf);
             SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
-            File_Close(&archiveStream.file);
             return false;
         }
+
+        auto makeDirs = [journal](const std::string& dir) {
+            if (journal) journal->createDirectories(dir);
+            else safeCreateDirectories(dir);
+        };
 
         auto updateProgressPct = [&]() {
             if (totalUncompressed > 0) {
@@ -231,6 +478,15 @@ bool extract7zArchive(
                 outError = "Распаковка отменена пользователем";
                 util::logLine("sevenzip: extraction cancelled by user");
                 break;
+            }
+            if (pauseToken && pauseToken->load()) {
+                while (pauseToken->load() && (!cancelToken || !cancelToken->load()) && !g_appExiting.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                if (cancelToken && cancelToken->load()) {
+                    outError = "Распаковка отменена пользователем";
+                    break;
+                }
             }
 
             size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
@@ -291,7 +547,7 @@ bool extract7zArchive(
             }
 
             if (isDir) {
-                safeCreateDirectories(fullPath);
+                makeDirs(fullPath);
                 updateProgressPct();
                 if (progressCb) progressCb(progress);
                 continue;
@@ -305,7 +561,7 @@ bool extract7zArchive(
                                  (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
             if (res != SZ_OK) {
                 if (res == SZ_ERROR_MEM) {
-                    outError = "requires_streaming";
+                    outError = k7zRequiresStreaming;
                 } else {
                     outError = sresToMessage(res);
                 }
@@ -314,7 +570,6 @@ bool extract7zArchive(
                 break;
             }
 
-            // Verify file CRC when the archive stores one.
             if (SzBitWithVals_Check(&db.CRCs, i)) {
                 UInt32 crc = CrcUpdate(CRC_INIT_VAL, outBuffer + offset, outSizeProcessed);
                 if (CRC_GET_DIGEST(crc) != db.CRCs.Vals[i]) {
@@ -326,8 +581,9 @@ bool extract7zArchive(
 
             size_t lastSlash = fullPath.rfind('/');
             if (lastSlash != std::string::npos) {
-                safeCreateDirectories(fullPath.substr(0, lastSlash));
+                makeDirs(fullPath.substr(0, lastSlash));
             }
+            if (journal) journal->noteFile(fullPath);
 
             FILE* outFile = nullptr;
 #ifdef _WIN32
@@ -376,7 +632,6 @@ bool extract7zArchive(
             if (progressCb) progressCb(progress);
             ok = true;
         } else if (outError.empty()) {
-            // cancelled or broke without setting a message yet
             outError = res == SZ_OK ? "Распаковка прервана" : sresToMessage(res);
         }
     }
@@ -386,10 +641,182 @@ bool extract7zArchive(
     SzFree(nullptr, lookStream.buf);
     lookStream.buf = nullptr;
     SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
-    File_Close(&archiveStream.file);
+    return ok;
+}
 
+bool extract7zArchive(
+    const std::string& archivePath,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize,
+    size_t* outKnownTotalEntries,
+    PathTransformFn pathTransform,
+    ExtractionJournal* journal,
+    bool* outNoFallback
+) {
+    util::logLine("sevenzip: extractArchive start: " + archivePath + " -> " + destinationDir);
+
+    std::error_code ec;
+    uint64_t totalFileSize = 0;
+    try {
+        if (!std::filesystem::exists(archivePath, ec)) {
+            outError = "Файл архива не найден: " + archivePath;
+            util::logLine("sevenzip: archive does not exist: " + archivePath);
+            return false;
+        }
+        totalFileSize = std::filesystem::file_size(archivePath, ec);
+        if (journal) journal->createDirectories(destinationDir);
+        else safeCreateDirectories(destinationDir);
+    } catch (const std::exception& e) {
+        outError = e.what();
+        util::logLine("sevenzip: exception preparing destination: " + std::string(e.what()));
+        return false;
+    }
+
+    CFileInStream archiveStream;
+    File_Construct(&archiveStream.file);
+    archiveStream.wres = 0;
+
+    WRes wres;
+#ifdef _WIN32
+    std::wstring wpath = std::filesystem::u8path(archivePath).native();
+    wres = InFile_OpenW(&archiveStream.file, wpath.c_str());
+#else
+    wres = InFile_Open(&archiveStream.file, archivePath.c_str());
+#endif
+    if (wres != 0) {
+        outError = "Не удалось открыть архив для чтения";
+        util::logLine("sevenzip: InFile_Open failed, wres=" + std::to_string((int)wres));
+        return false;
+    }
+
+    FileInStream_CreateVTable(&archiveStream);
+
+    bool ok = extract7zInternal(&archiveStream.vt, totalFileSize, destinationDir,
+                                progressCb, cancelToken, nullptr, outError,
+                                outKnownUncompressedSize, outKnownTotalEntries, pathTransform,
+                                journal, outNoFallback);
+
+    File_Close(&archiveStream.file);
     util::logLine("sevenzip: extractArchive finished, success=" + std::string(ok ? "1" : "0"));
     return ok;
+}
+
+bool extract7zArchiveFromSource(
+    datasource::IDataSource* source,
+    uint64_t archiveSize,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
+    std::string& outError,
+    uint64_t* outKnownUncompressedSize,
+    size_t* outKnownTotalEntries,
+    PathTransformFn pathTransform,
+    ExtractionJournal* journal,
+    bool* outNoFallback
+) {
+    if (!source) {
+        outError = "Null data source";
+        return false;
+    }
+    util::logLine("sevenzip: extract7zArchiveFromSource start, size=" + std::to_string(archiveSize) + " -> " + destinationDir);
+    if (journal) journal->createDirectories(destinationDir);
+    else safeCreateDirectories(destinationDir);
+
+    DataSourceInStream dsStream;
+    dsStream.source = source;
+    dsStream.totalSize = archiveSize;
+    dsStream.currentOffset = 0;
+    dsStream.cancelToken = cancelToken;
+    dsStream.pauseToken = pauseToken;
+    dsStream.wres = 0;
+    DataSourceInStream_CreateVTable(&dsStream);
+
+    bool ok = extract7zInternal(&dsStream.vt, archiveSize, destinationDir,
+                                progressCb, cancelToken, pauseToken, outError,
+                                outKnownUncompressedSize, outKnownTotalEntries, pathTransform,
+                                journal, outNoFallback);
+    util::logLine("sevenzip: extract7zArchiveFromSource finished, success=" + std::string(ok ? "1" : "0"));
+    return ok;
+}
+
+bool peek7zArchiveFromSource(datasource::IDataSource* source,
+                             uint64_t archive_size,
+                             const std::shared_ptr<std::atomic<bool>>& cancel,
+                             ArchivePeek& out,
+                             std::string& out_error) {
+    out = ArchivePeek();
+    out.format = "7z";
+    if (!source) {
+        out_error = "Null data source";
+        return false;
+    }
+
+    DataSourceInStream dsStream;
+    dsStream.source = source;
+    dsStream.totalSize = archive_size;
+    dsStream.currentOffset = 0;
+    dsStream.cancelToken = cancel;
+    dsStream.wres = 0;
+    DataSourceInStream_CreateVTable(&dsStream);
+
+    // Small look-ahead buffer: only the signature header and the end header are read.
+    const size_t kPeekBuf = 64 * 1024;
+    CLookToRead2 lookStream;
+    LookToRead2_CreateVTable(&lookStream, False);
+    lookStream.buf = static_cast<Byte*>(SzAlloc(nullptr, kPeekBuf));
+    if (!lookStream.buf) {
+        out_error = "out of memory";
+        return false;
+    }
+    lookStream.bufSize = kPeekBuf;
+    lookStream.realStream = &dsStream.vt;
+    LookToRead2_INIT(&lookStream);
+
+    CrcGenerateTable();
+    CSzArEx db;
+    SzArEx_Init(&db);
+    SRes res = SzArEx_Open(&db, &lookStream.vt, (ISzAllocPtr)&g_allocImp, (ISzAllocPtr)&g_allocTempImp);
+    if (res != SZ_OK) {
+        out_error = sresToMessage(res);
+        SzFree(nullptr, lookStream.buf);
+        SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+        return false;
+    }
+
+    UInt16* nameBuf = nullptr;
+    size_t nameBufSize = 0;
+    for (UInt32 i = 0; i < db.NumFiles; i++) {
+        size_t nameLen = SzArEx_GetFileNameUtf16(&db, i, nullptr);
+        if (nameLen == 0 || nameLen > (1u << 20)) continue;
+        if (nameLen > nameBufSize) {
+            SzFree(nullptr, nameBuf);
+            nameBufSize = nameLen;
+            nameBuf = static_cast<UInt16*>(SzAlloc(nullptr, nameBufSize * sizeof(UInt16)));
+            if (!nameBuf) break;
+        }
+        SzArEx_GetFileNameUtf16(&db, i, nameBuf);
+        std::string clean = sanitizeEntryName(utf16leToUtf8(nameBuf, nameLen - 1));
+        for (char& c : clean) {
+            if (c == '\\') c = '/';
+        }
+        ArchiveEntryInfo info;
+        info.is_dir = (SzArEx_IsDir(&db, i) != 0) || (!clean.empty() && clean.back() == '/');
+        while (!clean.empty() && clean.back() == '/') clean.pop_back();
+        if (clean.empty()) continue;
+        info.path = clean;
+        info.size = info.is_dir ? 0 : static_cast<uint64_t>(SzArEx_GetFileSize(&db, i));
+        out.total_uncompressed += info.size;
+        out.entries.push_back(std::move(info));
+    }
+
+    if (nameBuf) SzFree(nullptr, nameBuf);
+    SzFree(nullptr, lookStream.buf);
+    SzArEx_Free(&db, (ISzAllocPtr)&g_allocImp);
+    return true;
 }
 
 bool list7zArchiveFolder(

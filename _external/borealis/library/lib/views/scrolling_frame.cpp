@@ -15,6 +15,8 @@
     limitations under the License.
 */
 
+#include <algorithm>
+#include <cmath>
 #include <borealis/core/application.hpp>
 #include <borealis/core/touch/scroll_gesture.hpp>
 #include <borealis/core/touch/tap_gesture.hpp>
@@ -130,6 +132,7 @@ void ScrollingFrame::draw(NVGcontext* vg, float x, float y, float width, float h
 {
     updateScrollingIndicatior();
     naturalScrollingBehaviour();
+    finishHeldScroll();
 
     // Update scrolling - try until it works
     if (this->updateScrollingOnNextFrame && this->updateScrolling(false))
@@ -382,13 +385,25 @@ void ScrollingFrame::startScrolling(bool animated, float newScroll)
     if (newScroll == this->contentOffsetY)
         return;
 
-    if (animated)
+    if (animated && Application::isNavigationRepeating() && Application::getInputType() == InputType::GAMEPAD)
     {
-        Style style = Application::getStyle();
+        // Each step lasts a bit longer than the repeat interval, so the
+        // linear segments overlap and the list glides at a constant speed
+        float time             = std::max(Application::getNavigationRepeatInterval() * 1.25f, 40.0f);
+        this->heldScroll       = true;
+        this->heldScrollTarget = newScroll;
+        this->heldScrollSpeed  = std::fabs(newScroll - this->contentOffsetY.getValue()) / time;
+        animateScrolling(newScroll, time, EasingFunction::linear);
+    }
+    else if (animated)
+    {
+        this->heldScroll = false;
+        Style style      = Application::getStyle();
         animateScrolling(newScroll, style["brls/animations/highlight"]);
     }
     else
     {
+        this->heldScroll = false;
         this->contentOffsetY.stop();
         this->contentOffsetY = newScroll;
         this->scrollAnimationTick();
@@ -396,13 +411,30 @@ void ScrollingFrame::startScrolling(bool animated, float newScroll)
     }
 }
 
-void ScrollingFrame::animateScrolling(float newScroll, float time)
+void ScrollingFrame::finishHeldScroll()
+{
+    if (!this->heldScroll || Application::isNavigationRepeating())
+        return;
+
+    this->heldScroll = false;
+
+    float remaining = std::fabs(this->heldScrollTarget - this->contentOffsetY.getValue());
+    if (!this->contentOffsetY.isRunning() || remaining < 0.5f || this->heldScrollSpeed <= 0.0f)
+        return;
+
+    // quadraticOut starts at 2 * distance / time: pick the time that keeps
+    // the current speed, so the list decelerates instead of stopping dead
+    float time = std::clamp(2.0f * remaining / this->heldScrollSpeed, 60.0f, 400.0f);
+    animateScrolling(this->heldScrollTarget, time, EasingFunction::quadraticOut);
+}
+
+void ScrollingFrame::animateScrolling(float newScroll, float time, EasingFunction easing)
 {
     this->contentOffsetY.stop();
 
     this->contentOffsetY.reset();
 
-    this->contentOffsetY.addStep(newScroll, time, EasingFunction::quadraticOut);
+    this->contentOffsetY.addStep(newScroll, time, easing);
 
     this->contentOffsetY.setTickCallback([this] {
         this->scrollAnimationTick();

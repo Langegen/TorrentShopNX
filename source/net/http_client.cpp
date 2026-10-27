@@ -307,7 +307,16 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
             resp.status_code = static_cast<int>(code);
         } else {
             resp.status_code = 0;
-            resp.body = curl_easy_strerror(res);
+            // How far the transfer got and the socket errno, so a log line
+            // tells "reset after N KB" apart from "nothing arrived".
+            long os_errno = 0;
+            long http_code = 0;
+            curl_off_t got = 0;
+            curl_easy_getinfo(curl, CURLINFO_OS_ERRNO, &os_errno);
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+            curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &got);
+            resp.body = std::string(curl_easy_strerror(res)) + "; errno=" + std::to_string(os_errno) +
+                        " http=" + std::to_string(http_code) + " got=" + std::to_string((long long)got) + "B";
         }
 
         curl_slist_free_all(headers);

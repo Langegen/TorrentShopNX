@@ -70,7 +70,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.17"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.18"; // Keep in sync with Makefile APP_VERSION
 
     const std::string& getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
@@ -94,21 +94,15 @@ public:
     void setLanguage(const std::string& lang);
 
     // Retro Games settings
-    const std::string& getRetroRomsMode() const; // "prompt" (default), "tico", "retroarch", "downloads", "custom"
+    // "auto" (default): Tico folders, Vita3K and Cemu folders; "custom": <custom path>/<console>/.
+    // Older values (prompt, tico, retroarch, downloads) are read as "auto".
+    const std::string& getRetroRomsMode() const;
     void setRetroRomsMode(const std::string& mode);
-    bool isTicoMode() const;
-    bool isPromptMode() const;
+    bool isRetroCustomFolder() const;
 
     const std::string& getRetroCustomPath() const;
     void setRetroCustomPath(const std::string& path);
 
-    bool getRetroAutoExtract() const; // default false
-    void setRetroAutoExtract(bool enabled);
-
-    const std::string& getRetroRomsetMode() const; // "full" (default), "select"
-    void setRetroRomsetMode(const std::string& mode);
-
-    std::string getEffectiveRetroRomsDir(const std::string& console_default_subfolder = "") const;
 
     // Appearance / Theme settings
     const std::string& getTheme() const; // "light" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "graphite"
@@ -161,8 +155,6 @@ private:
     std::string language_;
     std::string retro_roms_mode_;
     std::string retro_custom_path_;
-    bool retro_auto_extract_;
-    std::string retro_romset_mode_;
     std::string theme_;
     std::string background_mode_;
     std::string custom_background_path_;

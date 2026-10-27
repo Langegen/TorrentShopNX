@@ -189,7 +189,11 @@ int utp_nb_init(void) {
 void utp_nb_exit(void) {
     if (!g_inited) return;
     for (int i = 0; i < SESS_MAX; i++) {
-        if (g_sess[i].sock) UTP_Close(g_sess[i].sock);
+        // A session already closed by utp_nb_close() keeps its sock until
+        // libutp destroys it (cb_on_state DESTROYING); closing it a second
+        // time is invalid (libutp asserts; with NDEBUG it re-runs the close
+        // on a socket in FIN_SENT/DESTROY state).
+        if (g_sess[i].sock && !g_sess[i].closing) UTP_Close(g_sess[i].sock);
     }
     // Give libutp a moment to destroy sockets; then free remaining sessions.
     for (int k = 0; k < 10; k++) UTP_CheckTimeouts();

@@ -659,22 +659,25 @@ static void tcp_speed_opts(int sock) {
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 }
 
+int peer_nb_set_rcvbuf(peer_nb *p, int bytes) {
+    if (!p || p->sock < 0 || bytes <= 0) return 0;
+    while (bytes >= 64 * 1024) {
+        if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &bytes, sizeof(bytes)) == 0)
+            return bytes;
+        bytes /= 2;
+    }
+    return 0;
+}
+
 void peer_nb_apply_speed_opts(peer_nb *p) {
     if (!p || p->sock < 0) return;
 #ifdef __SWITCH__
-    /* On Horizon OS (libnx), BSD socket buffers are allocated from a fixed 32 MB pool.
-       Try 256 KB first for high throughput on fast peers, falling back gracefully if memory is tight. */
-    int rbuf = 256 * 1024;
-    if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-        rbuf = 192 * 1024;
-        if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-            rbuf = 128 * 1024;
-            if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
-                rbuf = 64 * 1024;
-                setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf));
-            }
-        }
-    }
+    /* On Horizon (libnx) every socket buffer comes out of ONE process-wide pool
+       (~13 MB, see socketPoolBytes in main.cpp). A modest 128 KB window for
+       everyone; the netloop raises it for peers that prove fast
+       (peer_nb_set_rcvbuf from torrentfs upkeep), so slow peers do not pin
+       memory the fast ones and HTTP need. */
+    peer_nb_set_rcvbuf(p, 128 * 1024);
 #else
     int rbuf = 512 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
@@ -766,16 +769,25 @@ void peer_nb_free(peer_nb *p) {
 // below; pump_rx drives the MSE handshake which queues its produced bytes.)
 static int nb_tx_append(peer_nb *p, const void *buf, size_t len);
 
+// Every recv() on the Switch is an IPC to the bsd sysmodule. A read that
+// returns less than asked for has drained the socket, so the pump stops there
+// instead of paying one more call just to get EAGAIN (level-triggered poll
+// reports the socket again if more arrives). Measured before: ~30k socket
+// calls/s at 8 MB/s, a third of the netloop's core.
 ssize_t peer_nb_pump_rx(peer_nb *p) {
     ssize_t total = 0;
+    p->rx_more = false;
     for (;;) {
         if (p->rx_len >= PEER_RX_CAP) {
             nb_compact(p);
-            if (p->rx_len >= PEER_RX_CAP)
+            if (p->rx_len >= PEER_RX_CAP) {
+                p->rx_more = true;
                 return total;  // a whole message is buffered; caller must drain it
+            }
         }
         ssize_t n;
         size_t old_len = p->rx_len;
+        size_t want = PEER_RX_CAP - p->rx_len;
         if (p->utp) {
             n = utp_nb_read((utp_nb_sess *)p->utp,
                             p->rx + p->rx_len, (int)(PEER_RX_CAP - p->rx_len));
@@ -853,6 +865,7 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
             }
             nb_compact(p);
         }
+        if (!p->utp && (size_t)n < want) return total;   // socket drained
     }
 }
 

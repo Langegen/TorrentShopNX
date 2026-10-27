@@ -749,3 +749,23 @@ SRes SzAr_DecodeFolder(const CSzAr *p, UInt32 folderIndex,
     return res;
   }
 }
+
+
+/* TorrentShopNX: lets callers inspect a folder's coder chain up front
+   (to reject unsupported archives before any payload is downloaded). */
+SRes SzAr_GetFolder(const CSzAr *p, UInt32 folderIndex, CSzFolder *folder)
+{
+  CSzData sd;
+  SRes res;
+  sd.Data = p->CodersData + p->FoCodersOffsets[folderIndex];
+  sd.Size = p->FoCodersOffsets[(size_t)folderIndex + 1] - p->FoCodersOffsets[folderIndex];
+  res = SzGetNextFolderItem(folder, &sd);
+  if (res == SZ_OK && sd.Size != 0)
+    return SZ_ERROR_ARCHIVE;
+  return res;
+}
+
+SRes SzFolder_CheckSupported(const CSzFolder *f)
+{
+  return CheckSupportedFolder(f);
+}

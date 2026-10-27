@@ -1,4 +1,3 @@
-#include "RetroTargetPrompt.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
@@ -13,6 +12,10 @@
 #include "../installer/cnmt_parser.h"
 #include "../installer/ncz_parser.h"
 #include "../utils/app_paths.h"
+#include "../catalog/release_finder.h"
+#include "../catalog/titledb.h"
+#include "GameDetailView.hpp"
+#include "ReleaseChooser.hpp"
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
@@ -220,6 +223,19 @@ struct SwitchServiceGuard {
         return false;
     }
 
+    // Highest installed version of `tid` (SD or NAND), 0 when not installed.
+    uint32_t installedVersion(uint64_t tid) {
+        uint32_t best = 0;
+        NcmContentMetaKey key = {};
+        if (db_sd_open && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db_sd, &key, tid))) {
+            best = key.version;
+        }
+        if (db_nand_open && R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db_nand, &key, tid))) {
+            if (key.version > best) best = key.version;
+        }
+        return best;
+    }
+
     bool isInstalled(uint64_t tid, uint32_t file_version = 0) {
         if (tid == 0) return false;
 
@@ -253,6 +269,7 @@ static inline bool isTitleIdInstalled(uint64_t tid, SwitchServiceGuard& guard, u
 }
 #else
 struct SwitchServiceGuard {
+    uint32_t installedVersion(uint64_t tid) { (void)tid; return 0; }
     bool isInstalled(uint64_t tid, uint32_t file_version = 0) {
         (void)file_version;
         if (tid == 0x01000BF0152FB131ULL) return true; // DLC Left 4 Dead Bundle (mock)
@@ -292,6 +309,92 @@ static uint64_t resolveFileTitleId(const std::string& filename, const std::strin
 static inline uint64_t parseTitleIdFromFilename(const std::string& name) {
     return util::parseTitleIdFromFileName(name);
 }
+
+bool isSwitchPackageFile(const std::string& filename) {
+    return isSwitchGameFile(filename);
+}
+
+uint64_t torrentFileTitleId(const std::string& filename, const std::string& gameTitleId) {
+    return resolveFileTitleId(filename, gameTitleId);
+}
+
+void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file) {
+    std::vector<int> singleSelected = { file.index };
+    Game singleGame = game;
+    singleGame.title = cleanTitle(game.title);
+    singleGame.topic_id = game.topic_id + "_" + std::to_string(file.index);
+
+    auto comp = util::classifyDownloadComponent(file.name, game.title);
+    unsigned long long pkgSize = (file.size > 0) ? static_cast<unsigned long long>(file.size) : 0;
+    ui::DownloadManager::instance().addDownload(
+        singleGame, singleSelected, file.index, file.name, "",
+        game.topic_id, cleanTitle(game.title), comp.label, comp.cleanName, comp.type, pkgSize);
+}
+
+namespace {
+
+// What the release offers against what is installed and what titledb knows.
+struct ReleaseUpdateCheck {
+    bool warn = false;
+    uint32_t inRelease = 0;     // newest update package in the torrent, 0 = none
+    uint32_t latest = 0;        // newest update in titledb
+    uint32_t installed = 0;     // installed update, 0 = none
+    std::string latestDate;
+    std::vector<Game> others;   // other catalog releases of the game, best first
+};
+
+// Runs on a worker: titledb parse and ncm queries are too slow for the UI thread.
+ReleaseUpdateCheck checkReleaseUpdate(const Game& game, const std::vector<torrent::TorrentFileInfo>& files) {
+    ReleaseUpdateCheck r;
+    uint64_t appId = catalog::releaseAppId(game);
+    if (appId == 0) return r;
+    uint64_t patchId = appId | 0x800ULL;
+
+    for (const auto& f : files) {
+        if (!isSwitchGameFile(f.name)) continue;
+        uint64_t tid = resolveFileTitleId(f.name, game.title_id);
+        if (tid != patchId) continue;
+        uint32_t v = util::parseVersionFromFileName(f.name);
+        if (v > r.inRelease) r.inRelease = v;
+    }
+    r.latest = titledb::latestUpdateVersion(appId);
+    {
+        SwitchServiceGuard guard;
+        r.installed = guard.installedVersion(patchId);
+    }
+    if (r.latest == 0 || r.inRelease >= r.latest || r.installed >= r.latest) return r;
+
+    r.warn = true;
+    r.latestDate = titledb::formatDate(titledb::updateDate(appId, r.latest));
+    for (auto& g : catalog::findReleases(appId)) {
+        if (g.topic_id != game.topic_id) r.others.push_back(std::move(g));
+    }
+    util::logLine("FileSelectView: release " + game.topic_id + " has update " + std::to_string(r.inRelease) +
+                  ", latest " + std::to_string(r.latest) + ", installed " + std::to_string(r.installed) +
+                  ", other releases: " + std::to_string(r.others.size()));
+    return r;
+}
+
+void showOldUpdateWarning(const ReleaseUpdateCheck& r) {
+    auto upd = [](uint32_t v) { return "#" + std::to_string(titledb::updateOrdinal(v)); };
+    std::string inRelease = r.inRelease ? brls::getStr("app/fileselect/update_n", upd(r.inRelease))
+                                        : "app/fileselect/no_update_in_release"_i18n;
+    std::string latest = upd(r.latest) + (r.latestDate.empty() ? "" : " (" + r.latestDate + ")");
+    std::string installed = r.installed ? upd(r.installed) : "app/fileselect/update_none"_i18n;
+    auto* dialog = new brls::Dialog(brls::getStr("app/fileselect/old_update_warn", inRelease, latest, installed));
+    if (!r.others.empty()) {
+        auto others = r.others;
+        dialog->addButton("app/fileselect/other_releases"_i18n, [others]() {
+            showReleaseChooser(others, [](const Game& g) {
+                brls::Application::pushActivity(new GameDetailView(g));
+            });
+        });
+    }
+    dialog->addButton("app/common/continue"_i18n, []() {});
+    dialog->open();
+}
+
+} // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FileSelectView
@@ -367,10 +470,7 @@ void FileSelectView::onContentAvailable() {
     if (!retro_console_id_.empty()) {
         if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
         if (installLocationText) {
-            std::string sub = retro_console_id_;
-            const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
-            if (cInfo && !cInfo->default_rom_subfolder.empty()) sub = cInfo->default_rom_subfolder;
-            installLocationText->setText(cfg.getEffectiveRetroRomsDir(sub));
+            installLocationText->setText(catalog::RetroCatalogManager::instance().getTargetDir(retro_console_id_));
             installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
     } else if (isHomebrewGame(game_)) {
@@ -484,20 +584,29 @@ void FileSelectView::startProbe() {
         }
     });
 
-    brls::async([this, status_running, alive]() {
+    Game gameCopy = game_;
+    bool switchMode = !isFolderHierarchyMode();
+    brls::async([this, status_running, alive, gameCopy, switchMode]() {
         util::logLine("FileSelectView: probe thread started");
         std::vector<torrent::TorrentFileInfo> probedFiles;
         std::string err;
 
-        util::logLine("FileSelectView: probing magnet " + game_.magnet);
+        util::logLine("FileSelectView: probing magnet " + gameCopy.magnet);
         bool success = ui::DownloadManager::instance().getImpl()
-                           .probeTorrentFiles(game_.magnet, probedFiles, &err);
+                           .probeTorrentFiles(gameCopy.magnet, probedFiles, &err);
         util::logLine("FileSelectView: probe done, success=" + std::to_string(success) +
                       " count=" + std::to_string(probedFiles.size()));
 
         status_running->store(false);
 
-        brls::sync([this, success, probedFiles, err, alive]() {
+        // Does this release carry the newest update? Checked here, on the
+        // worker: it parses titledb and queries ncm.
+        auto updateCheck = std::make_shared<ReleaseUpdateCheck>();
+        if (success && switchMode && alive->load()) {
+            *updateCheck = checkReleaseUpdate(gameCopy, probedFiles);
+        }
+
+        brls::sync([this, success, probedFiles, err, alive, updateCheck]() {
             if (!alive->load()) {
                 util::logLine("FileSelectView: view already destroyed, aborting sync");
                 return;
@@ -571,6 +680,10 @@ void FileSelectView::startProbe() {
                     if (firstFocusable) {
                         brls::Application::giveFocus(firstFocusable);
                     }
+                }
+
+                if (updateCheck->warn) {
+                    showOldUpdateWarning(*updateCheck);
                 }
             } else {
                 std::string err_prompt = "app/fileselect/meta_error"_i18n;
@@ -1553,17 +1666,9 @@ void FileSelectView::toggleAllSelection() {
 
 void FileSelectView::startDownloadAndGoToDownloads() {
     if (files_.empty()) {
-        if (!retro_console_id_.empty()) {
-            promptRetroTargetSelection(retro_console_id_, [this](const std::string& target_mode) {
-                ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, target_mode);
-                brls::Application::notify(brls::getStr("app/downloads/state_queued"));
-                brls::Application::popActivity();
-            });
-        } else {
-            ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
-            brls::Application::notify(brls::getStr("app/downloads/state_queued"));
-            brls::Application::popActivity();
-        }
+        ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+        brls::Application::notify(brls::getStr("app/downloads/state_queued"));
+        brls::Application::popActivity();
         return;
     }
 
@@ -1678,16 +1783,10 @@ void FileSelectView::startDownloadAndGoToDownloads() {
 }
 
 void FileSelectView::promptAndExecuteDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
-    if (!retro_console_id_.empty()) {
-        promptRetroTargetSelection(retro_console_id_, [this, selectedIndices, forcedIndex, forcedName](const std::string& target_mode) {
-            this->executeDownloads(selectedIndices, forcedIndex, forcedName, target_mode);
-        });
-    } else {
-        executeDownloads(selectedIndices, forcedIndex, forcedName, "");
-    }
+    executeDownloads(selectedIndices, forcedIndex, forcedName);
 }
 
-void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName, const std::string& retro_target_mode) {
+void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName) {
     (void)forcedIndex;
     (void)forcedName;
 
@@ -1711,7 +1810,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 unsigned long long fileSize = (files_[i].size > 0) ? static_cast<unsigned long long>(files_[i].size) : 0;
                 ui::DownloadManager::instance().addDownload(
                     singleGame, singleSelected, files_[i].index, files_[i].name, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize, retro_target_mode);
+                    game_.topic_id, cleanTitle(game_.title), "OTH", filenameOnly, 4, fileSize);
             } else if (!chosen.empty()) {
                 std::vector<int> bundleSelected;
                 bundleSelected.reserve(chosen.size());
@@ -1729,7 +1828,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 std::string firstName = files_[chosen[0]].name;
                 ui::DownloadManager::instance().addDownload(
                     bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes, retro_target_mode);
+                    game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes);
             }
         } else {
             std::vector<size_t> packages;
@@ -1760,17 +1859,9 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             });
 
             // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
+            // (this branch is the Switch mode: no retro console / target)
             for (size_t idx : packages) {
-                std::vector<int> singleSelected = { files_[idx].index };
-                Game singleGame = game_;
-                singleGame.title = cleanTitle(game_.title);
-                singleGame.topic_id = game_.topic_id + "_" + std::to_string(files_[idx].index);
-
-                auto comp = util::classifyDownloadComponent(files_[idx].name, game_.title);
-                unsigned long long pkgSize = (files_[idx].size > 0) ? static_cast<unsigned long long>(files_[idx].size) : 0;
-                ui::DownloadManager::instance().addDownload(
-                    singleGame, singleSelected, files_[idx].index, files_[idx].name, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, pkgSize, retro_target_mode);
+                queueSwitchPackage(game_, files_[idx]);
             }
 
             // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
@@ -1783,10 +1874,8 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                     if (files_[idx].size > 0) extraTotalBytes += static_cast<unsigned long long>(files_[idx].size);
                 }
 
+                // The downloads screen adds the file count in the interface language
                 auto comp = util::classifyDownloadComponent(files_[extraFiles[0]].name, game_.title);
-                if (extraFiles.size() > 1) {
-                    comp.cleanName += " (" + std::to_string(extraFiles.size()) + " ф.)";
-                }
 
                 std::string extraTitle = cleanTitle(game_.title);
                 Game extraGame = game_;
@@ -1797,7 +1886,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
 
                 ui::DownloadManager::instance().addDownload(
                     extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes, retro_target_mode);
+                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes);
             }
         }
     } catch (const std::exception& e) {

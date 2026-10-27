@@ -1,0 +1,15 @@
+# title: Grand Theft Auto: Liberty City Stories (порт GTA lcs) [NRO][RUS/Multi7]
+# source: log (консоль, 25.10.2026), topic 6874694, установлено успешно
+1511797473	switch/gtalcs/data_main.wad
+395992	GTA Liberty City Stories (port) [0116aff9fe760000].nsp
+480883007	switch/gtalcs/data_music.wad
+21266004	switch/gtalcs/gtalcs_nx.nro
+40325340	switch/gtalcs/intro.m4v
+8671264	switch/gtalcs/libGame.so
+1532712	switch/gtalcs/libopenal.so
+
+## expect
+game gtalcs
+variants default
+dest switch/gtalcs/gtalcs_nx.nro => sdmc:/switch/gtalcs/gtalcs_nx.nro
+forwarder default GTA Liberty City Stories (port) [0116aff9fe760000].nsp

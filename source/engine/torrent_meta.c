@@ -15,6 +15,7 @@
 #include "magnet.h"
 #include "bt_peer.h"
 #include "dhtclient.h"
+#include "thread_cfg.h"
 #include "../utils/app_paths.h"
 
 static void set_err(char *err, size_t errlen, const char *msg) {
@@ -389,7 +390,14 @@ const char *torrent_meta_state_str(int state) {
 // (NX_SESSION_MGR_MAX_SESSIONS), and a worker sits inside connect()/recv() the
 // whole time it holds a peer. 8 leaves room for the app's own HTTP (a poster
 // fetch may still be in flight) without ever approaching the cap.
+// On the Switch 5: announce rounds no longer serialise behind one global lock
+// (see ANNOUNCE_GLOBAL_MAX), so their peak socket use is higher; three fewer
+// metadata workers keep the engine's worst case where it was.
+#ifdef __SWITCH__
+#define META_WORKERS 5
+#else
 #define META_WORKERS 8
+#endif
 
 // How long the DHT lookup is allowed to run when the tracker peers did not
 // serve the metadata. Bounded: the probe happens on the UI-visible path.
@@ -466,7 +474,7 @@ static void meta_run(meta_fetch *fetch) {
     int started = 0;
     for (int i = 0; i < nw; i++) {
         if (threadCreate(&workers[started], meta_worker, fetch, NULL, 0x10000,
-                         0x2C, -2) != 0)
+                         TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) != 0)
             break;
         if (threadStart(&workers[started]) != 0) {
             threadClose(&workers[started]);
@@ -998,25 +1006,35 @@ static int announce_http(const char *tracker, const char *hash_enc,
 // Each announce thread sits in a BLOCKING socket call (curl or SO_RCVTIMEO
 // recvfrom) for its whole lifetime, and the Switch OS allows only 16 such
 // concurrent BSD sessions per process. The metadata fetch and torrentfs's
-// discovery thread can both announce (8 trackers each) at the same moment,
-// which would burn 16 sessions alone -- plus the DHT's permanent recvfrom and
-// the netloop's reads. A global announce lock serialises the two, keeping the
-// worst case at ~12 sessions.
+// discovery thread can both announce at the same moment; the process-wide
+// ANNOUNCE_GLOBAL_MAX (below) bounds how many sockets that takes in total.
 #define AJOB_PEERS 512
 
-/* At most this many tracker announces run in parallel: every one of them sits
-   in a blocking socket call. On Switch, 2 parallel threads keep the socket footprint
-   low to prevent BSD session/buffer pool exhaustion when downloading concurrently. */
+/* Tracker announces: every one in flight sits in a blocking socket call.
+ *
+ * This used to be a global mutex around the whole announce round plus 2
+ * threads per round, the remaining trackers announced one after another on
+ * the caller's thread. A round over ~10 trackers (3-5 s timeouts each) held
+ * the mutex for tens of seconds, and the metadata fetch of a newly added
+ * torrent queued behind the discovery thread of the active download.
+ *
+ * Now: no round waits for another. Each round drains its tracker list with a
+ * small worker pool (the caller's own thread always works, so a round always
+ * progresses), and ANNOUNCE_GLOBAL_MAX caps the EXTRA worker threads across
+ * all rounds in the process -- the BSD-session footprint stays bounded. */
 #ifdef __SWITCH__
-#define ANNOUNCE_MAX_THREADS 2
+#define ANNOUNCE_GLOBAL_MAX   3   /* extra announce threads, whole process */
+#define ANNOUNCE_PER_ROUND    3   /* workers per round, the caller included */
 #else
-#define ANNOUNCE_MAX_THREADS 4
+#define ANNOUNCE_GLOBAL_MAX   8
+#define ANNOUNCE_PER_ROUND    4
 #endif
 
-/* Zero-initialised is a valid Mutex in libnx; the PC compat shim initialises
-   lazily. Serialises metadata-fetch announces with torrentfs discovery
-   announces so they never burn the 16 blocking BSD sessions together. */
+/* Guards s_announce_threads and the tracker cooldown table (s_tc), which the
+   announce threads of every round update concurrently. Zero-initialised is a
+   valid Mutex in libnx; init_* makes it ready before the first thread runs. */
 static Mutex s_announce_mtx;
+static int s_announce_threads = 0;   /* extra worker threads running, process-wide */
 
 void torrent_announce_mutex_init(void) {
     mutexInit(&s_announce_mtx);
@@ -1050,20 +1068,22 @@ static int tracker_get_cooldown_slot(const char *url) {
 }
 
 static bool tracker_is_on_cooldown(const char *url, u64 now) {
+    bool on = false;
+    mutexLock(&s_announce_mtx);
     for (int i = 0; i < s_tc_count; i++) {
         if (strncmp(s_tc[i].url, url, sizeof(s_tc[i].url)) == 0) {
-            if (s_tc[i].fails >= TRACKER_MAX_FAILS && now < s_tc[i].cooldown_until) {
-                return true;
-            }
+            on = s_tc[i].fails >= TRACKER_MAX_FAILS && now < s_tc[i].cooldown_until;
             break;
         }
     }
-    return false;
+    mutexUnlock(&s_announce_mtx);
+    return on;
 }
 
 static void tracker_record_result(const char *url, bool success, u64 freq) {
+    mutexLock(&s_announce_mtx);
     int idx = tracker_get_cooldown_slot(url);
-    if (idx < 0) return;
+    if (idx < 0) { mutexUnlock(&s_announce_mtx); return; }
     if (success) {
         s_tc[idx].fails = 0;
         s_tc[idx].cooldown_until = 0;
@@ -1073,6 +1093,7 @@ static void tracker_record_result(const char *url, bool success, u64 freq) {
             s_tc[idx].cooldown_until = armGetSystemTick() + (u64)TRACKER_COOLDOWN_SECS * freq;
         }
     }
+    mutexUnlock(&s_announce_mtx);
 }
 
 typedef struct {
@@ -1093,10 +1114,16 @@ typedef struct {
     torrent_peer_cb cb;   // delivered from this thread as soon as peers arrive
     void *cb_ctx;
     const volatile bool *cancel;  // teardown flag; aborts a slow announce
-
-    Thread thread;
-    bool has_thread;
+    bool skip;                    // on cooldown: not announced this round
 } ajob;
+
+// One announce round's work queue, drained by up to ANNOUNCE_PER_ROUND workers.
+typedef struct {
+    ajob *jobs;
+    int n;
+    Mutex lock;
+    int next;
+} apool;
 
 static void announce_thread(void *arg) {
     ajob *j = arg;
@@ -1122,6 +1149,24 @@ static void announce_thread(void *arg) {
     if (j->count > 0 && j->cb) j->cb(j->cb_ctx, j->peers, j->count);
 }
 
+static void apool_worker(void *arg) {
+    apool *p = arg;
+    for (;;) {
+        mutexLock(&p->lock);
+        int i = p->next < p->n ? p->next++ : -1;
+        mutexUnlock(&p->lock);
+        if (i < 0) return;
+        ajob *j = &p->jobs[i];
+        if (j->skip) continue;
+        if (j->cancel && *j->cancel) {
+            j->count = -1;
+            snprintf(j->terr, sizeof(j->terr), "cancelled");
+            continue;
+        }
+        announce_thread(j);
+    }
+}
+
 int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
                         const volatile bool *cancel, char *err, size_t errlen) {
     char hash_enc[61], peer_id_enc[61];
@@ -1132,30 +1177,21 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
     urlencode_bytes(t->info_hash, 20, hash_enc);
     urlencode_bytes(peer_id, 20, peer_id_enc);
 
-    // Serialise with any other announce (metadata fetch vs torrentfs
-    // discovery) so the parallel tracker threads never exhaust the Switch's
-    // 16 blocking BSD sessions together with the rest of the engine.
-    mutexLock(&s_announce_mtx);
-
     // Only the very first announce round of a torrent carries event=started;
     // later rounds omit it. Trackers (t-ru.org observed) treat a stream of
     // started-events as client abuse and cut the peer list to a single
     // address; a plain re-announce stays within the protocol.
-    bool first = ((torrent_meta *)t)->announce_seq++ == 0;
+    bool first = __atomic_fetch_add(&((torrent_meta *)t)->announce_seq, 1,
+                                    __ATOMIC_RELAXED) == 0;
 
-    // Announce to every tracker in PARALLEL, delivering peers via the callback
-    // the moment each tracker answers (so the fastest one unblocks downloading).
-    ajob *jobs = calloc(t->tracker_count, sizeof(*jobs));
+    ajob *jobs = calloc(t->tracker_count > 0 ? t->tracker_count : 1, sizeof(*jobs));
     if (!jobs) {
         set_err(err, errlen, "out of memory (announce)");
-        mutexUnlock(&s_announce_mtx);
         return -1;
     }
 
-    int n_threaded = t->tracker_count;
-    if (n_threaded > ANNOUNCE_MAX_THREADS) n_threaded = ANNOUNCE_MAX_THREADS;
-
     u64 now = armGetSystemTick();
+    int runnable = 0;
     for (int i = 0; i < t->tracker_count; i++) {
         ajob *j = &jobs[i];
         j->tracker = t->trackers[i];
@@ -1169,47 +1205,70 @@ int torrent_announce_cb(const torrent_meta *t, torrent_peer_cb cb, void *ctx,
         j->cb = cb;
         j->cb_ctx = ctx;
         j->cancel = cancel;
-
         if (tracker_is_on_cooldown(j->tracker, now)) {
+            j->skip = true;
             j->count = -1;
             snprintf(j->terr, sizeof(j->terr), "cooldown");
-            continue;
+        } else {
+            runnable++;
         }
+    }
 
-        if (i < n_threaded) {
-            if (threadCreate(&j->thread, announce_thread, j, NULL, 0x8000, 0x2C, -2) == 0) {
-                j->has_thread = true;
-                threadStart(&j->thread);
-#ifdef __SWITCH__
-                svcSleepThread(20000000ULL); // 20ms stagger between concurrent tracker thread launches
-#endif
-            } else {
-                j->count = -1;
-                snprintf(j->terr, sizeof(j->terr), "thread create failed");
-            }
+    // Peers reach the callback the moment each tracker answers, so the
+    // fastest tracker unblocks downloading; the round returns once all have.
+    apool pool = { jobs, t->tracker_count };
+    mutexInit(&pool.lock);
+    int want = runnable < ANNOUNCE_PER_ROUND ? runnable : ANNOUNCE_PER_ROUND;
+    int extra = want > 1 ? want - 1 : 0;   // the caller is worker #1
+    mutexLock(&s_announce_mtx);
+    if (extra > ANNOUNCE_GLOBAL_MAX - s_announce_threads)
+        extra = ANNOUNCE_GLOBAL_MAX - s_announce_threads;
+    if (extra < 0) extra = 0;
+    s_announce_threads += extra;
+    mutexUnlock(&s_announce_mtx);
+
+    Thread workers[ANNOUNCE_PER_ROUND];
+    int started = 0;
+    for (int k = 0; k < extra; k++) {
+        if (threadCreate(&workers[started], apool_worker, &pool, NULL, 0x8000,
+                         TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) != 0)
+            break;
+        if (threadStart(&workers[started]) != 0) {
+            threadClose(&workers[started]);
+            break;
         }
+        started++;
+    }
+    if (started < extra) {   // give back the budget we could not use
+        mutexLock(&s_announce_mtx);
+        s_announce_threads -= extra - started;
+        mutexUnlock(&s_announce_mtx);
+    }
+
+    apool_worker(&pool);   // the caller drains the queue too
+    for (int k = 0; k < started; k++) {
+        threadWaitForExit(&workers[k]);
+        threadClose(&workers[k]);
+    }
+    if (started > 0) {
+        mutexLock(&s_announce_mtx);
+        s_announce_threads -= started;
+        mutexUnlock(&s_announce_mtx);
     }
 
     int answered = 0;
     for (int i = 0; i < t->tracker_count; i++) {
         ajob *j = &jobs[i];
-        if (j->has_thread) {
-            threadWaitForExit(&j->thread);
-            threadClose(&j->thread);
-        } else if (i >= n_threaded && strcmp(j->terr, "cooldown") != 0) {
-            announce_thread(j);  // inline wave: bounded by the same timeouts
-        }
         if (j->count > 0) {
             answered++;
             tlog("tracker %.1fs (%d) %.60s", j->secs, j->count, j->tracker);
-        } else if (strcmp(j->terr, "cooldown") != 0) {
+        } else if (!j->skip) {
             tlog("tracker %.1fs (failed: %s) %.60s", j->secs,
                  j->terr[0] ? j->terr : "timeout", j->tracker);
         }
     }
 
     free(jobs);
-    mutexUnlock(&s_announce_mtx);
     return answered;
 }
 

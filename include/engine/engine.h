@@ -22,6 +22,7 @@ extern "C" {
 #define TSNX_MAX_NAME_LEN   256
 #define TSNX_MAX_PATH_LEN   512
 #define TSNX_MAX_FILES      65536
+#define TSNX_MAX_TORRENTS   32      /* registry capacity: size get_torrents() buffers by it */
 
 typedef struct tsnx_engine tsnx_engine;
 typedef struct tsnx_torrent tsnx_torrent;
@@ -93,6 +94,10 @@ bool tsnx_engine_resume_torrent(tsnx_engine *eng, const char *hash);
 int  tsnx_engine_get_torrents(tsnx_engine *eng, tsnx_torrent_item *out,
                               int max_items);
 
+/* One torrent's list entry by info-hash. False if it is not registered. */
+bool tsnx_engine_get_torrent(tsnx_engine *eng, const char *hash,
+                             tsnx_torrent_item *out);
+
 /* Get the number of files in a torrent. */
 int  tsnx_engine_get_file_count(tsnx_engine *eng, const char *hash);
 
@@ -100,7 +105,9 @@ int  tsnx_engine_get_file_count(tsnx_engine *eng, const char *hash);
 int  tsnx_engine_get_files(tsnx_engine *eng, const char *hash,
                            tsnx_file_info *out, int max_files);
 
-/* Mark a file as wanted or not. Unwanted files are not downloaded. */
+/* Mark a file as wanted or not. The streamed file is always downloaded; an
+ * unwanted file is skipped by the lookahead that pre-fetches the start of the
+ * next file near the end of the current one. */
 bool tsnx_engine_set_file_wanted(tsnx_engine *eng, const char *hash,
                                  int file_index, bool wanted);
 
@@ -166,6 +173,18 @@ bool tsnx_engine_set_piece_zone(tsnx_engine *eng, const char *hash,
 // Remove all externally-set zones and let the internal picker decide.
 bool tsnx_engine_clear_piece_zones(tsnx_engine *eng, const char *hash);
 
+// Replace the whole zone window atomically (preferred over clear + several
+// set_piece_zone calls, whose in-between state the engine could act on).
+// Ranges are absolute piece indices; at most TSNX_MAX_ZONE_RANGES are used.
+#define TSNX_MAX_ZONE_RANGES 64
+typedef struct {
+    int first_piece;
+    int piece_count;
+    tsnx_piece_zone zone;
+} tsnx_zone_range;
+bool tsnx_engine_set_window(tsnx_engine *eng, const char *hash,
+                            const tsnx_zone_range *ranges, int n);
+
 // Calm mode: how many milliseconds of buffer are ahead of the consumer.
 // Deeper backlog narrows the number of peers allowed to claim new work.
 void tsnx_engine_set_backlog_ms(tsnx_engine *eng, const char *hash, int ms);
@@ -179,6 +198,14 @@ void tsnx_engine_set_ram_stream(tsnx_engine *eng, int on);
 
 // Strict verification mode: 1 = only return SHA-1 verified pieces (no unverified streaming reads)
 void tsnx_engine_set_strict_verify(tsnx_engine *eng, const char *hash, int on);
+
+// Cap this torrent's peer sessions (<= the engine's compiled maximum;
+// <= 0 restores the default). Turnover keeps the fastest within the cap.
+bool tsnx_engine_set_session_limit(tsnx_engine *eng, const char *hash, int n);
+
+// Peer turnover timing (defaults: every 30 s, 60 s trial per newcomer).
+// Process-wide; meant for tests and tuning.
+void tsnx_engine_set_rotation_timing(int turnover_secs, int trial_secs);
 
 // Force an immediate tracker re-announce for this torrent.
 bool tsnx_engine_announce_now(tsnx_engine *eng, const char *hash);

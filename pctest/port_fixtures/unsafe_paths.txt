@@ -1,0 +1,20 @@
+# title: Evil Port (port) [NRO]
+# source: синтетика (выход за пределы папки и системные пути)
+1000000	Evil Port/switch/evil/evil.nro
+1000	Evil Port/switch/../bootloader/hekate_ipl.ini
+1000	Evil Port/Homebrew/atmosphere/config/system_settings.ini
+1000	Evil Port/Homebrew/bootloader/payloads/x.bin
+1000	Evil Port/Homebrew/hbmenu.nro
+5000	Evil Port/Homebrew/atmosphere/contents/0100CCCCDDDD0000/romfs/patch.bin
+900000000	Evil Port/Full Game [0100CCCCDDDD0000].nsp
+300000	Evil Port/Evil Port (port) [0100CCCCDDDD0001].nsp
+
+## expect
+game evil
+skip switch/../bootloader/hekate_ipl.ini
+skip Homebrew/atmosphere/config/system_settings.ini
+skip Homebrew/bootloader/payloads/x.bin
+dest Homebrew/hbmenu.nro => sdmc:/switch/evil/hbmenu.nro
+dest Homebrew/atmosphere/contents/0100CCCCDDDD0000/romfs/patch.bin => sdmc:/atmosphere/contents/0100CCCCDDDD0000/romfs/patch.bin
+skip Full Game [0100CCCCDDDD0000].nsp
+forwarder default Evil Port (port) [0100CCCCDDDD0001].nsp

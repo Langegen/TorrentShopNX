@@ -17,6 +17,7 @@
 
 #include "torrent_meta.h"   // torrent_set_announce_port
 #include "engine_log.h"
+#include "thread_cfg.h"
 
 #define SSDP_ADDR      "239.255.255.250"
 #define SSDP_PORT      1900
@@ -409,7 +410,8 @@ int upnp_start(int internal_port) {
     if (s_started || internal_port <= 0) return 0;
     s_internal_port = internal_port;
     s_stop = false;
-    if (threadCreate(&s_thread, upnp_main, NULL, NULL, 0x20000, 0x2C, -2) != 0) {
+    if (threadCreate(&s_thread, upnp_main, NULL, NULL, 0x20000,
+                     TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) != 0) {
         s_stop = true;
         return -1;
     }

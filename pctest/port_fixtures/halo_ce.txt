@@ -1,0 +1,23 @@
+# title: Halo Combat Evolved (порт) [NRO][RUS/ENG]
+# source: описание (игра в switch/ + необязательная русская озвучка поверх)
+40000000	Halo CE/switch/haloce/haloce.nro
+500000000	Halo CE/switch/haloce/maps/bloodgulch.map
+300000000	Halo CE/switch/haloce/sounds.map
+320000000	Halo CE/Russian voiceover/switch/haloce/sounds.map
+2000	Halo CE/Russian voiceover/readme.txt
+300000	Halo CE/Halo CE (port) [0100A1B2C3D40000].nsp
+
+## expect
+game haloce
+variants ru,en
+default ru
+default_en en
+dest Halo CE/switch/haloce/sounds.map => sdmc:/switch/haloce/sounds.map
+dest Russian voiceover/switch/haloce/sounds.map => sdmc:/switch/haloce/sounds.map
+in ru Russian voiceover/switch/haloce/sounds.map
+notin ru Halo CE/switch/haloce/sounds.map
+in en Halo CE/switch/haloce/sounds.map
+notin en Russian voiceover/switch/haloce/sounds.map
+in ru maps/bloodgulch.map
+in en maps/bloodgulch.map
+skip Russian voiceover/readme.txt

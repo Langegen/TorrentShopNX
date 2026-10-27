@@ -5,6 +5,7 @@
 #include "../buffer/ring_buffer.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../engine/thread_cfg.h"
 #include <borealis.hpp>
 
 #include <algorithm>
@@ -438,17 +439,20 @@ bool HybridNspInstaller::startStreamingPhase() {
     ring_buffer_.reset();
 
 #ifdef __SWITCH__
-    // Network/Collector thread: Higher priority, Core 0
+    // Collector (pulls torrent data into the ring buffer): work core, not the
+    // UI core. It used to run on core 0 at 0x20 -- above the UI thread.
     Result rc = threadCreate(&collector_thread_, collectorThreadEntry, this,
-                              nullptr, COLLECTOR_THREAD_STACK_SIZE, 0x20, 0);
+                              nullptr, COLLECTOR_THREAD_STACK_SIZE,
+                              TSNX_THREAD_ARGS(TSNX_CORE_WORK, TSNX_PRIO_COLLECTOR));
     if (R_FAILED(rc)) {
         setError("Failed to create Collector thread, rc=" + std::to_string(rc));
         return false;
     }
 
-    // Decompression/Installer thread: Lower priority, Core 1
+    // Decompression/Installer thread: lowest priority on the work core
     rc = threadCreate(&installer_thread_, installerThreadEntry, this,
-                       nullptr, INSTALLER_THREAD_STACK_SIZE, 0x30, 1);
+                       nullptr, INSTALLER_THREAD_STACK_SIZE,
+                       TSNX_THREAD_ARGS(TSNX_CORE_WORK, 0x30));
     if (R_FAILED(rc)) {
         setError("Failed to create Installer thread, rc=" + std::to_string(rc));
         threadClose(&collector_thread_);

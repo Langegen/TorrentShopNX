@@ -4,6 +4,7 @@
 #include <borealis.hpp>
 #include <borealis/extern/nlohmann/json.hpp>
 #include "../utils/log.h"
+#include "../utils/perf_stats.h"
 #include "../utils/app_paths.h"
 #include "../utils/string_utils.h"
 #include "../config/config.h"
@@ -77,7 +78,7 @@ bool DownloadManager::hasActiveDownload(const std::string& topic_id, const std::
 
 void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id,
                                  const std::string& group_id, const std::string& group_title, const std::string& component_label, const std::string& component_name, int component_type,
-                                 unsigned long long initial_file_size, const std::string& retro_target_mode) {
+                                 unsigned long long initial_file_size) {
     if (hasActiveDownload(game.topic_id, game.magnet, forced_file_index)) {
         util::logLine("download_ui: game " + game.title + " (topic_id=" + game.topic_id + ") is already in download queue, ignoring duplicate");
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
@@ -86,8 +87,10 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
 
     size_t idx = 0;
     {
+        const uint64_t lock_wait_start = perf::nowUs();
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
-        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id, retro_target_mode);
+        perf::LockTimer lock_timer(perf::LockSite::UiAdd, lock_wait_start);
+        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id);
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
@@ -97,7 +100,6 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         item.cover_url = game.cover;
         item.is_homebrew = isHomebrewGame(game);
         item.retro_console_id = retro_console_id;
-        item.retro_target_mode = retro_target_mode;
 
         item.download_total_bytes = initial_file_size;
         item.install_total = initial_file_size;
@@ -118,7 +120,8 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
     saveDownloads();
 }
 
-void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index) {
+void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer::PortInstallPlan> plan, int variant_index,
+                                     bool with_optional) {
     if (hasActiveDownload(game.topic_id, game.magnet, -1)) {
         util::logLine("download_ui: port install already in download queue for " + game.title + " (topic_id=" + game.topic_id + "), ignoring duplicate");
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
@@ -128,7 +131,7 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
     size_t idx = 0;
     {
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
-        idx = impl_.addPortInstall(game.title, game.magnet, plan, variant_index);
+        idx = impl_.addPortInstall(game.title, game.magnet, plan, variant_index, with_optional);
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
@@ -141,7 +144,8 @@ void DownloadManager::addPortInstall(const Game& game, std::shared_ptr<installer
         item.component_type = 4;
 
         if (plan && variant_index >= 0 && (size_t)variant_index < (size_t)plan->variants.size()) {
-            item.download_total_bytes = plan->variants[variant_index].total_size + plan->forwarder_nsp_size;
+            // total_size already includes the variant's forwarder
+            item.download_total_bytes = plan->variants[variant_index].total_size + (with_optional ? plan->optional_size : 0);
             item.install_total = item.download_total_bytes;
         }
 

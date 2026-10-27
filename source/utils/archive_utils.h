@@ -7,6 +7,10 @@
 #include <cstdint>
 #include "file_ops.h"
 
+namespace datasource {
+class IDataSource;
+}
+
 namespace util {
 
 struct ArchiveProgress {
@@ -51,6 +55,11 @@ bool getArchiveTotals(
 
 using PathTransformFn = std::function<std::string(const std::string& entryName, bool isDir)>;
 
+// True if the linked libarchive can decode 7z LZMA/LZMA2 + ARM64 filter folders
+// (needs a build against liblzma >= 5.4). Checked once by decoding a tiny
+// embedded archive; the result is cached.
+bool libarchiveSupports7zArm64Lzma();
+
 // Iterates entries in an archive without decompressing file contents.
 // Calls callback for each entry until callback returns false or end of archive.
 // Returns true if the archive was successfully opened and read.
@@ -73,6 +82,19 @@ bool extractArchive(
     PathTransformFn pathTransform = nullptr
 );
 
+// Extracts an archive directly from a data source stream on the fly.
+// Does NOT save the intermediate archive to disk (bypasses FAT32 4GB limit).
+bool extractArchiveFromSource(
+    datasource::IDataSource* source,
+    uint64_t archiveSize,
+    const std::string& destinationDir,
+    std::function<void(const ArchiveProgress&)> progressCb,
+    std::shared_ptr<std::atomic<bool>> cancelToken,
+    std::shared_ptr<std::atomic<bool>> pauseToken,
+    std::string& outError,
+    PathTransformFn pathTransform = nullptr
+);
+
 // Extracts a single file entry from an archive to destination directory.
 bool extractSingleFileFromArchive(
     const std::string& archivePath,
@@ -87,14 +109,15 @@ bool extractSingleFileFromArchive(
 // Runs synchronously — caller should invoke via background thread (e.g. brls::async or ArchiveProgressDialog).
 // Periodic progress callback is fired during packing.
 // Archiving can be cancelled via cancelToken.
+// store_only: no compression (fast; for game images that do not shrink anyway).
 bool createZipArchive(
     const std::string& archivePath,
     const std::vector<std::string>& sourcePaths,
     const std::string& baseDir,
     std::function<void(const ArchiveProgress&)> progressCb,
     std::shared_ptr<std::atomic<bool>> cancelToken,
-    std::string& outError
+    std::string& outError,
+    bool store_only = false
 );
 
 } // namespace util
-

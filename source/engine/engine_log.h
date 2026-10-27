@@ -17,8 +17,14 @@ extern "C" {
 
 // Open the diagnostic log.  path == NULL (or a path that cannot be opened)
 // falls back to stderr so PC tests still see output.
+// Lines are written asynchronously (in-memory ring + writer thread, on disk
+// within ~0.5 s); engine_log_close() drains everything before closing.
 void engine_log_init(const char *path);
 void engine_log_close(void);
+
+// Block (at most ~200 ms) until every line logged so far is in the file. For
+// exit paths that skip engine_log_close() (e.g. _exit on the console).
+void engine_log_flush(void);
 
 // Set minimum level that actually gets written (default ENGINE_LOG_INFO).
 void engine_log_set_level(int level);

@@ -39,7 +39,7 @@
   <br/>
 
   <img src="docs/screenshots/retro_games.jpg" alt="Retro Games Catalog" width="95%"/>
-  <p><em>Retro Games Catalog: Over 8,200 games across 20 systems (Nintendo, Sony PlayStation, Sega) with direct saving to RetroArch folders</em></p>
+  <p><em>Retro Games Catalog: Over 8,200 games across 20 systems (Nintendo, Sony PlayStation, Sega) — downloaded games show up in Tico, Vita3K and Cemu right away</em></p>
 </div>
 
 ---
@@ -64,11 +64,12 @@
   - Massive library: **over 8,200+ games across 20 gaming platforms**:
     - **Nintendo (10 systems)**: NES / Famicom, Super Nintendo (SNES), Nintendo 64, Game Boy / Color, Game Boy Advance, Nintendo DS, Nintendo 3DS, GameCube, Wii, Wii U.
     - **Sony (4 systems)**: PlayStation 1, PlayStation 2, PlayStation Portable (PSP), PlayStation Vita.
-    - **Sega (6 systems)**: Mega Drive / Genesis, Master System, Game Gear, Dreamcast, Saturn, SG-1000.
+    - **Sega (6 systems)**: Mega Drive / Genesis, Master System, Game Gear, Sega CD / Mega CD, Sega 32X, Dreamcast.
   - Includes original clean dumps, localized releases, and popular fan hacks.
-  - **Built-in Emulator & BIOS Manager**: one-click download and updates for standalone emulators (RetroArch, pSNES, mGBA, PPSSPP, etc.) along with necessary BIOS packages.
+  - **No manual setup**: games of every console except PS Vita and Wii U run in [Tico](https://ticoverse.com). The app installs Tico and the emulator module it needs, puts games into Tico's folders (`sdmc:/tico/roms/<console>/`), unpacks archives straight from the torrent, writes `.m3u` playlists for multi-disc games, turns `.ccd`/`.mds` images into `.cue` and saves cover art. PS Vita games are saved to `sdmc:/roms/vita` (a release that comes as a folder is packed into one zip) and installed from Vita3K's file manager; Wii U games go to Cemu's folder.
+  - **Emulator manager**: Tico and its modules, Vita3K and Cemu with updates from GitHub; BIOS and firmware checks that say which file goes where.
   - **Folder Tree Explorer**: browse nested folder structures inside torrents without file limits (256-file restriction removed) with selective downloading support for romsets.
-  - Automatic download to emulator folders (default `sdmc:/roms/<console>/`) or custom storage paths.
+  - "On SD" marks in the catalog and removing a game from the card with all its files.
   - Online retro database updates directly from GitHub via the `-` button.
 
 - 🗂️ **Built-in Dual-Pane File Manager & Utilities**:
@@ -209,10 +210,8 @@ auto_app_update=true
 language=en
 
 # Retro Games settings
-retro_roms_mode=retroarch
+retro_roms_mode=auto
 retro_custom_path=
-retro_auto_extract=false
-retro_romset_mode=full
 
 # UI Theming and Appearance
 theme=light
@@ -244,10 +243,8 @@ show_bottom_dashboard=true
 | `background_blur` | `0` (Off), `1` (Low), `2` (Medium), `3` (High) | Blur level applied to the background image. |
 | `background_dim` | `0` (0%), `1` (15%), `2` (28%), `3` (45%), `4` (65%) | Dimming overlay applied to the background to ensure high text readability. |
 | `show_bottom_dashboard` | `true` / `false` | Whether to display the bottom statistics footer on the dashboard. |
-| `retro_roms_mode` | `retroarch` / `downloads` / `custom` | Target folder for ROM downloads: RetroArch (`sdmc:/roms/<console>/`), downloads folder, or custom path. |
-| `retro_custom_path` | `sdmc:/...` | Custom directory path for ROMs (used when `retro_roms_mode=custom`). |
-| `retro_auto_extract` | `true` / `false` | Automatically extract downloaded ROM archives upon completion. |
-| `retro_romset_mode` | `full` / `select` | Romset download mode: download the full set archive (`full`) or open folder tree file selection (`select`). |
+| `retro_roms_mode` | `auto` / `custom` | Where retro games go: automatically (Tico, Vita3K and Cemu folders) or a custom folder as `<folder>/<console>/` — add it in Tico under Settings › General › Game folders. |
+| `retro_custom_path` | `sdmc:/...` | Custom folder for retro games (used when `retro_roms_mode=custom`). |
 
 ---
 

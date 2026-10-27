@@ -2,7 +2,9 @@
 
 #include <filesystem>
 #include <mutex>
+#include <string>
 #include <vector>
+#include <sys/stat.h>
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -11,7 +13,67 @@ extern std::recursive_mutex g_switch_service_mutex;
 
 namespace util {
 
+#ifdef __SWITCH__
+// Sums file sizes with the native FS API: fsDirRead returns up to kBatch
+// entries per IPC and every entry already carries its size. The portable
+// version below does one stat IPC per file; on a cache with thousands of
+// covers that floods the fs service, which runs on the system core next to
+// the compositor, and the UI thread then waits in eglSwapBuffers.
+// Returns false when the path can't be handled natively (caller falls back).
+static bool dirSizeNative(const std::string& path, uint64_t& out_total) {
+    FsFileSystem* fs = nullptr;
+    char root[FS_MAX_PATH] = {0};
+    if (fsdevTranslatePath(path.c_str(), &fs, root) < 0 || !fs) return false;
+
+    constexpr size_t kBatch = 64;
+    std::vector<FsDirectoryEntry> entries(kBatch);
+    std::vector<std::string> pending{root};
+    uint64_t total = 0;
+    bool openedRoot = false;
+
+    while (!pending.empty()) {
+        std::string dir = std::move(pending.back());
+        pending.pop_back();
+
+        FsDir d;
+        if (R_FAILED(fsFsOpenDirectory(fs, dir.c_str(), FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &d))) {
+            if (!openedRoot) return false;   // root itself unreadable: let the caller decide
+            continue;
+        }
+        openedRoot = true;
+
+        for (;;) {
+            s64 got = 0;
+            if (R_FAILED(fsDirRead(&d, &got, kBatch, entries.data())) || got <= 0) break;
+            for (s64 i = 0; i < got; ++i) {
+                const FsDirectoryEntry& e = entries[static_cast<size_t>(i)];
+                if (e.type == FsDirEntryType_Dir) {
+                    std::string sub = dir;
+                    if (sub.empty() || sub.back() != '/') sub += '/';
+                    sub += e.name;
+                    pending.push_back(std::move(sub));
+                } else if (e.file_size > 0) {
+                    total += static_cast<uint64_t>(e.file_size);
+                }
+            }
+        }
+        fsDirClose(&d);
+    }
+
+    out_total = total;
+    return true;
+}
+#endif
+
 uint64_t dirSizeRecursive(const std::string& path) {
+#ifdef __SWITCH__
+    {
+        struct stat st;
+        if (stat(path.c_str(), &st) != 0) return 0;
+        uint64_t native = 0;
+        if (dirSizeNative(path, native)) return native;
+    }
+#endif
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) return 0;
     uint64_t total = 0;

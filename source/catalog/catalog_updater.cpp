@@ -6,6 +6,7 @@
 #include "utils/log.h"
 #include "utils/app_paths.h"
 #include "net/http_client.h"
+#include "installer/PortInstallPlanner.hpp"
 #include "ui/CatalogProgressNotification.hpp"
 #include "ui/CatalogView.hpp"
 #include "ui/FavoritesManager.hpp"
@@ -45,6 +46,36 @@ static void updateNewReleasesCollectionInBackground() {
     } else {
         util::logLine("catalog_updater: failed to update new_release.json, status=" + std::to_string(res.status_code));
     }
+}
+
+// Install recipes for homebrew ports (port_recipes.json next to the collections),
+// at most every 12 hours. Only a file that parses replaces the saved one.
+static void updatePortRecipesInBackground() {
+    const std::string path = installer::onlinePortRecipesPath();
+    const std::string url = std::string(kCollectionsBaseUrl) + "port_recipes.json";
+
+    struct stat st;
+    if (stat(path.c_str(), &st) == 0) {
+        std::time_t now = std::time(nullptr);
+        if (now > 0 && (now - st.st_mtime) < (12 * 3600)) return;
+    }
+
+    net::HttpClient http;
+    http.setTimeout(20);
+    auto res = http.httpGet(url);
+    if (res.status_code != 200 || res.body.empty()) {
+        util::logLine("catalog_updater: port_recipes.json not updated, status=" + std::to_string(res.status_code));
+        return;
+    }
+    std::vector<installer::PortRecipe> recipes;
+    std::string err;
+    if (!installer::parsePortRecipes(res.body, recipes, err)) {
+        util::logLine("catalog_updater: port_recipes.json rejected: " + err);
+        return;
+    }
+    writeTextFile(path, res.body);
+    installer::PortRecipeStore::instance().reload();
+    util::logLine("catalog_updater: port_recipes.json updated, " + std::to_string(recipes.size()) + " recipes");
 }
 
 bool CatalogUpdater::isUpdateRunning() const {
@@ -124,6 +155,9 @@ void CatalogUpdater::startUpdate(CatalogUpdateMode mode,
 
         // Also refresh new_release.json collection if due (every 4 hours)
         updateNewReleasesCollectionInBackground();
+
+        // Port install recipes (every 12 hours)
+        updatePortRecipesInBackground();
 
         // Refresh game stats (seeds, leeches, downloads, timestamps)
         GameStatsManager::instance().updateStatsInBackground();

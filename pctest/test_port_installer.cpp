@@ -11,9 +11,13 @@
 
 #include "../source/installer/PortInstallPlanner.hpp"
 #include "../source/utils/archive_utils.h"
+#include "../source/utils/sevenzip_utils.h"
 #include "../source/utils/file_ops.h"
 #include "../source/utils/string_utils.h"
 #include "../source/buffer/ring_buffer.h"
+#include "../source/datasource/file_data_source.h"
+
+std::atomic<bool> g_appExiting{false};
 
 struct Game {
     std::string title;
@@ -481,8 +485,213 @@ int main() {
         std::cout << "  -> PASSED: RingBuffer supports small allocations (< 8MB) without OOM error." << std::endl;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // TEST 9: Streaming archive extraction from IDataSource (util::extractArchiveFromSource)
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+        std::cout << "\n[TEST 9] Testing streaming archive extraction from IDataSource (bypassing FAT32 file limit)..." << std::endl;
+
+        std::string testDir = "scratch/test_stream_extract";
+        std::string testZip = "scratch/test_stream.zip";
+        std::error_code ec;
+        std::filesystem::remove_all(testDir, ec);
+        std::filesystem::remove(testZip, ec);
+        std::filesystem::create_directories("scratch", ec);
+
+        // 1. Create a test archive using libarchive write
+        struct archive* a = archive_write_new();
+        archive_write_set_format_zip(a);
+        archive_write_open_filename(a, testZip.c_str());
+
+        const char* filesToAdd[3] = {
+            "switch/halflife2/hl2.nro",
+            "switch/halflife2/hl2/gameinfo.txt",
+            "switch/halflife2/hl2/materials/models/gman.vtf"
+        };
+        const char* contents[3] = {
+            "SOURCE_ENGINE_NRO_MAIN_EXECUTABLE_BINARY_DATA",
+            "GameInfo\n{\ngame \"Half-Life 2\"\ntitle \"HALF-LIFE'\"\n}",
+            "VTF_TEXTURE_BINARY_BLOB_0123456789ABCDEF_TEXTURE_HEADER"
+        };
+
+        for (int i = 0; i < 3; ++i) {
+            struct archive_entry* entry = archive_entry_new();
+            archive_entry_set_pathname(entry, filesToAdd[i]);
+            archive_entry_set_size(entry, std::strlen(contents[i]));
+            archive_entry_set_filetype(entry, AE_IFREG);
+            archive_entry_set_perm(entry, 0644);
+            archive_write_header(a, entry);
+            archive_write_data(a, contents[i], std::strlen(contents[i]));
+            archive_entry_free(entry);
+        }
+        archive_write_close(a);
+        archive_write_free(a);
+
+        TEST_ASSERT(std::filesystem::exists(testZip), "Test ZIP archive must exist on disk");
+        uint64_t zipSize = std::filesystem::file_size(testZip);
+
+        // 2. Wrap the archive with FileDataSource to emulate an IDataSource stream (like CustomEngineBackend)
+        datasource::FileDataSource fileSource(testZip);
+        bool openOk = fileSource.open();
+        TEST_ASSERT(openOk, "FileDataSource::open must succeed");
+        TEST_ASSERT(fileSource.totalSize() == zipSize, "FileDataSource::totalSize must match zip file size");
+
+        // 3. Extract directly from datasource::IDataSource stream using util::extractArchiveFromSource
+        int streamCbCount = 0;
+        std::string lastStreamFile;
+        uint64_t lastStreamBytes = 0;
+        auto streamCb = [&](const util::ArchiveProgress& p) {
+            streamCbCount++;
+            lastStreamFile = p.currentFileName;
+            lastStreamBytes = p.bytesExtracted;
+        };
+
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        std::shared_ptr<std::atomic<bool>> pauseFlag = std::make_shared<std::atomic<bool>>(false);
+        std::string extractErr;
+
+        bool streamOk = util::extractArchiveFromSource(
+            &fileSource, zipSize, testDir,
+            streamCb, cancelFlag, pauseFlag, extractErr
+        );
+
+        TEST_ASSERT(streamOk, "extractArchiveFromSource must succeed: " + extractErr);
+        TEST_ASSERT(streamCbCount > 0, "Progress callback must be invoked during streaming extraction");
+        TEST_ASSERT(lastStreamBytes > 0, "Extracted bytes must be reported in progress callback");
+        TEST_ASSERT(!lastStreamFile.empty(), "Last extracted file name must be reported");
+
+        // 4. Verify extracted files on disk and their contents
+        for (int i = 0; i < 3; ++i) {
+            std::string fullPath = testDir + "/" + filesToAdd[i];
+            TEST_ASSERT(std::filesystem::exists(fullPath), "Extracted file exists on disk: " + fullPath);
+
+            std::ifstream in(fullPath);
+            std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            TEST_ASSERT(content == contents[i], "Extracted file content matches original: " + std::string(filesToAdd[i]));
+        }
+
+        // 5. Clean up
+        fileSource.close();
+        std::filesystem::remove_all(testDir, ec);
+        std::filesystem::remove(testZip, ec);
+
+        std::cout << "  -> PASSED: Streaming archive extraction from IDataSource works seamlessly without saving archive." << std::endl;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TEST 10: Cancellation during streaming archive extraction
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+        std::cout << "\n[TEST 10] Testing cancellation flag during streaming extraction..." << std::endl;
+
+        std::string testDir = "scratch/test_cancel_extract";
+        std::string testZip = "scratch/test_cancel.zip";
+        std::error_code ec;
+        std::filesystem::remove_all(testDir, ec);
+        std::filesystem::remove(testZip, ec);
+        std::filesystem::create_directories("scratch", ec);
+
+        struct archive* a = archive_write_new();
+        archive_write_set_format_zip(a);
+        archive_write_open_filename(a, testZip.c_str());
+
+        std::string bigData(100000, 'X');
+        for (int i = 0; i < 5; ++i) {
+            std::string fname = "switch/test/file" + std::to_string(i) + ".bin";
+            struct archive_entry* entry = archive_entry_new();
+            archive_entry_set_pathname(entry, fname.c_str());
+            archive_entry_set_size(entry, bigData.size());
+            archive_entry_set_filetype(entry, AE_IFREG);
+            archive_entry_set_perm(entry, 0644);
+            archive_write_header(a, entry);
+            archive_write_data(a, bigData.data(), bigData.size());
+            archive_entry_free(entry);
+        }
+        archive_write_close(a);
+        archive_write_free(a);
+
+        uint64_t zipSize = std::filesystem::file_size(testZip);
+        datasource::FileDataSource fileSource(testZip);
+        fileSource.open();
+
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        std::shared_ptr<std::atomic<bool>> pauseFlag = std::make_shared<std::atomic<bool>>(false);
+        std::string extractErr;
+
+        auto streamCb = [&](const util::ArchiveProgress& p) {
+            // Cancel as soon as first file is extracted
+            cancelFlag->store(true);
+        };
+
+        bool ok = util::extractArchiveFromSource(
+            &fileSource, zipSize, testDir,
+            streamCb, cancelFlag, pauseFlag, extractErr
+        );
+
+        TEST_ASSERT(!ok, "extractArchiveFromSource must return false when cancelled");
+        TEST_ASSERT(cancelFlag->load(), "Cancel flag was triggered");
+
+        fileSource.close();
+        std::filesystem::remove_all(testDir, ec);
+        std::filesystem::remove(testZip, ec);
+
+        std::cout << "  -> PASSED: extractArchiveFromSource immediately aborts on cancel flag." << std::endl;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TEST 11: Streaming .7z archive extraction from IDataSource (SzArEx + fallback)
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+        std::cout << "\n[TEST 11] Testing streaming .7z archive extraction from IDataSource..." << std::endl;
+
+        std::string testDir = "scratch/test_7z_extract";
+        std::string test7z = "scratch/test.7z";
+        std::error_code ec;
+        std::filesystem::remove_all(testDir, ec);
+
+        if (!std::filesystem::exists(test7z)) {
+            std::string cmd = "\"\"C:\\Program Files\\7-Zip\\7z.exe\" a -t7z scratch/test.7z resources/i18n/ru/app.json\"";
+            std::system(cmd.c_str());
+        }
+
+        if (std::filesystem::exists(test7z)) {
+            uint64_t archSize = std::filesystem::file_size(test7z);
+            datasource::FileDataSource fileSource(test7z);
+            bool openOk = fileSource.open();
+            TEST_ASSERT(openOk, "FileDataSource::open for 7z must succeed");
+
+            int streamCbCount = 0;
+            std::string last7zFile;
+            auto streamCb = [&](const util::ArchiveProgress& p) {
+                streamCbCount++;
+                last7zFile = p.currentFileName;
+            };
+
+            std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+            std::shared_ptr<std::atomic<bool>> pauseFlag = std::make_shared<std::atomic<bool>>(false);
+            std::string extractErr;
+
+            bool streamOk = util::extractArchiveFromSource(
+                &fileSource, archSize, testDir,
+                streamCb, cancelFlag, pauseFlag, extractErr
+            );
+
+            TEST_ASSERT(streamOk, "extractArchiveFromSource (.7z) must succeed: " + extractErr);
+            TEST_ASSERT(streamCbCount > 0, "Callback must be invoked during 7z extraction");
+            TEST_ASSERT(std::filesystem::exists(testDir + "/resources/i18n/ru/app.json") ||
+                        std::filesystem::exists(testDir + "/app.json"), "7z extracted file must exist");
+
+            fileSource.close();
+            std::cout << "  -> PASSED: .7z streaming extraction from IDataSource verified successfully." << std::endl;
+        } else {
+            std::cout << "  -> SKIPPED: 7z archive not found on disk." << std::endl;
+        }
+
+        std::filesystem::remove_all(testDir, ec);
+    }
+
     std::cout << "\n==================================================" << std::endl;
-    std::cout << "   ALL AUTOMATED TESTS PASSED SUCCESSFULLY! (8/8)  " << std::endl;
+    std::cout << "   ALL AUTOMATED TESTS PASSED SUCCESSFULLY! (11/11) " << std::endl;
     std::cout << "==================================================" << std::endl;
     return 0;
 }

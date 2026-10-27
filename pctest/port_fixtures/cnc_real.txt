@@ -1,0 +1,29 @@
+# title: Command & Conquer: Red Alert / C&C Tiberian Dawn (порт Vanilla-Conquer) [NSP][RUS/ENG]
+# source: log (консоль, 25.10.2026), topic 5986937
+1150447973	English version/switch-cnc.7z
+364248	Command and Conquer Vanilla-Conquer [01782d13459b0000].nsp
+347864	Command and Conquer Red Alert Vanilla-Conquer [01046f0041fc0000].nsp
+481	Homebrew (2.01.2021)/switch/cnc/CONQUER.INI
+155	Homebrew (2.01.2021)/switch/cnc/keymap.keys
+8860354	Homebrew (2.01.2021)/switch/cnc/vanillatd.nro
+185	Homebrew (2.01.2021)/switch/redalert/keymap.keys
+228	Homebrew (2.01.2021)/switch/redalert/REDALERT.INI
+9429692	Homebrew (2.01.2021)/switch/redalert/vanillara.nro
+9084923	Homebrew (2.01.2021)/switch/redalert/vanillatd.nro
+4	Homebrew (2.01.2021)/switch/redalert/CD1/CD_LABEL
+4	Homebrew (2.01.2021)/switch/redalert/CD2/CD_LABEL
+712783288	Russian version/switch.7z
+
+## expect
+variants ru,en
+default ru
+default_en en
+in ru Russian version/switch.7z
+notin ru English version/switch-cnc.7z
+dest Homebrew (2.01.2021)/switch/redalert/vanillara.nro => sdmc:/switch/redalert/vanillara.nro
+dest Homebrew (2.01.2021)/switch/cnc/vanillatd.nro => sdmc:/switch/cnc/vanillatd.nro
+# Две игры в раздаче: оба ярлыка (разные Title ID)
+forwarders ru = 2
+forwarders en = 2
+forwarder ru Command and Conquer Vanilla-Conquer [01782d13459b0000].nsp
+forwarder ru Command and Conquer Red Alert Vanilla-Conquer [01046f0041fc0000].nsp

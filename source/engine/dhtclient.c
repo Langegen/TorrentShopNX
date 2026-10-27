@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 
 #include "engine_log.h"
+#include "thread_cfg.h"
 #include "torrent_meta.h"   // torrent_announce_port(): our advertised listen port
 #include "../utils/app_paths.h"
 
@@ -217,6 +218,8 @@ static int s_bg_sock = -1;
 static bool s_bg_bootstrapped = false;
 static uint8_t s_bg_node_id[20];
 static dht_target s_targets[DHT_MAX_TARGETS];
+// Callbacks taken from s_targets and running outside s_bg_mtx (guarded by it).
+static int s_cb_inflight = 0;
 static u64 s_last_walk = 0;       // last random-id walk tick
 
 // Table-refresh sweep state (moved to file scope so a socket restart can
@@ -379,11 +382,17 @@ static void bg_on_event(void *closure, int event,
     }
     dht_peer_cb cb = target ? target->cb : NULL;
     void *ctx = target ? target->ctx : NULL;
+    if (cb) s_cb_inflight++;   // dht_background_remove waits for this to drain
     mutexUnlock(&s_bg_mtx);
     if (!cb) return;
 
     int n = (int)(data_len / 6);
-    if (n <= 0) return;
+    if (n <= 0) {
+        mutexLock(&s_bg_mtx);
+        s_cb_inflight--;
+        mutexUnlock(&s_bg_mtx);
+        return;
+    }
     peer_addr peers[128];
     int np = 0;
     const uint8_t *b = data;
@@ -400,6 +409,9 @@ static void bg_on_event(void *closure, int event,
         mutexUnlock(&s_bg_mtx);
         cb(ctx, peers, np);
     }
+    mutexLock(&s_bg_mtx);
+    s_cb_inflight--;
+    mutexUnlock(&s_bg_mtx);
 }
 
 static void dht_bg_main(void *arg) {
@@ -700,7 +712,7 @@ static int dht_bg_start(void) {
     }
     s_bg_stop = false;
     if (threadCreate(&s_bg_thread, dht_bg_main, NULL, NULL,
-                     0x20000, 0x2C, -2) == 0) {
+                     0x20000, TSNX_THREAD_ARGS(TSNX_CORE_NET, TSNX_PRIO_NET_BG)) == 0) {
         threadStart(&s_bg_thread);
         s_bg_thread_started = true;
         mutexUnlock(&s_bg_mtx);
@@ -847,6 +859,13 @@ void dht_background_remove(const uint8_t info_hash[20]) {
             s_targets[i].ctx = NULL;
             break;
         }
+    }
+    // A callback that already took cb/ctx runs outside the lock: the caller is
+    // about to free ctx (torrentfs_close), so wait until none is in flight.
+    while (s_cb_inflight > 0) {
+        mutexUnlock(&s_bg_mtx);
+        svcSleepThread(1000000ULL);   // 1 ms
+        mutexLock(&s_bg_mtx);
     }
     mutexUnlock(&s_bg_mtx);
     // The thread itself keeps running: the routing table stays warm for the

@@ -1,0 +1,40 @@
+# title: Max Payne Mobile (порт) [NRO][RUS/ENG]
+# source: описание (две версии: NX в корне + Homebrew/, PCAE в своей папке со своим ярлыком)
+# Инструкция NX: maxpaynenx.7z -> корень SD; Homebrew/maxpaynenx -> sdmc:/maxpaynenx; ярлыка нет.
+# Инструкция PCAE: maxpayne.zip -> /switch/; из PCAE Switch.zip папку maxpayne -> /switch/; MaxPayne.nsp.
+# Куда распаковать PCAE-архивы, решит этап 2 (оглавление архива) или рецепт (этап 3);
+# здесь проверяется только то, что умеет эвристика.
+2000	Max Payne Mobile [NRO][RUS-ENG]/Homebrew/maxpaynenx/config.txt
+3000000	Max Payne Mobile [NRO][RUS-ENG]/Homebrew/maxpaynenx/maxpaynenx.nro
+400000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/MaxPayne.nsp
+900000000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/PCAE Switch.zip
+5000000	Max Payne Mobile [NRO][RUS-ENG]/PCAE Switch/maxpayne.zip
+1100000000	Max Payne Mobile [NRO][RUS-ENG]/maxpaynenx.7z
+
+## expect
+# Содержимое архивов предположительное (как в инструкции).
+listing maxpaynenx.7z = maxpaynenx/, maxpaynenx/files/data.dat, maxpaynenx/files/x_level1.ras
+listing PCAE Switch/maxpayne.zip = maxpayne/, maxpayne/maxpayne.nro, maxpayne/libMaxPayne.so
+listing PCAE Switch/PCAE Switch.zip = PCAE Switch/maxpayne/files/data.dat, PCAE Switch/maxpayne/files/pcae.ras, PCAE Switch/readme.txt
+variants main,alt1,all
+default main
+default_en main
+dest Homebrew/maxpaynenx/config.txt => sdmc:/maxpaynenx/config.txt
+dest Homebrew/maxpaynenx/maxpaynenx.nro => sdmc:/maxpaynenx/maxpaynenx.nro
+extract maxpaynenx.7z => sdmc:/
+extract PCAE Switch/maxpayne.zip => sdmc:/switch/
+extract PCAE Switch/PCAE Switch.zip => sdmc:/switch/
+entry PCAE Switch/PCAE Switch.zip | PCAE Switch/maxpayne/files/data.dat => maxpayne/files/data.dat
+entry PCAE Switch/maxpayne.zip | maxpayne/maxpayne.nro => maxpayne/maxpayne.nro
+in main maxpaynenx.7z
+in main Homebrew/maxpaynenx/config.txt
+notin main PCAE Switch/maxpayne.zip
+notin main PCAE Switch/MaxPayne.nsp
+in alt1 PCAE Switch/maxpayne.zip
+in alt1 PCAE Switch/PCAE Switch.zip
+notin alt1 maxpaynenx.7z
+forwarder main -
+forwarder alt1 PCAE Switch/MaxPayne.nsp
+forwarder all PCAE Switch/MaxPayne.nsp
+in all maxpaynenx.7z
+in all PCAE Switch/maxpayne.zip

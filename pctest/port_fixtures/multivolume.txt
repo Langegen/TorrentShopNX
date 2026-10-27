@@ -1,0 +1,20 @@
+# title: Big Port (port) [NRO]
+# source: синтетика (многотомные 7z и RAR)
+2000000000	Big Port/data.7z.001
+2000000000	Big Port/data.7z.002
+700000000	Big Port/data.7z.003
+2000000000	Big Port/voice.part1.rar
+900000000	Big Port/voice.part2.rar
+1000000	Big Port/switch/bigport/bigport.nro
+300000	Big Port/Big Port (port) [0100AAAABBBB0000].nsp
+
+## expect
+game bigport
+variants default
+extract data.7z.001 => sdmc:/
+volumes data.7z.001 = 3
+in default data.7z.002
+in default data.7z.003
+volumes voice.part1.rar = 2
+unsupported voice.part1.rar
+dest switch/bigport/bigport.nro => sdmc:/switch/bigport/bigport.nro

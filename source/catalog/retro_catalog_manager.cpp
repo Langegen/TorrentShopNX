@@ -3,6 +3,7 @@
 #include "../utils/app_paths.h"
 #include "../utils/log.h"
 #include "../net/http_client.h"
+#include "../config/config.h"
 #include <sys/stat.h>
 #include <filesystem>
 #include <fstream>
@@ -168,6 +169,62 @@ void RetroCatalogManager::initConsoles() {
             "dc", true, "Flycast"
         }
     };
+    applyRouteTable();
+}
+
+// Where each console's games go and what format its emulator wants.
+// Folder names, modules and extensions follow the module.json files of the
+// Tico modules (github.com/ticohq/tico-<module>) as of Tico 0.8.0.
+void RetroCatalogManager::applyRouteTable() {
+    struct RouteDef {
+        const char* id;
+        RetroRoute route;
+        const char* slug;
+        const char* module;
+        const char* core_label;
+        bool disc_based;
+        bool supports_m3u;
+        bool keep_archives;
+        std::vector<std::string> launch_ext;
+    };
+    static const std::vector<RouteDef> table = {
+        {"nes",       RetroRoute::Tico, "nes",           "fceumm",          "FCEUmm",          false, false, true,  {".nes", ".fds", ".unf", ".unif"}},
+        {"snes",      RetroRoute::Tico, "snes",          "snes9x",          "Snes9x",          false, false, true,  {".sfc", ".smc", ".fig", ".swc", ".bs", ".st"}},
+        {"n64",       RetroRoute::Tico, "n64",           "mupen64plus",     "Mupen64Plus",     false, false, true,  {".z64", ".n64", ".v64"}},
+        {"gbc",       RetroRoute::Tico, "gbc",           "gambatte",        "Gambatte",        false, false, true,  {".gb", ".gbc"}},
+        {"gba",       RetroRoute::Tico, "gba",           "mgba",            "mGBA",            false, false, true,  {".gba", ".gb", ".gbc", ".sgb"}},
+        {"nds",       RetroRoute::Tico, "nds",           "drastic",         "DraStic",         false, false, true,  {".nds"}},
+        {"3ds",       RetroRoute::Tico, "3ds",           "dekopon",         "Dekopon",         false, false, false, {".3ds", ".cci", ".cxi", ".app", ".3dsx", ".zcci", ".zcxi", ".z3dsx"}},
+        {"gamecube",  RetroRoute::Tico, "gc",            "dolphin",         "Dolphin",         true,  true,  false, {".rvz", ".iso", ".gcm", ".gcz", ".ciso", ".wia", ".wbfs"}},
+        {"wii",       RetroRoute::Tico, "wii",           "dolphin",         "Dolphin",         true,  true,  false, {".rvz", ".wbfs", ".iso", ".gcz", ".ciso", ".wia", ".gcm", ".wad"}},
+        {"wiiu",      RetroRoute::Cemu, "",              "",                "",                true,  false, false, {".wua", ".wux", ".wud", ".rpx"}},
+        {"ps1",       RetroRoute::Tico, "psx",           "duckstation",     "DuckStation",     true,  true,  false, {".chd", ".cue", ".iso", ".pbp", ".ecm", ".bin"}},
+        {"ps2",       RetroRoute::Tico, "ps2",           "nethersx2",       "NetherSX2",       true,  false, false, {".chd", ".iso", ".cso", ".zso", ".gz", ".bin", ".mdf", ".img", ".nrg"}},
+        {"psp",       RetroRoute::Tico, "psp",           "ppsspp",          "PPSSPP",          true,  true,  false, {".iso", ".cso", ".pbp", ".chd"}},
+        {"psvita",    RetroRoute::Vita3K, "",            "",                "",                true,  false, true,  {".vpk", ".pkg"}},
+        {"sega_ms",   RetroRoute::Tico, "master-system", "genesis_plus_gx", "Genesis Plus GX", false, false, true,  {".sms", ".bin"}},
+        {"sega_gg",   RetroRoute::Tico, "game-gear",     "genesis_plus_gx", "Genesis Plus GX", false, false, true,  {".gg", ".bin"}},
+        {"sega_md",   RetroRoute::Tico, "genesis",       "genesis_plus_gx", "Genesis Plus GX", false, false, true,  {".md", ".bin", ".gen", ".smd"}},
+        {"sega_cd",   RetroRoute::Tico, "sega-cd",       "genesis_plus_gx", "Genesis Plus GX", true,  true,  false, {".chd", ".cue", ".iso", ".bin"}},
+        {"sega_32x",  RetroRoute::Tico, "sega-32x",      "picodrive",       "PicoDrive",       false, false, true,  {".32x"}},
+        {"dreamcast", RetroRoute::Tico, "dc",            "flycast",         "Flycast",         true,  true,  false, {".chd", ".gdi", ".cdi", ".cue"}},
+    };
+
+    for (auto& c : consoles_) {
+        for (const auto& r : table) {
+            if (c.id != r.id) continue;
+            c.route = r.route;
+            c.is_tico_supported = (r.route == RetroRoute::Tico);
+            c.tico_slug = r.slug;
+            c.tico_module = r.module;
+            c.tico_recommended_core = r.core_label;
+            c.disc_based = r.disc_based;
+            c.supports_m3u = r.supports_m3u;
+            c.keep_archives = r.keep_archives;
+            c.launch_extensions = r.launch_ext;
+            break;
+        }
+    }
 }
 
 const RetroConsoleInfo* RetroCatalogManager::findConsole(const std::string& id) const {
@@ -177,13 +234,46 @@ const RetroConsoleInfo* RetroCatalogManager::findConsole(const std::string& id) 
     return nullptr;
 }
 
-std::string RetroCatalogManager::getEffectiveConsoleSubfolder(const std::string& console_id, bool is_tico_mode) const {
+RetroRoute RetroCatalogManager::getRoute(const std::string& console_id) const {
     const auto* info = findConsole(console_id);
-    if (!info) return console_id;
-    if (is_tico_mode && info->is_tico_supported && !info->tico_slug.empty()) {
-        return info->tico_slug;
+    return info ? info->route : RetroRoute::Tico;
+}
+
+std::string RetroCatalogManager::getTargetDir(const std::string& console_id) const {
+    const auto* info = findConsole(console_id);
+    RetroRoute route = info ? info->route : RetroRoute::Tico;
+    if (route == RetroRoute::Vita3K) return TSNX_VITA_ROMS_DIR;
+    if (route == RetroRoute::Cemu) return TSNX_CEMU_GAMES_DIR;
+
+    std::string slug = getTicoSlug(console_id);
+    auto& cfg = config::ConfigManager::instance();
+    if (cfg.isRetroCustomFolder() && !cfg.getRetroCustomPath().empty()) {
+        std::string base = cfg.getRetroCustomPath();
+        if (base.back() != '/') base += '/';
+        return base + slug;
     }
-    return info->default_rom_subfolder.empty() ? console_id : info->default_rom_subfolder;
+    return std::string(TSNX_TICO_ROMS_DIR) + "/" + slug;
+}
+
+std::string RetroCatalogManager::getRunnerLabel(const std::string& console_id) const {
+    const auto* info = findConsole(console_id);
+    if (!info) return "";
+    switch (info->route) {
+        case RetroRoute::Vita3K: return "Vita3K";
+        case RetroRoute::Cemu:   return "Cemu";
+        case RetroRoute::Tico:   break;
+    }
+    std::string core = getTicoCoreName(console_id);
+    return core.empty() ? "Tico" : ("Tico • " + core);
+}
+
+std::string RetroCatalogManager::getRunnerPackageId(const std::string& console_id) const {
+    switch (getRoute(console_id)) {
+        case RetroRoute::Vita3K: return "vita3k";
+        case RetroRoute::Cemu:   return "cemu";
+        case RetroRoute::Tico:   break;
+    }
+    return "tico";
 }
 
 bool RetroCatalogManager::isTicoSupported(const std::string& console_id) const {
@@ -202,48 +292,6 @@ std::string RetroCatalogManager::getTicoCoreName(const std::string& console_id) 
     if (info && !info->tico_recommended_core.empty()) return info->tico_recommended_core;
     if (info && !info->recommended_emulator.empty()) return info->recommended_emulator;
     return "";
-}
-
-bool RetroCatalogManager::isDiscOrComplexConsole(const std::string& console_id) const {
-    return (console_id == "gamecube" || console_id == "wii" ||
-            console_id == "ps1" || console_id == "psp" ||
-            console_id == "dreamcast" || console_id == "sega_cd" ||
-            console_id == "3ds");
-}
-
-bool RetroCatalogManager::isGameFilePresent(const std::string& console_id, const std::string& filename) const {
-    if (console_id.empty() || filename.empty()) return false;
-    const auto* info = findConsole(console_id);
-    if (!info) return false;
-
-    std::string stem = std::filesystem::path(filename).stem().string();
-
-    std::vector<std::string> searchDirs;
-    if (info->is_tico_supported && !info->tico_slug.empty()) {
-        searchDirs.push_back(std::string(TSNX_TICO_ROMS_DIR) + "/" + info->tico_slug);
-    }
-    if (!info->default_rom_subfolder.empty()) {
-        searchDirs.push_back(std::string(TSNX_ROMS_BASE_DIR) + "/" + info->default_rom_subfolder);
-    }
-    if (!info->default_rom_subfolder.empty()) {
-        searchDirs.push_back(std::string(TSNX_DOWNLOADS_DIR) + "/retro/" + info->default_rom_subfolder);
-    }
-
-    std::error_code ec;
-    for (const auto& dir : searchDirs) {
-        if (!std::filesystem::exists(dir, ec)) continue;
-        std::string directPath = dir + "/" + filename;
-        if (std::filesystem::exists(directPath, ec)) return true;
-
-        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-            if (entry.is_regular_file(ec)) {
-                if (entry.path().stem().string() == stem) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
 }
 
 std::string RetroCatalogManager::getConsoleJsonPath(const std::string& console_id) const {

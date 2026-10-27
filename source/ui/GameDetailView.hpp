@@ -17,6 +17,9 @@ public:
     static brls::View* create(); // XML support stub
 
     void updateFavoriteButton();
+    // Retro games: "Download" or "On SD" when the game is already on the card.
+    void updateRetroDownloadButton();
+    void confirmRetroRemoval();
 
 private:
     Game game_;

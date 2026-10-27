@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <ctime>
 #include <thread>
+#include <chrono>
 #include <filesystem>
 #include <sys/stat.h>
 #include <borealis.hpp>
@@ -175,6 +176,9 @@ struct Game {
     bool is_romset = false;
     std::string content_type;
     std::string sort_key;
+    // Newest update package in the release (titledb number, N << 16), 0 = unknown.
+    // Filled by the catalog builder from the torrent file list.
+    uint32_t update_version = 0;
 };
 
 // Heuristic and flag checker for romsets / multi-game collections
@@ -240,6 +244,10 @@ inline void from_json(const nlohmann::json& j, Game& g) {
     
     g.description = safeGetStr(j, "description");
     g.multiplayer = safeGetStr(j, "multiplayer");
+    {
+        std::string uv = safeGetStr(j, "update_version");
+        g.update_version = uv.empty() ? 0 : static_cast<uint32_t>(std::strtoul(uv.c_str(), nullptr, 10));
+    }
 
     g.is_romset = false;
     if (j.contains("is_romset")) {
@@ -277,7 +285,8 @@ inline void to_json(nlohmann::json& j, const Game& g) {
         {"description", g.description},
         {"multiplayer", g.multiplayer},
         {"is_romset", g.is_romset},
-        {"content_type", g.content_type}
+        {"content_type", g.content_type},
+        {"update_version", g.update_version}
     };
 }
 
@@ -597,6 +606,7 @@ private:
         else if (currentKey == "multiplayer") currentGame.multiplayer = std::move(val);
         else if (currentKey == "is_romset") currentGame.is_romset = (val == "true" || val == "1");
         else if (currentKey == "content_type") currentGame.content_type = std::move(val);
+        else if (currentKey == "update_version") currentGame.update_version = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 10));
     }
 };
 
@@ -684,7 +694,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     writeRaw(magic, 8);
-    uint32_t version = 4;
+    uint32_t version = 5;
     writeRaw(&version, sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     writeRaw(&count, sizeof(count));
@@ -727,6 +737,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeRaw(&is_rom, sizeof(is_rom));
         writeStr(g.content_type);
         writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
+        writeRaw(&g.update_version, sizeof(g.update_version));
     }
 
     fflush(f);
@@ -762,12 +773,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version != 1 && version != 2 && version != 3 && version != 4) {
+    if (version < 1 || version > 5) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
     if (out_needs_upgrade) {
-        *out_needs_upgrade = (version < 4);
+        *out_needs_upgrade = (version < 5);
     }
 
     uint32_t count = 0;
@@ -835,6 +846,11 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
 
         if (version >= 4) {
             if (!readStr(g.sort_key)) return false;
+        }
+        if (version >= 5) {
+            if (ptr + sizeof(uint32_t) > end) return false;
+            std::memcpy(&g.update_version, ptr, sizeof(uint32_t));
+            ptr += sizeof(uint32_t);
         }
         if (g.sort_key.empty()) {
             g.sort_key = computeSortKey(g.title);
@@ -935,11 +951,17 @@ inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std:
         std::vector<Game> games;
         bool needsUpgrade = false;
         if (loadGamesFromBinaryFile(binPath, games, &needsUpgrade) && !games.empty()) {
-            if (needsUpgrade) {
-                util::logLine("GameData: upgrading binary cache to version 4 with precomputed sort keys");
+            if (!needsUpgrade) return games;
+            if (!hasJson) {
+                util::logLine("GameData: upgrading binary cache to version 5");
                 saveGamesToBinaryFile(binPath, games);
+                return games;
             }
-            return games;
+            // Older caches lack fields (update_version) that only the JSON
+            // has: rebuild from it. Diffs applied since live only in the old
+            // .bin, so drop the diff ETag to have the next diff re-applied.
+            util::logLine("GameData: binary cache predates version 5, rebuilding from JSON");
+            std::remove(getCatalogDiffEtagPath().c_str());
         }
         util::logLine("GameData: binary cache invalid or empty, falling back to JSON");
     }
@@ -1194,9 +1216,16 @@ inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_second
                  dir, std::filesystem::directory_options::skip_permission_denied, ec)) {
             if (g_cleanupCancelled.load()) break;
             std::error_code ec2;
-            if (!entry.is_regular_file(ec2)) continue;
+            // One stat per file (is_regular_file() was a second one). Every
+            // call is an fs IPC; fs, vi and bsd share the system core, and a
+            // burst of them stalls the UI's frame present ([uistall] in
+            // eglSwapBuffers: 100-250 ms frames for the whole sweep even at
+            // 5 ms per 32 files). A pause after every file keeps it to
+            // ~200 IPCs/s: slower, but this runs in the background once a day.
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
             struct stat st;
             if (stat(entry.path().string().c_str(), &st) != 0) continue;
+            if (!S_ISREG(st.st_mode)) continue;
             if ((now - st.st_mtime) > max_age_seconds) {
                 std::filesystem::remove(entry.path(), ec2);
                 if (!ec2) ++removed;
@@ -1270,6 +1299,17 @@ inline void migrateStorageLayout() {
 
 // Age-based stale-cache sweep executed asynchronously in background to ensure instant startup
 inline void sweepStaleCaches() {
+    // Ages are counted in days: once a day is enough. The sweep walks every
+    // cached cover and icon and used to run on every start.
+    const std::string marker = std::string(TSNX_CACHE_DIR) + "/.last_sweep";
+    {
+        struct stat mst;
+        std::time_t now = std::time(nullptr);
+        if (now > 0 && stat(marker.c_str(), &mst) == 0 && now - mst.st_mtime < 86400) {
+            util::logLine("GameData: stale cache sweep skipped (last run < 24h ago)");
+            return;
+        }
+    }
     util::logLine("GameData: background stale cache sweep start");
     sweepExpiredFiles(TSNX_CACHE_CATALOG, 1800);           // catalog bodies (match read TTL: 30 min)
     if (g_cleanupCancelled.load()) return;
@@ -1280,6 +1320,8 @@ inline void sweepStaleCaches() {
     sweepExpiredFiles(TSNX_CACHE_ICONS, 90 * 86400);       // NACP icons: 90 days
     if (g_cleanupCancelled.load()) return;
     sweepExpiredFiles(TSNX_CACHE_THUMBNAILS, 30 * 86400);  // cover thumbnails: 30 days
+    if (g_cleanupCancelled.load()) return;
+    if (FILE* mf = fopen(marker.c_str(), "wb")) fclose(mf);   // mtime = this run
     util::logLine("GameData: background stale cache sweep done");
 }
 
@@ -1303,7 +1345,36 @@ inline std::string normalizeImageUrl(const std::string& url) {
     if (norm.rfind("https://", 0) == 0 && (norm.find("imagebam.com") != std::string::npos || norm.find("vfl.ru") != std::string::npos)) {
         norm.replace(0, 5, "http");
     }
+    // wsrv.nl (eShop screenshot proxy) serves an ECDSA-only certificate that the
+    // Switch ssl service fails to handshake with ("SSL connect error" on every
+    // fetch). The same images are served over plain HTTP without a redirect.
+    if (norm.rfind("https://wsrv.nl/", 0) == 0 || norm.rfind("https://images.weserv.nl/", 0) == 0) {
+        norm.replace(0, 5, "http");
+    }
     return norm;
+}
+
+// Second route for images served through the wsrv.nl / images.weserv.nl proxy
+// (eShop screenshots: img-eshop.cdn.nintendo.net is unreachable under 90DNS).
+// On the console wsrv.nl failed outright in some sessions ("SSL connect error"
+// over https, "Failure when receiving data from the peer" over http) while the
+// same URLs loaded fine from a PC on the same network. DuckDuckGo's image proxy
+// is not behind Cloudflare and has an RSA certificate, which the Switch ssl
+// service handles. Returns "" when the URL is not a weserv one.
+inline std::string imageProxyFallback(const std::string& url) {
+    if (url.find("://wsrv.nl/") == std::string::npos &&
+        url.find("://images.weserv.nl/") == std::string::npos) return "";
+    size_t p = url.find("url=");
+    if (p == std::string::npos) return "";
+    p += 4;
+    size_t e = url.find('&', p);
+    std::string inner = url.substr(p, e == std::string::npos ? std::string::npos : e - p);
+    if (inner.empty()) return "";
+    if (inner.rfind("http://", 0) != 0 && inner.rfind("https://", 0) != 0 && inner.rfind("http%3A", 0) != 0 &&
+        inner.rfind("https%3A", 0) != 0) {
+        inner = "https://" + inner;   // weserv accepts scheme-less url=
+    }
+    return "https://external-content.duckduckgo.com/iu/?u=" + inner;
 }
 
 // Helper to convert thumbnail URLs from popular image hostings to their original/full-size versions
@@ -1568,6 +1639,16 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         std::string orig = getOriginalImageUrl(normUrl);
         if (orig != normUrl) {
             effectiveFallback = orig;
+        }
+    }
+    // weserv proxy: the fallback must leave that host (the caller's fallback is
+    // usually the same weserv URL), or a failing wsrv.nl leaves a placeholder.
+    {
+        std::string proxyFb = imageProxyFallback(normUrl);
+        if (!proxyFb.empty() &&
+            (effectiveFallback.empty() || effectiveFallback == normUrl ||
+             !imageProxyFallback(effectiveFallback).empty())) {
+            effectiveFallback = proxyFb;
         }
     }
 

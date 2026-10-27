@@ -95,12 +95,14 @@ int main() {
         std::cout << "Test 10a (Base A000 v0): label=" << c1.label << " name=" << c1.cleanName << std::endl;
         assert(c1.type == 0);
         assert(c1.label == "MAIN");
+        assert(c1.version.empty());
 
         auto c2 = util::classifyDownloadComponent("Super Game [0100FE701475A800][v65536].nsp");
         std::cout << "Test 10b (Patch A800 int ver): label=" << c2.label << " name=" << c2.cleanName << std::endl;
         assert(c2.type == 1);
         assert(c2.label == "UPD");
         assert(c2.cleanName == "Патч [v65536]");
+        assert(c2.version == "[v65536]");
 
         auto c2_sem = util::classifyDownloadComponent("Super Game [0100FE701475A800][v131072](v1.2.0).nsp");
         std::cout << "Test 10b2 (Patch A800 sem ver): label=" << c2_sem.label << " name=" << c2_sem.cleanName << std::endl;

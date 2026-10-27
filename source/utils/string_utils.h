@@ -117,6 +117,7 @@ namespace util {
         int type = 0;              // 0: Base (MAIN), 1: Update (UPD), 2: DLC (DLC), 3: Mod/Extra (OTH)
         std::string label;         // "MAIN", "UPD", "DLC", "OTH"
         std::string cleanName;     // Clean, human-readable name without repeating the game title or Atmosphere paths
+        std::string version;       // Update version as in the file name ("[v65536]", "v1.2.0"), empty if unknown
     };
 
     inline std::string extractPatchVersionString(const std::string& filename) {
@@ -317,6 +318,7 @@ namespace util {
             res.type = 1;
             res.label = "UPD";
             std::string verStr = extractPatchVersionString(filename);
+            res.version = verStr;
             res.cleanName = verStr.empty() ? "Патч" : ("Патч " + verStr);
             return res;
         }
@@ -335,6 +337,7 @@ namespace util {
         if (!verStr.empty()) {
             res.type = 1;
             res.label = "UPD";
+            res.version = verStr;
             res.cleanName = "Патч " + verStr;
             return res;
         }

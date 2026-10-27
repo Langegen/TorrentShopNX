@@ -11,12 +11,15 @@
 #include "../config/config.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/update_journal.h"
 #include "../net/http_client.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
 #include <curl/curl.h>
 #include <atomic>
+#include <chrono>
+#include <memory>
 #ifdef __SWITCH__
 #include <switch.h>
 #include <unistd.h>
@@ -207,9 +210,12 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                 }
                 
                 struct stat st;
-                bool validDownloadedFile = (stat(tmpPath.c_str(), &st) == 0 && st.st_size > 100 * 1024);
-                
-                util::logLine("downloadAndInstallAppUpdate: res=" + std::to_string(res) + " http=" + std::to_string(http_code) + " size=" + (validDownloadedFile ? std::to_string(st.st_size) : "invalid"));
+                bool haveFile = (stat(tmpPath.c_str(), &st) == 0);
+                bool validDownloadedFile = haveFile && util::isValidNroFile(tmpPath);
+
+                util::updateJournal("download: curl=" + std::to_string(res) + " http=" + std::to_string(http_code) +
+                                    " size=" + (haveFile ? std::to_string(st.st_size) : "none") +
+                                    (validDownloadedFile ? " nro=ok" : " nro=INVALID"));
                 
                 if (res == CURLE_OK && http_code == 200 && validDownloadedFile) {
                     try {
@@ -231,9 +237,14 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
 #ifdef __SWITCH__
                             fsdevCommitDevice("sdmc");
 #endif
+                            util::updateJournal("download: saved " + updatePath);
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
                             pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
-                                brls::Application::getPlatform()->exitToHomeMode(false);
+                                // Normal exit to HOME: the NRO is replaced during shutdown
+                                // and the next launch runs the new version. Going back to
+                                // hbloader from a live session (exitToHomeMode(false)) crashed
+                                // the title because engine/curl threads were still running.
+                                util::updateJournal("user chose close-and-update");
                                 brls::Application::quit();
                             });
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
@@ -421,6 +432,78 @@ brls::View* SettingsTab::buildGeneralTab() {
     return scroll;
 }
 
+// Release list of the same repository as the update URL
+// (".../releases/latest" -> ".../releases?per_page=20").
+static std::string testReleasesUrl(const std::string& latestUrl) {
+    const std::string suffix = "/releases/latest";
+    std::string base = latestUrl;
+    if (base.size() < suffix.size() || base.compare(base.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        base = config::ConfigManager::DEFAULT_APP_UPDATE_URL;
+    }
+    return base.substr(0, base.size() - suffix.size()) + "/releases?per_page=20";
+}
+
+// Hidden: newest pre-release or release built from the "test" branch that has
+// an .nro. releases/latest skips pre-releases, so regular users never get it.
+static void openTestBuildInstaller(const std::string& latestUrl) {
+    brls::Application::notify("app/settings/test_build_fetch"_i18n);
+    std::string listUrl = testReleasesUrl(latestUrl);
+    brls::async([listUrl]() {
+        util::logLine("testBuild: fetching " + listUrl);
+        net::HttpClient http;
+        auto res = http.httpGet(listUrl);
+        bool fetched = res.status_code == 200 && !res.body.empty();
+        std::string version, url, date;
+        if (fetched) {
+            try {
+                auto list = nlohmann::json::parse(res.body);
+                if (list.is_array()) {
+                    for (const auto& r : list) {
+                        if (r.value("draft", false)) continue;
+                        bool isTest = r.value("prerelease", false) || r.value("target_commitish", "") == "test";
+                        if (!isTest || !r.contains("assets") || !r["assets"].is_array()) continue;
+                        for (const auto& asset : r["assets"]) {
+                            std::string name = asset.value("name", "");
+                            if (name.size() >= 4 && name.compare(name.size() - 4, 4, ".nro") == 0) {
+                                url = asset.value("browser_download_url", "");
+                                break;
+                            }
+                        }
+                        if (url.empty()) continue;
+                        version = r.value("tag_name", "test");
+                        std::string iso = r.value("published_at", "");
+                        if (iso.size() >= 10) date = iso.substr(8, 2) + "." + iso.substr(5, 2) + "." + iso.substr(0, 4);
+                        break;
+                    }
+                }
+            } catch (const std::exception& e) {
+                util::logLine("testBuild: parse error: " + std::string(e.what()));
+                fetched = false;
+            }
+        } else {
+            util::logLine("testBuild: fetch failed, status=" + std::to_string(res.status_code));
+        }
+        util::logLine("testBuild: " + (url.empty() ? std::string("none") : version + " " + url));
+
+        brls::sync([fetched, version, url, date]() {
+            if (url.empty()) {
+                brls::Dialog* d = new brls::Dialog(fetched ? "app/settings/test_build_none"_i18n
+                                                           : "app/settings/update_check_failed"_i18n);
+                d->addButton("app/common/ok"_i18n, []() {});
+                d->open();
+                return;
+            }
+            brls::Dialog* dialog = new brls::Dialog(brls::getStr("app/settings/test_build_confirm", version, date));
+            dialog->addButton("app/common/yes"_i18n, [url, version]() {
+                util::updateJournal("test build chosen: " + version);
+                downloadAndInstallAppUpdate(url, version);
+            });
+            dialog->addButton("app/common/no"_i18n, []() {});
+            dialog->open();
+        });
+    });
+}
+
 brls::View* SettingsTab::buildUpdatesTab() {
     auto& cfg = config::ConfigManager::instance();
     brls::Box* box = nullptr;
@@ -497,6 +580,20 @@ brls::View* SettingsTab::buildUpdatesTab() {
         });
         return true;
     });
+    // Hidden: ZR pressed 5 times within 2.5 s on this cell offers the test build.
+    auto zrTaps = std::make_shared<std::pair<int, std::chrono::steady_clock::time_point>>(0, std::chrono::steady_clock::time_point{});
+    forceAppUpdateCell->registerAction("", brls::ControllerButton::BUTTON_RT, [zrTaps, &cfg](brls::View*) {
+        auto now = std::chrono::steady_clock::now();
+        if (zrTaps->first == 0 || now - zrTaps->second > std::chrono::milliseconds(2500)) {
+            zrTaps->first = 0;
+            zrTaps->second = now;
+        }
+        if (++zrTaps->first >= 5) {
+            zrTaps->first = 0;
+            openTestBuildInstaller(cfg.getEffectiveAppUpdateUrl());
+        }
+        return true;
+    }, true);
     box->addView(forceAppUpdateCell);
 
     // ── Каталог игр ─────────────────────────────────────────────────
@@ -587,31 +684,6 @@ brls::View* SettingsTab::buildUpdatesTab() {
         return true;
     });
     box->addView(catalogUpdateCell);
-
-    // ── Ретро-каталоги ──────────────────────────────────────────────
-    addSettingsSectionHeader(box, "app/settings/sec_retro_update"_i18n);
-
-    auto* updateRetroCatalogsCell = new brls::DetailCell();
-    updateRetroCatalogsCell->setText("app/settings/retro_update_catalogs"_i18n);
-    auto updateRetroDetailText = [updateRetroCatalogsCell, alive = aliveToken_]() {
-        if (!alive || !*alive) return;
-        int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
-        if (count > 0) {
-            updateRetroCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
-        } else {
-            updateRetroCatalogsCell->setDetailText("app/settings/retro_update_catalogs_empty"_i18n);
-        }
-    };
-    updateRetroDetailText();
-    updateRetroCatalogsCell->registerClickAction([updateRetroDetailText, alive = aliveToken_](brls::View* view) {
-        showRetroCatalogUpdateDialog([updateRetroDetailText, alive](int updatedCount) {
-            if (alive && *alive) {
-                updateRetroDetailText();
-            }
-        });
-        return true;
-    });
-    box->addView(updateRetroCatalogsCell);
 
     return scroll;
 }
@@ -895,21 +967,12 @@ brls::View* SettingsTab::buildRetroTab() {
     brls::Box* box = nullptr;
     brls::ScrollingFrame* scroll = makeTabBox(&box);
 
-    // 1. Base ROMs folder selection
+    // 1. Where games go: automatically (Tico, Vita3K, Cemu folders) or a custom folder
     std::vector<std::string> folderOptions = {
-        "app/settings/retro_folder_prompt"_i18n,
-        "app/settings/retro_folder_tico"_i18n,
-        "app/settings/retro_folder_retroarch"_i18n,
-        "app/settings/retro_folder_downloads"_i18n,
+        "app/settings/retro_folder_auto"_i18n,
         "app/settings/retro_folder_custom"_i18n
     };
-    int initialFolderIdx = 0;
-    std::string currentMode = cfg.getRetroRomsMode();
-    if (currentMode == "tico") initialFolderIdx = 1;
-    else if (currentMode == "retroarch") initialFolderIdx = 2;
-    else if (currentMode == "downloads") initialFolderIdx = 3;
-    else if (currentMode == "custom") initialFolderIdx = 4;
-    else initialFolderIdx = 0;
+    int initialFolderIdx = cfg.isRetroCustomFolder() ? 1 : 0;
 
     auto* customFolderCell = new brls::DetailCell();
     customFolderCell->setText("app/settings/retro_custom_folder"_i18n);
@@ -943,38 +1006,25 @@ brls::View* SettingsTab::buildRetroTab() {
 
     auto* folderCell = new brls::SelectorCell();
     folderCell->init("app/settings/retro_roms_folder"_i18n, folderOptions, initialFolderIdx, [](int selected) {}, [&cfg, customFolderCell](int selected) {
-        if (selected == 1) {
-            cfg.setRetroRomsMode("tico");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-            tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
-            tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
-        } else if (selected == 2) {
-            cfg.setRetroRomsMode("retroarch");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-        } else if (selected == 3) {
-            cfg.setRetroRomsMode("downloads");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-        } else if (selected == 4) {
-            cfg.setRetroRomsMode("custom");
-            customFolderCell->setVisibility(brls::Visibility::VISIBLE);
-        } else {
-            cfg.setRetroRomsMode("prompt");
-            customFolderCell->setVisibility(brls::Visibility::GONE);
-        }
+        cfg.setRetroRomsMode(selected == 1 ? "custom" : "auto");
+        customFolderCell->setVisibility(selected == 1 ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
         cfg.save();
     });
     box->addView(folderCell);
 
-    customFolderCell->setVisibility((initialFolderIdx == 4) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    customFolderCell->setVisibility((initialFolderIdx == 1) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     box->addView(customFolderCell);
 
-    // 2. Auto-extract toggle
-    auto* autoExtractCell = new brls::BooleanCell();
-    autoExtractCell->init("app/settings/retro_auto_extract"_i18n, cfg.getRetroAutoExtract(), [&cfg](bool value) {
-        cfg.setRetroAutoExtract(value);
-        cfg.save();
-    });
-    box->addView(autoExtractCell);
+    // 2. How the folder is used (shown under the selector)
+    auto* folderHint = new brls::Label();
+    folderHint->setText("app/settings/retro_folder_hint"_i18n);
+    folderHint->setFontSize(13.0f);
+    folderHint->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    folderHint->setMarginTop(6.0f);
+    folderHint->setMarginBottom(14.0f);
+    folderHint->setMarginLeft(16.0f);
+    folderHint->setMarginRight(16.0f);
+    box->addView(folderHint);
 
     // 3. Update retro game databases
     auto* updateCatalogsCell = new brls::DetailCell();

@@ -13,6 +13,31 @@
 
 namespace catalog {
 
+namespace {
+
+// "0.8.0" < "0.8.1", "3.0.2" < "3.0.10"; non-numeric parts compare as text.
+bool versionLess(const std::string& a, const std::string& b) {
+    std::istringstream sa(a), sb(b);
+    std::string pa, pb;
+    while (true) {
+        bool ha = static_cast<bool>(std::getline(sa, pa, '.'));
+        bool hb = static_cast<bool>(std::getline(sb, pb, '.'));
+        if (!ha && !hb) return false;
+        if (!ha) return true;
+        if (!hb) return false;
+        bool na = !pa.empty() && std::all_of(pa.begin(), pa.end(), ::isdigit);
+        bool nb = !pb.empty() && std::all_of(pb.begin(), pb.end(), ::isdigit);
+        if (na && nb) {
+            long va = std::stol(pa), vb = std::stol(pb);
+            if (va != vb) return va < vb;
+        } else if (pa != pb) {
+            return pa < pb;
+        }
+    }
+}
+
+} // namespace
+
 RetroEmulatorManager& RetroEmulatorManager::instance() {
     static RetroEmulatorManager inst;
     return inst;
@@ -43,15 +68,15 @@ void RetroEmulatorManager::initPackages() {
             "tico",
             "Tico Frontend",
             "ticohq",
-            "0.7.2",
-            "Современный ретро-лаунчер (17 платформ: NES, SNES, N64, GB, GBA, NDS, 3DS, GC, Wii, PS1, PSP, Sega, DC)",
+            "0.8.0",
+            "Ретро-лаунчер: запускает игры всех консолей каталога, кроме PS Vita и Wii U, через модули эмуляторов",
             "tico",
             "https://github.com/ticohq/tico/releases/latest/download/tico.nro",
             "tico.nro",
             "sdmc:/switch/tico/tico.nro",
             "",
             false,
-            25 * 1024 * 1024,
+            42588986,
             {"nes", "snes", "n64", "gbc", "gba", "nds", "3ds", "gamecube", "wii", "ps1", "psp", "sega_ms", "sega_gg", "sega_md", "sega_cd", "sega_32x", "dreamcast"},
             nvgRGBA(124, 77, 255, 255),
             "tico_bios"
@@ -365,7 +390,87 @@ void RetroEmulatorManager::initPackages() {
         }
     };
 
+    addTicoModulePackages();
     applyPackageDefaults();
+}
+
+bool RetroEmulatorManager::isVersionLess(const std::string& a, const std::string& b) {
+    return versionLess(a, b);
+}
+
+std::string RetroEmulatorManager::ticoModulePackageId(const std::string& module_id) {
+    return "tico_module_" + module_id;
+}
+
+// Since Tico 0.8 every emulator is a module: a folder in sdmc:/tico/modules/<id>/
+// with module.json and the emulator .nro, published as tico-<name>-module.zip
+// on GitHub. Sizes and versions below are the releases of October 2026;
+// refreshGithubReleases() replaces them with the latest ones.
+void RetroEmulatorManager::addTicoModulePackages() {
+    struct ModuleDef {
+        const char* id;
+        const char* name;
+        const char* repo;
+        const char* asset;
+        const char* version;
+        int64_t size;
+        std::vector<std::string> consoles;
+    };
+    static const std::vector<ModuleDef> modules = {
+        {"fceumm",          "FCEUmm",          "ticohq/tico-fceumm",         "tico-fceumm-module.zip",        "3.0.2", 12307291, {"nes"}},
+        {"snes9x",          "Snes9x",          "ticohq/tico-snes9x",         "tico-snes9x-module.zip",        "3.0.2", 12238312, {"snes"}},
+        {"mupen64plus",     "Mupen64Plus",     "ticohq/tico-mupen64plus",    "tico-mupen64plus-module.zip",   "3.0.2", 17212902, {"n64"}},
+        {"gambatte",        "Gambatte",        "ticohq/tico-gambatte",       "tico-gambatte-module.zip",      "3.0.2", 11668346, {"gbc"}},
+        {"mgba",            "mGBA",            "ticohq/tico-mgba",           "tico-mgba-module.zip",          "3.0.2", 11648673, {"gba"}},
+        {"drastic",         "DraStic",         "ticohq/tico-drasticDS",      "tico-drastic-module.zip",       "3.0.0", 14590150, {"nds"}},
+        {"dekopon",         "Dekopon",         "danfromtico/tico-dekopon",   "tico-dekopon-module.zip",       "3.0.0", 17332757, {"3ds"}},
+        {"dolphin",         "Dolphin",         "ticohq/tico-dolphin",        "tico-dolphin-module.zip",       "3.0.0", 19858293, {"gamecube", "wii"}},
+        {"duckstation",     "DuckStation",     "ticohq/tico-duckstation",    "tico-duckstation-module.zip",   "3.0.0", 26414001, {"ps1"}},
+        {"nethersx2",       "NetherSX2",       "ticohq/tico-NetherSX2",      "tico-nethersx2-module.zip",     "3.0.0", 30452100, {"ps2"}},
+        {"ppsspp",          "PPSSPP",          "ticohq/tico-ppsspp",         "tico-ppsspp-module.zip",        "3.0.0", 26796853, {"psp"}},
+        {"genesis_plus_gx", "Genesis Plus GX", "ticohq/tico-genesisplusgx",  "tico-genesisplusgx-module.zip", "3.0.2", 12545520, {"sega_md", "sega_ms", "sega_gg", "sega_cd"}},
+        {"picodrive",       "PicoDrive",       "ticohq/tico-picodrive",      "tico-picodrive-module.zip",     "3.0.2", 11364290, {"sega_32x"}},
+        {"flycast",         "Flycast",         "ticohq/tico-flycast",        "tico-flycast-module.zip",       "3.0.0", 14923038, {"dreamcast"}},
+    };
+
+    for (const auto& m : modules) {
+        EmulatorPackage p;
+        p.id = ticoModulePackageId(m.id);
+        p.name = m.name;
+        p.author = m.repo;
+        p.version = m.version;
+        p.description = std::string("Tico module: ") + m.name;
+        p.category = "tico_module";
+        p.download_url = std::string("https://github.com/") + m.repo + "/releases/latest/download/" + m.asset;
+        p.filename = m.asset;
+        p.install_path = std::string("sdmc:/tico/modules/") + m.id + "/module.json";
+        p.extract_dir = "sdmc:/tico/modules";
+        p.is_archive = true;
+        p.file_size = m.size;
+        p.supported_console_ids = m.consoles;
+        p.color = nvgRGBA(124, 77, 255, 255);
+        p.github_repo = m.repo;
+        p.github_asset = m.asset;
+        packages_.push_back(p);
+    }
+
+    for (auto& p : packages_) {
+        if (p.id == "tico") {
+            p.github_repo = "ticohq/tico";
+            p.github_asset = "tico.nro";
+        }
+    }
+}
+
+bool RetroEmulatorManager::getPackageCopy(const std::string& emu_id, EmulatorPackage& out) const {
+    std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
+    for (const auto& p : packages_) {
+        if (p.id == emu_id) {
+            out = p;
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() const {
@@ -376,35 +481,48 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "Tico BIOS & System Pack",
             "Dump / Libretro",
             "1.0",
-            "Комплект BIOS и системных файлов для нативных ядер Tico: DuckStation, Flycast, Genesis Plus GX, DraStic, mGBA, FCEUmm",
+            "Комплект BIOS и системных файлов для нативных ядер Tico: NetherSX2, DuckStation, Flycast, Genesis Plus GX, DraStic, mGBA, FCEUmm",
             "tico",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
             "scph5501.bin",
             "sdmc:/tico/system/duckstation/scph5501.bin",
-            "sdmc:/tico/system",
+            "",
             false,
-            3452928,
-            {"ps1", "dreamcast", "sega_cd", "nds", "gba", "nes"},
+            7647232,
+            {"ps1", "ps2", "dreamcast", "sega_cd", "nds", "gba", "nes"},
             nvgRGBA(124, 77, 255, 255),
             "",
             {
                 // DuckStation (PS1)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/tico/system/duckstation/scph5501.bin", 524288},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/switch/duckstation/bios/scph5501.bin", 524288},
+                // NetherSX2 (PS2)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/tico/system/nethersx2/ps2-0230a-20080220.bin", 4194304},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin", 4194304},
                 // Flycast (Dreamcast)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/tico/system/flycast/dc_boot.bin", 2097152},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/tico/system/flycast/flash.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/switch/flycast/data/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/switch/flycast/data/flash.bin", 131072},
                 // Genesis Plus GX (Sega CD)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_E.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_J.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/switch/pGEN/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/switch/pGEN/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/switch/pGEN/bios_CD_J.bin", 131072},
                 // DraStic (Nintendo DS)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/tico/system/drastic/nds_bios_arm7.bin", 16384},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/tico/system/drastic/nds_bios_arm9.bin", 4096},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/tico/system/drastic/nds_firmware.bin", 262144},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/drastic/system/nds_bios_arm7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/drastic/system/nds_bios_arm9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/drastic/system/nds_firmware.bin", 262144},
                 // mGBA (GBA)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/gba_bios.bin", "sdmc:/tico/system/mgba/gba_bios.bin", 16384},
                 // FCEUmm (FDS)
-                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192}
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/switch/pNES/disksys.rom", 8192}
             }
         },
 
@@ -418,12 +536,17 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin",
             "ps2-0230a-20080220.bin",
-            "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin",
-            "sdmc:/switch/NetherSX2/bios",
+            "sdmc:/tico/system/nethersx2/ps2-0230a-20080220.bin",
+            "",
             false,
             4194304,
             {"ps2"},
-            nvgRGBA(0, 36, 100, 255)
+            nvgRGBA(0, 36, 100, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/tico/system/nethersx2/ps2-0230a-20080220.bin", 4194304},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin", 4194304}
+            }
         },
 
         // --- 2. PlayStation 1 BIOS (DuckStation) ---
@@ -436,12 +559,17 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
             "scph5501.bin",
-            "sdmc:/switch/duckstation/bios/scph5501.bin",
-            "sdmc:/switch/duckstation/bios",
+            "sdmc:/tico/system/duckstation/scph5501.bin",
+            "",
             false,
             524288,
             {"ps1"},
-            nvgRGBA(0, 55, 145, 255)
+            nvgRGBA(0, 55, 145, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/tico/system/duckstation/scph5501.bin", 524288},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/switch/duckstation/bios/scph5501.bin", 524288}
+            }
         },
 
         // --- 3. PlayStation Vita Firmware (Vita3K) ---
@@ -455,7 +583,7 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "http://dus01.psp2.update.playstation.net/update/psp2/image/2019_0924/sd_8b5f60b56c3da8365b973dba570c53a5/PSP2UPDAT.PUP?dest=us",
             "PSP2UPDAT.PUP",
             "sdmc:/switch/Vita3K/PSP2UPDAT.PUP",
-            "sdmc:/switch/Vita3K",
+            "",
             false,
             56768512,
             {"psvita"},
@@ -472,14 +600,16 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin",
             "dc_boot.bin",
-            "sdmc:/switch/flycast/data/dc_boot.bin",
-            "sdmc:/switch/flycast/data",
+            "sdmc:/tico/system/flycast/dc_boot.bin",
+            "",
             false,
             2228224,
             {"dreamcast"},
             nvgRGBA(255, 87, 34, 255),
             "",
             {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/tico/system/flycast/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/tico/system/flycast/flash.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/switch/flycast/data/dc_boot.bin", 2097152},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/switch/flycast/data/flash.bin", 131072}
             }
@@ -491,18 +621,21 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "Sega CD BIOS Pack",
             "Sega / Dump",
             "v2.00",
-            "BIOS привода Sega CD / Mega CD (US, EUR, JPN) для запуска CD-образов в pGEN",
+            "BIOS привода Sega CD / Mega CD (US, EUR, JPN) для запуска CD-образов",
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
             "bios_CD_U.bin",
-            "sdmc:/switch/pGEN/bios_CD_U.bin",
-            "sdmc:/switch/pGEN",
+            "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin",
+            "",
             false,
             393216,
             {"sega_cd"},
             nvgRGBA(76, 175, 80, 255),
             "",
             {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_J.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/switch/pGEN/bios_CD_U.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/switch/pGEN/bios_CD_E.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/switch/pGEN/bios_CD_J.bin", 131072}
@@ -520,7 +653,7 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
             "bios7.bin",
             "sdmc:/switch/melonds/bios7.bin",
-            "sdmc:/switch/melonds",
+            "",
             false,
             282624,
             {"nds"},
@@ -543,12 +676,17 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom",
             "disksys.rom",
-            "sdmc:/switch/pNES/disksys.rom",
-            "sdmc:/switch/pNES",
+            "sdmc:/tico/system/fceumm/disksys.rom",
+            "",
             false,
             8192,
             {"nes"},
-            nvgRGBA(230, 0, 18, 255)
+            nvgRGBA(230, 0, 18, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/switch/pNES/disksys.rom", 8192}
+            }
         },
 
         // --- 8. Sega 32X & Sega CD (RetroArch) ---
@@ -562,7 +700,7 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
             "bios_CD_U.bin",
             "sdmc:/retroarch/cores/system/bios_CD_U.bin",
-            "sdmc:/retroarch/cores/system",
+            "",
             false,
             393216,
             {"sega_32x", "sega_cd"},
@@ -581,18 +719,21 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "DraStic DS BIOS & Firmware",
             "Nintendo / Dump",
             "v1.0",
-            "Системные файлы ARM7/ARM9 BIOS и nds_firmware.bin для DraStic DS (/switch/drastic/system/)",
+            "Системные файлы ARM7/ARM9 BIOS и nds_firmware.bin для DraStic DS",
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
             "nds_bios_arm7.bin",
-            "sdmc:/switch/drastic/system/nds_bios_arm7.bin",
-            "sdmc:/switch/drastic/system",
+            "sdmc:/tico/system/drastic/nds_bios_arm7.bin",
+            "",
             false,
             282624,
             {"nds"},
             nvgRGBA(0, 188, 212, 255),
             "",
             {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/tico/system/drastic/nds_bios_arm7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/tico/system/drastic/nds_bios_arm9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/tico/system/drastic/nds_firmware.bin", 262144},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/drastic/system/nds_bios_arm7.bin", 16384},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/drastic/system/nds_bios_arm9.bin", 4096},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/drastic/system/nds_firmware.bin", 262144}
@@ -698,6 +839,7 @@ bool RetroEmulatorManager::isInstalled(const std::string& emu_id) const {
 }
 
 std::string RetroEmulatorManager::getInstalledVersion(const std::string& emu_id) const {
+    std::lock_guard<std::mutex> lock(versions_mutex_);
     auto it = installed_versions_.find(emu_id);
     if (it != installed_versions_.end()) {
         return it->second;
@@ -719,7 +861,8 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
     }
 
     std::string installedVer = getInstalledVersion(emu_id);
-    if (!installedVer.empty() && installedVer != p->version && p->version != "latest") {
+    if (!installedVer.empty() && p->version != "latest" && installedVer != p->version &&
+        (p->github_repo.empty() || versionLess(installedVer, p->version))) {
         return EmulatorInstallStatus::UPDATE_AVAILABLE;
     }
 
@@ -727,23 +870,22 @@ EmulatorInstallStatus RetroEmulatorManager::getInstallStatus(const std::string& 
 }
 
 void RetroEmulatorManager::recordInstalledVersion(const std::string& emu_id, const std::string& version) {
-    installed_versions_[emu_id] = version;
-    saveInstalledVersions();
+    {
+        std::lock_guard<std::mutex> lock(versions_mutex_);
+        installed_versions_[emu_id] = version;
+        saveInstalledVersions();
+    }
     if (emu_id == "tico") {
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
         tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
-        if (config::ConfigManager::instance().getRetroRomsMode() == "retroarch") {
-            config::ConfigManager::instance().setRetroRomsMode("tico");
-            config::ConfigManager::instance().save();
-            util::logLine("RetroEmulatorManager: Tico installed, automatically switched retro_roms_mode to 'tico'");
-        }
     } else if (emu_id == "tico_bios") {
         tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
     }
 }
 
 void RetroEmulatorManager::loadInstalledVersions() {
+    std::lock_guard<std::mutex> lock(versions_mutex_);
     installed_versions_.clear();
     std::string path = resolvePlatformPath(TSNX_DATA_DIR "/installed_emulators.txt");
 
@@ -803,8 +945,8 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
         }
     }
 
-    // If there is an extract_dir, remove it if it exists
-    if (!p->extract_dir.empty()) {
+    // If there is an extract_dir, remove it only if package was an archive
+    if (p->is_archive && !p->extract_dir.empty()) {
         std::string dir = resolvePlatformPath(p->extract_dir);
         if (std::filesystem::exists(dir, ec)) {
             std::filesystem::remove_all(dir, ec);
@@ -820,8 +962,14 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
         }
     }
 
-    installed_versions_.erase(emu_id);
-    saveInstalledVersions();
+    {
+        std::lock_guard<std::mutex> lock(versions_mutex_);
+        installed_versions_.erase(emu_id);
+        if (p->category == "bios") {
+            installed_versions_.erase("tico_bios");
+        }
+        saveInstalledVersions();
+    }
     util::logLine("RetroEmulatorManager: uninstalled " + emu_id);
     return true;
 }
@@ -830,6 +978,18 @@ const EmulatorPackage* RetroEmulatorManager::getBiosPackageForEmulator(const std
     const auto* emu = findPackage(emu_id);
     if (!emu || emu->bios_id.empty()) return nullptr;
     return findPackage(emu->bios_id);
+}
+
+const EmulatorPackage* RetroEmulatorManager::getBiosPackageForConsole(const std::string& console_id) const {
+    if (console_id == "ps1") return findPackage("ps1_bios");
+    if (console_id == "ps2") return findPackage("ps2_bios");
+    if (console_id == "dreamcast") return findPackage("dreamcast_bios");
+    if (console_id == "sega_cd") return findPackage("segacd_bios");
+    if (console_id == "nds") return findPackage("drastic_bios");
+    if (console_id == "psvita") return findPackage("vita_fw");
+    if (console_id == "nes") return findPackage("fds_bios");
+    if (console_id == "sega_32x") return findPackage("sega32x_bios");
+    return nullptr;
 }
 
 std::string RetroEmulatorManager::getManifestDownloadUrl() const {
@@ -841,6 +1001,7 @@ std::string RetroEmulatorManager::getLocalManifestPath() const {
 }
 
 bool RetroEmulatorManager::saveLocalManifest() {
+    std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
     std::string finalPath = getLocalManifestPath();
     tsnx_ensure_parent_dirs(finalPath.c_str());
 
@@ -900,6 +1061,7 @@ bool RetroEmulatorManager::saveLocalManifest() {
 }
 
 bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
+    std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
     try {
         auto j = nlohmann::json::parse(json_str);
         if (!j.is_array()) return false;
@@ -910,6 +1072,20 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
 
             auto it = std::find_if(packages_.begin(), packages_.end(),
                 [&id](const EmulatorPackage& p) { return p.id == id; });
+
+            if (it != packages_.end() && !it->github_repo.empty()) {
+                // Tico and its modules: the built-in definition is authoritative; a cached
+                // entry may only bring a newer release (never roll the version back).
+                std::string v = item.value("version", "");
+                if (!v.empty() && !versionLess(v, it->version)) {
+                    it->version = v;
+                    std::string url = item.value("download_url", "");
+                    if (!url.empty()) it->download_url = url;
+                    int64_t size = item.value("file_size", (int64_t)0);
+                    if (size > 0) it->file_size = size;
+                }
+                continue;
+            }
 
             if (it != packages_.end()) {
                 if (item.contains("name") && !item["name"].get<std::string>().empty())
@@ -1060,7 +1236,7 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
         util::logLine("RetroEmulatorManager: failed to download manifest from " + url);
         std::error_code ec;
         std::filesystem::remove(tmpPath, ec);
-        return false;
+        return refreshGithubReleases();
     }
 
     if (progress_cb) progress_cb(0.7f, "Разбор данных манифеста...");
@@ -1085,12 +1261,75 @@ bool RetroEmulatorManager::refreshManifest(std::function<void(float progress, co
         return false;
     }
 
+    // Tico and its modules come from GitHub releases rather than the manifest.
+    refreshGithubReleases();
+
     // Save the fully merged manifest to disk so all BIOSes are preserved
     saveLocalManifest();
 
     if (progress_cb) progress_cb(1.0f, "Манифест успешно обновлен");
     util::logLine("RetroEmulatorManager: manifest successfully refreshed and cached at " + finalPath);
     return true;
+}
+
+bool RetroEmulatorManager::refreshGithubReleases() {
+    struct Target {
+        std::string id, repo, asset;
+    };
+    std::vector<Target> targets;
+    {
+        std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
+        for (const auto& p : packages_) {
+            if (!p.github_repo.empty()) targets.push_back({p.id, p.github_repo, p.github_asset});
+        }
+    }
+
+    int updated = 0;
+    for (const auto& t : targets) {
+        if (g_appExiting.load()) break;
+        net::HttpClient client;
+        client.setTimeout(20);
+        net::HttpResponse r = client.httpGet("https://api.github.com/repos/" + t.repo + "/releases/latest",
+                                             {"Accept: application/vnd.github+json"});
+        if (r.status_code != 200 || r.body.empty()) {
+            util::logLine("RetroEmulatorManager: GitHub release check failed for " + t.repo +
+                          " (HTTP " + std::to_string(r.status_code) + ")");
+            if (r.status_code == 403 || r.status_code == 429) break; // rate limited: try again tomorrow
+            continue;
+        }
+        try {
+            auto j = nlohmann::json::parse(r.body);
+            std::string tag = j.value("tag_name", "");
+            if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) tag = tag.substr(1);
+            int64_t size = 0;
+            std::string url;
+            if (j.contains("assets") && j["assets"].is_array()) {
+                for (const auto& a : j["assets"]) {
+                    if (a.value("name", "") == t.asset) {
+                        size = a.value("size", (int64_t)0);
+                        url = a.value("browser_download_url", "");
+                        break;
+                    }
+                }
+            }
+            if (tag.empty()) continue;
+            std::lock_guard<std::recursive_mutex> lock(packages_mutex_);
+            for (auto& p : packages_) {
+                if (p.id != t.id) continue;
+                p.version = tag;
+                if (size > 0) p.file_size = size;
+                if (!url.empty()) p.download_url = url;
+                ++updated;
+                break;
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("RetroEmulatorManager: bad GitHub response: ") + e.what());
+        }
+    }
+    util::logLine("RetroEmulatorManager: GitHub releases checked, " + std::to_string(updated) + " of " +
+                  std::to_string(targets.size()) + " updated");
+    if (updated > 0) saveLocalManifest();
+    return updated > 0;
 }
 
 void RetroEmulatorManager::healInstalledEmulators() {
@@ -1179,8 +1418,11 @@ void RetroEmulatorManager::healInstalledEmulators() {
         tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
         tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
         tsnx_ensure_dir(TSNX_TICO_SYSTEM_DIR);
+        // Tico 0.8 keeps its settings in tico/data/tico.vault; older ones need an update for modules.
+        std::lock_guard<std::mutex> lock(versions_mutex_);
         if (installed_versions_.find("tico") == installed_versions_.end()) {
-            installed_versions_["tico"] = "0.7.2";
+            bool v08 = std::filesystem::exists(resolvePlatformPath("sdmc:/tico/data/tico.vault"), ec);
+            installed_versions_["tico"] = v08 ? "0.8.0" : "0.7.2";
             saveInstalledVersions();
         }
     }
@@ -1189,6 +1431,7 @@ void RetroEmulatorManager::healInstalledEmulators() {
     std::string ticoDuckstation = resolvePlatformPath("sdmc:/tico/system/duckstation/scph5501.bin");
     std::string ticoFlycast = resolvePlatformPath("sdmc:/tico/system/flycast/dc_boot.bin");
     if (std::filesystem::exists(ticoDuckstation, ec) || std::filesystem::exists(ticoFlycast, ec)) {
+        std::lock_guard<std::mutex> lock(versions_mutex_);
         if (installed_versions_.find("tico_bios") == installed_versions_.end()) {
             installed_versions_["tico_bios"] = "1.0";
             saveInstalledVersions();

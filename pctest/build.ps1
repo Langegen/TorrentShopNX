@@ -133,6 +133,60 @@ function Build-PerfTest {
     Write-Host "OK -> pctest\test_engine_perf"
 }
 
+# Engine registry stress test (concurrent remove/re-add, reads, status polls).
+function Build-RegistryTest {
+    $OBJDIR = "pctest\obj"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
+    $cobj = @()
+    foreach ($src in $COMMON_SOURCES) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        if (-not (Test-Path $o)) {
+            & $GCC @CFLAGS -c $src -o $o
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+        $cobj += $o
+    }
+    $o_reg = Join-Path $OBJDIR "test_registry.o"
+    & $GPP @CXXFLAGS -std=c++17 -Ipctest -c pctest\test_registry.cpp -o $o_reg
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_reg $CPP_OBJ -o "pctest\test_registry" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_registry"
+
+    # Multi-seeder scheduler test (hedging, CANCEL, zones, strict verify).
+    # Links the app's CustomEngineScheduler (+ util log) for --appsched.
+    $SW_INC = @("-Isource", "-Iinclude", "-Isource\datasource", "-Isource\utils")
+    $o_sw = Join-Path $OBJDIR "test_swarm_sched.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -c pctest\test_swarm_sched.cpp -o $o_sw
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $o_sched = Join-Path $OBJDIR "sw_custom_engine_scheduler.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -c source\datasource\custom_engine_scheduler.cpp -o $o_sched
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $o_log = Join-Path $OBJDIR "sw_log.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -c source\utils\log.cpp -o $o_log
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_sw $o_sched $o_log $CPP_OBJ -o "pctest\test_swarm_sched" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_swarm_sched"
+
+    # Peer rotation test (24 seeders, session cap): reuses the swarm test.
+    $o_rot = Join-Path $OBJDIR "test_rotation.o"
+    & $GPP @CXXFLAGS -std=c++17 -pthread @SW_INC -Ipctest -c pctest\test_rotation.cpp -o $o_rot
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $GPP @CXXFLAGS -std=c++17 $cobj $o_rot $o_sched $o_log $CPP_OBJ -o "pctest\test_rotation" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_rotation"
+
+    # Peer pool index fuzz test: includes torrentfs.c, so link everything else.
+    $o_pool = Join-Path $OBJDIR "test_pool.o"
+    & $GCC @CFLAGS -c pctest\test_pool.c -o $o_pool
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $cobj_nofs = $cobj | Where-Object { $_ -notlike "*torrentfs.c.o" }
+    & $GPP @CXXFLAGS -std=c++17 $cobj_nofs $o_pool $CPP_OBJ -o "pctest\test_pool" @LIBS
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_pool"
+}
+
 function Build-MechanismsTest {
     $OBJDIR = "pctest\obj"
     if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR | Out-Null }
@@ -153,6 +207,38 @@ function Build-MechanismsTest {
     Write-Host "OK -> pctest\test_mechanisms"
 }
 
+# 7z codec pre-check + libarchive ARM64 + rollback of partial extraction.
+# Needs mingw-w64-x86_64-libarchive. Run:
+#   pctest\test_extract_safety.exe <dir with big_arm64.7z, small_corrupt.7z, encrypted.7z, src_big\> <workDir>
+function Build-ExtractSafetyTest {
+    $OBJDIR = "pctest\obj\xs"
+    if (-not (Test-Path $OBJDIR)) { New-Item -ItemType Directory -Path $OBJDIR -Force | Out-Null }
+    $objs = @()
+    foreach ($src in (Get-ChildItem "source\7zsdk\*.c")) {
+        $o = Join-Path $OBJDIR ($src.Name + ".o")
+        & $GCC -O1 -DZ7_PPMD_SUPPORT -DZ7_EXTRACT_ONLY -c $src.FullName -o $o
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $objs += $o
+    }
+    $XS_CPP = @(
+        "pctest\test_extract_safety.cpp",
+        "source\utils\archive_utils.cpp",
+        "source\utils\sevenzip_utils.cpp",
+        "source\utils\extraction_journal.cpp",
+        "source\utils\file_ops.cpp",
+        "source\utils\log.cpp"
+    )
+    foreach ($src in $XS_CPP) {
+        $o = Join-Path $OBJDIR ([System.IO.Path]::GetFileName($src) + ".o")
+        & $GPP -std=gnu++20 -O1 -g -Isource -Iinclude -c $src -o $o
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $objs += $o
+    }
+    & $GPP $objs -o "pctest\test_extract_safety" -larchive
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "OK -> pctest\test_extract_safety"
+}
+
 Build-CppObjects
 
 Build-Test "test_bencode"
@@ -165,5 +251,7 @@ Build-Test "dhttest"
 Build-AppTest
 Build-NetBrowsingTest
 Build-PerfTest
+Build-RegistryTest
 Build-MechanismsTest
+Build-ExtractSafetyTest
 

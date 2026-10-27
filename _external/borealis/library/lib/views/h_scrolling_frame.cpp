@@ -15,6 +15,8 @@
     limitations under the License.
 */
 
+#include <algorithm>
+#include <cmath>
 #include <borealis/core/application.hpp>
 #include <borealis/core/touch/scroll_gesture.hpp>
 #include <borealis/core/touch/tap_gesture.hpp>
@@ -130,6 +132,7 @@ void HScrollingFrame::draw(NVGcontext* vg, float x, float y, float width, float 
 {
     updateScrollingIndicatior();
     naturalScrollingBehaviour();
+    finishHeldScroll();
 
     // Update scrolling - try until it works
     if (this->updateScrollingOnNextFrame && this->updateScrolling(false))
@@ -365,13 +368,23 @@ void HScrollingFrame::startScrolling(bool animated, float newScroll)
     if (newScroll == this->contentOffsetX)
         return;
 
-    if (animated)
+    if (animated && Application::isNavigationRepeating() && Application::getInputType() == InputType::GAMEPAD)
     {
-        Style style = Application::getStyle();
+        float time             = std::max(Application::getNavigationRepeatInterval() * 1.25f, 40.0f);
+        this->heldScroll       = true;
+        this->heldScrollTarget = newScroll;
+        this->heldScrollSpeed  = std::fabs(newScroll - this->contentOffsetX.getValue()) / time;
+        animateScrolling(newScroll, time, EasingFunction::linear);
+    }
+    else if (animated)
+    {
+        this->heldScroll = false;
+        Style style      = Application::getStyle();
         animateScrolling(newScroll, style["brls/animations/highlight"]);
     }
     else
     {
+        this->heldScroll = false;
         this->contentOffsetX.stop();
         this->contentOffsetX = newScroll;
         this->scrollAnimationTick();
@@ -379,13 +392,28 @@ void HScrollingFrame::startScrolling(bool animated, float newScroll)
     }
 }
 
-void HScrollingFrame::animateScrolling(float newScroll, float time)
+void HScrollingFrame::finishHeldScroll()
+{
+    if (!this->heldScroll || Application::isNavigationRepeating())
+        return;
+
+    this->heldScroll = false;
+
+    float remaining = std::fabs(this->heldScrollTarget - this->contentOffsetX.getValue());
+    if (!this->contentOffsetX.isRunning() || remaining < 0.5f || this->heldScrollSpeed <= 0.0f)
+        return;
+
+    float time = std::clamp(2.0f * remaining / this->heldScrollSpeed, 60.0f, 400.0f);
+    animateScrolling(this->heldScrollTarget, time, EasingFunction::quadraticOut);
+}
+
+void HScrollingFrame::animateScrolling(float newScroll, float time, EasingFunction easing)
 {
     this->contentOffsetX.stop();
 
     this->contentOffsetX.reset();
 
-    this->contentOffsetX.addStep(newScroll, time, EasingFunction::quadraticOut);
+    this->contentOffsetX.addStep(newScroll, time, easing);
 
     this->contentOffsetX.setTickCallback([this] {
         this->scrollAnimationTick();

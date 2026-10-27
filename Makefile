@@ -21,7 +21,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 TARGET      :=  TorrentShopNX
 APP_TITLE   :=  TorrentShopNX
 APP_AUTHOR  :=  Langegen
-APP_VERSION :=  2.17
+APP_VERSION :=  2.18
 BUILD       :=  build
 SOURCES     :=  source source/ui source/ui/dashboard source/catalog source/rss source/torrent source/download source/installer source/net source/utils source/datasource source/buffer source/config source/7zsdk
 DATA        :=
@@ -47,6 +47,19 @@ EXTRA_LIBPATHS      :=
 
 SOURCES += source/engine
 CFLAGS += -DTSNX_USE_CUSTOM_ENGINE=1 -DPOSIX
+
+#---------------------------------------------------------------------------------
+# libarchive: prefer our own build (scripts/build_libarchive_switch.sh). The
+# devkitPro switch-libarchive 3.7.2 package lacks the LZMA2 + ARM64 7z filter.
+#---------------------------------------------------------------------------------
+LIBARCHIVE_LOCAL := _external/libarchive-switch
+ifneq ($(wildcard $(TOPDIR)/$(LIBARCHIVE_LOCAL)/lib/libarchive.a),)
+    INCLUDES       += $(LIBARCHIVE_LOCAL)/include
+    LIBARCHIVE_LIB := $(TOPDIR)/$(LIBARCHIVE_LOCAL)/lib/libarchive.a
+else
+    $(warning $(LIBARCHIVE_LOCAL) not built: falling back to portlibs libarchive without 7z ARM64 support. Run scripts/build_libarchive_switch.sh)
+    LIBARCHIVE_LIB := -larchive
+endif
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -77,7 +90,7 @@ CFLAGS      +=  $(INCLUDE) -D__SWITCH__
 CXXFLAGS    :=  $(CFLAGS) -std=gnu++20 -fexceptions -Wno-deprecated
 ASFLAGS     :=  -g $(ARCH)
 LDFLAGS     :=  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -flto -Wl,-Map,$(notdir $*.map)
-LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -larchive -llzma -lbz2 -llz4 -lexpat -lz -lzstd -lnx -lm
+LIBS        :=  $(BOREALIS_LIBS) -lglfw3 -lEGL -lglapi -ldrm_nouveau -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(LIBARCHIVE_LIB) -llzma -lbz2 -llz4 -lexpat -lz -lzstd -lnx -lm
 
 #---------------------------------------------------------------------------------
 # Pass-through/recursive rules

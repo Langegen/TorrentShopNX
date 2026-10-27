@@ -4,6 +4,7 @@
 #include "../GameData.hpp"
 
 #include <atomic>
+#include <ctime>
 #include <functional>
 #include <vector>
 #include <string>
@@ -14,6 +15,7 @@ enum class GameUpdateStatus {
     UpToDate,
     UpdateAvailable,
     UpdateIgnored,
+    NotInstalled,   // record only: base game and update are on a missing SD card or archived
     Unknown
 };
 
@@ -56,6 +58,19 @@ struct LibraryItem {
     uint32_t installedPatchVersion = 0;
     int dlcCount = 0;
     std::vector<InstalledComponent> components;
+
+    // Raw titledb numbers (Nintendo counts updates as N << 16)
+    uint32_t latestPatchVersion = 0;
+    // Every catalog release of this game, best first (releases[0] == game).
+    std::vector<Game> releases;
+
+    // Homebrew port installed by the auto-installer (its own section)
+    bool isPort = false;
+    std::string portKey;
+    std::string portVariant;
+    size_t portFiles = 0;
+    std::time_t portInstalledAt = 0;
+    std::vector<uint64_t> portForwarders;
 };
 
 struct LibrarySection {
@@ -99,9 +114,17 @@ public:
     void scanForUpdates();
     void showGameActionMenu(const LibraryItem& item, int currentSection, int currentRow);
     void uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods = false);
+    // Ports: Y opens this menu; removal deletes files, folders and shortcuts.
+    void showPortActionMenu(const LibraryItem& item, int currentSection, int currentRow);
+    void uninstallPort(const LibraryItem& item, int currentSection, int currentRow);
     void showComponentManager(const LibraryItem& item, int currentSection, int currentRow);
     void toggleUpdateIgnored(uint64_t titleId, const std::string& displayName, int currentSection = -1, int currentRow = -1);
     void showModWarningDialog(const LibraryItem& item);
+    // Opens the game's release: straight away when there is one, otherwise a
+    // list of all releases (best first) to pick from.
+    void openRelease(const LibraryItem& item);
+    // Queues the missing update of every game in "Updates available".
+    void updateAllGames();
     void rebuildSections(int targetSection = -1, int targetRow = -1);
     void updateStatsAndSpace();
     void updateSpaceHint();

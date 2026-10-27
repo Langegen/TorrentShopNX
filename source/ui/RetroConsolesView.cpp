@@ -4,6 +4,8 @@
 #include "RetroEmulatorsView.hpp"
 #include "ThemeManager.hpp"
 #include "../catalog/retro_emulator_manager.h"
+#include "../catalog/retro_layout.h"
+#include "../catalog/retro_readiness.h"
 #include "../config/config.h"
 #include "../utils/app_paths.h"
 #include "../utils/log.h"
@@ -59,7 +61,7 @@ void RetroConsolesView::onContentAvailable() {
         titleLabel->setText(brls::getStr("app/retro/consoles_title"));
     }
     if (statsHint) {
-        statsHint->setText(brls::getStr("app/retro/consoles_stats") + "app/retro/consoles_stats_suffix"_i18n);
+        updateHeader();
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {
             showUpdateDialog();
         }));
@@ -79,29 +81,41 @@ void RetroConsolesView::onContentAvailable() {
 
     rebuildGrid();
     refreshGameCounts();
+    refreshStatuses();
 
-    static bool s_checkedTicoPrompt = false;
-    if (!s_checkedTicoPrompt) {
-        s_checkedTicoPrompt = true;
-        auto& cfg = config::ConfigManager::instance();
-        std::error_code ec;
-        std::string ticoNro = catalog::RetroEmulatorManager::resolvePlatformPath(TSNX_TICO_NRO_PATH);
-        std::string ticoDir = catalog::RetroEmulatorManager::resolvePlatformPath(TSNX_TICO_BASE_DIR);
-        if (cfg.getRetroRomsMode() == "retroarch" && (std::filesystem::exists(ticoNro, ec) || std::filesystem::exists(ticoDir, ec))) {
-            std::string promptMsg = "app/retro/tico_detect_title"_i18n + "\n\n" +
-                                    "app/retro/tico_detect_desc"_i18n;
-            auto* prompt = new brls::Dialog(promptMsg);
-            prompt->setCancelable(true);
-            prompt->addButton("app/retro/tico_detect_switch"_i18n, [&cfg]() {
-                cfg.setRetroRomsMode("tico");
-                cfg.save();
-                tsnx_ensure_dir(TSNX_TICO_ROMS_DIR);
-                tsnx_ensure_dir(TSNX_TICO_COVERS_DIR);
-                brls::Application::notify("app/retro/tico_mode_active_notify"_i18n);
+    // Once per launch: bring folders written by older versions to the current
+    // layout, and offer to move PS Vita / Wii U games to their emulators.
+    static bool s_checkedLegacyLayout = false;
+    if (!s_checkedLegacyLayout) {
+        s_checkedLegacyLayout = true;
+        std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
+        brls::async([flag]() {
+            catalog::retro::migrateLegacyTicoLayout();
+            if (catalog::retro::wasLegacyStandaloneOfferAnswered()) return;
+            catalog::retro::LegacyStandaloneGames legacy = catalog::retro::findLegacyStandaloneGames();
+            if (legacy.total() == 0) return;
+            brls::sync([flag, legacy]() {
+                if (!flag->load()) return;
+                std::string msg = "app/retro/legacy_move_title"_i18n + "\n\n" +
+                                  brls::getStr("app/retro/legacy_move_desc",
+                                               std::to_string(legacy.vita), std::to_string(legacy.wiiu));
+                auto* dialog = new brls::Dialog(msg);
+                dialog->setCancelable(true);
+                dialog->addButton("app/retro/legacy_move_btn"_i18n, []() {
+                    brls::async([]() {
+                        int moved = catalog::retro::moveLegacyStandaloneGames();
+                        catalog::retro::markLegacyStandaloneOfferAnswered();
+                        brls::sync([moved]() {
+                            brls::Application::notify(brls::getStr("app/retro/legacy_moved_notify", std::to_string(moved)));
+                        });
+                    });
+                });
+                dialog->addButton("app/retro/legacy_keep_btn"_i18n, []() {
+                    catalog::retro::markLegacyStandaloneOfferAnswered();
+                });
+                dialog->open();
             });
-            prompt->addButton("app/retro/tico_detect_later"_i18n, []() {});
-            prompt->open();
-        }
+        });
     }
 }
 
@@ -109,13 +123,74 @@ void RetroConsolesView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     rebuildGrid();
     refreshGameCounts();
+    refreshStatuses();
+    updateHeader();
 }
 
 void RetroConsolesView::showUpdateDialog() {
     showRetroCatalogUpdateDialog([this](int updatedCount) {
         if (updatedCount > 0) {
             refreshGameCounts();
+            updateHeader();
         }
+    });
+}
+
+// "Systems: 20 • Games in the base: 8214" from the cached bases, not a fixed text.
+void RetroConsolesView::updateHeader() {
+    if (!statsHint) return;
+    auto& mgr = catalog::RetroCatalogManager::instance();
+    std::string systems = std::to_string(mgr.consoles().size());
+    int games = mgr.getTotalCachedGamesCount();
+    std::string text = games > 0
+        ? brls::getStr("app/retro/consoles_stats_fmt", systems, std::to_string(games))
+        : brls::getStr("app/retro/consoles_count_fmt", systems);
+    statsHint->setText(text + "app/retro/consoles_stats_suffix"_i18n);
+}
+
+// What each console still needs, shown under its name. Reads the SD card, so off the UI thread.
+void RetroConsolesView::refreshStatuses() {
+    std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
+    std::vector<std::string> ids;
+    for (const auto& c : catalog::RetroCatalogManager::instance().consoles()) ids.push_back(c.id);
+
+    brls::async([this, flag, ids]() {
+        struct Status {
+            std::string id;
+            std::string key;
+            int kind; // 0 ready, 1 attention, 2 neutral
+        };
+        std::vector<Status> statuses;
+        for (const auto& id : ids) {
+            if (!flag->load()) return;
+            catalog::RetroReadiness r = catalog::checkRetroReadiness(id);
+            if (!r.systemFilesReady()) {
+                statuses.push_back({id, id == "psvita" ? "app/retro/card_need_fw" : "app/retro/card_need_bios", 1});
+            } else if (!r.emulatorReady()) {
+                statuses.push_back({id, "app/retro/card_auto_install", 2});
+            } else {
+                statuses.push_back({id, "app/retro/card_ready", 0});
+            }
+        }
+        brls::sync([this, flag, statuses]() {
+            if (!flag->load()) return;
+            auto& mgr = catalog::RetroCatalogManager::instance();
+            bool isLight = ThemeManager::instance().isCurrentThemeLight();
+            for (const auto& st : statuses) {
+                auto it = console_cards_.find(st.id);
+                const auto* info = mgr.findConsole(st.id);
+                if (it == console_cards_.end() || !it->second || !info) continue;
+                std::string runner = info->route == catalog::RetroRoute::Tico ? std::string("Tico") : mgr.getRunnerLabel(st.id);
+                it->second->setDesc(info->release_year + " • " + runner + " • " + brls::getStr(st.key));
+                if (st.kind == 0) {
+                    it->second->setDescColor(isLight ? nvgRGBA(22, 128, 61, 255) : nvgRGBA(76, 217, 100, 255));
+                } else if (st.kind == 1) {
+                    it->second->setDescColor(isLight ? nvgRGB(194, 65, 12) : nvgRGB(255, 183, 77));
+                } else {
+                    it->second->setDescColor(ThemeManager::instance().getTextSecondaryColor());
+                }
+            }
+        });
     });
 }
 
@@ -195,12 +270,9 @@ void RetroConsolesView::rebuildGrid() {
             int cached = mgr.getCachedGameCount(c.id);
             std::string countStr = (cached > 0) ? (std::to_string(cached) + " " + "app/retro/unit_games"_i18n) : "app/retro/catalog_badge"_i18n;
 
-            bool emuInstalled = !c.recommended_emulator_id.empty() &&
-                                catalog::RetroEmulatorManager::instance().isInstalled(c.recommended_emulator_id);
-            std::string desc = c.release_year + " • " + c.recommended_emulator;
-            if (emuInstalled) {
-                desc += "app/retro/emu_ready_badge"_i18n;
-            }
+            // The status ("ready", "needs a BIOS"...) is added by refreshStatuses().
+            std::string runner = (c.route == catalog::RetroRoute::Tico) ? std::string("Tico") : mgr.getRunnerLabel(c.id);
+            std::string desc = c.release_year + " • " + runner;
 
             catalog::RetroConsoleInfo cInfo = c;
             CollectionCard* card = new CollectionCard(
@@ -214,9 +286,6 @@ void RetroConsolesView::rebuildGrid() {
                 }
             );
 
-            if (emuInstalled) {
-                card->setDescColor(isLightConsoles ? nvgRGBA(22, 128, 61, 255) : nvgRGBA(76, 217, 100, 255));
-            }
 
             if (currentGridRow.size() < 3) {
                 card->setMarginRight(16.0f);
