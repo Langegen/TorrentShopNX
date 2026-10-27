@@ -19,6 +19,8 @@ public:
     void setCountText(const std::string& text);
     void setDesc(const std::string& desc);
     void setDescColor(NVGcolor color);
+    // Small colored chip next to the count ("Готово", "Нужен BIOS"); empty text hides it.
+    void setStatus(const std::string& text, NVGcolor fg, NVGcolor bg);
 
     void onFocusGained() override;
     void onFocusLost() override;
@@ -37,6 +39,8 @@ private:
     brls::Label* title_label_ = nullptr;
     brls::Label* desc_label_ = nullptr;
     brls::Label* count_label_ = nullptr;
+    brls::Box* status_chip_ = nullptr;
+    brls::Label* status_label_ = nullptr;
 
     float scale_ = 1.0f;
     float glow_ = 0.0f;

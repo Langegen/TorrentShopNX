@@ -982,7 +982,7 @@
         "consoles_stats_fmt": "الأنظمة: {0} • الألعاب في القاعدة: {1}",
         "consoles_count_fmt": "الأنظمة: {0}",
         "card_ready": "جاهز",
-        "card_auto_install": "يُثبَّت المحاكي تلقائيًا",
+        "card_auto_install": "تثبيت تلقائي",
         "card_need_bios": "يلزم BIOS",
         "card_need_fw": "يلزم برنامج ثابت",
         "on_sd": "على SD",

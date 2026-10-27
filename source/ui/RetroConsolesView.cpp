@@ -194,14 +194,21 @@ void RetroConsolesView::refreshStatuses() {
                 const auto* info = mgr.findConsole(st.id);
                 if (it == console_cards_.end() || !it->second || !info) continue;
                 std::string runner = info->route == catalog::RetroRoute::Tico ? std::string("Tico") : mgr.getRunnerLabel(st.id);
-                it->second->setDesc(joinDescParts({info->release_year, runner, brls::getStr(st.key)}));
+                // "1990 · Tico" as the description; readiness as a colored chip by the count
+                it->second->setDesc(joinDescParts({info->release_year, runner}));
+                NVGcolor fg, bg;
                 if (st.kind == 0) {
-                    it->second->setDescColor(isLight ? nvgRGBA(22, 128, 61, 255) : nvgRGBA(76, 217, 100, 255));
+                    fg = isLight ? nvgRGB(22, 120, 60) : nvgRGB(110, 220, 150);
+                    bg = isLight ? nvgRGBA(38, 166, 91, 34) : nvgRGBA(76, 217, 100, 40);
                 } else if (st.kind == 1) {
-                    it->second->setDescColor(isLight ? nvgRGB(194, 65, 12) : nvgRGB(255, 183, 77));
+                    fg = isLight ? nvgRGB(176, 70, 0) : nvgRGB(255, 185, 90);
+                    bg = isLight ? nvgRGBA(245, 124, 0, 34) : nvgRGBA(255, 160, 50, 44);
                 } else {
-                    it->second->setDescColor(ThemeManager::instance().getTextSecondaryColor());
+                    // Emulator installs itself on first download: the usual case, no chip
+                    it->second->setStatus("", fg, bg);
+                    continue;
                 }
+                it->second->setStatus(brls::getStr(st.key), fg, bg);
             }
         });
     });

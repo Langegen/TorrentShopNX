@@ -957,7 +957,7 @@
         "consoles_stats_fmt": "主机：{0} • 数据库中的游戏：{1}",
         "consoles_count_fmt": "主机：{0}",
         "card_ready": "就绪",
-        "card_auto_install": "模拟器会自动安装",
+        "card_auto_install": "自动安装",
         "card_need_bios": "需要 BIOS",
         "card_need_fw": "需要固件",
         "on_sd": "在 SD 卡上",

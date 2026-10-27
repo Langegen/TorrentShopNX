@@ -97,7 +97,21 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     count_label_->setTextColor(ThemeManager::instance().getAccentColor());
     count_label_->setSingleLine(true);
     pill->addView(count_label_);
+    pill->setShrink(0.0f);
+    count_label_->setAutoAnimate(false);
     badgeRow->addView(pill);
+
+    status_chip_ = new brls::Box();
+    status_chip_->setPadding(2.0f, 7.0f, 2.0f, 7.0f);
+    status_chip_->setCornerRadius(6.0f);
+    status_chip_->setMarginLeft(6.0f);
+    status_chip_->setVisibility(brls::Visibility::GONE);
+    status_label_ = new brls::Label();
+    status_label_->setFontSize(13.0f);
+    status_label_->setSingleLine(true);
+    status_label_->setAutoAnimate(false);
+    status_chip_->addView(status_label_);
+    badgeRow->addView(status_chip_);
 
     infoCol->addView(badgeRow);
     this->addView(infoCol);
@@ -120,6 +134,18 @@ void CollectionCard::setCountText(const std::string& text) {
 
 void CollectionCard::setDesc(const std::string& text) {
     if (desc_label_) desc_label_->setText(flattenLines(text));
+}
+
+void CollectionCard::setStatus(const std::string& text, NVGcolor fg, NVGcolor bg) {
+    if (!status_chip_ || !status_label_) return;
+    if (text.empty()) {
+        status_chip_->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+    status_label_->setText(text);
+    status_label_->setTextColor(fg);
+    status_chip_->setBackgroundColor(bg);
+    status_chip_->setVisibility(brls::Visibility::VISIBLE);
 }
 
 void CollectionCard::setDescColor(NVGcolor color) {
