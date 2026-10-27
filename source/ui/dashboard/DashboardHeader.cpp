@@ -82,7 +82,7 @@ DashboardHeader::DashboardHeader() {
     // Row 1: Catalog Count & Last Update Date
     catalog_info_label_ = new brls::Label();
     catalog_info_label_->setText("");
-    catalog_info_label_->setFontSize(13.0f);
+    catalog_info_label_->setFontSize(14.0f);
     catalog_info_label_->setTextColor(textAccent);
     catalog_info_label_->setSingleLine(true);
     rightBox_->addView(catalog_info_label_);
@@ -90,7 +90,7 @@ DashboardHeader::DashboardHeader() {
     // Row 2: SD & NAND Storage (free / total)
     storage_info_label_ = new brls::Label();
     storage_info_label_->setText("SD: 0 GB / 0 GB  •  NAND: 0 GB / 0 GB");
-    storage_info_label_->setFontSize(12.5f);
+    storage_info_label_->setFontSize(14.0f);
     storage_info_label_->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     storage_info_label_->setMarginTop(4.0f);
     storage_info_label_->setSingleLine(true);

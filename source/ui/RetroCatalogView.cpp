@@ -1,4 +1,5 @@
 #include "RetroCatalogView.hpp"
+#include "../utils/string_utils.h"
 #include "../utils/i18n_plural.h"
 #include "ui/ThemeManager.hpp"
 #include "GameDetailView.hpp"
@@ -611,7 +612,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForHeader(brls::Recyc
 }
 
 float RetroCatalogView::RetroDataSource::heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    return parent_->isListView_ ? 84.0f : 308.0f;
+    return parent_->isListView_ ? 84.0f : 326.0f;
 }
 
 brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
@@ -640,8 +641,9 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         cell->title->setText(cleanName);
         cell->size->setText(game.size);
 
-        std::string metaStr = (game.year.empty() ? "" : (game.year + " • ")) +
-                              (game.genre.empty() ? parent_->consoleInfo_.name : game.genre);
+        const bool hasGenre = !util::isPlaceholderValue(game.genre);
+        std::string metaStr = (util::isPlaceholderValue(game.year) ? "" : (game.year + " · ")) +
+                              (hasGenre ? game.genre : parent_->consoleInfo_.name);
         cell->meta->setText(metaStr);
 
         GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
@@ -758,11 +760,9 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cardBox->setVisibility(brls::Visibility::VISIBLE);
             cardBox->setFocusable(true);
 
-            std::string fullTitle = cleanRetroTitle(game.title);
-            std::string shortTitle = truncateCatalogTitle(fullTitle, 36);
+            // Full title, at most two lines (maxLines in retro_grid_cell.xml)
             brls::Label* titleLabel = cards[i].title;
-
-            titleLabel->setText(shortTitle);
+            titleLabel->setText(cleanRetroTitle(game.title));
             titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             cards[i].size->setText(game.size);
 
@@ -794,7 +794,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cardBox->getFocusEvent()->clear();
             cardBox->getFocusLostEvent()->clear();
 
-            cardBox->getFocusEvent()->subscribe([this, titleLabel, fullTitle, section = index.section, effectiveRow, i, gameIdx](brls::View* v) {
+            cardBox->getFocusEvent()->subscribe([this, titleLabel, section = index.section, effectiveRow, i, gameIdx](brls::View* v) {
                 if (v->isFocused()) {
                     RetroGridRowCell::s_lastFocusedColumn = i;
                     parent_->focusedSection_ = section;
@@ -802,14 +802,10 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                     net::ImageDownloader::instance().setFocusedPosition(effectiveRow, i);
                 }
                 titleLabel->setTextColor(ThemeManager::instance().getAccentColor());
-                titleLabel->setText(fullTitle);
-                titleLabel->setAnimated(true);
             });
 
-            cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
+            cardBox->getFocusLostEvent()->subscribe([titleLabel](brls::View*) {
                 titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
-                titleLabel->setAnimated(false);
-                titleLabel->setText(shortTitle);
             });
 
             GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());

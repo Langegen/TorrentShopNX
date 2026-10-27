@@ -40,7 +40,7 @@ DashboardTile::DashboardTile(int index, const std::string& icon_res, const std::
     NVGcolor accent = ThemeManager::instance().getTextAccentColor();
     sub_badge_ = new brls::Label();
     sub_badge_->setText("");
-    sub_badge_->setFontSize(12.0f);
+    sub_badge_->setFontSize(13.0f);
     sub_badge_->setTextColor(nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 230));
     sub_badge_->setPositionType(brls::PositionType::ABSOLUTE);
     sub_badge_->setPositionTop(10.0f);

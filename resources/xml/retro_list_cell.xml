@@ -32,14 +32,14 @@
         <brls:Box width="auto" height="auto" axis="row" alignItems="center" marginTop="4">
             <brls:Label
                 id="meta"
-                fontSize="12"
+                fontSize="14"
                 textColor="@theme/brls/header/subtitle"
                 marginRight="10"
                 singleLine="true" />
 
             <brls:Label
                 id="lang"
-                fontSize="10.5"
+                fontSize="13"
                 textColor="#FFFFFF"
                 backgroundColor="#E91E63"
                 cornerRadius="4"
@@ -49,11 +49,12 @@
     </brls:Box>
 
     <!-- Size & Action Tag -->
-    <brls:Box width="auto" height="auto" axis="row" alignItems="center">
+    <brls:Box width="auto" height="auto" axis="row" alignItems="center" shrink="0">
         <brls:Label
             id="size"
-            fontSize="13"
+            fontSize="14"
             textColor="@theme/brls/header/subtitle"
+            singleLine="true"
             marginRight="14" />
 
         <brls:Box
@@ -64,18 +65,18 @@
             visibility="gone">
             <brls:Label
                 id="seeds"
-                fontSize="13"
+                fontSize="14"
                 textColor="#34C759"
                 singleLine="true" />
             <brls:Label
                 text=" / "
-                fontSize="11"
+                fontSize="14"
                 textColor="#666666"
                 singleLine="true" />
             <brls:Label
                 id="leeches"
-                fontSize="13"
-                textColor="#FF453A"
+                fontSize="14"
+                textColor="#8E8E93"
                 singleLine="true" />
         </brls:Box>
 
@@ -92,7 +93,8 @@
             <brls:Label
                 id="actionLabel"
                 text="@i18n/app/retro/btn_download_rom"
-                fontSize="11"
+                fontSize="13"
+                singleLine="true"
                 textColor="@theme/brls/accent" />
         </brls:Box>
     </brls:Box>

@@ -360,37 +360,20 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cardBox->setVisibility(brls::Visibility::VISIBLE);
                 cardBox->setFocusable(true);
                 
-                // Short title (guaranteed ≤150px): safe static display
-                std::string fullTitle  = cleanTitle(game.title);
-                std::string shortTitle = truncateCatalogTitle(fullTitle);
-                brls::Label* titleLabel = cards[i].title;
-
-                titleLabel->setText(shortTitle);
+                // Full title, at most two lines (maxLines in catalog_cell.xml)
+                cards[i].title->setText(cleanTitle(game.title));
                 cards[i].size->setText(game.size);
 
                 // Clear subscriptions from recycled cell before adding new ones
                 cardBox->getFocusEvent()->clear();
                 cardBox->getFocusLostEvent()->clear();
 
-                // On focus → switch to full title and start scrolling animation (scissor-clipped by Borealis)
-                cardBox->getFocusEvent()->subscribe([this, titleLabel, fullTitle, row, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([this, row, i](brls::View* v) {
                     if (v->isFocused()) {
                         parent_->focusedRow_ = row;
                         parent_->focusedCol_ = i;
                         GameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
-                    }
-                    if (titleLabel->getFullText() != fullTitle) {
-                        titleLabel->setText(fullTitle);
-                    }
-                    titleLabel->setAnimated(true);
-                });
-
-                // On focus lost → stop animation and restore short title (no overflow)
-                cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
-                    titleLabel->setAnimated(false);
-                    if (titleLabel->getFullText() != shortTitle) {
-                        titleLabel->setText(shortTitle);
                     }
                 });
                 

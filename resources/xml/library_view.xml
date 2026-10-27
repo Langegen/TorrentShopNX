@@ -37,7 +37,7 @@
 
         <brls:Label
             text="@i18n/app/library/col_title"
-            fontSize="12"
+            fontSize="14"
             textColor="@theme/brls/header/subtitle"
             grow="1.0"
             marginRight="20"
@@ -46,7 +46,7 @@
         <brls:Label
             text="@i18n/app/library/installed"
             width="150px"
-            fontSize="12"
+            fontSize="14"
             textColor="@theme/brls/header/subtitle"
             horizontalAlign="center"
             marginRight="15" />
@@ -54,7 +54,7 @@
         <brls:Label
             text="@i18n/app/library/available"
             width="150px"
-            fontSize="12"
+            fontSize="14"
             textColor="@theme/brls/header/subtitle"
             horizontalAlign="center"
             marginRight="15" />
@@ -62,7 +62,7 @@
         <brls:Label
             text="@i18n/app/library/col_status"
             width="150px"
-            fontSize="12"
+            fontSize="14"
             textColor="@theme/brls/header/subtitle"
             horizontalAlign="center" />
 

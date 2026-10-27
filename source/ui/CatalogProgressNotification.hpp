@@ -50,7 +50,7 @@ public:
         statusLabel = new brls::Label();
         statusLabel->setFocusable(false);
         statusLabel->setText("app/catalog/connecting"_i18n);
-        statusLabel->setFontSize(12);
+        statusLabel->setFontSize(14.0);
         statusLabel->setTextColor(nvgRGB(170, 170, 180));
         this->addView(statusLabel);
     }

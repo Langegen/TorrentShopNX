@@ -43,27 +43,27 @@
 
             <!-- Download Progress Bar Row -->
             <brls:Box width="auto" height="18px" axis="row" alignItems="center" marginBottom="3">
-                <brls:Label text="@i18n/app/downloads/download_label" fontSize="12" width="115px" singleLine="true" />
+                <brls:Label text="@i18n/app/downloads/download_label" fontSize="14" width="115px" singleLine="true" />
                 <brls:Box id="progressBarBg" width="275px" height="8px" backgroundColor="#444444" cornerRadius="4">
                     <brls:Box id="progressBar" width="0" height="8px" backgroundColor="#4CAF50" cornerRadius="4" />
                 </brls:Box>
-                <brls:Label id="progressText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
+                <brls:Label id="progressText" text="0%" fontSize="14" marginLeft="10" singleLine="true" />
             </brls:Box>
 
             <!-- Install Progress Bar Row -->
             <brls:Box id="installProgressRow" width="auto" height="18px" axis="row" alignItems="center" marginBottom="3">
-                <brls:Label text="@i18n/app/downloads/install_label" fontSize="12" width="115px" singleLine="true" />
+                <brls:Label text="@i18n/app/downloads/install_label" fontSize="14" width="115px" singleLine="true" />
                 <brls:Box id="installBarBg" width="275px" height="8px" backgroundColor="#444444" cornerRadius="4">
                     <brls:Box id="installBar" width="0" height="8px" backgroundColor="#2196F3" cornerRadius="4" />
                 </brls:Box>
-                <brls:Label id="installText" text="0%" fontSize="12" marginLeft="10" singleLine="true" />
+                <brls:Label id="installText" text="0%" fontSize="14" marginLeft="10" singleLine="true" />
             </brls:Box>
 
             <!-- Stats Row -->
             <brls:Box width="auto" height="auto" axis="row" alignItems="center">
-                <brls:Label id="statsText" fontSize="12" textColor="#AAAAAA" singleLine="true" marginRight="12" />
-                <brls:Label id="elapsedText" fontSize="12" textColor="#AAAAAA" singleLine="true" marginRight="12" />
-                <brls:Label id="peersText" fontSize="12" textColor="#AAAAAA" singleLine="true" />
+                <brls:Label id="statsText" fontSize="14" textColor="#AAAAAA" singleLine="true" marginRight="12" />
+                <brls:Label id="elapsedText" fontSize="14" textColor="#AAAAAA" singleLine="true" marginRight="12" />
+                <brls:Label id="peersText" fontSize="14" textColor="#AAAAAA" singleLine="true" />
             </brls:Box>
 
         </brls:Box>
@@ -83,8 +83,8 @@
             paddingLeft="8"
             paddingRight="8"
             visibility="gone">
-            <brls:Label id="sdkConsoleLabel" text="" fontSize="11" textColor="@theme/brls/header/subtitle" marginBottom="2" />
-            <brls:Label id="sdkGameLabel" text="" fontSize="12" textColor="#FF7043" />
+            <brls:Label id="sdkConsoleLabel" text="" fontSize="14" textColor="@theme/brls/header/subtitle" marginBottom="2" />
+            <brls:Label id="sdkGameLabel" text="" fontSize="14" textColor="#FF7043" />
         </brls:Box>
 
         <!-- Right Status & Controls Column -->
@@ -97,7 +97,7 @@
             justifyContent="center">
             <brls:Label
                 id="countBadge"
-                fontSize="12"
+                fontSize="13"
                 textColor="#AAAAAA"
                 horizontalAlign="right"
                 singleLine="true"
@@ -109,7 +109,7 @@
                 singleLine="true" />
             <brls:Label
                 id="expandHint"
-                fontSize="12"
+                fontSize="14"
                 textColor="#00C8F5"
                 horizontalAlign="right"
                 singleLine="true"

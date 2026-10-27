@@ -157,28 +157,19 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             cards[i].card->setVisibility(brls::Visibility::VISIBLE);
             cards[i].card->setFocusable(true);
             
-            std::string fullTitle  = cleanTitle(game.title);
-            std::string shortTitle = truncateCatalogTitle(fullTitle);
-            brls::Label* titleLabel = cards[i].title;
-
-            titleLabel->setText(shortTitle);
+            // Full title, at most two lines (maxLines in catalog_cell.xml)
+            cards[i].title->setText(cleanTitle(game.title));
             cards[i].size->setText(game.size);
 
             // Clear subscriptions from recycled cell
             cards[i].card->getFocusEvent()->clear();
             cards[i].card->getFocusLostEvent()->clear();
 
-            cards[i].card->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
+            cards[i].card->getFocusEvent()->subscribe([row, i](brls::View* v) {
                 if (v->isFocused()) {
                     GameRowCell::s_lastFocusedColumn = i;
                     net::ImageDownloader::instance().setFocusedPosition(row, i);
                 }
-                titleLabel->setText(fullTitle);
-                titleLabel->setAnimated(true);
-            });
-            cards[i].card->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
-                titleLabel->setAnimated(false);
-                titleLabel->setText(shortTitle);
             });
             
             GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());

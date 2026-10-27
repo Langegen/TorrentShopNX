@@ -155,7 +155,7 @@ brls::Box* makeBadge(const std::string& text, NVGcolor bg, NVGcolor fg) {
     badge->setShrink(0.0f);
     auto* lbl = new brls::Label();
     lbl->setText(text);
-    lbl->setFontSize(11.0f);
+    lbl->setFontSize(13.0f);
     lbl->setTextColor(fg);
     lbl->setSingleLine(true);
     badge->addView(lbl);
@@ -210,7 +210,7 @@ brls::Box* makeStatusBadge(const std::string& text, int kind, bool isLight) {
     badge->setBackgroundColor(bg);
     auto* lbl = new brls::Label();
     lbl->setText(text);
-    lbl->setFontSize(12.0f);
+    lbl->setFontSize(13.0f);
     lbl->setSingleLine(true);
     lbl->setTextColor(fg);
     badge->addView(lbl);
@@ -282,7 +282,7 @@ brls::Box* RetroEmulatorsView::buildPackageRow(const catalog::EmulatorPackage& p
     if (pkg.category != "tico_module") {
         auto* authorLabel = new brls::Label();
         authorLabel->setText("app/retro/author_prefix"_i18n + pkg.author);
-        authorLabel->setFontSize(12.0f);
+        authorLabel->setFontSize(14.0f);
         authorLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         titleRow->addView(authorLabel);
     }
@@ -298,7 +298,7 @@ brls::Box* RetroEmulatorsView::buildPackageRow(const catalog::EmulatorPackage& p
     } else {
         descLabel->setText(pkg.description);
     }
-    descLabel->setFontSize(12.0f);
+    descLabel->setFontSize(14.0f);
     descLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     descLabel->setSingleLine(true);
     leftBox->addView(descLabel);
@@ -313,7 +313,7 @@ brls::Box* RetroEmulatorsView::buildPackageRow(const catalog::EmulatorPackage& p
 
     auto* sizeLabel = new brls::Label();
     sizeLabel->setText(formatSize(pkg.file_size));
-    sizeLabel->setFontSize(13.0f);
+    sizeLabel->setFontSize(14.0f);
     sizeLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     sizeLabel->setMarginRight(14.0f);
     sizeLabel->setSingleLine(true);
@@ -422,7 +422,7 @@ brls::Box* RetroEmulatorsView::buildSystemFileRow(const catalog::SystemFileCheck
 
     auto* hintLabel = new brls::Label();
     hintLabel->setText(brls::getStr(f.hint_key) + "  →  " + f.dir);
-    hintLabel->setFontSize(12.0f);
+    hintLabel->setFontSize(14.0f);
     hintLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     hintLabel->setSingleLine(true);
     leftBox->addView(hintLabel);
@@ -520,7 +520,7 @@ brls::Box* RetroEmulatorsView::buildActionRow(const std::string& text, const std
     if (!detail.empty()) {
         auto* d = new brls::Label();
         d->setText(detail);
-        d->setFontSize(13.0f);
+        d->setFontSize(14.0f);
         d->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         d->setMarginLeft(16.0f);
         d->setSingleLine(true);

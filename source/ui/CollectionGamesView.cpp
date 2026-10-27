@@ -375,27 +375,17 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                 cardBox->setVisibility(brls::Visibility::VISIBLE);
                 cardBox->setFocusable(true);
 
-                std::string fullTitle = entry.title;
-                std::string shortTitle = truncateCatalogTitle(fullTitle);
-                brls::Label* titleLabel = cards[i].title;
-
-                titleLabel->setText(shortTitle);
+                // Full title, at most two lines (maxLines in collection_grid_cell.xml)
+                cards[i].title->setText(entry.title);
 
                 cardBox->getFocusEvent()->clear();
                 cardBox->getFocusLostEvent()->clear();
 
-                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([row, i](brls::View* v) {
                     if (v->isFocused()) {
                         CollectionGameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
                     }
-                    titleLabel->setText(fullTitle);
-                    titleLabel->setAnimated(true);
-                });
-
-                cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
-                    titleLabel->setAnimated(false);
-                    titleLabel->setText(shortTitle);
                 });
 
                 // Metacritic badge (top-right of the cover)

@@ -1019,7 +1019,7 @@ brls::View* SettingsTab::buildRetroTab() {
     // 2. How the folder is used (shown under the selector)
     auto* folderHint = new brls::Label();
     folderHint->setText("app/settings/retro_folder_hint"_i18n);
-    folderHint->setFontSize(13.0f);
+    folderHint->setFontSize(14.0f);
     folderHint->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     folderHint->setMarginTop(6.0f);
     folderHint->setMarginBottom(14.0f);
@@ -1090,7 +1090,7 @@ brls::View* SettingsTab::buildAboutTab() {
 
     brls::Label* authorLabel = new brls::Label();
     authorLabel->setText("app/settings/about_author"_i18n);
-    authorLabel->setFontSize(13.0f);
+    authorLabel->setFontSize(14.0f);
     authorLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     authorLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     authorLabel->setMarginBottom(10.0f);
@@ -1098,7 +1098,7 @@ brls::View* SettingsTab::buildAboutTab() {
 
     brls::Label* hintLabel = new brls::Label();
     hintLabel->setText("app/settings/community_hint"_i18n);
-    hintLabel->setFontSize(13.5f);
+    hintLabel->setFontSize(14.0f);
     hintLabel->setTextColor(ThemeManager::instance().getTextAccentColor());
     hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     headerBox->addView(hintLabel);
@@ -1139,7 +1139,7 @@ brls::View* SettingsTab::buildAboutTab() {
 
         brls::Label* lblDesc = new brls::Label();
         lblDesc->setText(desc);
-        lblDesc->setFontSize(12.5f);
+        lblDesc->setFontSize(14.0f);
         lblDesc->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         lblDesc->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         lblDesc->setMarginBottom(12.0f);
@@ -1172,7 +1172,7 @@ brls::View* SettingsTab::buildAboutTab() {
 
         brls::Label* lblUrl = new brls::Label();
         lblUrl->setText(url);
-        lblUrl->setFontSize(12.0f);
+        lblUrl->setFontSize(14.0f);
         lblUrl->setTextColor(accentColor);
         lblUrl->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         urlBox->addView(lblUrl);
@@ -1180,7 +1180,7 @@ brls::View* SettingsTab::buildAboutTab() {
 
         brls::Label* hintAction = new brls::Label();
         hintAction->setText("app/settings/qr_press_hint"_i18n);
-        hintAction->setFontSize(11.5f);
+        hintAction->setFontSize(14.0f);
         hintAction->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         hintAction->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         card->addView(hintAction);

@@ -1964,7 +1964,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
             badgeBox->setMarginRight(12.0f);
 
             auto* badgeText = new brls::Label();
-            badgeText->setFontSize(11.0f);
+            badgeText->setFontSize(13.0f);
             badgeText->setTextColor(nvgRGB(255, 255, 255));
 
             if (comp.type == InstalledComponent::Type::BaseGame) {
@@ -1997,7 +1997,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
 
             auto* delBtn = new brls::Button();
             delBtn->setText("app/library/comp_delete_btn"_i18n);
-            delBtn->setFontSize(13.0f);
+            delBtn->setFontSize(14.0f);
             delBtn->setWidth(120.0f);
             delBtn->setHeight(34.0f);
             delBtn->setTextColor(nvgRGB(255, 255, 255));

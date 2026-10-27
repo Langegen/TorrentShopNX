@@ -829,7 +829,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
 
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/type_archive"_i18n + util::formatFileSize(item.size));
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(nvgRGBA(255, 110, 64, 210));
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
@@ -1138,7 +1138,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
 
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/type_package"_i18n + util::formatFileSize(item.size));
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(ThemeManager::instance().getAccentColor());
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
@@ -1193,7 +1193,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         auto* sp = spaceText.empty() ? nullptr : new brls::Label();
         if (sp) {
             sp->setText(spaceText);
-            sp->setFontSize(12.0f);
+            sp->setFontSize(14.0f);
             sp->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             colText->addView(sp);
         }
@@ -1343,7 +1343,7 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     bool isLight = ThemeManager::instance().isCurrentThemeLight();
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/delete_source_prompt"_i18n + fileName);
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(isLight ? nvgRGB(180, 100, 0) : nvgRGBA(255, 179, 0, 210));
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
@@ -1876,7 +1876,7 @@ void FileManagerView::showActionsMenu() {
 
     auto* subLbl = new brls::Label();
     subLbl->setText(subtitleText);
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(ThemeManager::instance().getAccentColor());
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);

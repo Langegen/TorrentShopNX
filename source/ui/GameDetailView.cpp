@@ -1,4 +1,5 @@
 #include "GameDetailView.hpp"
+#include "../utils/string_utils.h"
 #include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
@@ -82,23 +83,6 @@ private:
     brls::Button* btnQr_;
 };
 
-// Empty or placeholder values from the catalog ("Unknown", "N/A", "-") that
-// are better hidden than shown.
-static bool isUnknownValue(const std::string& raw) {
-    size_t b = raw.find_first_not_of(" \t\r\n");
-    if (b == std::string::npos) return true;
-    size_t e = raw.find_last_not_of(" \t\r\n");
-    std::string v = catalog::toLowerUtf8(raw.substr(b, e - b + 1));
-    static const char* kPlaceholders[] = {
-        "unknown", "n/a", "na", "-", "\xe2\x80\x94", "?", "none",
-        "\xd0\xbd\xd0\xb5\xd0\xb8\xd0\xb7\xd0\xb2\xd0\xb5\xd1\x81\xd1\x82\xd0\xbd\xd0\xbe", // "неизвестно"
-    };
-    for (const char* p : kPlaceholders) {
-        if (v == p) return true;
-    }
-    return false;
-}
-
 GameDetailView::GameDetailView(const Game& game, const std::string& retro_console_id)
     : game_(game), retro_console_id_(retro_console_id) {
 }
@@ -117,7 +101,7 @@ void GameDetailView::onContentAvailable() {
     int shownMeta = 0;
     auto setMeta = [&shownMeta](brls::Label* label, const char* key, const std::string& value) {
         if (!label) return;
-        if (isUnknownValue(value)) {
+        if (util::isPlaceholderValue(value)) {
             label->setVisibility(brls::Visibility::GONE);
             return;
         }
@@ -171,7 +155,7 @@ void GameDetailView::onContentAvailable() {
     if (desc.size() >= 2 && desc.substr(0, 2) == ": ") {
         desc = desc.substr(2);
     }
-    if (isUnknownValue(desc)) {
+    if (util::isPlaceholderValue(desc)) {
         description->setVisibility(brls::Visibility::GONE);
         if (descriptionHeader) descriptionHeader->setVisibility(brls::Visibility::GONE);
     } else {
@@ -266,7 +250,7 @@ void GameDetailView::onContentAvailable() {
     // Add genre badges
     std::vector<std::string> displayBadges = catalog::getDisplayGenreBadges(game_.genre);
     for (const auto& genreTag : displayBadges) {
-        if (isUnknownValue(genreTag)) continue;
+        if (util::isPlaceholderValue(genreTag)) continue;
         brls::Box* gBadge = new brls::Box();
         gBadge->setPadding(5, 10, 5, 10);
         gBadge->setMarginRight(10);
@@ -289,7 +273,7 @@ void GameDetailView::onContentAvailable() {
     if (!game_.multiplayer.empty()) {
         std::string mp = game_.multiplayer;
         std::string lowerMp = catalog::toLowerUtf8(mp);
-        if (lowerMp != "\xd0\xbd\xd0\xb5\xd1\x82" && lowerMp != "no" && lowerMp != "1" && !isUnknownValue(mp)) {
+        if (lowerMp != "\xd0\xbd\xd0\xb5\xd1\x82" && lowerMp != "no" && lowerMp != "1" && !util::isPlaceholderValue(mp)) {
             brls::Box* mpBadge = new brls::Box();
             mpBadge->setPadding(5, 10, 5, 10);
             mpBadge->setMarginRight(10);
