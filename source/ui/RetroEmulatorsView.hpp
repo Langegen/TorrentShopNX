@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include "../catalog/retro_emulator_manager.h"
+#include "../catalog/retro_readiness.h"
 
 namespace ui {
 
@@ -21,8 +22,7 @@ public:
 
 private:
     brls::Box* buildPackageRow(const catalog::EmulatorPackage& pkg, bool isLight);
-    brls::Box* buildSystemFileRow(const std::string& console_id, const std::string& hint_key,
-                                  const std::string& dir, bool present, bool optional, bool isLight);
+    brls::Box* buildSystemFileRow(const catalog::SystemFileCheck& f, bool isLight);
     brls::Box* buildActionRow(const std::string& text, const std::string& detail, bool isLight);
     // Installs the packages one after another, each with its progress dialog.
     void installSequence(std::vector<std::string> package_ids, size_t index);

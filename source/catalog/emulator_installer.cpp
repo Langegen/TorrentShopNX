@@ -137,6 +137,38 @@ bool installEmulatorPackage(const EmulatorPackage& pkg,
             const auto& comp = pkg.companion_downloads[i];
             std::string target = RetroEmulatorManager::resolvePlatformPath(comp.install_path);
             std::string name = fs::path(target).filename().string();
+
+            // Optimization: if this identical URL was already downloaded in an earlier companion file, copy it locally
+            bool copied = false;
+            for (int prev = 0; prev < i; ++prev) {
+                if (pkg.companion_downloads[prev].download_url == comp.download_url) {
+                    std::string prevTarget = RetroEmulatorManager::resolvePlatformPath(pkg.companion_downloads[prev].install_path);
+                    if (fs::is_regular_file(prevTarget, ec) && fs::file_size(prevTarget, ec) > 0) {
+                        tsnx_ensure_parent_dirs(target.c_str());
+                        fs::remove(target, ec);
+                        ec.clear();
+                        fs::copy_file(prevTarget, target, fs::copy_options::overwrite_existing, ec);
+                        if (!ec) {
+                            copied = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (copied) {
+                InstallProgress p;
+                p.stage = InstallProgress::Stage::Downloading;
+                p.file = name;
+                p.file_index = i;
+                p.file_count = count;
+                p.done = comp.file_size;
+                p.total = comp.file_size;
+                p.fraction = static_cast<float>(i + 1) / count;
+                report(p);
+                continue;
+            }
+
             bool ok = downloadFile(comp.download_url, target, comp.file_size, cancel,
                 [&](int64_t done, int64_t total) {
                     InstallProgress p;

@@ -70,6 +70,7 @@ public:
     bool uninstallEmulator(const std::string& emu_id, std::string& out_err);
 
     const EmulatorPackage* getBiosPackageForEmulator(const std::string& emu_id) const;
+    const EmulatorPackage* getBiosPackageForConsole(const std::string& console_id) const;
 
     std::string getManifestDownloadUrl() const;
     std::string getLocalManifestPath() const;

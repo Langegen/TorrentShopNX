@@ -102,9 +102,13 @@ std::vector<SystemFileCheck> systemFilesFor(const std::string& console_id) {
                   anyExists(d, {"nds_firmware.bin", "firmware.bin"});
         add("app/retro/bios_hint_nds", "sdmc:/tico/system/drastic/", ok);
     } else if (console_id == "psvita") {
-        // Vita3K-nx treats the firmware as installed when its system modules are unpacked.
-        add("app/retro/vita_fw_hint", "sdmc:/switch/vita3k/",
-            dirHasExtension(local("sdmc:/switch/vita3k/vita/vs0/sys/external"), ".suprx"));
+        // Vita3K-nx treats the firmware as installed when its system modules are unpacked,
+        // or if the firmware update package PSP2UPDAT.PUP has been placed in Vita3K directory.
+        bool hasUnpacked = dirHasExtension(local("sdmc:/switch/vita3k/vita/vs0/sys/external"), ".suprx");
+        std::error_code ec;
+        bool hasPup = (fs::is_regular_file(local("sdmc:/switch/Vita3K/PSP2UPDAT.PUP"), ec) && fs::file_size(local("sdmc:/switch/Vita3K/PSP2UPDAT.PUP"), ec) > 50 * 1024 * 1024) ||
+                      (fs::is_regular_file(local("sdmc:/switch/vita3k/PSP2UPDAT.PUP"), ec) && fs::file_size(local("sdmc:/switch/vita3k/PSP2UPDAT.PUP"), ec) > 50 * 1024 * 1024);
+        add("app/retro/vita_fw_hint", "sdmc:/switch/vita3k/", hasUnpacked || hasPup);
     } else if (console_id == "wiiu") {
         std::error_code ec;
         add("app/retro/cemu_keys_hint", "sdmc:/switch/cemu/",
@@ -168,6 +172,12 @@ bool ensureRunnerInstalled(const std::string& console_id,
     if (!r.module_pkg.empty() && !r.module_installed) needed.push_back(r.module_pkg);
 
     auto& emu = RetroEmulatorManager::instance();
+    if (!r.systemFilesReady()) {
+        const auto* biosPkg = emu.getBiosPackageForConsole(console_id);
+        if (biosPkg) {
+            needed.push_back(biosPkg->id);
+        }
+    }
     for (const auto& id : needed) {
         if (cancel && cancel->load()) {
             out_error = "cancelled";

@@ -399,10 +399,9 @@ brls::Box* RetroEmulatorsView::buildPackageRow(const catalog::EmulatorPackage& p
     return row;
 }
 
-brls::Box* RetroEmulatorsView::buildSystemFileRow(const std::string& console_id, const std::string& hint_key,
-                                                  const std::string& dir, bool present, bool optional, bool isLight) {
+brls::Box* RetroEmulatorsView::buildSystemFileRow(const catalog::SystemFileCheck& f, bool isLight) {
     auto* row = makeRowShell(isLight);
-    std::string focusKey = "sys:" + console_id;
+    std::string focusKey = "sys:" + f.console_id;
     row->getFocusEvent()->subscribe([this, focusKey](brls::View* v) {
         if (v && v->isFocused()) lastFocusedPkgId_ = focusKey;
     });
@@ -412,43 +411,99 @@ brls::Box* RetroEmulatorsView::buildSystemFileRow(const std::string& console_id,
     leftBox->setGrow(1.0f);
     leftBox->setShrink(1.0f);
 
-    const auto* cInfo = catalog::RetroCatalogManager::instance().findConsole(console_id);
+    const auto* cInfo = catalog::RetroCatalogManager::instance().findConsole(f.console_id);
     auto* nameLabel = new brls::Label();
-    nameLabel->setText(cInfo ? cInfo->name : console_id);
+    nameLabel->setText(cInfo ? cInfo->name : f.console_id);
     nameLabel->setFontSize(16.0f);
     nameLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
     nameLabel->setMarginBottom(4.0f);
     leftBox->addView(nameLabel);
 
     auto* hintLabel = new brls::Label();
-    hintLabel->setText(brls::getStr(hint_key) + "  →  " + dir);
+    hintLabel->setText(brls::getStr(f.hint_key) + "  →  " + f.dir);
     hintLabel->setFontSize(12.0f);
     hintLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     hintLabel->setSingleLine(true);
     leftBox->addView(hintLabel);
     row->addView(leftBox);
 
+    auto& emuMgr = catalog::RetroEmulatorManager::instance();
+    const auto* biosPkg = emuMgr.getBiosPackageForConsole(f.console_id);
+
     auto* rightBox = new brls::Box();
     rightBox->setMarginLeft(16.0f);
     rightBox->setShrink(0.0f);
-    if (present) {
+    if (f.present) {
         rightBox->addView(makeStatusBadge("app/retro/sysfile_found"_i18n, 0, isLight));
-    } else if (optional) {
+    } else if (biosPkg != nullptr) {
+        rightBox->addView(makeStatusBadge("app/retro/emulator_download"_i18n, 3, isLight));
+    } else if (f.optional) {
         rightBox->addView(makeStatusBadge("app/retro/sysfile_optional"_i18n, 2, isLight));
     } else {
         rightBox->addView(makeStatusBadge("app/retro/sysfile_missing"_i18n, 1, isLight));
     }
     row->addView(rightBox);
 
-    // The hint line is cut on narrow screens: A shows it whole.
-    std::string title = cInfo ? cInfo->name : console_id;
-    std::string text = brls::getStr(hint_key) + "\n\n" + dir;
-    row->registerClickAction([title, text](brls::View*) {
-        auto* dialog = new brls::Dialog(title + "\n\n" + text);
-        dialog->addButton("app/common/ok"_i18n, []() {});
-        dialog->open();
-        return true;
-    });
+    std::string title = cInfo ? cInfo->name : f.console_id;
+    std::string text = brls::getStr(f.hint_key) + "\n\n" + f.dir;
+
+    if (!biosPkg) {
+        row->registerClickAction([title, text](brls::View*) {
+            auto* dialog = new brls::Dialog(title + "\n\n" + text);
+            dialog->addButton("app/common/ok"_i18n, []() {});
+            dialog->open();
+            return true;
+        });
+    } else {
+        catalog::EmulatorPackage activePkg = *biosPkg;
+        if (!f.present) {
+            row->registerClickAction([this, activePkg](brls::View*) {
+                showEmulatorInstallDialog(activePkg, [this](bool ok) {
+                    if (ok) rebuildList();
+                });
+                return true;
+            });
+        } else {
+            row->registerClickAction([this, activePkg, title](brls::View*) {
+                auto* chooseDialog = new brls::Dialog(title + "\n\n" + "app/retro/bios_already_installed"_i18n);
+                chooseDialog->addButton("app/retro/btn_reinstall"_i18n, [this, activePkg]() {
+                    brls::sync([this, activePkg]() {
+                        showEmulatorInstallDialog(activePkg, [this](bool ok) {
+                            if (ok) rebuildList();
+                        });
+                    });
+                });
+                chooseDialog->addButton("app/retro/btn_delete"_i18n, [this, activePkg]() {
+                    std::string err;
+                    if (catalog::RetroEmulatorManager::instance().uninstallEmulator(activePkg.id, err)) {
+                        brls::Application::notify("app/retro/bios_deleted"_i18n);
+                        rebuildList();
+                    } else {
+                        brls::Application::notify("app/retro/emu_delete_error"_i18n + err);
+                    }
+                });
+                chooseDialog->addButton("app/common/cancel"_i18n, []() {});
+                chooseDialog->open();
+                return true;
+            });
+
+            row->registerAction("app/retro/btn_delete"_i18n, brls::ControllerButton::BUTTON_X, [this, activePkg, title](brls::View*) {
+                auto* confirmDialog = new brls::Dialog(brls::getStr("app/retro/confirm_delete_bios_title") + title + "?");
+                confirmDialog->addButton("app/retro/btn_delete"_i18n, [this, activePkg]() {
+                    std::string err;
+                    if (catalog::RetroEmulatorManager::instance().uninstallEmulator(activePkg.id, err)) {
+                        brls::Application::notify("app/retro/bios_deleted"_i18n);
+                        rebuildList();
+                    } else {
+                        brls::Application::notify("app/retro/emu_delete_error"_i18n + err);
+                    }
+                });
+                confirmDialog->addButton("app/common/cancel"_i18n, []() {});
+                confirmDialog->open();
+                return true;
+            });
+        }
+    }
     return row;
 }
 
@@ -571,8 +626,36 @@ void RetroEmulatorsView::rebuildList() {
     // 3. System files the emulators ask for
     listBox->addView(createCategoryHeader("app/retro/sec_system_files"_i18n,
                                           isLight ? nvgRGB(190, 24, 93) : nvgRGBA(233, 30, 99, 255)));
-    for (const auto& f : catalog::checkAllSystemFiles()) {
-        addRow(buildSystemFileRow(f.console_id, f.hint_key, f.dir, f.present, f.optional, isLight), "sys:" + f.console_id);
+
+    std::vector<std::string> missingBiosPackages;
+    int64_t missingBiosBytes = 0;
+    std::vector<std::string> seenBiosIds;
+    auto allSysFiles = catalog::checkAllSystemFiles();
+    for (const auto& f : allSysFiles) {
+        if (!f.present && !f.optional) {
+            const auto* biosPkg = emuMgr.getBiosPackageForConsole(f.console_id);
+            if (biosPkg) {
+                if (std::find(seenBiosIds.begin(), seenBiosIds.end(), biosPkg->id) == seenBiosIds.end()) {
+                    seenBiosIds.push_back(biosPkg->id);
+                    missingBiosPackages.push_back(biosPkg->id);
+                    missingBiosBytes += biosPkg->file_size;
+                }
+            }
+        }
+    }
+
+    if (!missingBiosPackages.empty()) {
+        auto* row = buildActionRow(brls::getStr("app/retro/install_missing_bios", std::to_string(missingBiosPackages.size())),
+                                   formatSize(missingBiosBytes), isLight);
+        row->registerClickAction([this, missingBiosPackages](brls::View*) {
+            installSequence(missingBiosPackages, 0);
+            return true;
+        });
+        addRow(row, "action:bios");
+    }
+
+    for (const auto& f : allSysFiles) {
+        addRow(buildSystemFileRow(f, isLight), "sys:" + f.console_id);
     }
 
     // 4. Everything else, folded by default

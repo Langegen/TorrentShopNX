@@ -481,35 +481,48 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "Tico BIOS & System Pack",
             "Dump / Libretro",
             "1.0",
-            "Комплект BIOS и системных файлов для нативных ядер Tico: DuckStation, Flycast, Genesis Plus GX, DraStic, mGBA, FCEUmm",
+            "Комплект BIOS и системных файлов для нативных ядер Tico: NetherSX2, DuckStation, Flycast, Genesis Plus GX, DraStic, mGBA, FCEUmm",
             "tico",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
             "scph5501.bin",
             "sdmc:/tico/system/duckstation/scph5501.bin",
-            "sdmc:/tico/system",
+            "",
             false,
-            3452928,
-            {"ps1", "dreamcast", "sega_cd", "nds", "gba", "nes"},
+            7647232,
+            {"ps1", "ps2", "dreamcast", "sega_cd", "nds", "gba", "nes"},
             nvgRGBA(124, 77, 255, 255),
             "",
             {
                 // DuckStation (PS1)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/tico/system/duckstation/scph5501.bin", 524288},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/switch/duckstation/bios/scph5501.bin", 524288},
+                // NetherSX2 (PS2)
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/tico/system/nethersx2/ps2-0230a-20080220.bin", 4194304},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin", 4194304},
                 // Flycast (Dreamcast)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/tico/system/flycast/dc_boot.bin", 2097152},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/tico/system/flycast/flash.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/switch/flycast/data/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/switch/flycast/data/flash.bin", 131072},
                 // Genesis Plus GX (Sega CD)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_E.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_J.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/switch/pGEN/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/switch/pGEN/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/switch/pGEN/bios_CD_J.bin", 131072},
                 // DraStic (Nintendo DS)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/tico/system/drastic/nds_bios_arm7.bin", 16384},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/tico/system/drastic/nds_bios_arm9.bin", 4096},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/tico/system/drastic/nds_firmware.bin", 262144},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/drastic/system/nds_bios_arm7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/drastic/system/nds_bios_arm9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/drastic/system/nds_firmware.bin", 262144},
                 // mGBA (GBA)
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/gba_bios.bin", "sdmc:/tico/system/mgba/gba_bios.bin", 16384},
                 // FCEUmm (FDS)
-                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192}
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/switch/pNES/disksys.rom", 8192}
             }
         },
 
@@ -523,12 +536,17 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin",
             "ps2-0230a-20080220.bin",
-            "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin",
-            "sdmc:/switch/NetherSX2/bios",
+            "sdmc:/tico/system/nethersx2/ps2-0230a-20080220.bin",
+            "",
             false,
             4194304,
             {"ps2"},
-            nvgRGBA(0, 36, 100, 255)
+            nvgRGBA(0, 36, 100, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/tico/system/nethersx2/ps2-0230a-20080220.bin", 4194304},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/pcsx2/bios/ps2-0230a-20080220.bin", "sdmc:/switch/NetherSX2/bios/ps2-0230a-20080220.bin", 4194304}
+            }
         },
 
         // --- 2. PlayStation 1 BIOS (DuckStation) ---
@@ -541,12 +559,17 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin",
             "scph5501.bin",
-            "sdmc:/switch/duckstation/bios/scph5501.bin",
-            "sdmc:/switch/duckstation/bios",
+            "sdmc:/tico/system/duckstation/scph5501.bin",
+            "",
             false,
             524288,
             {"ps1"},
-            nvgRGBA(0, 55, 145, 255)
+            nvgRGBA(0, 55, 145, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/tico/system/duckstation/scph5501.bin", 524288},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/scph5501.bin", "sdmc:/switch/duckstation/bios/scph5501.bin", 524288}
+            }
         },
 
         // --- 3. PlayStation Vita Firmware (Vita3K) ---
@@ -560,7 +583,7 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "http://dus01.psp2.update.playstation.net/update/psp2/image/2019_0924/sd_8b5f60b56c3da8365b973dba570c53a5/PSP2UPDAT.PUP?dest=us",
             "PSP2UPDAT.PUP",
             "sdmc:/switch/Vita3K/PSP2UPDAT.PUP",
-            "sdmc:/switch/Vita3K",
+            "",
             false,
             56768512,
             {"psvita"},
@@ -577,14 +600,16 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin",
             "dc_boot.bin",
-            "sdmc:/switch/flycast/data/dc_boot.bin",
-            "sdmc:/switch/flycast/data",
+            "sdmc:/tico/system/flycast/dc_boot.bin",
+            "",
             false,
             2228224,
             {"dreamcast"},
             nvgRGBA(255, 87, 34, 255),
             "",
             {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/tico/system/flycast/dc_boot.bin", 2097152},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/tico/system/flycast/flash.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/dc_boot.bin", "sdmc:/switch/flycast/data/dc_boot.bin", 2097152},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/dc/flash.bin", "sdmc:/switch/flycast/data/flash.bin", 131072}
             }
@@ -596,18 +621,21 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "Sega CD BIOS Pack",
             "Sega / Dump",
             "v2.00",
-            "BIOS привода Sega CD / Mega CD (US, EUR, JPN) для запуска CD-образов в pGEN",
+            "BIOS привода Sega CD / Mega CD (US, EUR, JPN) для запуска CD-образов",
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
             "bios_CD_U.bin",
-            "sdmc:/switch/pGEN/bios_CD_U.bin",
-            "sdmc:/switch/pGEN",
+            "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin",
+            "",
             false,
             393216,
             {"sega_cd"},
             nvgRGBA(76, 175, 80, 255),
             "",
             {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_U.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_E.bin", 131072},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/tico/system/genesis_plus_gx/bios_CD_J.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin", "sdmc:/switch/pGEN/bios_CD_U.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_E.bin", "sdmc:/switch/pGEN/bios_CD_E.bin", 131072},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_J.bin", "sdmc:/switch/pGEN/bios_CD_J.bin", 131072}
@@ -625,7 +653,7 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
             "bios7.bin",
             "sdmc:/switch/melonds/bios7.bin",
-            "sdmc:/switch/melonds",
+            "",
             false,
             282624,
             {"nds"},
@@ -648,12 +676,17 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom",
             "disksys.rom",
-            "sdmc:/switch/pNES/disksys.rom",
-            "sdmc:/switch/pNES",
+            "sdmc:/tico/system/fceumm/disksys.rom",
+            "",
             false,
             8192,
             {"nes"},
-            nvgRGBA(230, 0, 18, 255)
+            nvgRGBA(230, 0, 18, 255),
+            "",
+            {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/tico/system/fceumm/disksys.rom", 8192},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/disksys.rom", "sdmc:/switch/pNES/disksys.rom", 8192}
+            }
         },
 
         // --- 8. Sega 32X & Sega CD (RetroArch) ---
@@ -667,7 +700,7 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios_CD_U.bin",
             "bios_CD_U.bin",
             "sdmc:/retroarch/cores/system/bios_CD_U.bin",
-            "sdmc:/retroarch/cores/system",
+            "",
             false,
             393216,
             {"sega_32x", "sega_cd"},
@@ -686,18 +719,21 @@ std::vector<EmulatorPackage> RetroEmulatorManager::getBuiltinBiosPackages() cons
             "DraStic DS BIOS & Firmware",
             "Nintendo / Dump",
             "v1.0",
-            "Системные файлы ARM7/ARM9 BIOS и nds_firmware.bin для DraStic DS (/switch/drastic/system/)",
+            "Системные файлы ARM7/ARM9 BIOS и nds_firmware.bin для DraStic DS",
             "bios",
             "https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin",
             "nds_bios_arm7.bin",
-            "sdmc:/switch/drastic/system/nds_bios_arm7.bin",
-            "sdmc:/switch/drastic/system",
+            "sdmc:/tico/system/drastic/nds_bios_arm7.bin",
+            "",
             false,
             282624,
             {"nds"},
             nvgRGBA(0, 188, 212, 255),
             "",
             {
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/tico/system/drastic/nds_bios_arm7.bin", 16384},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/tico/system/drastic/nds_bios_arm9.bin", 4096},
+                {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/tico/system/drastic/nds_firmware.bin", 262144},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios7.bin", "sdmc:/switch/drastic/system/nds_bios_arm7.bin", 16384},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/bios9.bin", "sdmc:/switch/drastic/system/nds_bios_arm9.bin", 4096},
                 {"https://raw.githubusercontent.com/archtaurus/RetroPieBIOS/master/BIOS/firmware.bin", "sdmc:/switch/drastic/system/nds_firmware.bin", 262144}
@@ -909,8 +945,8 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
         }
     }
 
-    // If there is an extract_dir, remove it if it exists
-    if (!p->extract_dir.empty()) {
+    // If there is an extract_dir, remove it only if package was an archive
+    if (p->is_archive && !p->extract_dir.empty()) {
         std::string dir = resolvePlatformPath(p->extract_dir);
         if (std::filesystem::exists(dir, ec)) {
             std::filesystem::remove_all(dir, ec);
@@ -929,6 +965,9 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
     {
         std::lock_guard<std::mutex> lock(versions_mutex_);
         installed_versions_.erase(emu_id);
+        if (p->category == "bios") {
+            installed_versions_.erase("tico_bios");
+        }
         saveInstalledVersions();
     }
     util::logLine("RetroEmulatorManager: uninstalled " + emu_id);
@@ -939,6 +978,18 @@ const EmulatorPackage* RetroEmulatorManager::getBiosPackageForEmulator(const std
     const auto* emu = findPackage(emu_id);
     if (!emu || emu->bios_id.empty()) return nullptr;
     return findPackage(emu->bios_id);
+}
+
+const EmulatorPackage* RetroEmulatorManager::getBiosPackageForConsole(const std::string& console_id) const {
+    if (console_id == "ps1") return findPackage("ps1_bios");
+    if (console_id == "ps2") return findPackage("ps2_bios");
+    if (console_id == "dreamcast") return findPackage("dreamcast_bios");
+    if (console_id == "sega_cd") return findPackage("segacd_bios");
+    if (console_id == "nds") return findPackage("drastic_bios");
+    if (console_id == "psvita") return findPackage("vita_fw");
+    if (console_id == "nes") return findPackage("fds_bios");
+    if (console_id == "sega_32x") return findPackage("sega32x_bios");
+    return nullptr;
 }
 
 std::string RetroEmulatorManager::getManifestDownloadUrl() const {
