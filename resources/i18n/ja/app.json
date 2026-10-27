@@ -215,11 +215,6 @@
         "stats": "容量: {0} | 発売年: {1}",
         "topic": "トピックを開く",
         "qr_download": "QRコードでダウンロード",
-        "developer": "開発元: {0}",
-        "publisher": "発売元: {0}",
-        "release_date": "発売日: {0}",
-        "image_format": "フォーマット: {0}",
-        "voice_lang": "音声言語: {0}",
         "description_header": "ゲーム紹介",
         "screenshots_header": "スクリーンショット",
         "download_btn": "ダウンロード",
@@ -235,9 +230,7 @@
         "auto_install_not_port": "Homebrewポートとして認識されませんでした",
         "choose_version_title": "インストールするバージョンを選択",
         "select_files_btn": "ファイルを選択",
-        "download_romset_btn": "ROMセットをダウンロード",
-        "stats_info": "トレント: {0} シード / {1} ピア ({2} DL)",
-        "stats_date": "追加日: {0}"
+        "download_romset_btn": "ROMセットをダウンロード"
     },
     "fileselect": {
         "title": "トレント内ファイル",
@@ -1255,5 +1248,15 @@
         "select": "選択",
         "actions": "操作",
         "open": "開く"
+    },
+    "detail_meta": {
+        "developer": "開発元",
+        "publisher": "発売元",
+        "release": "発売日",
+        "format": "フォーマット",
+        "voice": "音声言語",
+        "torrent": "トレント",
+        "torrent_value": "{0} シード / {1} ピア ({2} DL)",
+        "added": "追加日"
     }
 }

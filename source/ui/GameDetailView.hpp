@@ -31,13 +31,7 @@ private:
     BRLS_BIND(brls::Image, cover, "cover");
     BRLS_BIND(brls::Label, title, "title");
     BRLS_BIND(brls::Box, badgesBox, "badgesBox");
-    BRLS_BIND(brls::Label, metaDeveloper, "metaDeveloper");
-    BRLS_BIND(brls::Label, metaPublisher, "metaPublisher");
-    BRLS_BIND(brls::Label, metaYear, "metaYear");
-    BRLS_BIND(brls::Label, metaFormat, "metaFormat");
-    BRLS_BIND(brls::Label, metaVoice, "metaVoice");
-    BRLS_BIND(brls::Label, metaStats, "metaStats");
-    BRLS_BIND(brls::Label, metaDate, "metaDate");
+    BRLS_BIND(brls::Box, coverFrame, "coverFrame");
     BRLS_BIND(brls::Box, metaBox, "metaBox");
     BRLS_BIND(brls::Label, description, "description");
     BRLS_BIND(brls::Label, descriptionHeader, "descriptionHeader");

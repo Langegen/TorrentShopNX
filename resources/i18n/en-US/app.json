@@ -200,11 +200,6 @@
         "comp_patch_plain": "Update"
     },
     "detail": {
-        "developer": "Developer: {0}",
-        "publisher": "Publisher: {0}",
-        "release_date": "Release Date: {0}",
-        "image_format": "Image Format: {0}",
-        "voice_lang": "Voice Language: {0}",
         "description_header": "Description",
         "screenshots_header": "Screenshots",
         "download_btn": "Download",
@@ -235,9 +230,7 @@
         "topic": "Open Topic",
         "unknown_genre": "Unknown Genre",
         "unknown_publisher": "Unknown Publisher",
-        "update_available": "Update Available",
-        "stats_info": "Torrent: {0} seeds / {1} peers ({2} dl)",
-        "stats_date": "Added: {0}"
+        "update_available": "Update Available"
     },
     "fileselect": {
         "title": "File Selection",
@@ -1259,5 +1252,15 @@
         "select": "Select",
         "actions": "Actions",
         "open": "Open"
+    },
+    "detail_meta": {
+        "developer": "Developer",
+        "publisher": "Publisher",
+        "release": "Release Date",
+        "format": "Image Format",
+        "voice": "Voice Language",
+        "torrent": "Torrent",
+        "torrent_value": "{0} seeds / {1} peers ({2} dl)",
+        "added": "Added"
     }
 }

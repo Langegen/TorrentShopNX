@@ -215,11 +215,6 @@
         "stats": "Größe: {0} | Jahr: {1}",
         "topic": "Thema öffnen",
         "qr_download": "Download per QR",
-        "developer": "Entwickler: {0}",
-        "publisher": "Publisher: {0}",
-        "release_date": "Veröffentlichungsdatum: {0}",
-        "image_format": "Format: {0}",
-        "voice_lang": "Sprachausgabe: {0}",
         "description_header": "Beschreibung",
         "screenshots_header": "Screenshots",
         "download_btn": "Herunterladen",
@@ -235,9 +230,7 @@
         "auto_install_not_port": "Release nicht als Homebrew-Port erkannt",
         "choose_version_title": "Version zum Installieren auswählen",
         "select_files_btn": "Dateien auswählen",
-        "download_romset_btn": "ROMset herunterladen",
-        "stats_info": "Torrent: {0} Seeds / {1} Peers ({2} DL)",
-        "stats_date": "Hinzugefügt: {0}"
+        "download_romset_btn": "ROMset herunterladen"
     },
     "fileselect": {
         "title": "Torrent-Dateien",
@@ -1255,5 +1248,15 @@
         "select": "Auswählen",
         "actions": "Aktionen",
         "open": "Öffnen"
+    },
+    "detail_meta": {
+        "developer": "Entwickler",
+        "publisher": "Publisher",
+        "release": "Veröffentlichungsdatum",
+        "format": "Format",
+        "voice": "Sprachausgabe",
+        "torrent": "Torrent",
+        "torrent_value": "{0} Seeds / {1} Peers ({2} DL)",
+        "added": "Hinzugefügt"
     }
 }

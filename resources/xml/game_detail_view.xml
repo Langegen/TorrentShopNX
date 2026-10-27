@@ -4,7 +4,9 @@
         
         <!-- Left Column: Cover & Actions -->
         <brls:Box width="280px" height="auto" axis="column" marginRight="35" alignItems="center">
-            <brls:Image id="cover" width="280px" height="390px" cornerRadius="8" />
+            <brls:Box id="coverFrame" width="280px" height="390px" cornerRadius="10" alignItems="center" justifyContent="center" backgroundColor="@theme/brls/sidebar/separator">
+                <brls:Image id="cover" width="280px" height="390px" cornerRadius="10" />
+            </brls:Box>
 
             <!-- Action: Download -->
             <brls:Button id="btnDownload" text="@i18n/app/detail/download_btn" width="280px" height="48px" marginTop="15" style="primary" />
@@ -21,21 +23,14 @@
             <brls:Box id="contentBox" width="auto" height="auto" axis="column" paddingRight="20">
                 
                 <!-- Game Title -->
-                <brls:Label id="title" fontSize="28" marginBottom="10" />
+                <brls:Label id="title" fontSize="28" marginBottom="12" maxLines="2" autoAnimate="false" />
 
                 <!-- Badges (Genre & Lang) -->
                 <brls:Box id="badgesBox" width="auto" height="auto" axis="row" marginBottom="15" />
 
                 <!-- Metadata Block -->
-                <brls:Box id="metaBox" width="auto" height="auto" axis="column" marginBottom="20" padding="15" cornerRadius="10">
-                    <brls:Label id="metaDeveloper" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
-                    <brls:Label id="metaPublisher" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
-                    <brls:Label id="metaYear" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
-                    <brls:Label id="metaFormat" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
-                    <brls:Label id="metaVoice" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" />
-                    <brls:Label id="metaStats" fontSize="15" textColor="@theme/brls/header/subtitle" marginBottom="4" visibility="gone" />
-                    <brls:Label id="metaDate" fontSize="15" textColor="@theme/brls/header/subtitle" visibility="gone" />
-                </brls:Box>
+                <!-- Characteristics: two columns of caption / value, filled in code -->
+                <brls:Box id="metaBox" width="auto" height="auto" axis="column" marginBottom="22" paddingTop="16" paddingRight="20" paddingBottom="4" paddingLeft="20" cornerRadius="12" />
 
                 <!-- Screenshots Section (directly above Description) -->
                 <brls:Box id="screenshotsContainer" width="auto" height="auto" axis="column" marginBottom="20">

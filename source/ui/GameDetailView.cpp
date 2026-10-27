@@ -1,4 +1,5 @@
 #include "GameDetailView.hpp"
+#include "style/UiTokens.hpp"
 #include "../utils/string_utils.h"
 #include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
@@ -97,57 +98,85 @@ void GameDetailView::onContentAvailable() {
     title->setText(cleanTitle(game_.title));
     setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/borealis_96.png", false, "", -1, -1, 2000000);
     
-    // Metadata: fields without a value are hidden instead of showing "Unknown"
-    int shownMeta = 0;
-    auto setMeta = [&shownMeta](brls::Label* label, const char* key, const std::string& value) {
-        if (!label) return;
-        if (util::isPlaceholderValue(value)) {
-            label->setVisibility(brls::Visibility::GONE);
-            return;
-        }
-        label->setVisibility(brls::Visibility::VISIBLE);
-        label->setText(brls::getStr(key, value));
-        ++shownMeta;
+    // Characteristics: caption above value, two per row. Fields without a
+    // value are left out instead of showing "Unknown".
+    struct MetaItem { std::string caption, value; bool wide; };
+    std::vector<MetaItem> meta;
+    auto addMeta = [&meta](const char* captionKey, const std::string& value, bool wide = false) {
+        if (!util::isPlaceholderValue(value)) meta.push_back({brls::getStr(captionKey), value, wide});
     };
-    setMeta(metaDeveloper, "app/detail/developer", game_.developer);
-    setMeta(metaPublisher, "app/detail/publisher", game_.publisher);
-    setMeta(metaYear, "app/detail/release_date", game_.year);
-    setMeta(metaFormat, "app/detail/image_format", game_.image_format);
-    setMeta(metaVoice, "app/detail/voice_lang", game_.voice_lang);
-    
+    addMeta("app/detail_meta/developer", game_.developer);
+    addMeta("app/detail_meta/publisher", game_.publisher);
+    addMeta("app/detail_meta/release", game_.year);
+    addMeta("app/detail_meta/voice", game_.voice_lang);
+
     const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game_.topic_id);
     if (statsData && (statsData->seeds >= 0 || statsData->downloads >= 0)) {
-        if (metaStats) {
-            metaStats->setVisibility(brls::Visibility::VISIBLE);
-            std::string statsStr = brls::getStr("app/detail/stats_info",
-                                                std::to_string(std::max(0, statsData->seeds)),
-                                                std::to_string(std::max(0, statsData->leeches)),
-                                                std::to_string(std::max<int64_t>(0, statsData->downloads)));
-            metaStats->setText(statsStr);
-            ++shownMeta;
+        addMeta("app/detail_meta/torrent",
+                brls::getStr("app/detail_meta/torrent_value",
+                             std::to_string(std::max(0, statsData->seeds)),
+                             std::to_string(std::max(0, statsData->leeches)),
+                             std::to_string(std::max<int64_t>(0, statsData->downloads))));
+        // "2021-06-11 19:34:29" -> "11.06.2021"
+        std::string added = statsData->registered_at;
+        if (added.size() >= 10 && added[4] == '-' && added[7] == '-') {
+            added = added.substr(8, 2) + "." + added.substr(5, 2) + "." + added.substr(0, 4);
         }
-        if (metaDate) {
-            std::string dateStr = statsData->registered_at;
-            if (!dateStr.empty()) {
-                metaDate->setVisibility(brls::Visibility::VISIBLE);
-                metaDate->setText(brls::getStr("app/detail/stats_date", dateStr));
-                ++shownMeta;
-            } else {
-                metaDate->setVisibility(brls::Visibility::GONE);
+        addMeta("app/detail_meta/added", added);
+    }
+    // Long ("NSZ, compressed ~58%, installed 0.08 GB"): last, on a row of its own
+    addMeta("app/detail_meta/format", game_.image_format, game_.image_format.size() > 32);
+
+    if (metaBox) {
+        metaBox->clearViews();
+        if (meta.empty()) {
+            metaBox->setVisibility(brls::Visibility::GONE);
+        } else {
+            metaBox->setVisibility(brls::Visibility::VISIBLE);
+            metaBox->setBackgroundColor(style::cardBg());
+            metaBox->setBorderThickness(1.0f);
+            metaBox->setBorderColor(style::cardBorder());
+            brls::Box* row = nullptr;
+            int inRow = 2;
+            for (size_t i = 0; i < meta.size(); ++i) {
+                if (inRow >= 2 || meta[i].wide) {
+                    inRow = 0;
+                    row = new brls::Box();
+                    row->setAxis(brls::Axis::ROW);
+                    row->setWidthPercentage(100.0f);
+                    row->setMarginBottom(14.0f);
+                    metaBox->addView(row);
+                }
+                brls::Box* cell = new brls::Box();
+                cell->setAxis(brls::Axis::COLUMN);
+                cell->setWidthPercentage(meta[i].wide ? 100.0f : 50.0f);
+                inRow += meta[i].wide ? 2 : 1;
+                cell->setPaddingRight(16.0f);
+
+                brls::Label* cap = new brls::Label();
+                cap->setText(meta[i].caption);
+                cap->setFontSize(style::kFontCaption);
+                cap->setTextColor(style::textSecondary());
+                cap->setSingleLine(true);
+                cell->addView(cap);
+
+                brls::Label* val = new brls::Label();
+                val->setText(meta[i].value);
+                val->setLineHeight(1.25f);
+                val->setFontSize(style::kFontBody + 1.0f);
+                val->setTextColor(style::textPrimary());
+                val->setMarginTop(3.0f);
+                val->setMaxLines(2);
+                val->setAutoAnimate(false);
+                cell->addView(val);
+                row->addView(cell);
             }
         }
-    } else {
-        if (metaStats) metaStats->setVisibility(brls::Visibility::GONE);
-        if (metaDate) metaDate->setVisibility(brls::Visibility::GONE);
     }
-    
-    if (metaBox && shownMeta == 0) {
-        metaBox->setVisibility(brls::Visibility::GONE);
-    } else if (metaBox) {
-        metaBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
-        metaBox->setBorderThickness(1.0f);
-        metaBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
-        metaBox->setCornerRadius(10.0f);
+
+    if (coverFrame) {
+        coverFrame->setShadowType(brls::ShadowType::GENERIC);
+        coverFrame->setShadowVisibility(true);
     }
 
     // Clean description (remove leading ': ')
@@ -278,15 +307,15 @@ void GameDetailView::onContentAvailable() {
             mpBadge->setPadding(5, 10, 5, 10);
             mpBadge->setMarginRight(10);
             mpBadge->setMarginBottom(10);
-            mpBadge->setBackgroundColor(nvgRGBA(255, 255, 255, 14));
+            mpBadge->setBackgroundColor(style::isLight() ? nvgRGB(232, 236, 242) : nvgRGBA(255, 255, 255, 20));
             mpBadge->setBorderThickness(1.0f);
-            mpBadge->setBorderColor(nvgRGBA(255, 255, 255, 22));
+            mpBadge->setBorderColor(style::cardBorder());
             mpBadge->setCornerRadius(6);
 
             brls::Label* mpLabel = new brls::Label();
-            mpLabel->setText(mp);
+            mpLabel->setText(std::string("\uE7FB ") + mp); // people icon + player count
             mpLabel->setFontSize(14);
-            mpLabel->setTextColor(ThemeManager::instance().getCardTitleColor());
+            mpLabel->setTextColor(style::textSecondary());
             mpBadge->addView(mpLabel);
 
             badgesBox->addView(mpBadge);

@@ -200,11 +200,6 @@
         "comp_patch_plain": "تحديث"
     },
     "detail": {
-        "developer": "المطور: {0}",
-        "publisher": "الناشر: {0}",
-        "release_date": "تاريخ الإصدار: {0}",
-        "image_format": "صيغة الملف: {0}",
-        "voice_lang": "لغة الصوت: {0}",
         "description_header": "الوصف",
         "screenshots_header": "لقطات الشاشة",
         "download_btn": "تنزيل",
@@ -235,9 +230,7 @@
         "topic": "فتح الموضوع",
         "unknown_genre": "نوع غير معروف",
         "unknown_publisher": "ناشر غير معروف",
-        "update_available": "يتوفر تحديث",
-        "stats_info": "التورنت: {0} موزع / {1} قرين ({2} تنزيل)",
-        "stats_date": "تاريخ الإضافة: {0}"
+        "update_available": "يتوفر تحديث"
     },
     "fileselect": {
         "title": "اختيار الملفات",
@@ -1255,5 +1248,15 @@
         "select": "تحديد",
         "actions": "إجراءات",
         "open": "فتح"
+    },
+    "detail_meta": {
+        "developer": "المطور",
+        "publisher": "الناشر",
+        "release": "تاريخ الإصدار",
+        "format": "صيغة الملف",
+        "voice": "لغة الصوت",
+        "torrent": "التورنت",
+        "torrent_value": "{0} موزع / {1} قرين ({2} تنزيل)",
+        "added": "تاريخ الإضافة"
     }
 }

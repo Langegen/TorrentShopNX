@@ -134,13 +134,6 @@ static void addCaption(brls::Box* card, const std::string& caption, const std::s
     card->addView(row);
 }
 
-static brls::Label* addValue(brls::Box* card, const std::string& text, NVGcolor color, float size = kValueFont) {
-    brls::Label* v = makeLabel(text, size, color);
-    v->setWidthPercentage(100.0f);
-    card->addView(v);
-    return v;
-}
-
 static brls::Label* addSub(brls::Box* card, const std::string& text, NVGcolor color) {
     brls::Label* s = makeLabel(text, kCardSubFont, color);
     s->setWidthPercentage(100.0f);

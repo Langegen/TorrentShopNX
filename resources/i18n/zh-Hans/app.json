@@ -215,11 +215,6 @@
         "stats": "容量: {0} | 年份: {1}",
         "topic": "查看发布页面",
         "qr_download": "扫码下载",
-        "developer": "开发商: {0}",
-        "publisher": "发行商: {0}",
-        "release_date": "发售日期: {0}",
-        "image_format": "格式: {0}",
-        "voice_lang": "语音语言: {0}",
         "description_header": "游戏简介",
         "screenshots_header": "游戏截图",
         "download_btn": "下载安装",
@@ -235,9 +230,7 @@
         "auto_install_not_port": "未识别为自制移植版",
         "choose_version_title": "选择要安装的版本",
         "select_files_btn": "选择文件",
-        "download_romset_btn": "下载 ROM 集",
-        "stats_info": "种子统计: {0} 做种 / {1} 下载中 ({2} 次下载)",
-        "stats_date": "添加时间: {0}"
+        "download_romset_btn": "下载 ROM 集"
     },
     "fileselect": {
         "title": "种子包含文件",
@@ -1255,5 +1248,15 @@
         "select": "选择",
         "actions": "操作",
         "open": "打开"
+    },
+    "detail_meta": {
+        "developer": "开发商",
+        "publisher": "发行商",
+        "release": "发售日期",
+        "format": "格式",
+        "voice": "语音语言",
+        "torrent": "种子统计",
+        "torrent_value": "{0} 做种 / {1} 下载中 ({2} 次下载)",
+        "added": "添加时间"
     }
 }

@@ -200,11 +200,6 @@
         "comp_patch_plain": "Патч"
     },
     "detail": {
-        "developer": "Разработчик: {0}",
-        "publisher": "Издатель: {0}",
-        "release_date": "Дата выпуска: {0}",
-        "image_format": "Формат образа: {0}",
-        "voice_lang": "Язык озвучки: {0}",
         "description_header": "Описание",
         "screenshots_header": "Скриншоты",
         "download_btn": "Скачать",
@@ -235,9 +230,7 @@
         "topic": "Открыть тему",
         "unknown_genre": "Неизвестный жанр",
         "unknown_publisher": "Неизвестный издатель",
-        "update_available": "Доступно обновление",
-        "stats_info": "Раздача: {0} сид. / {1} пир. ({2} загр.)",
-        "stats_date": "Добавлено: {0}"
+        "update_available": "Доступно обновление"
     },
     "fileselect": {
         "title": "Выбор файлов",
@@ -1259,5 +1252,15 @@
         "select": "Выбор",
         "actions": "Действия",
         "open": "Открыть"
+    },
+    "detail_meta": {
+        "developer": "Разработчик",
+        "publisher": "Издатель",
+        "release": "Дата выпуска",
+        "format": "Формат образа",
+        "voice": "Язык озвучки",
+        "torrent": "Раздача",
+        "torrent_value": "{0} сид. / {1} пир. ({2} загр.)",
+        "added": "Добавлено"
     }
 }
