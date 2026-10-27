@@ -46,7 +46,7 @@
                 </brls:Box>
 
                 <!-- Description -->
-                <brls:Label text="@i18n/app/detail/description_header" fontSize="20" marginBottom="10" />
+                <brls:Label id="descriptionHeader" text="@i18n/app/detail/description_header" fontSize="20" marginBottom="10" />
                 <brls:Label id="description" fontSize="16" marginBottom="30" />
 
             </brls:Box>

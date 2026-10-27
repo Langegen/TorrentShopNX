@@ -8,6 +8,7 @@
 #include "../utils/log.h"
 #include <iomanip>
 #include <sstream>
+#include "../utils/i18n_plural.h"
 
 namespace ui {
 
@@ -260,8 +261,8 @@ brls::Box* RetroEmulatorsView::buildPackageRow(const catalog::EmulatorPackage& p
     NVGcolor consoleBg = isLight ? nvgRGBA(0, 150, 214, 25) : nvgRGBA(0, 180, 216, 40);
     NVGcolor consoleFg = isLight ? nvgRGB(2, 132, 199) : nvgRGB(56, 217, 245);
     if (pkg.supported_console_ids.size() > 4) {
-        titleRow->addView(makeBadge(brls::getStr("app/retro/tico_systems_badge_count",
-                                                 std::to_string(pkg.supported_console_ids.size())),
+        titleRow->addView(makeBadge(util::pluralize("app/plural/systems",
+                                                 static_cast<long long>(pkg.supported_console_ids.size())),
                                     isLight ? nvgRGBA(124, 77, 255, 30) : nvgRGBA(124, 77, 255, 45),
                                     isLight ? nvgRGB(100, 45, 220) : nvgRGB(180, 150, 255)));
     } else {

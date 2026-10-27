@@ -1,4 +1,5 @@
 #include "LibraryView.hpp"
+#include "../utils/i18n_plural.h"
 #include "ThemeManager.hpp"
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
@@ -1022,7 +1023,7 @@ void LibraryView::updateAllGames() {
         return;
     }
 
-    std::string msg = brls::getStr("app/library/update_all_confirm", std::to_string(targets.size()));
+    std::string msg = brls::getStr("app/library/update_all_confirm", util::pluralize("app/plural/games", static_cast<long long>(targets.size())));
     if (withMods > 0) msg += "\n\n" + brls::getStr("app/library/update_all_mods_note", std::to_string(withMods));
     auto* dialog = new brls::Dialog(msg);
     dialog->addButton("app/common/yes"_i18n, [targets]() {

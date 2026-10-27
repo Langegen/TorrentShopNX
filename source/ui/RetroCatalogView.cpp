@@ -1,4 +1,5 @@
 #include "RetroCatalogView.hpp"
+#include "../utils/i18n_plural.h"
 #include "ui/ThemeManager.hpp"
 #include "GameDetailView.hpp"
 #include "FilterSortDialog.hpp"
@@ -596,7 +597,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForHeader(brls::Recyc
         header->setTitle(title);
         const auto* gList = parent_->sections_[section].games;
         size_t count = gList ? gList->size() : 0;
-        std::string countStr = std::to_string(count) + " " + (parent_->sections_[section].isRomset ? "app/retro/unit_torrents"_i18n : "app/retro/unit_games"_i18n);
+        std::string countStr = util::pluralize(parent_->sections_[section].isRomset ? "app/plural/torrents" : "app/plural/games", count);
         header->setSubtitle(countStr);
         header->setVisibility(brls::Visibility::VISIBLE);
         header->setHeight(brls::View::AUTO);

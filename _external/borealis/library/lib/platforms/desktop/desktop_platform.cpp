@@ -21,6 +21,7 @@
 #include <borealis/core/logger.hpp>
 #include <borealis/platforms/desktop/desktop_platform.hpp>
 #include <borealis/platforms/desktop/steam_deck.hpp>
+#include <cstdlib>
 #include <memory>
 #include <sstream>
 
@@ -454,8 +455,17 @@ DesktopPlatform::DesktopPlatform()
 #endif
 }
 
+// PC preview of the Switch footer: TSNX_SWITCH_FOOTER=1 reports a battery and
+// a Wi-Fi connection, so the footer has the same width as on the console.
+static bool switchFooterPreview()
+{
+    return std::getenv("TSNX_SWITCH_FOOTER") != nullptr;
+}
+
 bool DesktopPlatform::canShowBatteryLevel()
 {
+    if (switchFooterPreview())
+        return true;
 #if defined(IOS) || defined(TVOS)
     return ios_battery_status() != 0;
 #elif defined(__APPLE__)
@@ -472,6 +482,8 @@ bool DesktopPlatform::canShowBatteryLevel()
 
 bool DesktopPlatform::canShowWirelessLevel()
 {
+    if (switchFooterPreview())
+        return true;
 #if defined(IOS) || defined(TVOS)
     return false;
 #elif defined(__APPLE__)
@@ -485,6 +497,8 @@ bool DesktopPlatform::canShowWirelessLevel()
 
 int DesktopPlatform::getBatteryLevel()
 {
+    if (switchFooterPreview())
+        return 80;
 #if defined(IOS) || defined(TVOS)
     return ios_battery() * 100;
 #elif defined(__APPLE__)
@@ -501,6 +515,8 @@ int DesktopPlatform::getBatteryLevel()
 
 bool DesktopPlatform::isBatteryCharging()
 {
+    if (switchFooterPreview())
+        return false;
 #if defined(IOS) || defined(TVOS)
     return ios_battery_status() == 2;
 #elif defined(__APPLE__)
@@ -517,6 +533,8 @@ bool DesktopPlatform::isBatteryCharging()
 
 bool DesktopPlatform::hasWirelessConnection()
 {
+    if (switchFooterPreview())
+        return true;
 #if defined(IOS) || defined(TVOS)
     return false;
 #elif defined(__APPLE__)
@@ -532,6 +550,8 @@ bool DesktopPlatform::hasWirelessConnection()
 
 int DesktopPlatform::getWirelessLevel()
 {
+    if (switchFooterPreview())
+        return 3;
 #if defined(IOS) || defined(TVOS)
     return 0;
 #elif defined(__APPLE__)
@@ -549,6 +569,8 @@ int DesktopPlatform::getWirelessLevel()
 
 bool DesktopPlatform::hasEthernetConnection()
 {
+    if (switchFooterPreview())
+        return false;
     bool has_eth = false;
 #if defined(IOS) || defined(TVOS)
 #elif defined(__APPLE__)

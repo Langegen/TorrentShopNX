@@ -82,6 +82,23 @@ private:
     brls::Button* btnQr_;
 };
 
+// Empty or placeholder values from the catalog ("Unknown", "N/A", "-") that
+// are better hidden than shown.
+static bool isUnknownValue(const std::string& raw) {
+    size_t b = raw.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return true;
+    size_t e = raw.find_last_not_of(" \t\r\n");
+    std::string v = catalog::toLowerUtf8(raw.substr(b, e - b + 1));
+    static const char* kPlaceholders[] = {
+        "unknown", "n/a", "na", "-", "\xe2\x80\x94", "?", "none",
+        "\xd0\xbd\xd0\xb5\xd0\xb8\xd0\xb7\xd0\xb2\xd0\xb5\xd1\x81\xd1\x82\xd0\xbd\xd0\xbe", // "неизвестно"
+    };
+    for (const char* p : kPlaceholders) {
+        if (v == p) return true;
+    }
+    return false;
+}
+
 GameDetailView::GameDetailView(const Game& game, const std::string& retro_console_id)
     : game_(game), retro_console_id_(retro_console_id) {
 }
@@ -96,13 +113,23 @@ void GameDetailView::onContentAvailable() {
     title->setText(cleanTitle(game_.title));
     setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/borealis_96.png", false, "", -1, -1, 2000000);
     
-    // Metadata
-    std::string unknownStr = "app/detail/unknown"_i18n;
-    metaDeveloper->setText(brls::getStr("app/detail/developer", game_.developer.empty() ? unknownStr : game_.developer));
-    metaPublisher->setText(brls::getStr("app/detail/publisher", game_.publisher.empty() ? unknownStr : game_.publisher));
-    metaYear->setText(brls::getStr("app/detail/release_date", game_.year.empty() ? unknownStr : game_.year));
-    metaFormat->setText(brls::getStr("app/detail/image_format", game_.image_format.empty() ? unknownStr : game_.image_format));
-    metaVoice->setText(brls::getStr("app/detail/voice_lang", game_.voice_lang.empty() ? unknownStr : game_.voice_lang));
+    // Metadata: fields without a value are hidden instead of showing "Unknown"
+    int shownMeta = 0;
+    auto setMeta = [&shownMeta](brls::Label* label, const char* key, const std::string& value) {
+        if (!label) return;
+        if (isUnknownValue(value)) {
+            label->setVisibility(brls::Visibility::GONE);
+            return;
+        }
+        label->setVisibility(brls::Visibility::VISIBLE);
+        label->setText(brls::getStr(key, value));
+        ++shownMeta;
+    };
+    setMeta(metaDeveloper, "app/detail/developer", game_.developer);
+    setMeta(metaPublisher, "app/detail/publisher", game_.publisher);
+    setMeta(metaYear, "app/detail/release_date", game_.year);
+    setMeta(metaFormat, "app/detail/image_format", game_.image_format);
+    setMeta(metaVoice, "app/detail/voice_lang", game_.voice_lang);
     
     const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game_.topic_id);
     if (statsData && (statsData->seeds >= 0 || statsData->downloads >= 0)) {
@@ -113,12 +140,14 @@ void GameDetailView::onContentAvailable() {
                                                 std::to_string(std::max(0, statsData->leeches)),
                                                 std::to_string(std::max<int64_t>(0, statsData->downloads)));
             metaStats->setText(statsStr);
+            ++shownMeta;
         }
         if (metaDate) {
             std::string dateStr = statsData->registered_at;
             if (!dateStr.empty()) {
                 metaDate->setVisibility(brls::Visibility::VISIBLE);
                 metaDate->setText(brls::getStr("app/detail/stats_date", dateStr));
+                ++shownMeta;
             } else {
                 metaDate->setVisibility(brls::Visibility::GONE);
             }
@@ -128,7 +157,9 @@ void GameDetailView::onContentAvailable() {
         if (metaDate) metaDate->setVisibility(brls::Visibility::GONE);
     }
     
-    if (metaBox) {
+    if (metaBox && shownMeta == 0) {
+        metaBox->setVisibility(brls::Visibility::GONE);
+    } else if (metaBox) {
         metaBox->setBackgroundColor(ThemeManager::instance().getCardBgColor());
         metaBox->setBorderThickness(1.0f);
         metaBox->setBorderColor(ThemeManager::instance().getCardBorderColor());
@@ -140,7 +171,12 @@ void GameDetailView::onContentAvailable() {
     if (desc.size() >= 2 && desc.substr(0, 2) == ": ") {
         desc = desc.substr(2);
     }
-    description->setText(desc);
+    if (isUnknownValue(desc)) {
+        description->setVisibility(brls::Visibility::GONE);
+        if (descriptionHeader) descriptionHeader->setVisibility(brls::Visibility::GONE);
+    } else {
+        description->setText(desc);
+    }
     
     // Dynamic Badges (Console, Genres & Languages)
     if (!retro_console_id_.empty()) {
@@ -230,6 +266,7 @@ void GameDetailView::onContentAvailable() {
     // Add genre badges
     std::vector<std::string> displayBadges = catalog::getDisplayGenreBadges(game_.genre);
     for (const auto& genreTag : displayBadges) {
+        if (isUnknownValue(genreTag)) continue;
         brls::Box* gBadge = new brls::Box();
         gBadge->setPadding(5, 10, 5, 10);
         gBadge->setMarginRight(10);
@@ -252,7 +289,7 @@ void GameDetailView::onContentAvailable() {
     if (!game_.multiplayer.empty()) {
         std::string mp = game_.multiplayer;
         std::string lowerMp = catalog::toLowerUtf8(mp);
-        if (lowerMp != "\xd0\xbd\xd0\xb5\xd1\x82" && lowerMp != "no" && lowerMp != "1") {
+        if (lowerMp != "\xd0\xbd\xd0\xb5\xd1\x82" && lowerMp != "no" && lowerMp != "1" && !isUnknownValue(mp)) {
             brls::Box* mpBadge = new brls::Box();
             mpBadge->setPadding(5, 10, 5, 10);
             mpBadge->setMarginRight(10);

@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <map>
 #include "../utils/string_utils.h"
+#include "../utils/i18n_plural.h"
 
 extern std::vector<Game> g_games;
 
@@ -404,15 +405,8 @@ static std::string formatKbps(float speed_kbps, bool is_download) {
     }
 }
 
-// "one/few/many" plural forms; languages without them repeat the same text.
 static std::string formatFileCount(int n) {
-    int n10 = n % 10;
-    int n100 = n % 100;
-    std::string num = std::to_string(n);
-    if (n100 >= 11 && n100 <= 19) return brls::getStr("app/downloads/file_count_many", num);
-    if (n10 == 1) return brls::getStr("app/downloads/file_count_one", num);
-    if (n10 >= 2 && n10 <= 4) return brls::getStr("app/downloads/file_count_few", num);
-    return brls::getStr("app/downloads/file_count_many", num);
+    return util::pluralize("app/plural/files", n);
 }
 
 // Component name in the interface language. The queue stores the name built

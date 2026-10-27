@@ -18,6 +18,8 @@
 
 #include <yoga/YGNode.h>
 
+#include <algorithm>
+
 #include <borealis/core/application.hpp>
 #include <borealis/core/util.hpp>
 #include <borealis/views/image.hpp>
@@ -186,7 +188,16 @@ void Image::draw(NVGcontext* vg, float x, float y, float width, float height, St
     nvgBeginPath(vg);
     if (getClipsToBounds())
     {
-        nvgRoundedRect(vg, x, y, width, height, getCornerRadius());
+        // Fill only where the view and the scaled image overlap. With FIT the
+        // image is smaller than the view, and filling the whole view repeats the
+        // image's edge pixels across the empty space.
+        float left   = std::max(x, coordX);
+        float top    = std::max(y, coordY);
+        float right  = std::min(x + width, coordX + this->imageWidth);
+        float bottom = std::min(y + height, coordY + this->imageHeight);
+        if (right <= left || bottom <= top)
+            return;
+        nvgRoundedRect(vg, left, top, right - left, bottom - top, getCornerRadius());
     }
     else
     {

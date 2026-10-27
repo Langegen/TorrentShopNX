@@ -1,4 +1,5 @@
 #include "FileSelectView.hpp"
+#include "../utils/i18n_plural.h"
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
 #include "DownloadsView.hpp"
@@ -1819,8 +1820,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                     bundleSelected.push_back(files_[i].index);
                     if (files_[i].size > 0) bundleTotalBytes += static_cast<unsigned long long>(files_[i].size);
                 }
-                std::string countStr = std::to_string(chosen.size());
-                std::string bundleTitle = cleanTitle(game_.title) + " (" + brls::getStr("app/fileselect/bundle_files", countStr) + ")";
+                std::string bundleTitle = cleanTitle(game_.title) + " (" + util::pluralize("app/plural/files", static_cast<long long>(chosen.size())) + ")";
                 Game bundleGame = game_;
                 bundleGame.title = bundleTitle;
                 bundleGame.topic_id = game_.topic_id + (retro_console_id_.empty() ? "_hb_bundle" : "_romset");
@@ -1828,7 +1828,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
                 std::string firstName = files_[chosen[0]].name;
                 ui::DownloadManager::instance().addDownload(
                     bundleGame, bundleSelected, firstIndex, firstName, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), "OTH", brls::getStr("app/fileselect/bundle_files", countStr), 4, bundleTotalBytes);
+                    game_.topic_id, cleanTitle(game_.title), "OTH", util::pluralize("app/plural/files", static_cast<long long>(chosen.size())), 4, bundleTotalBytes);
             }
         } else {
             std::vector<size_t> packages;

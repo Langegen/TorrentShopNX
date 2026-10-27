@@ -1,4 +1,5 @@
 #include "SettingsTab.hpp"
+#include "../utils/i18n_plural.h"
 #include "ThemeManager.hpp"
 #include "BackgroundFilePicker.hpp"
 #include "DownloadUiManager.hpp"
@@ -1034,7 +1035,7 @@ brls::View* SettingsTab::buildRetroTab() {
         if (!alive || !*alive) return;
         int count = catalog::RetroCatalogManager::instance().getTotalCachedGamesCount();
         if (count > 0) {
-            updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", std::to_string(count)));
+            updateCatalogsCell->setDetailText(brls::getStr("app/settings/retro_update_catalogs_cached", util::pluralize("app/plural/games", count)));
         } else {
             updateCatalogsCell->setDetailText("app/settings/retro_update_catalogs_empty"_i18n);
         }

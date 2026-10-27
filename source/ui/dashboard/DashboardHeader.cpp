@@ -3,6 +3,7 @@
 #include "../StorageTabView.hpp"
 #include "../../config/config.h"
 #include "../../utils/log.h"
+#include "../../utils/i18n_plural.h"
 
 using namespace brls::literals;
 
@@ -142,7 +143,7 @@ void DashboardHeader::refreshTheme() {
 void DashboardHeader::updateStats(int game_count, const std::string& catalog_updated_str,
                                   const std::string& sd_str, const std::string& nand_str) {
     if (catalog_info_label_) {
-        std::string text = "app/dashboard/header_catalog_prefix"_i18n + std::to_string(game_count) + " " + "app/retro/unit_games"_i18n;
+        std::string text = "app/dashboard/header_catalog_prefix"_i18n + util::pluralize("app/plural/games", game_count);
         if (!catalog_updated_str.empty()) {
             text += "app/dashboard/header_updated_prefix"_i18n + catalog_updated_str;
         }

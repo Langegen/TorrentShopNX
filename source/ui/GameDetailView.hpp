@@ -40,6 +40,7 @@ private:
     BRLS_BIND(brls::Label, metaDate, "metaDate");
     BRLS_BIND(brls::Box, metaBox, "metaBox");
     BRLS_BIND(brls::Label, description, "description");
+    BRLS_BIND(brls::Label, descriptionHeader, "descriptionHeader");
     BRLS_BIND(brls::Box, screenshotsContainer, "screenshotsContainer");
     BRLS_BIND(brls::Box, screenshotsBox, "screenshotsBox");
     BRLS_BIND(brls::HScrollingFrame, screenshotsScroll, "screenshotsScroll");
