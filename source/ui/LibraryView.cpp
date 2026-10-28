@@ -549,10 +549,10 @@ static std::unordered_map<uint64_t, ScanCacheEntry> loadScanCache() {
         if (!t.is_object()) continue;
         uint64_t tid = std::strtoull(it.key().c_str(), nullptr, 16);
         ScanCacheEntry e;
-        e.sig = t.value("sig", "");
-        e.name = t.value("name", "");
-        e.displayVersion = t.value("ver", "");
-        e.sdk = t.value("sdk", "");
+        e.sig = util::sanitizeUtf8(t.value("sig", ""));
+        e.name = util::sanitizeUtf8(t.value("name", ""));
+        e.displayVersion = util::sanitizeUtf8(t.value("ver", ""));
+        e.sdk = util::sanitizeUtf8(t.value("sdk", ""));
         e.gcd.totalSize = t.value("total", 0ULL);
         e.gcd.appSize = t.value("app", 0ULL);
         e.gcd.patchSize = t.value("patch", 0ULL);
@@ -596,11 +596,13 @@ static void saveScanCache(const std::unordered_map<uint64_t, ScanCacheEntry>& ca
     }
     nlohmann::json root = {{"v", 1}, {"titles", titles}};
     std::string tmp = scanCachePath() + ".tmp";
-    {
+    try {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         if (!out) return;
-        out << root.dump();
+        out << root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
         if (!out) return;
+    } catch (...) {
+        return;
     }
     std::remove(scanCachePath().c_str());
     std::rename(tmp.c_str(), scanCachePath().c_str());
@@ -1291,14 +1293,17 @@ void LibraryView::scanForUpdates() {
                                                      sizeof(NsApplicationControlData), &ctrl_size);
                 }
                 if (R_SUCCEEDED(rc) && ctrl_size >= sizeof(ctrl->nacp)) {
-                    e.displayVersion = ctrl->nacp.display_version;
+                    util::decompressNacpLanguageEntries(ctrl->nacp.lang, sizeof(ctrl->nacp.lang));
+                    e.displayVersion = util::sanitizeUtf8(ctrl->nacp.display_version);
                     // English name first (index 1 in the NACP language array),
-                    // then the system language
+                    // then AmericanEnglish (index 0), then the system language
                     e.name.clear();
-                    if (ctrl->nacp.lang[1].name[0] != '\0') e.name = ctrl->nacp.lang[1].name;
+                    if (ctrl->nacp.lang[1].name[0] != '\0') e.name = util::sanitizeUtf8(ctrl->nacp.lang[1].name);
+                    if (e.name.empty() && ctrl->nacp.lang[0].name[0] != '\0') e.name = util::sanitizeUtf8(ctrl->nacp.lang[0].name);
                     if (e.name.empty()) {
                         NacpLanguageEntry* lang = nullptr;
-                        if (R_SUCCEEDED(nacpGetLanguageEntry(&ctrl->nacp, &lang)) && lang) e.name = lang->name;
+                        if (R_SUCCEEDED(nacpGetLanguageEntry(&ctrl->nacp, &lang)) && lang)
+                            e.name = util::sanitizeUtf8(lang->name);
                     }
                     saveInstalledIcon(tid, *ctrl, ctrl_size);   // the icon the home menu shows
                 }
