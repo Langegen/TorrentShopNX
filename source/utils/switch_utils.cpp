@@ -2,10 +2,13 @@
 #include "log.h"
 #include "../config/config.h"
 #include <string>
+#include <vector>
+#include <cstring>
 #include <chrono>
 #include <cctype>
 #include <algorithm>
 #include <cmath>
+#include <zlib.h>
 
 #ifdef __SWITCH__
 #include <borealis.hpp>
@@ -645,6 +648,94 @@ uint32_t parseVersionFromFileName(const std::string& name) {
         }
     }
     return 0;
+}
+
+std::string sanitizeUtf8(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c == 0) break;
+        if (c < 0x80) {
+            if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r') {
+                out.push_back(static_cast<char>(c));
+            }
+            i += 1;
+        } else if (c >= 0xC2 && c <= 0xDF && i + 1 < s.size()) {
+            unsigned char c1 = static_cast<unsigned char>(s[i + 1]);
+            if ((c1 & 0xC0) == 0x80) {
+                out.append(s.data() + i, 2);
+                i += 2;
+                continue;
+            }
+            i += 1;
+        } else if (c >= 0xE0 && c <= 0xEF && i + 2 < s.size()) {
+            unsigned char c1 = static_cast<unsigned char>(s[i + 1]);
+            unsigned char c2 = static_cast<unsigned char>(s[i + 2]);
+            bool ok = ((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80);
+            if (c == 0xE0 && c1 < 0xA0) ok = false;
+            if (c == 0xED && c1 >= 0xA0) ok = false; // UTF-16 surrogates U+D800..U+DFFF
+            if (ok) {
+                out.append(s.data() + i, 3);
+                i += 3;
+                continue;
+            }
+            i += 1;
+        } else if (c >= 0xF0 && c <= 0xF4 && i + 3 < s.size()) {
+            unsigned char c1 = static_cast<unsigned char>(s[i + 1]);
+            unsigned char c2 = static_cast<unsigned char>(s[i + 2]);
+            unsigned char c3 = static_cast<unsigned char>(s[i + 3]);
+            bool ok = ((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80) && ((c3 & 0xC0) == 0x80);
+            if (c == 0xF0 && c1 < 0x90) ok = false;
+            if (c == 0xF4 && c1 >= 0x90) ok = false;
+            if (ok) {
+                out.append(s.data() + i, 4);
+                i += 4;
+                continue;
+            }
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    return out;
+}
+
+bool decompressNacpLanguageEntries(void* langArea, size_t langAreaSize) {
+    constexpr size_t kEntrySize = 0x300;   // sizeof(NacpLanguageEntry): 0x200 name + 0x100 author
+    constexpr size_t kNameSize  = 0x200;
+    if (!langArea || langAreaSize < kEntrySize) return false;
+
+    const uint8_t* src = static_cast<const uint8_t*>(langArea);
+    uint16_t compSize = static_cast<uint16_t>(src[0]) | (static_cast<uint16_t>(src[1]) << 8);
+    if (compSize == 0 || compSize > langAreaSize - 2) return false;
+
+    std::vector<uint8_t> decompressed(32 * kEntrySize + 64, 0);
+    z_stream strm{};
+    strm.next_in   = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(src + 2));
+    strm.avail_in  = compSize;
+    strm.next_out  = decompressed.data();
+    strm.avail_out = static_cast<uInt>(decompressed.size());
+
+    if (inflateInit2(&strm, -MAX_WBITS) != Z_OK) return false;
+    int ret = inflate(&strm, Z_NO_FLUSH);
+    size_t totalOut = strm.total_out;
+    inflateEnd(&strm);
+
+    if ((ret != Z_STREAM_END && ret != Z_OK) || totalOut < kEntrySize) {
+        return false;
+    }
+
+    std::memset(langArea, 0, langAreaSize);
+    std::memcpy(langArea, decompressed.data(), std::min(totalOut, langAreaSize));
+
+    uint8_t* dst = static_cast<uint8_t*>(langArea);
+    size_t numEntries = langAreaSize / kEntrySize;
+    for (size_t i = 0; i < numEntries; ++i) {
+        dst[i * kEntrySize + kNameSize - 1]  = '\0';
+        dst[i * kEntrySize + kEntrySize - 1] = '\0';
+    }
+    return true;
 }
 
 } // namespace util

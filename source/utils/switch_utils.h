@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <string>
+#include <string_view>
 #include <cstdio>
 
 namespace util {
@@ -162,6 +164,13 @@ uint64_t parseTitleIdFromFileName(const std::string& name);
 
 // Parses integer version from filename (e.g. "[v3276800]", "(v65536)", "[v0]"). Returns 0 if absent/v0.
 uint32_t parseVersionFromFileName(const std::string& name);
+
+// Strips invalid UTF-8 byte sequences and non-printable control characters (< 0x20 except \t, \n, \r).
+std::string sanitizeUtf8(std::string_view s);
+
+// Decompresses SDK 20.0.0+ raw-DEFLATE compressed NACP language entries in-place
+// into the 16-entry NacpLanguageEntry array (0x3000 bytes). Safe no-op if already uncompressed.
+bool decompressNacpLanguageEntries(void* langArea, size_t langAreaSize);
 
 } // namespace util
 

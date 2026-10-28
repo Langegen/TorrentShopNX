@@ -1554,15 +1554,16 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                 sizeof(NsApplicationControlData),
                 &app_ctrl_size);
             if (R_SUCCEEDED(ctrl_rc) && app_ctrl_size >= sizeof(app_ctrl[0].nacp)) {
+                util::decompressNacpLanguageEntries(app_ctrl[0].nacp.lang, sizeof(app_ctrl[0].nacp.lang));
                 NacpLanguageEntry* lang = nullptr;
                 Result lang_rc = nacpGetLanguageEntry(&app_ctrl[0].nacp, &lang);
                 if (R_SUCCEEDED(lang_rc) && lang && lang->name[0] != '\0') {
-                    util::logLine("hybrid: application title from NACP: " + std::string(lang->name));
+                    util::logLine("hybrid: application title from NACP: " + util::sanitizeUtf8(lang->name));
                 } else {
                     bool found = false;
                     for (int l = 0; l < 16; l++) {
                         if (app_ctrl[0].nacp.lang[l].name[0] != '\0') {
-                            util::logLine("hybrid: application title from NACP (lang " + std::to_string(l) + "): " + std::string(app_ctrl[0].nacp.lang[l].name));
+                            util::logLine("hybrid: application title from NACP (lang " + std::to_string(l) + "): " + util::sanitizeUtf8(app_ctrl[0].nacp.lang[l].name));
                             found = true;
                             break;
                         }
