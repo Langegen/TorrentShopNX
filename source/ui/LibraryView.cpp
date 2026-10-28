@@ -11,6 +11,7 @@
 #include "../utils/app_paths.h"
 #include "../utils/mod_utils.h"
 #include "../utils/file_ops.h"
+#include "../utils/nacp_text.h"
 #include "../catalog/IgnoredUpdatesManager.hpp"
 #include "../catalog/game_stats_manager.h"
 #include "../catalog/release_picker.hpp"
@@ -542,6 +543,8 @@ static std::unordered_map<uint64_t, ScanCacheEntry> loadScanCache() {
     std::unordered_map<uint64_t, ScanCacheEntry> out;
     std::ifstream in(scanCachePath());
     if (!in) return out;
+    // A damaged cache only means a full rescan, never a crash
+    try {
     nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
     if (j.is_discarded() || !j.is_object() || j.value("v", 0) != 1 || !j.contains("titles")) return out;
     for (auto it = j["titles"].begin(); it != j["titles"].end(); ++it) {
@@ -549,10 +552,10 @@ static std::unordered_map<uint64_t, ScanCacheEntry> loadScanCache() {
         if (!t.is_object()) continue;
         uint64_t tid = std::strtoull(it.key().c_str(), nullptr, 16);
         ScanCacheEntry e;
-        e.sig = util::sanitizeUtf8(t.value("sig", ""));
+        e.sig = t.value("sig", "");
         e.name = util::sanitizeUtf8(t.value("name", ""));
         e.displayVersion = util::sanitizeUtf8(t.value("ver", ""));
-        e.sdk = util::sanitizeUtf8(t.value("sdk", ""));
+        e.sdk = t.value("sdk", "");
         e.gcd.totalSize = t.value("total", 0ULL);
         e.gcd.appSize = t.value("app", 0ULL);
         e.gcd.patchSize = t.value("patch", 0ULL);
@@ -573,6 +576,10 @@ static std::unordered_map<uint64_t, ScanCacheEntry> loadScanCache() {
             }
         }
         out[tid] = std::move(e);
+    }
+    } catch (const std::exception& ex) {
+        util::logLine(std::string("library: scan cache ignored: ") + ex.what());
+        out.clear();
     }
     return out;
 }
@@ -595,14 +602,20 @@ static void saveScanCache(const std::unordered_map<uint64_t, ScanCacheEntry>& ca
                        {"dlc", e.gcd.dlcSize}, {"dlcCount", e.gcd.dlcCount}, {"comps", comps}};
     }
     nlohmann::json root = {{"v", 1}, {"titles", titles}};
-    std::string tmp = scanCachePath() + ".tmp";
+    std::string text;
     try {
+        // Bad UTF-8 is replaced instead of throwing (it used to kill the app)
+        text = root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    } catch (const std::exception& ex) {
+        util::logLine(std::string("library: scan cache not saved: ") + ex.what());
+        return;
+    }
+    std::string tmp = scanCachePath() + ".tmp";
+    {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         if (!out) return;
-        out << root.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        out << text;
         if (!out) return;
-    } catch (...) {
-        return;
     }
     std::remove(scanCachePath().c_str());
     std::rename(tmp.c_str(), scanCachePath().c_str());
@@ -1199,6 +1212,9 @@ void LibraryView::scanForUpdates() {
     
     auto cancelToken = cancelToken_;
     brls::async([this, cancelToken]() {
+        // An exception escaping a worker thread terminates the whole app:
+        // report it on screen instead.
+        try {
         if (cancelToken && *cancelToken) return;
 
         bool dbOk = titledb::ensureDownloaded();
@@ -1293,17 +1309,22 @@ void LibraryView::scanForUpdates() {
                                                      sizeof(NsApplicationControlData), &ctrl_size);
                 }
                 if (R_SUCCEEDED(rc) && ctrl_size >= sizeof(ctrl->nacp)) {
-                    util::decompressNacpLanguageEntries(ctrl->nacp.lang, sizeof(ctrl->nacp.lang));
-                    e.displayVersion = util::sanitizeUtf8(ctrl->nacp.display_version);
+                    // SDK 20+ games keep the title table compressed
+                    if (util::unpackNacpTitles(ctrl->nacp.lang, sizeof(ctrl->nacp.lang))) {
+                        char tidHex[24];
+                        std::snprintf(tidHex, sizeof(tidHex), "%016llX", (unsigned long long)tid);
+                        util::logLine(std::string("library: unpacked compressed NACP titles of ") + tidHex);
+                    }
+                    e.displayVersion = util::sanitizeUtf8(ctrl->nacp.display_version, sizeof(ctrl->nacp.display_version));
                     // English name first (index 1 in the NACP language array),
-                    // then AmericanEnglish (index 0), then the system language
+                    // then the system language
                     e.name.clear();
-                    if (ctrl->nacp.lang[1].name[0] != '\0') e.name = util::sanitizeUtf8(ctrl->nacp.lang[1].name);
-                    if (e.name.empty() && ctrl->nacp.lang[0].name[0] != '\0') e.name = util::sanitizeUtf8(ctrl->nacp.lang[0].name);
+                    const NacpLanguageEntry& en = ctrl->nacp.lang[1];
+                    if (en.name[0] != '\0') e.name = util::nacpText(en.name, sizeof(en.name));
                     if (e.name.empty()) {
                         NacpLanguageEntry* lang = nullptr;
                         if (R_SUCCEEDED(nacpGetLanguageEntry(&ctrl->nacp, &lang)) && lang)
-                            e.name = util::sanitizeUtf8(lang->name);
+                            e.name = util::nacpText(lang->name, sizeof(lang->name));
                     }
                     saveInstalledIcon(tid, *ctrl, ctrl_size);   // the icon the home menu shows
                 }
@@ -1724,6 +1745,21 @@ void LibraryView::scanForUpdates() {
                 brls::Application::giveFocus(recycler);
             }
         });
+        } catch (const std::exception& ex) {
+            util::logLine(std::string("library: scan failed: ") + ex.what());
+            brls::sync([this, cancelToken]() {
+                if (cancelToken && *cancelToken) return;
+                isScanning_ = false;
+                if (statsHint) statsHint->setText("app/library/scan_failed"_i18n);
+            });
+        } catch (...) {
+            util::logLine("library: scan failed: unknown exception");
+            brls::sync([this, cancelToken]() {
+                if (cancelToken && *cancelToken) return;
+                isScanning_ = false;
+                if (statsHint) statsHint->setText("app/library/scan_failed"_i18n);
+            });
+        }
     });
 }
 

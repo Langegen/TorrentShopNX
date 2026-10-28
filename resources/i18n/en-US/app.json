@@ -366,6 +366,7 @@
         "badge_mods": "MODS",
         "loading_titledb": "Loading titledb version database...",
         "titledb_failed": "Error: failed to load titledb. Check internet connection.",
+        "scan_failed": "Error while scanning installed games",
         "scanning_games": "Scanning installed games...",
         "installed": "Installed",
         "available": "Available",

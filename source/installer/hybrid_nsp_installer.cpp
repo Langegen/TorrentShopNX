@@ -5,6 +5,7 @@
 #include "../buffer/ring_buffer.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
+#include "../utils/nacp_text.h"
 #include "../engine/thread_cfg.h"
 #include <borealis.hpp>
 
@@ -1554,16 +1555,17 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                 sizeof(NsApplicationControlData),
                 &app_ctrl_size);
             if (R_SUCCEEDED(ctrl_rc) && app_ctrl_size >= sizeof(app_ctrl[0].nacp)) {
-                util::decompressNacpLanguageEntries(app_ctrl[0].nacp.lang, sizeof(app_ctrl[0].nacp.lang));
+                util::unpackNacpTitles(app_ctrl[0].nacp.lang, sizeof(app_ctrl[0].nacp.lang));   // SDK 20+
                 NacpLanguageEntry* lang = nullptr;
                 Result lang_rc = nacpGetLanguageEntry(&app_ctrl[0].nacp, &lang);
                 if (R_SUCCEEDED(lang_rc) && lang && lang->name[0] != '\0') {
-                    util::logLine("hybrid: application title from NACP: " + util::sanitizeUtf8(lang->name));
+                    util::logLine("hybrid: application title from NACP: " + util::sanitizeUtf8(lang->name, sizeof(lang->name)));
                 } else {
                     bool found = false;
                     for (int l = 0; l < 16; l++) {
-                        if (app_ctrl[0].nacp.lang[l].name[0] != '\0') {
-                            util::logLine("hybrid: application title from NACP (lang " + std::to_string(l) + "): " + util::sanitizeUtf8(app_ctrl[0].nacp.lang[l].name));
+                        const NacpLanguageEntry& e = app_ctrl[0].nacp.lang[l];
+                        if (e.name[0] != '\0') {
+                            util::logLine("hybrid: application title from NACP (lang " + std::to_string(l) + "): " + util::sanitizeUtf8(e.name, sizeof(e.name)));
                             found = true;
                             break;
                         }

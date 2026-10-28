@@ -398,6 +398,7 @@
         "badge_mods": "MOD",
         "loading_titledb": "加载 TitleDB 数据库...",
         "titledb_failed": "TitleDB 数据库加载失败",
+        "scan_failed": "扫描已安装游戏时出错",
         "scanning_games": "正在分析主机已装内容...",
         "installed": "已安装",
         "release_completed": "发布的所有文件均已下载：{0}",
