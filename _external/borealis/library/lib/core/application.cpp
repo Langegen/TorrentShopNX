@@ -47,6 +47,9 @@
 namespace util {
     void logLine(const std::string& line);
 }
+namespace uiwd {
+    void logCurrentStack(const char* tag);
+}
 #include <borealis/views/rectangle.hpp>
 #include <borealis/views/recycler.hpp>
 #include <borealis/views/sidebar.hpp>
@@ -454,9 +457,13 @@ bool Application::internalMainLoop()
     if (s_loopCount <= 3) util::logLine("brls: internalMainLoop END frame=" + std::to_string(s_loopCount));
 
     // Free views deletion pool.
-    // A view deletion might inserts other views to deletionPool
+    // A view deletion might insert other views to deletionPool: take the pool
+    // out first, so those land in a fresh pool (freed next frame) instead of
+    // being pushed into the deque this loop is walking.
+    std::deque<View*> pool;
+    pool.swap(Application::deletionPool);
     std::deque<View*> undeletedViews;
-    for (auto view : Application::deletionPool)
+    for (auto view : pool)
     {
         if (!view->isPtrLocked())
         {
@@ -468,7 +475,7 @@ bool Application::internalMainLoop()
             brls::Logger::verbose("Application: will delete view: {}", view->describe());
         }
     }
-    Application::deletionPool = undeletedViews;
+    Application::deletionPool.insert(Application::deletionPool.end(), undeletedViews.begin(), undeletedViews.end());
 
     // Free activities deletion pool
     if (!Application::activityDeletionPool.empty())
@@ -1535,8 +1542,14 @@ void Application::setGlobalWallpaperMainMenuDim(float alpha)
 
 void Application::addToFreeQueue(View* view)
 {
-    if (std::binary_search(deletionPool.cbegin(), deletionPool.cend(), view))
+    // The pool is not sorted: binary_search missed views already queued, and
+    // such a view was deleted twice (crash in free() a frame later).
+    if (std::find(deletionPool.cbegin(), deletionPool.cend(), view) != deletionPool.cend())
+    {
+        util::logLine("brls: view queued for deletion twice, skipped: " + view->describe());
+        uiwd::logCurrentStack("double-free");
         return;
+    }
 
     brls::Logger::verbose("Application::addToFreeQueue {}", view->describe());
 
