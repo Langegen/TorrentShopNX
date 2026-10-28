@@ -1,4 +1,5 @@
 #include "CollectionGamesView.hpp"
+#include "EmptyState.hpp"
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
@@ -213,9 +214,7 @@ void CollectionGamesView::loadAndShow() {
             loading_ = false;
 
             if (!ok) {
-                loadingLabel->setText("app/collections/load_failed"_i18n);
-                loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-                recycler->setVisibility(brls::Visibility::GONE);
+                showEmpty(true);
                 return;
             }
 
@@ -226,9 +225,7 @@ void CollectionGamesView::loadAndShow() {
             matchIndex_ = std::move(matchIndex);
 
             if (entries_.empty()) {
-                loadingLabel->setText("app/collections/empty"_i18n);
-                loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-                recycler->setVisibility(brls::Visibility::GONE);
+                showEmpty(false);
                 return;
             }
 
@@ -375,27 +372,22 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                 cardBox->setVisibility(brls::Visibility::VISIBLE);
                 cardBox->setFocusable(true);
 
-                std::string fullTitle = entry.title;
-                std::string shortTitle = truncateCatalogTitle(fullTitle);
+                // One line with an ellipsis; scrolls in full while the card is focused
                 brls::Label* titleLabel = cards[i].title;
-
-                titleLabel->setText(shortTitle);
+                titleLabel->setText(entry.title);
 
                 cardBox->getFocusEvent()->clear();
                 cardBox->getFocusLostEvent()->clear();
 
-                cardBox->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([titleLabel, row, i](brls::View* v) {
                     if (v->isFocused()) {
                         CollectionGameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
                     }
-                    titleLabel->setText(fullTitle);
                     titleLabel->setAnimated(true);
                 });
-
-                cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
+                cardBox->getFocusLostEvent()->subscribe([titleLabel](brls::View*) {
                     titleLabel->setAnimated(false);
-                    titleLabel->setText(shortTitle);
                 });
 
                 // Metacritic badge (top-right of the cover)
@@ -483,7 +475,7 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                                   " url=" + (coverUrl.empty() ? "(none)" : coverUrl));
                 }
                 setImageFromHTTPS(cards[i].cover, coverUrl,
-                                  rowCell->imageToken, "romfs:/img/borealis_96.png",
+                                  rowCell->imageToken, "romfs:/img/cover_blank.png",
                                   false, "", row, i);
 
                 Game matchedCopy;
@@ -527,6 +519,27 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
     }
 
     return rowCell;
+}
+
+} // namespace ui
+
+namespace ui {
+
+// Empty collection or a failed download of its list
+void CollectionGamesView::showEmpty(bool failed) {
+    if (loadingLabel) loadingLabel->setVisibility(brls::Visibility::GONE);
+    if (recycler) recycler->setVisibility(brls::Visibility::GONE);
+    if (!emptyHolder) return;
+    emptyHolder->clearViews();
+    auto* state = new EmptyState();
+    if (failed) {
+        state->show(DashboardIcon::Kind::CloudError, "app/empty/load_failed_title"_i18n, "app/empty/load_failed_sub"_i18n);
+    } else {
+        state->show(DashboardIcon::Kind::GameCards, "app/empty/collection_title"_i18n, "app/empty/collection_sub"_i18n);
+    }
+    emptyHolder->addView(state);
+    emptyHolder->setVisibility(brls::Visibility::VISIBLE);
+    brls::Application::giveFocus(state->actionView());
 }
 
 } // namespace ui

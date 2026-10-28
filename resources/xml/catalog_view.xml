@@ -4,19 +4,21 @@
     height="auto"
     axis="column"
     paddingTop="20"
-    paddingRight="20"
-    paddingBottom="20"
-    paddingLeft="20">
+    paddingRight="32"
+    paddingBottom="12"
+    paddingLeft="32">
 
     <!-- Topbar -->
-    <brls:Box width="auto" height="60px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
+    <brls:Box width="auto" height="56px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="8">
         <brls:Label id="headerTitle" text="@i18n/app/catalog/title" fontSize="28" />
         
         <!-- Search and Filter triggers -->
         <brls:Box width="auto" height="auto" axis="row" alignItems="center">
-            <brls:Label id="statsHint" text="@i18n/app/catalog/never_updated" fontSize="16" textColor="#AAAAAA" />
+            <brls:Label id="statsHint" text="@i18n/app/catalog/never_updated" fontSize="15" textColor="@theme/brls/header/subtitle" />
         </brls:Box>
     </brls:Box>
+
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
 
     <!-- Recycler Grid -->
     <brls:RecyclerFrame

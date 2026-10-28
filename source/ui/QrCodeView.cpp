@@ -166,7 +166,7 @@ QrDialog::QrDialog(const std::string& title, const std::string& url, const std::
 
         brls::Label* urlLabel = new brls::Label();
         urlLabel->setText(url);
-        urlLabel->setFontSize(12.0f);
+        urlLabel->setFontSize(14.0f);
         urlLabel->setTextColor(isLight ? ThemeManager::instance().getAccentColor() : nvgRGB(100, 180, 245));
         urlLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         urlLabel->setWidth(396.0f);

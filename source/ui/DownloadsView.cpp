@@ -1,4 +1,6 @@
 #include "DownloadsView.hpp"
+#include "EmptyState.hpp"
+#include "CollectionsView.hpp"
 #include "DownloadUiManager.hpp"
 #include "FileManagerView.hpp"
 #include "ThemeManager.hpp"
@@ -15,6 +17,7 @@
 #include <filesystem>
 #include <map>
 #include "../utils/string_utils.h"
+#include "../utils/i18n_plural.h"
 
 extern std::vector<Game> g_games;
 
@@ -280,13 +283,7 @@ void DownloadsView::registerProgressCallback() {
             
             buildGroups(queue);
 
-            if (groups_.empty()) {
-                emptyLabel->setVisibility(brls::Visibility::VISIBLE);
-                recycler->setVisibility(brls::Visibility::GONE);
-            } else {
-                emptyLabel->setVisibility(brls::Visibility::GONE);
-                recycler->setVisibility(brls::Visibility::VISIBLE);
-            }
+            setEmpty(groups_.empty());
 
             size_t currentRows = groups_.size();
             std::vector<std::string> currentOrder;
@@ -350,6 +347,29 @@ DownloadsView::~DownloadsView() {
     ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
+// "No downloads" screen with a way to the catalog, instead of an empty list
+void DownloadsView::setEmpty(bool empty) {
+    if (!emptyHolder || !recycler) return;
+    if (empty && !emptyState_) {
+        emptyState_ = new EmptyState();
+        emptyState_->show(DashboardIcon::Kind::Download,
+                          "app/empty/downloads_title"_i18n, "app/empty/downloads_sub"_i18n,
+                          "app/empty/open_catalog"_i18n, []() {
+                              brls::Application::pushActivity(new CollectionsView());
+                          });
+        emptyHolder->addView(emptyState_);
+    }
+    const bool wasEmpty = emptyHolder->getVisibility() == brls::Visibility::VISIBLE;
+    emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+    if (empty && !wasEmpty && emptyState_ && emptyState_->actionView()) {
+        const auto& stack = brls::Application::getActivitiesStack();
+        if (!stack.empty() && stack.back() == this) {
+            brls::Application::giveFocus(emptyState_->actionView());
+        }
+    }
+}
+
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     util::ScreenSleepManager::instance().resetActivity();
@@ -358,13 +378,7 @@ void DownloadsView::willAppear(bool resetState) {
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     buildGroups(queue);
 
-    if (groups_.empty()) {
-        emptyLabel->setVisibility(brls::Visibility::VISIBLE);
-        recycler->setVisibility(brls::Visibility::GONE);
-    } else {
-        emptyLabel->setVisibility(brls::Visibility::GONE);
-        recycler->setVisibility(brls::Visibility::VISIBLE);
-    }
+    setEmpty(groups_.empty());
 
     lastRows_ = groups_.size();
     lastOrder_.clear();
@@ -404,15 +418,8 @@ static std::string formatKbps(float speed_kbps, bool is_download) {
     }
 }
 
-// "one/few/many" plural forms; languages without them repeat the same text.
 static std::string formatFileCount(int n) {
-    int n10 = n % 10;
-    int n100 = n % 100;
-    std::string num = std::to_string(n);
-    if (n100 >= 11 && n100 <= 19) return brls::getStr("app/downloads/file_count_many", num);
-    if (n10 == 1) return brls::getStr("app/downloads/file_count_one", num);
-    if (n10 >= 2 && n10 <= 4) return brls::getStr("app/downloads/file_count_few", num);
-    return brls::getStr("app/downloads/file_count_many", num);
+    return util::pluralize("app/plural/files", n);
 }
 
 // Component name in the interface language. The queue stores the name built
@@ -686,7 +693,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
 
             auto* ipLabel = new brls::Label();
             ipLabel->setText(ipBuf);
-            ipLabel->setFontSize(13.0f);
+            ipLabel->setFontSize(14.0f);
             ipLabel->setTextColor(primaryText);
 
             std::string statusStr;
@@ -713,7 +720,7 @@ static void showPeerInspector(const download::DownloadItem& item) {
 
             auto* statusLabel = new brls::Label();
             statusLabel->setText(statusStr);
-            statusLabel->setFontSize(13.0f);
+            statusLabel->setFontSize(14.0f);
             statusLabel->setTextColor(statusCol);
 
             row->addView(ipLabel);
@@ -1109,7 +1116,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     } else {
         if (cell->loadedCoverUrl != "__fallback__") {
             cell->loadedCoverUrl = "__fallback__";
-            cell->cover->setImageFromFile("romfs:/img/borealis_96.png");
+            cell->cover->setImageFromFile("romfs:/img/cover_blank.png");
         }
     }
 
@@ -1335,7 +1342,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 bBox->setCornerRadius(4.0f);
                 bBox->setMarginRight(8.0f);
                 auto* bLabel = new brls::Label();
-                bLabel->setFontSize(11.0f);
+                bLabel->setFontSize(13.0f);
                 bLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
                 bLabel->setSingleLine(true);
                 bBox->addView(bLabel);
@@ -1343,7 +1350,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
                 // Name Label
                 auto* nameLabel = new brls::Label();
-                nameLabel->setFontSize(13.0f);
+                nameLabel->setFontSize(14.0f);
                 nameLabel->setSingleLine(true);
                 nameLabel->setGrow(1.0f);
                 nameLabel->setShrink(1.0f);
@@ -1356,7 +1363,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 sdkPill->setPadding(2.0f, 5.0f, 2.0f, 5.0f);
                 sdkPill->setVisibility(brls::Visibility::GONE);
                 auto* sdkPillLabel = new brls::Label();
-                sdkPillLabel->setFontSize(10.0f);
+                sdkPillLabel->setFontSize(13.0f);
                 sdkPillLabel->setSingleLine(true);
                 sdkPill->addView(sdkPillLabel);
                 infoBox->addView(sdkPill);
@@ -1375,7 +1382,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 summaryRow->setAxis(brls::Axis::ROW);
                 summaryRow->setAlignItems(brls::AlignItems::CENTER);
                 auto* summaryTxt = new brls::Label();
-                summaryTxt->setFontSize(12.0f);
+                summaryTxt->setFontSize(14.0f);
                 summaryTxt->setSingleLine(true);
                 summaryRow->addView(summaryTxt);
                 progCol->addView(summaryRow);
@@ -1387,7 +1394,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 dlRow->setMarginBottom(2.0f);
                 auto* dlLbl = new brls::Label();
                 dlLbl->setText("app/downloads/download_label"_i18n);
-                dlLbl->setFontSize(10.0f);
+                dlLbl->setFontSize(14.0f);
                 dlLbl->setWidth(70.0f);
                 auto* dlBarBg = new brls::Box();
                 dlBarBg->setWidth(110.0f);
@@ -1401,7 +1408,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 dlBar->setBackgroundColor(nvgRGB(76, 175, 80));
                 dlBarBg->addView(dlBar);
                 auto* dlTxt = new brls::Label();
-                dlTxt->setFontSize(10.0f);
+                dlTxt->setFontSize(14.0f);
                 dlTxt->setMarginLeft(8.0f);
                 dlTxt->setWidth(165.0f);
                 dlTxt->setSingleLine(true);
@@ -1416,7 +1423,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 instRow->setAlignItems(brls::AlignItems::CENTER);
                 auto* instLbl = new brls::Label();
                 instLbl->setText("app/downloads/install_label"_i18n);
-                instLbl->setFontSize(10.0f);
+                instLbl->setFontSize(14.0f);
                 instLbl->setWidth(70.0f);
                 auto* instBarBg = new brls::Box();
                 instBarBg->setWidth(110.0f);
@@ -1430,7 +1437,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 instBar->setBackgroundColor(isLight ? nvgRGB(25, 118, 210) : nvgRGB(33, 150, 243));
                 instBarBg->addView(instBar);
                 auto* instTxt = new brls::Label();
-                instTxt->setFontSize(10.0f);
+                instTxt->setFontSize(14.0f);
                 instTxt->setMarginLeft(8.0f);
                 instTxt->setWidth(165.0f);
                 instTxt->setSingleLine(true);
@@ -1450,14 +1457,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
                 // Status Label
                 auto* compStatusLabel = new brls::Label();
-                compStatusLabel->setFontSize(12.0f);
+                compStatusLabel->setFontSize(14.0f);
                 compStatusLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 compStatusLabel->setSingleLine(true);
                 statusCol->addView(compStatusLabel);
 
                 // Elapsed Time Label
                 auto* compTimeLabel = new brls::Label();
-                compTimeLabel->setFontSize(10.0f);
+                compTimeLabel->setFontSize(14.0f);
                 compTimeLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 compTimeLabel->setSingleLine(true);
                 compTimeLabel->setMarginTop(2.0f);

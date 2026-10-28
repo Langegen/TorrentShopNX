@@ -21,6 +21,24 @@ namespace util {
         });
     }
 
+    // Empty or placeholder values from catalog data ("Unknown", "N/A", "-",
+    // "неизвестно") that are better hidden than shown.
+    inline bool isPlaceholderValue(const std::string& raw) {
+        size_t b = raw.find_first_not_of(" \t\r\n");
+        if (b == std::string::npos) return true;
+        size_t e = raw.find_last_not_of(" \t\r\n");
+        std::string v = toLowerCopy(raw.substr(b, e - b + 1));
+        static const char* kPlaceholders[] = {
+            "unknown", "n/a", "na", "-", "\xe2\x80\x94", "?", "none",
+            "\xd0\xbd\xd0\xb5\xd0\xb8\xd0\xb7\xd0\xb2\xd0\xb5\xd1\x81\xd1\x82\xd0\xbd\xd0\xbe", // "неизвестно"
+            "\xd0\x9d\xd0\xb5\xd0\xb8\xd0\xb7\xd0\xb2\xd0\xb5\xd1\x81\xd1\x82\xd0\xbd\xd0\xbe", // "Неизвестно"
+        };
+        for (const char* p : kPlaceholders) {
+            if (v == p) return true;
+        }
+        return false;
+    }
+
     inline std::string extractBtihHash(std::string magnet) {
         std::transform(magnet.begin(), magnet.end(), magnet.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));

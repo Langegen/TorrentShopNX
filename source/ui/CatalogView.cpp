@@ -1,4 +1,6 @@
 #include "CatalogView.hpp"
+#include "EmptyState.hpp"
+#include "style/HeaderHints.hpp"
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
@@ -134,7 +136,10 @@ void CatalogView::onContentAvailable() {
     });
 
     std::string countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
-    statsHint->setText(countStr + "app/catalog/stats_hint_suffix"_i18n);
+    statsHint->setText(ui::style::headerMeta(countStr, {
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT, "app/header_hint/jump_az"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n)}));
 
     if (headerTitle) {
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
@@ -278,7 +283,31 @@ void CatalogView::filterCatalog() {
         } else {
             countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
         }
-        statsHint->setText(countStr + "app/catalog/stats_hint_suffix"_i18n);
+        statsHint->setText(ui::style::headerMeta(countStr, {
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT, "app/header_hint/jump_az"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n)}));
+    }
+
+    // Nothing matches the search or filters: offer to reset them
+    if (emptyHolder && recycler) {
+        const bool empty = filteredGames_.empty();
+        if (empty && !emptyState_) {
+            emptyState_ = new EmptyState();
+            emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                              "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                              [this]() { resetFilters(); });
+            emptyHolder->addView(emptyState_);
+        }
+        emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+        if (empty) {
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (!stack.empty() && stack.back() == this && emptyState_->actionView()) {
+                brls::Application::giveFocus(emptyState_->actionView());
+            }
+            return;
+        }
     }
 
     GameRowCell::s_lastFocusedColumn = 0;
@@ -360,38 +389,26 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cardBox->setVisibility(brls::Visibility::VISIBLE);
                 cardBox->setFocusable(true);
                 
-                // Short title (guaranteed ≤150px): safe static display
-                std::string fullTitle  = cleanTitle(game.title);
-                std::string shortTitle = truncateCatalogTitle(fullTitle);
+                // One line with an ellipsis; scrolls in full while the card is focused
                 brls::Label* titleLabel = cards[i].title;
-
-                titleLabel->setText(shortTitle);
+                titleLabel->setText(cleanTitle(game.title));
                 cards[i].size->setText(game.size);
 
                 // Clear subscriptions from recycled cell before adding new ones
                 cardBox->getFocusEvent()->clear();
                 cardBox->getFocusLostEvent()->clear();
 
-                // On focus → switch to full title and start scrolling animation (scissor-clipped by Borealis)
-                cardBox->getFocusEvent()->subscribe([this, titleLabel, fullTitle, row, i](brls::View* v) {
+                cardBox->getFocusEvent()->subscribe([this, titleLabel, row, i](brls::View* v) {
                     if (v->isFocused()) {
                         parent_->focusedRow_ = row;
                         parent_->focusedCol_ = i;
                         GameRowCell::s_lastFocusedColumn = i;
                         net::ImageDownloader::instance().setFocusedPosition(row, i);
                     }
-                    if (titleLabel->getFullText() != fullTitle) {
-                        titleLabel->setText(fullTitle);
-                    }
                     titleLabel->setAnimated(true);
                 });
-
-                // On focus lost → stop animation and restore short title (no overflow)
-                cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
+                cardBox->getFocusLostEvent()->subscribe([titleLabel](brls::View*) {
                     titleLabel->setAnimated(false);
-                    if (titleLabel->getFullText() != shortTitle) {
-                        titleLabel->setText(shortTitle);
-                    }
                 });
                 
                 GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
@@ -417,7 +434,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                     }
                 }
                 
-                setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
+                setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/cover_blank.png", false, "", row, i);
                 
                 cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
                     bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);

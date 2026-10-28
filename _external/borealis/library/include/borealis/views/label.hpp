@@ -145,6 +145,20 @@ class Label : public View
     void setIsWrapping(bool isWrapping);
 
     /**
+     * Limits wrapped text to this many lines; the last line ends with an
+     * ellipsis when the text does not fit. 0 = no limit.
+     * XML attribute: "maxLines".
+     */
+    void setMaxLines(int maxLines);
+    int getMaxLines() const { return maxLines; }
+
+    /**
+     * Extra space between letters, in px (for small caps captions).
+     */
+    void setLetterSpacing(float spacing);
+    float getLetterSpacing() const { return letterSpacing; }
+
+    /**
      * Simplified Chinese to Traditional Chinese
      */
     static std::string STConverter(const std::string& text);
@@ -153,6 +167,10 @@ class Label : public View
     void setCursor(int cursor);
 
   protected:
+    // Draws at most maxLines wrapped rows, the last one ending with an ellipsis
+    // when text is left over.
+    void drawClampedLines(NVGcontext* vg, float x, float y, float width);
+
     std::string truncatedText;
     std::string fullText;
 
@@ -169,6 +187,8 @@ class Label : public View
 
     bool singleLine = false;
     bool isWrapping = false;
+    int maxLines    = 0;
+    float letterSpacing = 0.0f;
 
     bool autoAnimate  = true;
     bool animated     = false; // should it animate?

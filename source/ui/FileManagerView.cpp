@@ -1,4 +1,5 @@
 #include "FileManagerView.hpp"
+#include "style/HeaderHints.hpp"
 #include "ui/ThemeManager.hpp"
 #include "ArchiveProgressDialog.hpp"
 #include "InstallProgressDialog.hpp"
@@ -164,6 +165,13 @@ void FileManagerView::initPanelBindings() {
     panels_[0].spaceInfo = spaceInfo;
     panels_[0].selectionBar = selectionBar;
     panels_[0].selectionText = selectionText;
+    // Y / X / A as the footer binds them (the old translated string had them swapped in some languages)
+    const std::string selectionActions = ui::style::headerMeta("", {
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_Y, "app/header_hint/select"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_X, "app/header_hint/actions"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_A, "app/header_hint/open"_i18n)});
+    if (selectionHint) selectionHint->setText(selectionActions);
+    if (selectionHintRight) selectionHintRight->setText(selectionActions);
     panels_[0].selectionHint = selectionHint;
     panels_[0].colHeaders = leftColHeaders;
     panels_[0].colSize = leftColSize;
@@ -563,9 +571,9 @@ void FileManagerView::toggleSplitMode() {
 void FileManagerView::updateSplitHints() {
     if (splitToggleHint) {
         if (isSplitMode_) {
-            splitToggleHint->setText("[-] " + brls::getStr("app/file_manager/split_mode_disable"));
+            splitToggleHint->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, brls::getStr("app/file_manager/split_mode_disable")));
         } else {
-            splitToggleHint->setText("[-] " + brls::getStr("app/file_manager/split_toggle"));
+            splitToggleHint->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, brls::getStr("app/file_manager/split_toggle")));
         }
     }
     if (splitNavHint) {
@@ -829,7 +837,7 @@ void FileManagerView::showArchiveDialog(const util::FileItem& item) {
 
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/type_archive"_i18n + util::formatFileSize(item.size));
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(nvgRGBA(255, 110, 64, 210));
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
@@ -1138,7 +1146,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
 
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/type_package"_i18n + util::formatFileSize(item.size));
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(ThemeManager::instance().getAccentColor());
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
@@ -1193,7 +1201,7 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         auto* sp = spaceText.empty() ? nullptr : new brls::Label();
         if (sp) {
             sp->setText(spaceText);
-            sp->setFontSize(12.0f);
+            sp->setFontSize(14.0f);
             sp->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             colText->addView(sp);
         }
@@ -1343,7 +1351,7 @@ void FileManagerView::promptDeleteSourceFile(const std::string& filePath, const 
     bool isLight = ThemeManager::instance().isCurrentThemeLight();
     auto* subLbl = new brls::Label();
     subLbl->setText("app/file_manager/delete_source_prompt"_i18n + fileName);
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(isLight ? nvgRGB(180, 100, 0) : nvgRGBA(255, 179, 0, 210));
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);
@@ -1876,7 +1884,7 @@ void FileManagerView::showActionsMenu() {
 
     auto* subLbl = new brls::Label();
     subLbl->setText(subtitleText);
-    subLbl->setFontSize(13.0f);
+    subLbl->setFontSize(14.0f);
     subLbl->setTextColor(ThemeManager::instance().getAccentColor());
     subLbl->setSingleLine(true);
     headerTextCol->addView(subLbl);

@@ -197,7 +197,7 @@ void MainMenu::setupLayout() {
     rootBox_->addView(tilesBox_);
     rootBox_->setDefaultFocusedIndex(1);
 
-    // 3. Bottom 1/3 Summary Drawer (Compact 178px, lifted with margin)
+    // 3. Bottom summary panel (232px, lifted with margin)
     summaryView_ = new ui::DashboardSummaryView();
     summaryView_->setMarginBottom(18.0f);
     summaryView_->setOnOpenSectionCallback([this](int idx) {
@@ -612,6 +612,7 @@ struct DashboardSysInfo {
     std::mutex mtx;
     bool have = false;
     std::string sd, nand, ip;
+    int64_t sdFree = 0, sdTotal = 0, nandFree = 0, nandTotal = 0;
     std::atomic<bool> inFlight{false};
     std::chrono::steady_clock::time_point last{};
 };
@@ -638,6 +639,10 @@ void refreshDashboardSysInfoAsync() {
                 ? formatBytesLocal(static_cast<unsigned long long>(nandFree)) + " / " + formatBytesLocal(static_cast<unsigned long long>(nandTotal))
                 : "-";
             g_dashInfo.ip = ip;
+            g_dashInfo.sdFree = sdOk ? sdFree : 0;
+            g_dashInfo.sdTotal = sdOk ? sdTotal : 0;
+            g_dashInfo.nandFree = nandOk ? nandFree : 0;
+            g_dashInfo.nandTotal = nandOk ? nandTotal : 0;
             g_dashInfo.have = true;
             g_dashInfo.last = std::chrono::steady_clock::now();
         }
@@ -675,12 +680,17 @@ void MainMenu::refreshDashboardState() {
 
     // 2. Storage Stats (SD & NAND) and IP: last values from the worker
     std::string sdStr = "...", nandStr = "...", ipStr;
+    int64_t sdFree = 0, sdTotal = 0, nandFree = 0, nandTotal = 0;
     {
         std::lock_guard<std::mutex> lock(g_dashInfo.mtx);
         if (g_dashInfo.have) {
             sdStr = g_dashInfo.sd;
             nandStr = g_dashInfo.nand;
             ipStr = g_dashInfo.ip;
+            sdFree = g_dashInfo.sdFree;
+            sdTotal = g_dashInfo.sdTotal;
+            nandFree = g_dashInfo.nandFree;
+            nandTotal = g_dashInfo.nandTotal;
         }
     }
 
@@ -711,6 +721,7 @@ void MainMenu::refreshDashboardState() {
             summaryView_->setCatalogSample(*catalog);
         }
         if (!ipStr.empty()) summaryView_->setRemoteInfo(ipStr, 8080);
+        summaryView_->setStorageStats(sdFree, sdTotal, nandFree, nandTotal);
     }
 }
 

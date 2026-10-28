@@ -1,10 +1,25 @@
 #include "CollectionCard.hpp"
 #include "ui/ThemeManager.hpp"
 #include <cmath>
+#include "style/UiTokens.hpp"
 
 using namespace brls::literals;
 
 namespace ui {
+
+// Turns line breaks from translations into spaces: one paragraph.
+static std::string flattenLines(std::string text) {
+    for (char& c : text) {
+        if (c == '\n' || c == '\r') c = ' ';
+    }
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text) {
+        if (c == ' ' && !out.empty() && out.back() == ' ') continue;
+        out += c;
+    }
+    return out;
+}
 
 CollectionCard::CollectionCard(const std::string& icon_type,
                                const std::string& title,
@@ -18,7 +33,7 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     this->setFocusable(true);
     this->setHideHighlight(true); // Custom glass border
     this->setWidth(274.0f);
-    this->setHeight(98.0f);
+    this->setHeight(100.0f);
     this->setAxis(brls::Axis::ROW);
     this->setPadding(8.0f, 12.0f, 8.0f, 12.0f);
     this->setCornerRadius(14.0f);
@@ -36,29 +51,28 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     infoCol->setAxis(brls::Axis::COLUMN);
     infoCol->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     infoCol->setGrow(1.0f);
-    infoCol->setHeight(72.0f);
+    infoCol->setHeight(80.0f);
 
-    // Top block: Title + Desc
-    brls::Box* topBox = new brls::Box();
-    topBox->setAxis(brls::Axis::COLUMN);
-    topBox->setWidthPercentage(100.0f);
+    // Title, one-line description and the count badge, spread evenly over the
+    // card height (no gap under the text, no text glued to the title)
 
     title_label_ = new brls::Label();
     title_label_->setText(title);
-    title_label_->setFontSize(14.0f);
+    title_label_->setFontSize(16.0f);
     title_label_->setTextColor(ThemeManager::instance().getCardTitleColor());
     title_label_->setSingleLine(true);
-    topBox->addView(title_label_);
+    title_label_->setWidthPercentage(100.0f);
+    infoCol->addView(title_label_);
 
+    // One line; manual line breaks from translations are dropped
     desc_label_ = new brls::Label();
-    desc_label_->setText(desc);
-    desc_label_->setFontSize(11.5f);
-    desc_label_->setLineHeight(1.22f);
-    desc_label_->setTextColor(ThemeManager::instance().getCardSubColor());
-    desc_label_->setMarginTop(3.0f);
-    desc_label_->setSingleLine(false);
-    topBox->addView(desc_label_);
-    infoCol->addView(topBox);
+    desc_label_->setText(flattenLines(desc));
+    desc_label_->setFontSize(14.0f);
+    desc_label_->setTextColor(style::textSecondary());
+    desc_label_->setSingleLine(true);
+    desc_label_->setAutoAnimate(false);
+    desc_label_->setWidthPercentage(100.0f);
+    infoCol->addView(desc_label_);
 
     // Bottom block: Badge (Aligned exactly with bottom of the emblem)
     brls::Box* badgeRow = new brls::Box();
@@ -74,11 +88,25 @@ CollectionCard::CollectionCard(const std::string& icon_type,
 
     count_label_ = new brls::Label();
     count_label_->setText(count_text);
-    count_label_->setFontSize(11.5f);
+    count_label_->setFontSize(13.0f);
     count_label_->setTextColor(ThemeManager::instance().getAccentColor());
     count_label_->setSingleLine(true);
     pill->addView(count_label_);
+    pill->setShrink(0.0f);
+    count_label_->setAutoAnimate(false);
     badgeRow->addView(pill);
+
+    status_chip_ = new brls::Box();
+    status_chip_->setPadding(2.0f, 7.0f, 2.0f, 7.0f);
+    status_chip_->setCornerRadius(6.0f);
+    status_chip_->setMarginLeft(6.0f);
+    status_chip_->setVisibility(brls::Visibility::GONE);
+    status_label_ = new brls::Label();
+    status_label_->setFontSize(13.0f);
+    status_label_->setSingleLine(true);
+    status_label_->setAutoAnimate(false);
+    status_chip_->addView(status_label_);
+    badgeRow->addView(status_chip_);
 
     infoCol->addView(badgeRow);
     this->addView(infoCol);
@@ -100,7 +128,19 @@ void CollectionCard::setCountText(const std::string& text) {
 }
 
 void CollectionCard::setDesc(const std::string& text) {
-    if (desc_label_) desc_label_->setText(text);
+    if (desc_label_) desc_label_->setText(flattenLines(text));
+}
+
+void CollectionCard::setStatus(const std::string& text, NVGcolor fg, NVGcolor bg) {
+    if (!status_chip_ || !status_label_) return;
+    if (text.empty()) {
+        status_chip_->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+    status_label_->setText(text);
+    status_label_->setTextColor(fg);
+    status_chip_->setBackgroundColor(bg);
+    status_chip_->setVisibility(brls::Visibility::VISIBLE);
 }
 
 void CollectionCard::setDescColor(NVGcolor color) {

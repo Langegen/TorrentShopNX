@@ -35,7 +35,7 @@
         <brls:Box width="auto" height="auto" axis="row" alignItems="center" marginTop="3">
             <brls:Label
                 id="titleId"
-                fontSize="13"
+                fontSize="14"
                 textColor="@theme/brls/header/subtitle"
                 marginRight="10"
                 singleLine="true" />
@@ -53,7 +53,7 @@
                 <brls:Label
                     id="patchBadge"
                     text="UPD"
-                    fontSize="11"
+                    fontSize="13"
                     textColor="#FFFFFF" />
             </brls:Box>
 
@@ -70,7 +70,7 @@
                 <brls:Label
                     id="dlcBadge"
                     text="DLC"
-                    fontSize="11"
+                    fontSize="13"
                     textColor="#FFFFFF" />
             </brls:Box>
 
@@ -86,7 +86,7 @@
                 <brls:Label
                     id="modBadge"
                     text="MODS"
-                    fontSize="11"
+                    fontSize="13"
                     textColor="#FFFFFF" />
             </brls:Box>
         </brls:Box>

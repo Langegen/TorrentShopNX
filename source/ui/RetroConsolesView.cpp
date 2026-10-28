@@ -11,10 +11,23 @@
 #include "../utils/log.h"
 #include <algorithm>
 #include <filesystem>
+#include "../utils/i18n_plural.h"
 
 namespace ui {
 
 namespace {
+
+// "1983 · Tico · ready": skips empty parts, so a console without a year does
+// not start with a separator.
+std::string joinDescParts(std::initializer_list<std::string> parts) {
+    std::string out;
+    for (const auto& p : parts) {
+        if (p.empty()) continue;
+        if (!out.empty()) out += " · ";
+        out += p;
+    }
+    return out;
+}
 
 brls::Box* createSectionDivider(const std::string& title_text, NVGcolor bar_color) {
     brls::Box* headerBox = new brls::Box();
@@ -145,7 +158,7 @@ void RetroConsolesView::updateHeader() {
     std::string text = games > 0
         ? brls::getStr("app/retro/consoles_stats_fmt", systems, std::to_string(games))
         : brls::getStr("app/retro/consoles_count_fmt", systems);
-    statsHint->setText(text + "app/retro/consoles_stats_suffix"_i18n);
+    statsHint->setText(text);
 }
 
 // What each console still needs, shown under its name. Reads the SD card, so off the UI thread.
@@ -181,14 +194,21 @@ void RetroConsolesView::refreshStatuses() {
                 const auto* info = mgr.findConsole(st.id);
                 if (it == console_cards_.end() || !it->second || !info) continue;
                 std::string runner = info->route == catalog::RetroRoute::Tico ? std::string("Tico") : mgr.getRunnerLabel(st.id);
-                it->second->setDesc(info->release_year + " • " + runner + " • " + brls::getStr(st.key));
+                // "1990 · Tico" as the description; readiness as a colored chip by the count
+                it->second->setDesc(joinDescParts({info->release_year, runner}));
+                NVGcolor fg, bg;
                 if (st.kind == 0) {
-                    it->second->setDescColor(isLight ? nvgRGBA(22, 128, 61, 255) : nvgRGBA(76, 217, 100, 255));
+                    fg = isLight ? nvgRGB(22, 120, 60) : nvgRGB(110, 220, 150);
+                    bg = isLight ? nvgRGBA(38, 166, 91, 34) : nvgRGBA(76, 217, 100, 40);
                 } else if (st.kind == 1) {
-                    it->second->setDescColor(isLight ? nvgRGB(194, 65, 12) : nvgRGB(255, 183, 77));
+                    fg = isLight ? nvgRGB(176, 70, 0) : nvgRGB(255, 185, 90);
+                    bg = isLight ? nvgRGBA(245, 124, 0, 34) : nvgRGBA(255, 160, 50, 44);
                 } else {
-                    it->second->setDescColor(ThemeManager::instance().getTextSecondaryColor());
+                    // Emulator installs itself on first download: the usual case, no chip
+                    it->second->setStatus("", fg, bg);
+                    continue;
                 }
+                it->second->setStatus(brls::getStr(st.key), fg, bg);
             }
         });
     });
@@ -208,7 +228,7 @@ void RetroConsolesView::refreshGameCounts() {
                 brls::sync([flag, card, count]() {
                     if (flag->load() && card) {
                         if (count > 0) {
-                            card->setCountText(std::to_string(count) + " " + "app/retro/unit_games"_i18n);
+                            card->setCountText(util::pluralize("app/plural/games", count));
                         } else {
                             card->setCountText("app/retro/catalog_badge"_i18n);
                         }
@@ -268,11 +288,11 @@ void RetroConsolesView::rebuildGrid() {
             }
 
             int cached = mgr.getCachedGameCount(c.id);
-            std::string countStr = (cached > 0) ? (std::to_string(cached) + " " + "app/retro/unit_games"_i18n) : "app/retro/catalog_badge"_i18n;
+            std::string countStr = (cached > 0) ? util::pluralize("app/plural/games", cached) : "app/retro/catalog_badge"_i18n;
 
             // The status ("ready", "needs a BIOS"...) is added by refreshStatuses().
             std::string runner = (c.route == catalog::RetroRoute::Tico) ? std::string("Tico") : mgr.getRunnerLabel(c.id);
-            std::string desc = c.release_year + " • " + runner;
+            std::string desc = joinDescParts({c.release_year, runner});
 
             catalog::RetroConsoleInfo cInfo = c;
             CollectionCard* card = new CollectionCard(

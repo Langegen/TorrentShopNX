@@ -55,6 +55,7 @@ brls::Box* createSectionDivider(const std::string& title_text) {
     brls::Label* lbl = new brls::Label();
     lbl->setText(title_text);
     lbl->setFontSize(14.0f);
+    lbl->setLetterSpacing(0.8f);
     lbl->setTextColor(ThemeManager::instance().getAccentColor());
     headerBox->addView(lbl);
 

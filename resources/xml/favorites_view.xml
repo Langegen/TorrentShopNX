@@ -4,14 +4,16 @@
     height="auto"
     axis="column"
     paddingTop="20"
-    paddingRight="20"
-    paddingBottom="20"
-    paddingLeft="20">
+    paddingRight="32"
+    paddingBottom="12"
+    paddingLeft="32">
 
     <!-- Header -->
-    <brls:Box width="auto" height="60px" axis="row" alignItems="center" marginBottom="10">
+    <brls:Box width="auto" height="56px" axis="row" alignItems="center" marginBottom="8">
         <brls:Label text="@i18n/app/favorites/title" fontSize="28" />
     </brls:Box>
+
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
 
     <!-- Recycler Grid -->
     <brls:RecyclerFrame

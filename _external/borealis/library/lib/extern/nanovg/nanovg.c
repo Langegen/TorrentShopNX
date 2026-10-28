@@ -2863,8 +2863,10 @@ int nvgTextBreakLines(NVGcontext* ctx, const char* string, const char* end, floa
 			case 9:			// \t
 			case 11:		// \v
 			case 12:		// \f
-			case 0x00a0:	// NBSP
 				type = NVG_CONTROL;
+				break;
+			case 0x00a0:	// NBSP: drawn as a space but never a line break ("5 games")
+				type = NVG_CHAR;
 				break;
 			case 10:		// \n
 				type = pcodepoint == 13 ? NVG_CONTROL : NVG_NEWLINE;

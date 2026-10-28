@@ -539,8 +539,8 @@ void ThemeManager::applyThemeToBorealis() {
     lightTheme.addColor("brls/slider/line_filled", primary);
     lightTheme.addColor("brls/text", nvgRGB(36, 42, 54));
     lightTheme.addColor("brls/text_disabled", nvgRGB(130, 140, 155));
-    lightTheme.addColor("brls/header/subtitle", nvgRGB(100, 112, 128));
-    lightTheme.addColor("brls/text_secondary", nvgRGB(100, 112, 128));
+    lightTheme.addColor("brls/header/subtitle", nvgRGB(90, 99, 114));   // = style::textSecondary()
+    lightTheme.addColor("brls/text_secondary", nvgRGB(90, 99, 114));
     lightTheme.addColor("brls/sidebar/separator", nvgRGB(220, 226, 235));
     lightTheme.addColor("brls/applet_frame/separator", nvgRGB(215, 222, 232));
     lightTheme.addColor("brls/header/border", nvgRGB(215, 222, 232));

@@ -1,4 +1,5 @@
 #include "FavoritesView.hpp"
+#include "EmptyState.hpp"
 #include "CatalogView.hpp"
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
@@ -108,6 +109,32 @@ void FavoritesView::filterFavorites() {
 
     filteredFavorites_ = std::move(filtered);
 
+    // Nothing to show: say why and how to fill the list
+    if (emptyHolder && recycler) {
+        const bool empty = filteredFavorites_.empty();
+        if (empty) {
+            if (!emptyState_) {
+                emptyState_ = new EmptyState();
+                emptyHolder->addView(emptyState_);
+            }
+            if (allFavorites_.empty()) {
+                emptyState_->show(DashboardIcon::Kind::Star, "app/empty/favorites_title"_i18n,
+                                  brls::getStr("app/empty/favorites_sub",
+                                               brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_Y)));
+            } else {
+                emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                                  "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                                  [this]() { resetFilters(); });
+            }
+        }
+        emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+        if (empty) {
+            if (emptyState_->actionView()) brls::Application::giveFocus(emptyState_->actionView());
+            return;
+        }
+    }
+
     if (recycler) {
         GameRowCell::s_lastFocusedColumn = 0;
         recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
@@ -157,28 +184,24 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             cards[i].card->setVisibility(brls::Visibility::VISIBLE);
             cards[i].card->setFocusable(true);
             
-            std::string fullTitle  = cleanTitle(game.title);
-            std::string shortTitle = truncateCatalogTitle(fullTitle);
+            // One line with an ellipsis; scrolls in full while the card is focused
             brls::Label* titleLabel = cards[i].title;
-
-            titleLabel->setText(shortTitle);
+            titleLabel->setText(cleanTitle(game.title));
             cards[i].size->setText(game.size);
 
             // Clear subscriptions from recycled cell
             cards[i].card->getFocusEvent()->clear();
             cards[i].card->getFocusLostEvent()->clear();
 
-            cards[i].card->getFocusEvent()->subscribe([titleLabel, fullTitle, row, i](brls::View* v) {
+            cards[i].card->getFocusEvent()->subscribe([titleLabel, row, i](brls::View* v) {
                 if (v->isFocused()) {
                     GameRowCell::s_lastFocusedColumn = i;
                     net::ImageDownloader::instance().setFocusedPosition(row, i);
                 }
-                titleLabel->setText(fullTitle);
                 titleLabel->setAnimated(true);
             });
-            cards[i].card->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
+            cards[i].card->getFocusLostEvent()->subscribe([titleLabel](brls::View*) {
                 titleLabel->setAnimated(false);
-                titleLabel->setText(shortTitle);
             });
             
             GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
@@ -204,7 +227,7 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
                 }
             }
             
-            setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
+            setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/cover_blank.png", false, "", row, i);
             
             cards[i].card->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [this, game](brls::View* view) {
                 bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);

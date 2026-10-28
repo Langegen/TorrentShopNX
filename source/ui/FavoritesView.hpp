@@ -19,6 +19,8 @@ public:
     void resetFilters();
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
+    BRLS_BIND(brls::Box, emptyHolder, "emptyHolder");
+    class EmptyState* emptyState_ = nullptr;
 
 private:
     catalog::FilterSortState filterState_;

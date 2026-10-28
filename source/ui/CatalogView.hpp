@@ -94,6 +94,8 @@ public:
     void jumpToNextLetter(bool forward);
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
+    BRLS_BIND(brls::Box, emptyHolder, "emptyHolder");
+    class EmptyState* emptyState_ = nullptr;
     BRLS_BIND(brls::Label, headerTitle, "headerTitle");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
 

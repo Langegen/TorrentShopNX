@@ -1,4 +1,7 @@
 #include "RetroCatalogView.hpp"
+#include "style/HeaderHints.hpp"
+#include "../utils/string_utils.h"
+#include "../utils/i18n_plural.h"
 #include "ui/ThemeManager.hpp"
 #include "GameDetailView.hpp"
 #include "FilterSortDialog.hpp"
@@ -398,13 +401,15 @@ void RetroCatalogView::toggleViewMode() {
     RetroGridRowCell::s_lastFocusedColumn = isListView_ ? 0 : static_cast<int>(targetIdx % 6);
 
     if (statsHint) {
-        std::string modeStr = isListView_ ? "app/retro/mode_list"_i18n : "app/retro/mode_grid"_i18n;
         size_t total = filteredRomsets_.size() + filteredStandalone_.size();
         std::string countStr = "app/retro/games_prefix"_i18n + std::to_string(total);
         if (!filteredRomsets_.empty()) {
             countStr += "app/retro/romsets_prefix"_i18n + std::to_string(filteredRomsets_.size()) + ")";
         }
-        statsHint->setText(countStr + " | " + modeStr + "app/retro/retro_nav_hint"_i18n);
+        statsHint->setText(ui::style::headerMeta(countStr, {
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_LSB, "app/header_hint/view"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, "app/header_hint/refresh"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)}));
     }
 
     recycler->setDefaultCellFocus(brls::IndexPath(static_cast<int>(targetSection), targetRow));
@@ -514,7 +519,6 @@ void RetroCatalogView::filterCatalog() {
     }
 
     if (statsHint) {
-        std::string modeStr = isListView_ ? "app/retro/mode_list"_i18n : "app/retro/mode_grid"_i18n;
         size_t totalFiltered = filteredRomsets_.size() + filteredStandalone_.size();
         std::string countStr = "app/retro/games_prefix"_i18n + std::to_string(totalFiltered);
         if (totalFiltered != allGames_.size()) {
@@ -523,7 +527,10 @@ void RetroCatalogView::filterCatalog() {
         if (!filteredRomsets_.empty()) {
             countStr += "app/retro/romsets_prefix"_i18n + std::to_string(filteredRomsets_.size()) + ")";
         }
-        statsHint->setText(countStr + " | " + modeStr + "app/retro/retro_nav_hint"_i18n);
+        statsHint->setText(ui::style::headerMeta(countStr, {
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_LSB, "app/header_hint/view"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, "app/header_hint/refresh"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)}));
     }
 
     if (recycler) {
@@ -596,7 +603,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForHeader(brls::Recyc
         header->setTitle(title);
         const auto* gList = parent_->sections_[section].games;
         size_t count = gList ? gList->size() : 0;
-        std::string countStr = std::to_string(count) + " " + (parent_->sections_[section].isRomset ? "app/retro/unit_torrents"_i18n : "app/retro/unit_games"_i18n);
+        std::string countStr = util::pluralize(parent_->sections_[section].isRomset ? "app/plural/torrents" : "app/plural/games", count);
         header->setSubtitle(countStr);
         header->setVisibility(brls::Visibility::VISIBLE);
         header->setHeight(brls::View::AUTO);
@@ -639,8 +646,9 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         cell->title->setText(cleanName);
         cell->size->setText(game.size);
 
-        std::string metaStr = (game.year.empty() ? "" : (game.year + " • ")) +
-                              (game.genre.empty() ? parent_->consoleInfo_.name : game.genre);
+        const bool hasGenre = !util::isPlaceholderValue(game.genre);
+        std::string metaStr = (util::isPlaceholderValue(game.year) ? "" : (game.year + " · ")) +
+                              (hasGenre ? game.genre : parent_->consoleInfo_.name);
         cell->meta->setText(metaStr);
 
         GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());
@@ -661,11 +669,11 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
         } else if (isRom) {
             cell->actionBox->setBackgroundColor(nvgRGBA(255, 170, 0, 35));
             cell->actionLabel->setTextColor(nvgRGBA(255, 170, 0, 255));
-            cell->actionLabel->setText("app/retro/btn_download_set"_i18n);
+            cell->actionLabel->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_A, "app/retro/btn_download_set"_i18n));
         } else {
             cell->actionBox->setBackgroundColor(ThemeManager::instance().getDimAccentColor());
             cell->actionLabel->setTextColor(ThemeManager::instance().getAccentColor());
-            cell->actionLabel->setText("app/retro/btn_download_rom"_i18n);
+            cell->actionLabel->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_A, "app/retro/btn_download_rom"_i18n));
         }
 
         const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
@@ -757,11 +765,9 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cardBox->setVisibility(brls::Visibility::VISIBLE);
             cardBox->setFocusable(true);
 
-            std::string fullTitle = cleanRetroTitle(game.title);
-            std::string shortTitle = truncateCatalogTitle(fullTitle, 36);
+            // One line with an ellipsis; scrolls in full while the card is focused
             brls::Label* titleLabel = cards[i].title;
-
-            titleLabel->setText(shortTitle);
+            titleLabel->setText(cleanRetroTitle(game.title));
             titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
             cards[i].size->setText(game.size);
 
@@ -793,7 +799,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cardBox->getFocusEvent()->clear();
             cardBox->getFocusLostEvent()->clear();
 
-            cardBox->getFocusEvent()->subscribe([this, titleLabel, fullTitle, section = index.section, effectiveRow, i, gameIdx](brls::View* v) {
+            cardBox->getFocusEvent()->subscribe([this, titleLabel, section = index.section, effectiveRow, i, gameIdx](brls::View* v) {
                 if (v->isFocused()) {
                     RetroGridRowCell::s_lastFocusedColumn = i;
                     parent_->focusedSection_ = section;
@@ -801,14 +807,12 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                     net::ImageDownloader::instance().setFocusedPosition(effectiveRow, i);
                 }
                 titleLabel->setTextColor(ThemeManager::instance().getAccentColor());
-                titleLabel->setText(fullTitle);
                 titleLabel->setAnimated(true);
             });
 
-            cardBox->getFocusLostEvent()->subscribe([titleLabel, shortTitle](brls::View*) {
+            cardBox->getFocusLostEvent()->subscribe([titleLabel](brls::View*) {
                 titleLabel->setTextColor(ThemeManager::instance().getTextPrimaryColor());
                 titleLabel->setAnimated(false);
-                titleLabel->setText(shortTitle);
             });
 
             GameLangBadge badge = getGameLangBadge(game.interface_lang, brls::Application::getLocale());

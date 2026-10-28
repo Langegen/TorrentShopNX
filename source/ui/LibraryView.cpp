@@ -1,4 +1,5 @@
 #include "LibraryView.hpp"
+#include "../utils/i18n_plural.h"
 #include "ThemeManager.hpp"
 #include "CatalogView.hpp"
 #include "GameDetailView.hpp"
@@ -1037,7 +1038,7 @@ void LibraryView::updateAllGames() {
         return;
     }
 
-    std::string msg = brls::getStr("app/library/update_all_confirm", std::to_string(targets.size()));
+    std::string msg = brls::getStr("app/library/update_all_confirm", util::pluralize("app/plural/games", static_cast<long long>(targets.size())));
     if (withMods > 0) msg += "\n\n" + brls::getStr("app/library/update_all_mods_note", std::to_string(withMods));
     auto* dialog = new brls::Dialog(msg);
     dialog->addButton("app/common/yes"_i18n, [targets]() {
@@ -2004,7 +2005,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
             badgeBox->setMarginRight(12.0f);
 
             auto* badgeText = new brls::Label();
-            badgeText->setFontSize(11.0f);
+            badgeText->setFontSize(13.0f);
             badgeText->setTextColor(nvgRGB(255, 255, 255));
 
             if (comp.type == InstalledComponent::Type::BaseGame) {
@@ -2037,7 +2038,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
 
             auto* delBtn = new brls::Button();
             delBtn->setText("app/library/comp_delete_btn"_i18n);
-            delBtn->setFontSize(13.0f);
+            delBtn->setFontSize(14.0f);
             delBtn->setWidth(120.0f);
             delBtn->setHeight(34.0f);
             delBtn->setTextColor(nvgRGB(255, 255, 255));

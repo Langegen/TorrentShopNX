@@ -97,19 +97,58 @@ Dialog::Dialog(Box* contentView)
 Dialog::Dialog(std::string text)
 {
     Style style = Application::getStyle();
+    Theme theme = Application::getTheme();
 
-    Label* label = new Label();
-    label->setText(text);
-    label->setFontSize(style["brls/dialog/fontSize"]);
-    label->setHorizontalAlign(HorizontalAlign::CENTER);
-    label->setSingleLine(false);
-    label->setWidth(720.0f - 2.0f * style["brls/dialog/paddingLeftRight"]);
+    // "Question?\nExplanation": the first line is the title, the rest a
+    // smaller explanation. Both left-aligned, so long text wraps evenly.
+    auto trim = [](std::string s) {
+        size_t b = s.find_first_not_of(" \t\r\n");
+        if (b == std::string::npos)
+            return std::string();
+        size_t e = s.find_last_not_of(" \t\r\n");
+        return s.substr(b, e - b + 1);
+    };
+    std::string titleText = trim(text);
+    std::string bodyText;
+    size_t nl = titleText.find('\n');
+    if (nl != std::string::npos)
+    {
+        bodyText  = trim(titleText.substr(nl + 1));
+        titleText = trim(titleText.substr(0, nl));
+    }
+
+    const float sidePadding = 48.0f;
+    const float textWidth   = 720.0f - 2.0f * sidePadding;
 
     Box* box = new Box();
-    box->addView(label);
-    box->setAlignItems(AlignItems::CENTER);
+    box->setAxis(Axis::COLUMN);
+    box->setAlignItems(AlignItems::FLEX_START);
     box->setJustifyContent(JustifyContent::CENTER);
-    box->setPadding(style["brls/dialog/paddingTopBottom"], style["brls/dialog/paddingLeftRight"], style["brls/dialog/paddingTopBottom"], style["brls/dialog/paddingLeftRight"]);
+    box->setPadding(44.0f, sidePadding, 40.0f, sidePadding);
+
+    Label* title = new Label();
+    title->setText(titleText);
+    title->setFontSize(22.0f);
+    title->setLineHeight(1.3f);
+    title->setTextColor(theme["brls/text"]);
+    title->setHorizontalAlign(HorizontalAlign::LEFT);
+    title->setSingleLine(false);
+    title->setWidth(textWidth);
+    box->addView(title);
+
+    if (!bodyText.empty())
+    {
+        Label* body = new Label();
+        body->setText(bodyText);
+        body->setFontSize(18.0f);
+        body->setLineHeight(1.4f);
+        body->setTextColor(theme["brls/header/subtitle"]);
+        body->setHorizontalAlign(HorizontalAlign::LEFT);
+        body->setSingleLine(false);
+        body->setWidth(textWidth);
+        body->setMarginTop(12.0f);
+        box->addView(body);
+    }
 
     this->inflateFromXMLString(dialogXML);
     container->addView(box);

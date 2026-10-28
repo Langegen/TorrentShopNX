@@ -68,7 +68,7 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
 
     auto* statsLabel = new brls::Label();
     statsLabel->setText("0.0 MB / " + formatSizeMb(pkg.file_size));
-    statsLabel->setFontSize(12.0f);
+    statsLabel->setFontSize(14.0f);
     statsLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
     statsLabel->setMarginBottom(14.0f);
     content->addView(statsLabel);

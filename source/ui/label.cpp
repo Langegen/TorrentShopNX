@@ -23,6 +23,7 @@
 #include <borealis/core/util.hpp>
 #include <borealis/views/label.hpp>
 #include <unordered_map>
+#include <vector>
 #include "../config/config.h"
 #include "../utils/arabic_shaper.h"
 
@@ -30,6 +31,15 @@ namespace brls
 {
 
 #define ELLIPSIS "\u2026"
+
+// Sets a label's letter spacing for the current block and puts it back to 0 on
+// exit, so other text drawn later never inherits it.
+struct LetterSpacingScope
+{
+    NVGcontext* vg;
+    LetterSpacingScope(NVGcontext* v, float spacing) : vg(v) { nvgTextLetterSpacing(vg, spacing); }
+    ~LetterSpacingScope() { nvgTextLetterSpacing(vg, 0.0f); }
+};
 
 static std::unordered_map<const Label*, int> s_labelFontScale;
 
@@ -133,6 +143,7 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
     nvgFontFaceId(vg, label->getFont());
     nvgTextLineHeight(vg, label->getLineHeight());
+    LetterSpacingScope letterSpacingScope(vg, label->getLetterSpacing());
 
     // Measure the needed width for the ellipsis
     float bounds[4];
@@ -176,6 +187,25 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
         nvgTextBoxBounds(vg, 0, 0, availableWidth, fullText.c_str(), nullptr, boxBounds);
 
         float requiredHeight = boxBounds[3] - boxBounds[1];
+
+        // Clamped to maxLines: draw() ends the last line with an ellipsis, so
+        // the label always wraps and never needs more than maxLines rows.
+        if (label->getMaxLines() > 0)
+        {
+            float lineh = 0;
+            nvgTextMetrics(vg, nullptr, nullptr, &lineh);
+            float maxHeight = lineh * label->getLineHeight() * label->getMaxLines();
+            if (requiredHeight > maxHeight)
+                requiredHeight = maxHeight;
+            label->setIsWrapping(true);
+            if (heightMode == YGMeasureModeExactly)
+                size.height = height;
+            else if (heightMode == YGMeasureModeAtMost)
+                size.height = std::min(requiredHeight, height);
+            else
+                size.height = requiredHeight;
+            return size;
+        }
 
         // Undefined height mode, always wrap
         if (heightMode == YGMeasureModeUndefined)
@@ -274,6 +304,9 @@ Label::Label()
 
     this->registerBoolXMLAttribute("singleLine", [this](bool value)
         { this->setSingleLine(value); });
+
+    this->registerFloatXMLAttribute("maxLines", [this](float value)
+        { this->setMaxLines(static_cast<int>(value)); });
 
     this->registerFloatXMLAttribute("cursor", [this](float value)
         { this->setCursor(value); });
@@ -398,6 +431,7 @@ void Label::setText(const std::string& text)
         nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
         nvgFontFaceId(vg, this->font);
         nvgTextLineHeight(vg, this->lineHeight);
+        LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
 
         float bounds[4];
         nvgTextBounds(vg, 0, 0, ELLIPSIS, nullptr, bounds);
@@ -432,6 +466,88 @@ void Label::setText(const std::string& text)
 
     this->invalidate();
     this->resetScrollingAnimation();
+}
+
+void Label::drawClampedLines(NVGcontext* vg, float x, float y, float width)
+{
+    const char* start = this->fullText.c_str();
+    const char* end   = start + this->fullText.size();
+
+    std::vector<NVGtextRow> rows(static_cast<size_t>(this->maxLines));
+    int count = nvgTextBreakLines(vg, start, end, width, rows.data(), this->maxLines);
+    if (count <= 0)
+        return;
+
+    float lineh = 0;
+    nvgTextMetrics(vg, nullptr, nullptr, &lineh);
+    lineh *= this->lineHeight;
+
+    for (int i = 0; i < count; ++i)
+    {
+        float rowY = y + lineh * static_cast<float>(i);
+        const NVGtextRow& row = rows[static_cast<size_t>(i)];
+
+        bool textLeft = false;
+        if (i == count - 1)
+        {
+            for (const char* p = row.next; p < end; ++p)
+            {
+                if (*p != ' ' && *p != '\n' && *p != '\r' && *p != '\t')
+                {
+                    textLeft = true;
+                    break;
+                }
+            }
+        }
+
+        if (!textLeft)
+        {
+            nvgTextBox(vg, x, rowY, width, row.start, row.end);
+            continue;
+        }
+
+        // Last row with more text after it: keep what fits next to the ellipsis.
+        std::string rest(row.start, end);
+        size_t firstChar = rest.find_first_not_of(' ');
+        if (firstChar != std::string::npos && firstChar > 0)
+            rest.erase(0, firstChar);
+        float bounds[4];
+        nvgTextBounds(vg, 0, 0, ELLIPSIS, nullptr, bounds);
+        float ellipsisW = bounds[2] - bounds[0];
+
+        std::vector<NVGglyphPosition> glyphs(rest.size());
+        int glyphCount = nvgTextGlyphPositions(vg, 0, 0, rest.c_str(), nullptr, glyphs.data(), static_cast<int>(glyphs.size()));
+        size_t cut = rest.size();
+        for (int g = 0; g < glyphCount; ++g)
+        {
+            if (glyphs[static_cast<size_t>(g)].maxx + ellipsisW > width)
+            {
+                cut = static_cast<size_t>(glyphs[static_cast<size_t>(g)].str - rest.c_str());
+                break;
+            }
+        }
+        std::string shown = rest.substr(0, cut);
+        size_t last = shown.find_last_not_of(" \n\r\t");
+        shown = (last == std::string::npos) ? std::string() : shown.substr(0, last + 1);
+        shown += ELLIPSIS;
+        nvgTextBox(vg, x, rowY, width, shown.c_str(), nullptr);
+    }
+}
+
+void Label::setLetterSpacing(float spacing)
+{
+    if (this->letterSpacing == spacing)
+        return;
+    this->letterSpacing = spacing;
+    this->invalidate();
+}
+
+void Label::setMaxLines(int maxLines)
+{
+    if (this->maxLines == maxLines)
+        return;
+    this->maxLines = maxLines < 0 ? 0 : maxLines;
+    this->invalidate();
 }
 
 void Label::setSingleLine(bool singleLine)
@@ -530,6 +646,7 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
     nvgFontFaceId(vg, this->font);
     nvgFontQuality(vg, this->fontQuality);
     nvgTextLineHeight(vg, this->lineHeight);
+    LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
     nvgFillColor(vg, a(this->textColor));
 
     // Edit cursor
@@ -558,10 +675,13 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
         nvgRestore(vg);
     }
     // Wrapped text
-    else if (this->isWrapping)
+    else if (this->isWrapping || (this->maxLines > 0 && !this->singleLine))
     {
         nvgTextAlign(vg, horizAlign | NVG_ALIGN_TOP);
-        nvgTextBoxWithCursor(vg, x, y, width, this->fullText.c_str(), nullptr, cursor_position);
+        if (this->maxLines > 0)
+            this->drawClampedLines(vg, x, y, width);
+        else
+            nvgTextBoxWithCursor(vg, x, y, width, this->fullText.c_str(), nullptr, cursor_position);
     }
     // Truncated text
     else
@@ -687,6 +807,7 @@ void Label::onLayout()
         nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
         nvgFontFaceId(vg, this->font);
         nvgTextLineHeight(vg, this->lineHeight);
+        LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
 
         float bounds[4];
         nvgTextBounds(vg, 0, 0, ELLIPSIS, nullptr, bounds);
@@ -707,6 +828,7 @@ void Label::onLayout()
             nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
             nvgFontFaceId(vg, this->font);
             nvgTextLineHeight(vg, this->lineHeight);
+            LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
 
             std::vector<NVGglyphPosition> positions;
             positions.resize(stringLength);
