@@ -133,7 +133,6 @@
     },
     "downloads": {
         "title": "Téléchargements",
-        "empty": "Aucun téléchargements actif",
         "already_in_queue": "Ce jeu est deja dans les telechargements",
         "status_prefix": "État : ",
         "speed": "Vitesse : {0}/s",
@@ -1259,5 +1258,19 @@
         "torrent": "Torrent",
         "torrent_value": "{0} seeds / {1} peers ({2} téléch.)",
         "added": "Ajouté"
+    },
+    "empty": {
+        "downloads_title": "Aucun téléchargement",
+        "downloads_sub": "Les jeux en cours de téléchargement et d'installation apparaîtront ici",
+        "open_catalog": "Ouvrir le catalogue",
+        "favorites_title": "Aucun favori pour l'instant",
+        "favorites_sub": "Appuyez sur {0} sur un jeu pour l'ajouter ici",
+        "search_title": "Aucun résultat",
+        "search_sub": "Essayez une autre recherche ou réinitialisez les filtres",
+        "reset_filters": "Réinitialiser les filtres",
+        "collection_title": "Pas encore de jeux dans cette collection",
+        "collection_sub": "Les collections se mettent à jour automatiquement",
+        "load_failed_title": "Chargement impossible",
+        "load_failed_sub": "Vérifiez la connexion internet et rouvrez la collection"
     }
 }

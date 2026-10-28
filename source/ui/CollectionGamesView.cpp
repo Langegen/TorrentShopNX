@@ -1,4 +1,5 @@
 #include "CollectionGamesView.hpp"
+#include "EmptyState.hpp"
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
@@ -213,9 +214,7 @@ void CollectionGamesView::loadAndShow() {
             loading_ = false;
 
             if (!ok) {
-                loadingLabel->setText("app/collections/load_failed"_i18n);
-                loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-                recycler->setVisibility(brls::Visibility::GONE);
+                showEmpty(true);
                 return;
             }
 
@@ -226,9 +225,7 @@ void CollectionGamesView::loadAndShow() {
             matchIndex_ = std::move(matchIndex);
 
             if (entries_.empty()) {
-                loadingLabel->setText("app/collections/empty"_i18n);
-                loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-                recycler->setVisibility(brls::Visibility::GONE);
+                showEmpty(false);
                 return;
             }
 
@@ -522,6 +519,27 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
     }
 
     return rowCell;
+}
+
+} // namespace ui
+
+namespace ui {
+
+// Empty collection or a failed download of its list
+void CollectionGamesView::showEmpty(bool failed) {
+    if (loadingLabel) loadingLabel->setVisibility(brls::Visibility::GONE);
+    if (recycler) recycler->setVisibility(brls::Visibility::GONE);
+    if (!emptyHolder) return;
+    emptyHolder->clearViews();
+    auto* state = new EmptyState();
+    if (failed) {
+        state->show(DashboardIcon::Kind::CloudError, "app/empty/load_failed_title"_i18n, "app/empty/load_failed_sub"_i18n);
+    } else {
+        state->show(DashboardIcon::Kind::GameCards, "app/empty/collection_title"_i18n, "app/empty/collection_sub"_i18n);
+    }
+    emptyHolder->addView(state);
+    emptyHolder->setVisibility(brls::Visibility::VISIBLE);
+    brls::Application::giveFocus(state->actionView());
 }
 
 } // namespace ui

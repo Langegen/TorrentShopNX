@@ -1,4 +1,5 @@
 #include "CatalogView.hpp"
+#include "EmptyState.hpp"
 #include "style/HeaderHints.hpp"
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
@@ -286,6 +287,27 @@ void CatalogView::filterCatalog() {
         ui::style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT, "app/header_hint/jump_az"_i18n),
         ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n),
         ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n)}));
+    }
+
+    // Nothing matches the search or filters: offer to reset them
+    if (emptyHolder && recycler) {
+        const bool empty = filteredGames_.empty();
+        if (empty && !emptyState_) {
+            emptyState_ = new EmptyState();
+            emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                              "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                              [this]() { resetFilters(); });
+            emptyHolder->addView(emptyState_);
+        }
+        emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+        if (empty) {
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (!stack.empty() && stack.back() == this && emptyState_->actionView()) {
+                brls::Application::giveFocus(emptyState_->actionView());
+            }
+            return;
+        }
     }
 
     GameRowCell::s_lastFocusedColumn = 0;

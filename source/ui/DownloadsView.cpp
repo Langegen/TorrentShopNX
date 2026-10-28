@@ -1,4 +1,6 @@
 #include "DownloadsView.hpp"
+#include "EmptyState.hpp"
+#include "CollectionsView.hpp"
 #include "DownloadUiManager.hpp"
 #include "FileManagerView.hpp"
 #include "ThemeManager.hpp"
@@ -281,13 +283,7 @@ void DownloadsView::registerProgressCallback() {
             
             buildGroups(queue);
 
-            if (groups_.empty()) {
-                emptyLabel->setVisibility(brls::Visibility::VISIBLE);
-                recycler->setVisibility(brls::Visibility::GONE);
-            } else {
-                emptyLabel->setVisibility(brls::Visibility::GONE);
-                recycler->setVisibility(brls::Visibility::VISIBLE);
-            }
+            setEmpty(groups_.empty());
 
             size_t currentRows = groups_.size();
             std::vector<std::string> currentOrder;
@@ -351,6 +347,29 @@ DownloadsView::~DownloadsView() {
     ui::DownloadManager::instance().setProgressCallback(nullptr);
 }
 
+// "No downloads" screen with a way to the catalog, instead of an empty list
+void DownloadsView::setEmpty(bool empty) {
+    if (!emptyHolder || !recycler) return;
+    if (empty && !emptyState_) {
+        emptyState_ = new EmptyState();
+        emptyState_->show(DashboardIcon::Kind::Download,
+                          "app/empty/downloads_title"_i18n, "app/empty/downloads_sub"_i18n,
+                          "app/empty/open_catalog"_i18n, []() {
+                              brls::Application::pushActivity(new CollectionsView());
+                          });
+        emptyHolder->addView(emptyState_);
+    }
+    const bool wasEmpty = emptyHolder->getVisibility() == brls::Visibility::VISIBLE;
+    emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+    if (empty && !wasEmpty && emptyState_ && emptyState_->actionView()) {
+        const auto& stack = brls::Application::getActivitiesStack();
+        if (!stack.empty() && stack.back() == this) {
+            brls::Application::giveFocus(emptyState_->actionView());
+        }
+    }
+}
+
 void DownloadsView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     util::ScreenSleepManager::instance().resetActivity();
@@ -359,13 +378,7 @@ void DownloadsView::willAppear(bool resetState) {
     const auto& queue = ui::DownloadManager::instance().getImpl().queue();
     buildGroups(queue);
 
-    if (groups_.empty()) {
-        emptyLabel->setVisibility(brls::Visibility::VISIBLE);
-        recycler->setVisibility(brls::Visibility::GONE);
-    } else {
-        emptyLabel->setVisibility(brls::Visibility::GONE);
-        recycler->setVisibility(brls::Visibility::VISIBLE);
-    }
+    setEmpty(groups_.empty());
 
     lastRows_ = groups_.size();
     lastOrder_.clear();

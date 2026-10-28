@@ -94,7 +94,7 @@ public:
     void willDisappear(bool resetState) override;
 
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
-    BRLS_BIND(brls::Label, emptyLabel, "emptyLabel");
+    BRLS_BIND(brls::Box, emptyHolder, "emptyHolder");
     BRLS_BIND(brls::Label, backlightHint, "backlightHint");
 
     void buildGroups(const std::vector<download::DownloadItem>& queue);
@@ -106,6 +106,8 @@ public:
 
 private:
     void toggleBacklight();
+    void setEmpty(bool empty);
+    class EmptyState* emptyState_ = nullptr;
     void registerProgressCallback();
     std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 

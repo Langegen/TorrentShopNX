@@ -17,6 +17,8 @@
     <!-- Loading / error state -->
     <brls:Label id="loadingLabel" text="@i18n/app/common/loading" fontSize="18" textColor="#AAAAAA" marginTop="40" />
 
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
+
     <!-- Games list -->
     <brls:RecyclerFrame
         id="recycler"

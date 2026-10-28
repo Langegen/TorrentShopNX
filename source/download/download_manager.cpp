@@ -625,6 +625,25 @@ static void fileCopyWorker(datasource::IDataSource* source,
         return p;
     };
 
+    // Полный путь файла на карте. Длинные пути укорачиваются: FAT32 даёт EIO
+    // при длине пути больше 240 символов.
+    auto plainFileDest = [&](const std::filesystem::path& dest_rel) -> std::string {
+        std::string file_dest = (release_base / dest_rel).string();
+        if (file_dest.size() > 240) {
+            std::string fname = dest_rel.filename().string();
+            std::string base_s = release_base.string();
+            size_t max_parent_len = (240 > (base_s.size() + fname.size() + 2))
+                ? (240 - base_s.size() - fname.size() - 2) : 10;
+            std::string parent_s = dest_rel.parent_path().generic_string();
+            if (parent_s.size() > max_parent_len) {
+                parent_s.resize(max_parent_len);
+                while (!parent_s.empty() && (parent_s.back() == '/' || parent_s.back() == ' ')) parent_s.pop_back();
+            }
+            file_dest = (release_base / std::filesystem::path(parent_s) / fname).string();
+        }
+        return file_dest;
+    };
+
     // Ретро-игры: сначала ставим то, чем игра запускается (Tico и его модуль,
     // Vita3K или Cemu), если этого ещё нет. Без сети игра всё равно скачается.
     if (retro_info) {
@@ -672,8 +691,18 @@ static void fileCopyWorker(datasource::IDataSource* source,
 
     // Ретро-игры: архивы, которые всё равно пришлось бы распаковывать, распаковываются
     // прямо из торрента, без копии архива на карте. Оглавление zip/7z читается заранее
-    // (только хвост файла), чтобы решить, что с архивом делать.
+    // (начало и хвост файла), чтобы решить, что с архивом делать.
+    //
+    // Архивов немного: сначала читаются все оглавления (место проверяется точно, по
+    // распакованному размеру), потом идёт распаковка. Архивов много (ромсеты, сборники):
+    // каждый обрабатывается сразу - оглавление, распаковка или сохранение, следующий.
+    // Там архивы мельче куска торрента, чтение всех оглавлений скачивает почти всю
+    // раздачу, а движок держит в памяти только последние куски, и распаковка скачивала
+    // бы всё заново.
     if (retro_info && retro_info->route != catalog::RetroRoute::Vita3K && !cancel->load()) {
+        static constexpr size_t kPerArchiveAbove = 8;
+        static constexpr uint64_t kSpaceReserve = 32ULL * 1024 * 1024;
+
         struct RetroStream {
             std::vector<int> volumes;
             std::string first_path;
@@ -709,9 +738,8 @@ static void fileCopyWorker(datasource::IDataSource* source,
             return src;
         };
 
-        std::vector<RetroStream*> to_stream;
-        for (auto& kv : sets) {
-            RetroStream& rs = kv.second;
+        // Тома по порядку и папка назначения; false - архив скачивается как обычный файл.
+        auto prepareSet = [&](RetroStream& rs) -> bool {
             std::sort(rs.volumes.begin(), rs.volumes.end(), [&](int a, int b) {
                 return catalog::retro::archiveVolumeNumber(std::filesystem::path(files[a].path).filename().string()) <
                        catalog::retro::archiveVolumeNumber(std::filesystem::path(files[b].path).filename().string());
@@ -719,15 +747,15 @@ static void fileCopyWorker(datasource::IDataSource* source,
             rs.first_path = files[rs.volumes.front()].path;
             std::vector<std::string> names;
             for (int vi : rs.volumes) names.push_back(std::filesystem::path(files[vi].path).filename().string());
-            if (!catalog::retro::isStreamableArchiveSet(names)) continue;
+            if (!catalog::retro::isStreamableArchiveSet(names)) return false;
             auto dest = retro_plan.dest_rel.find(rs.first_path);
-            if (dest == retro_plan.dest_rel.end()) continue;
+            if (dest == retro_plan.dest_rel.end()) return false;
             rs.flat = dest->second.find('/') == std::string::npos;
+            return true;
+        };
 
-            {
-                std::lock_guard<std::mutex> lk(st->msg_mutex);
-                st->stage_label = "app/ports/stage_listing"_i18n;
-            }
+        // Оглавление архива и решение, что с ним делать.
+        auto listSet = [&](RetroStream& rs) {
             std::unique_ptr<datasource::ConcatDataSource> concat;
             bool listed = false;
             if (datasource::IDataSource* src = openSet(rs, concat)) {
@@ -746,49 +774,52 @@ static void fileCopyWorker(datasource::IDataSource* source,
                     util::logLine("download: no listing for " + rs.first_path + ": " + perr);
                 }
             }
-            if (cancel->load()) break;
             rs.action = catalog::retro::chooseArchiveAction(*retro_info, rs.flat, listed ? &rs.entries : nullptr);
-            if (rs.action != catalog::retro::ArchiveAction::Keep) to_stream.push_back(&rs);
-        }
+        };
 
-        // Место на карте: распакованное содержимое (или сжатый размер) и остальные файлы.
-        if (!cancel->load()) {
-            uint64_t need = 0;
-            std::set<int> streamed;
-            for (const RetroStream* rs : to_stream) {
-                need += rs->unpacked > 0 ? rs->unpacked : rs->size;
-                streamed.insert(rs->volumes.begin(), rs->volumes.end());
-            }
-            for (int idx : target_indices) {
-                if (idx >= 0 && idx < n && !streamed.count(idx)) need += static_cast<uint64_t>(files[idx].size);
-            }
-            need += need / 50 + 32ULL * 1024 * 1024;
+        auto ensureSpace = [&](uint64_t need) -> bool {
             int64_t sd_free = 0;
             if (util::getStorageFreeSpace(1, sd_free) && sd_free >= 0 && static_cast<uint64_t>(sd_free) < need) {
                 st->failed = true;
                 st->error = brls::getStr("app/retro/error_space", std::to_string(need / (1024 * 1024)) + " MB",
                                          std::to_string(static_cast<uint64_t>(sd_free) / (1024 * 1024)) + " MB");
                 util::logLine("download: " + st->error);
-                return;
+                return false;
             }
-        }
+            return true;
+        };
 
-        for (RetroStream* rs : to_stream) {
-            if (cancel->load() || g_appExiting.load()) break;
-            const std::string name = std::filesystem::path(rs->first_path).filename().string();
-            const std::string folder = rs->flat
+        auto markDone = [&](const RetroStream& rs) {
+            std::set<int> done(rs.volumes.begin(), rs.volumes.end());
+            target_indices.erase(std::remove_if(target_indices.begin(), target_indices.end(),
+                                                [&](int i) { return done.count(i) > 0; }),
+                                 target_indices.end());
+        };
+
+        auto setStage = [&](const std::string& name, const std::string& pct) {
+            std::lock_guard<std::mutex> lk(st->msg_mutex);
+            st->stage_label = brls::getStr("app/retro/stage_extracting", name, pct);
+        };
+
+        // Fallback: архив не вышло распаковать из торрента, он скачается файлом и
+        // распакуется с карты. Abort: отмена или ошибка, загрузка завершена.
+        enum class SetResult { Done, Fallback, Abort };
+
+        auto streamSet = [&](RetroStream& rs) -> SetResult {
+            const std::string name = std::filesystem::path(rs.first_path).filename().string();
+            const std::string folder = rs.flat
                 ? (release_base / retro_plan.release_folder).string()
-                : (release_base / std::filesystem::path(retro_plan.dest_rel[rs->first_path]).parent_path()).string();
+                : (release_base / std::filesystem::path(retro_plan.dest_rel[rs.first_path]).parent_path()).string();
             catalog::retro::ExtractTarget target = catalog::retro::makeExtractTarget(
-                *retro_info, rs->action, release_base.string(), folder, rs->entries, retro_naming);
-            if (rs->action == catalog::retro::ArchiveAction::ExtractToFolder && rs->flat) {
+                *retro_info, rs.action, release_base.string(), folder, rs.entries, retro_naming);
+            if (rs.action == catalog::retro::ArchiveAction::ExtractToFolder && rs.flat) {
                 retro_plan.game_dir = retro_plan.release_folder;
             }
 
             // Файлы больше 4 ГБ на карте FAT32 создаются заранее как «большие».
             auto inner = target.transform;
             const std::string dest_dir = target.dest_dir;
-            const std::map<std::string, uint64_t>* sizes = &rs->entry_sizes;
+            const std::map<std::string, uint64_t>* sizes = &rs.entry_sizes;
             auto transform = [inner, dest_dir, sizes](const std::string& entry, bool isDir) -> std::string {
                 std::string rel = inner(entry, isDir);
                 if (!rel.empty() && !isDir) {
@@ -799,24 +830,20 @@ static void fileCopyWorker(datasource::IDataSource* source,
             };
 
             std::unique_ptr<datasource::ConcatDataSource> concat;
-            datasource::IDataSource* src = openSet(*rs, concat);
+            datasource::IDataSource* src = openSet(rs, concat);
             if (!src) {
-                util::logLine("download: cannot open " + rs->first_path + " for streaming, it will be saved as a file");
-                continue;
+                util::logLine("download: cannot open " + rs.first_path + " for streaming, it will be saved as a file");
+                return SetResult::Fallback;
             }
-            const uint64_t arch_size = rs->size;
+            const uint64_t arch_size = rs.size;
             const uint64_t base_written = cumulative_written;
             auto progressCb = [&](const util::ArchiveProgress& prog) {
                 float pct = std::clamp(prog.percentage, 0.0f, 100.0f);
                 st->written.store(base_written + static_cast<uint64_t>(pct / 100.0f * static_cast<double>(arch_size)));
-                std::lock_guard<std::mutex> lk(st->msg_mutex);
-                st->stage_label = brls::getStr("app/retro/stage_extracting", name, std::to_string(static_cast<int>(pct)));
+                setStage(name, std::to_string(static_cast<int>(pct)));
             };
-            {
-                std::lock_guard<std::mutex> lk(st->msg_mutex);
-                st->stage_label = brls::getStr("app/retro/stage_extracting", name, "0");
-            }
-            util::logLine("download: unpacking " + rs->first_path + " from the torrent -> " + target.dest_dir);
+            setStage(name, "0");
+            util::logLine("download: unpacking " + rs.first_path + " from the torrent -> " + target.dest_dir);
             util::safeCreateDirectories(target.dest_dir);
             std::string err;
             bool ok = util::extractArchiveFromSource(src, arch_size, target.dest_dir, progressCb, cancel, pause, err, transform);
@@ -824,20 +851,154 @@ static void fileCopyWorker(datasource::IDataSource* source,
             if (cancel->load() || g_appExiting.load()) {
                 st->failed = true;
                 st->error = "download cancelled";
-                return;
+                return SetResult::Abort;
             }
             if (!ok) {
                 // Rare (damaged or unusual archive): fall back to saving it and unpacking from the card.
-                util::logLine("download: streaming unpack failed for " + rs->first_path + ": " + err);
-                continue;
+                util::logLine("download: streaming unpack failed for " + rs.first_path + ": " + err);
+                return SetResult::Fallback;
             }
             cumulative_written += arch_size;
             st->written.store(cumulative_written);
             for (const auto& placed : *target.placed_top) retro_plan.placed_top.push_back(placed);
-            std::set<int> done(rs->volumes.begin(), rs->volumes.end());
-            target_indices.erase(std::remove_if(target_indices.begin(), target_indices.end(),
-                                                [&](int i) { return done.count(i) > 0; }),
-                                 target_indices.end());
+            markDone(rs);
+            return SetResult::Done;
+        };
+
+        // Архив остаётся архивом (одна игра): сохраняем его сразу, пока куски ещё в памяти
+        // движка. Многотомные наборы так не сохраняются: каждый том - свой файл на карте.
+        auto saveKeptArchive = [&](RetroStream& rs) -> SetResult {
+            if (rs.volumes.size() != 1) return SetResult::Fallback;
+            const int idx = rs.volumes.front();
+            const uint64_t size = rs.size;
+            const std::string dest = plainFileDest(resolveDestRel(files[idx].path));
+
+            std::error_code ec;
+            const uint64_t have = std::filesystem::exists(dest, ec) ? std::filesystem::file_size(dest, ec) : 0;
+            if (!ec && size > 0 && have >= size) {
+                cumulative_written += size;
+                st->written.store(cumulative_written);
+                markDone(rs);
+                return SetResult::Done;
+            }
+            if (!ensureSpace(size + kSpaceReserve)) return SetResult::Abort;
+
+            std::unique_ptr<datasource::ConcatDataSource> concat;
+            datasource::IDataSource* src = openSet(rs, concat);
+            if (!src) return SetResult::Fallback;
+
+            tsnx_ensure_parent_dirs(dest.c_str());
+            util::prepareBigFile(dest, size);
+            FILE* f = std::fopen(dest.c_str(), "wb");
+            if (!f) {
+                src->notifyStreamingComplete(false);
+                return SetResult::Fallback;
+            }
+
+            static constexpr size_t kChunk = 2 * 1024 * 1024;
+            std::vector<unsigned char> buf(static_cast<size_t>(std::min<uint64_t>(kChunk, size)));
+            uint64_t offset = 0;
+            bool write_ok = true;
+            while (offset < size && !cancel->load() && !g_appExiting.load()) {
+                if (pause && pause->load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    continue;
+                }
+                const size_t want = static_cast<size_t>(std::min<uint64_t>(buf.size(), size - offset));
+                const size_t got = src->read(offset, buf.data(), want);
+                if (got == 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                    continue;
+                }
+                if (std::fwrite(buf.data(), 1, got, f) != got) {
+                    write_ok = false;
+                    break;
+                }
+                offset += got;
+                st->written.store(cumulative_written + offset);
+            }
+            std::fclose(f);
+            src->notifyStreamingComplete(write_ok && offset >= size);
+
+            if (cancel->load() || g_appExiting.load() || !write_ok) {
+                std::filesystem::remove(dest, ec);
+                st->failed = true;
+                st->error = write_ok ? "download cancelled" : "disk write failed";
+                return SetResult::Abort;
+            }
+            cumulative_written += size;
+            st->written.store(cumulative_written);
+            markDone(rs);
+            return SetResult::Done;
+        };
+
+        if (sets.size() <= kPerArchiveAbove) {
+            std::vector<RetroStream*> to_stream;
+            for (auto& kv : sets) {
+                RetroStream& rs = kv.second;
+                if (!prepareSet(rs)) continue;
+                {
+                    std::lock_guard<std::mutex> lk(st->msg_mutex);
+                    st->stage_label = "app/ports/stage_listing"_i18n;
+                }
+                listSet(rs);
+                if (cancel->load()) break;
+                if (rs.action != catalog::retro::ArchiveAction::Keep) to_stream.push_back(&rs);
+            }
+
+            // Место на карте: распакованное содержимое (или сжатый размер) и остальные файлы.
+            if (!cancel->load()) {
+                uint64_t need = 0;
+                std::set<int> streamed;
+                for (const RetroStream* rs : to_stream) {
+                    need += rs->unpacked > 0 ? rs->unpacked : rs->size;
+                    streamed.insert(rs->volumes.begin(), rs->volumes.end());
+                }
+                for (int idx : target_indices) {
+                    if (idx >= 0 && idx < n && !streamed.count(idx)) need += static_cast<uint64_t>(files[idx].size);
+                }
+                need += need / 50 + kSpaceReserve;
+                if (!ensureSpace(need)) return;
+            }
+
+            for (RetroStream* rs : to_stream) {
+                if (cancel->load() || g_appExiting.load()) break;
+                if (streamSet(*rs) == SetResult::Abort) return;
+            }
+        } else {
+            util::logLine("download: " + std::to_string(sets.size()) + " archives, unpacking one by one");
+
+            // Распакованный размер заранее неизвестен: сейчас проверяем, что помещается
+            // хотя бы сжатое, а точно - перед каждым архивом.
+            uint64_t need = 0;
+            for (int idx : target_indices) {
+                if (idx >= 0 && idx < n) need += static_cast<uint64_t>(files[idx].size);
+            }
+            if (!ensureSpace(need + need / 50 + kSpaceReserve)) return;
+
+            // В порядке раздачи: соседние мелкие архивы лежат в одних кусках.
+            std::vector<RetroStream*> order;
+            for (auto& kv : sets) order.push_back(&kv.second);
+            auto firstIndex = [](const RetroStream* rs) { return *std::min_element(rs->volumes.begin(), rs->volumes.end()); };
+            std::stable_sort(order.begin(), order.end(), [&](const RetroStream* a, const RetroStream* b) {
+                return firstIndex(a) < firstIndex(b);
+            });
+
+            for (RetroStream* rs : order) {
+                if (cancel->load() || g_appExiting.load()) break;
+                if (!prepareSet(*rs)) continue;
+                setStage(std::filesystem::path(rs->first_path).filename().string(), "0");
+                listSet(*rs);
+                if (cancel->load()) break;
+                SetResult r;
+                if (rs->action == catalog::retro::ArchiveAction::Keep) {
+                    r = saveKeptArchive(*rs);
+                } else {
+                    if (!ensureSpace((rs->unpacked > 0 ? rs->unpacked : rs->size) + kSpaceReserve)) return;
+                    r = streamSet(*rs);
+                }
+                if (r == SetResult::Abort) return;
+            }
         }
         std::lock_guard<std::mutex> lk(st->msg_mutex);
         st->stage_label.clear();
@@ -924,20 +1085,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 }
             }
         } else {
-            file_dest = (release_base / dest_rel).string();
-            // Предотвращение ошибки FAT32 EIO при длине пути > 240 символов
-            if (file_dest.size() > 240) {
-                std::string fname = dest_rel.filename().string();
-                std::string base_s = release_base.string();
-                size_t max_parent_len = (240 > (base_s.size() + fname.size() + 2))
-                    ? (240 - base_s.size() - fname.size() - 2) : 10;
-                std::string parent_s = dest_rel.parent_path().generic_string();
-                if (parent_s.size() > max_parent_len) {
-                    parent_s.resize(max_parent_len);
-                    while (!parent_s.empty() && (parent_s.back() == '/' || parent_s.back() == ' ')) parent_s.pop_back();
-                }
-                file_dest = (release_base / std::filesystem::path(parent_s) / fname).string();
-            }
+            file_dest = plainFileDest(dest_rel);
         }
         if (first_dest.empty()) first_dest = file_dest;
 

@@ -13,6 +13,8 @@
         <brls:Label text="@i18n/app/favorites/title" fontSize="28" />
     </brls:Box>
 
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
+
     <!-- Recycler Grid -->
     <brls:RecyclerFrame
         id="recycler"

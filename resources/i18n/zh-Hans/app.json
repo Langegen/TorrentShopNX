@@ -133,7 +133,6 @@
     },
     "downloads": {
         "title": "下载任务",
-        "empty": "暂无活跃下载任务",
         "already_in_queue": "此游戏已在下载列表中",
         "status_prefix": "状态: ",
         "speed": "速度: {0}/s",
@@ -1259,5 +1258,19 @@
         "torrent": "种子统计",
         "torrent_value": "{0} 做种 / {1} 下载中 ({2} 次下载)",
         "added": "添加时间"
+    },
+    "empty": {
+        "downloads_title": "没有下载",
+        "downloads_sub": "正在下载和安装的游戏会显示在这里",
+        "open_catalog": "打开目录",
+        "favorites_title": "还没有收藏",
+        "favorites_sub": "在游戏上按 {0} 即可添加到这里",
+        "search_title": "未找到结果",
+        "search_sub": "换个关键词，或重置筛选",
+        "reset_filters": "重置筛选",
+        "collection_title": "此合集暂无游戏",
+        "collection_sub": "合集会自动更新",
+        "load_failed_title": "加载失败",
+        "load_failed_sub": "请检查网络连接后重新打开合集"
     }
 }

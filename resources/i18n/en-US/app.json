@@ -133,7 +133,6 @@
     },
     "downloads": {
         "title": "Downloads",
-        "empty": "No active or completed downloads.",
         "already_in_queue": "This game is already in downloads",
         "state_waiting": "Waiting",
         "state_queued": "Queued",
@@ -1263,5 +1262,19 @@
         "torrent": "Torrent",
         "torrent_value": "{0} seeds / {1} peers ({2} dl)",
         "added": "Added"
+    },
+    "empty": {
+        "downloads_title": "No downloads",
+        "downloads_sub": "Games being downloaded and installed will show up here",
+        "open_catalog": "Open catalog",
+        "favorites_title": "No favorites yet",
+        "favorites_sub": "Press {0} on a game to add it here",
+        "search_title": "Nothing found",
+        "search_sub": "Try another search or reset the filters",
+        "reset_filters": "Reset filters",
+        "collection_title": "No games in this collection yet",
+        "collection_sub": "Collections update automatically",
+        "load_failed_title": "Couldn't load",
+        "load_failed_sub": "Check your internet connection and open the collection again"
     }
 }

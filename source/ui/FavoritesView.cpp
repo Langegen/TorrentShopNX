@@ -1,4 +1,5 @@
 #include "FavoritesView.hpp"
+#include "EmptyState.hpp"
 #include "CatalogView.hpp"
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
@@ -107,6 +108,32 @@ void FavoritesView::filterFavorites() {
     }
 
     filteredFavorites_ = std::move(filtered);
+
+    // Nothing to show: say why and how to fill the list
+    if (emptyHolder && recycler) {
+        const bool empty = filteredFavorites_.empty();
+        if (empty) {
+            if (!emptyState_) {
+                emptyState_ = new EmptyState();
+                emptyHolder->addView(emptyState_);
+            }
+            if (allFavorites_.empty()) {
+                emptyState_->show(DashboardIcon::Kind::Star, "app/empty/favorites_title"_i18n,
+                                  brls::getStr("app/empty/favorites_sub",
+                                               brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_Y)));
+            } else {
+                emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                                  "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                                  [this]() { resetFilters(); });
+            }
+        }
+        emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        recycler->setVisibility(empty ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+        if (empty) {
+            if (emptyState_->actionView()) brls::Application::giveFocus(emptyState_->actionView());
+            return;
+        }
+    }
 
     if (recycler) {
         GameRowCell::s_lastFocusedColumn = 0;

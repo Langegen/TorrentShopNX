@@ -133,7 +133,6 @@
     },
     "downloads": {
         "title": "ダウンロード",
-        "empty": "進行中のダウンロードはありません",
         "already_in_queue": "このゲームはすでにダウンロード一覧にあります",
         "status_prefix": "ステータス: ",
         "speed": "速度: {0}/s",
@@ -1259,5 +1258,19 @@
         "torrent": "トレント",
         "torrent_value": "{0} シード / {1} ピア ({2} DL)",
         "added": "追加日"
+    },
+    "empty": {
+        "downloads_title": "ダウンロードはありません",
+        "downloads_sub": "ダウンロード・インストール中のゲームがここに表示されます",
+        "open_catalog": "カタログを開く",
+        "favorites_title": "お気に入りはまだありません",
+        "favorites_sub": "ゲームで {0} を押すとここに追加されます",
+        "search_title": "見つかりませんでした",
+        "search_sub": "別の検索を試すか、フィルタをリセットしてください",
+        "reset_filters": "フィルタをリセット",
+        "collection_title": "このコレクションにはまだゲームがありません",
+        "collection_sub": "コレクションは自動で更新されます",
+        "load_failed_title": "読み込めませんでした",
+        "load_failed_sub": "インターネット接続を確認して、もう一度開いてください"
     }
 }

@@ -118,6 +118,8 @@ private:
     BRLS_BIND(brls::Label, headerTitle, "headerTitle");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
     BRLS_BIND(brls::Label, loadingLabel, "loadingLabel");
+    BRLS_BIND(brls::Box, emptyHolder, "emptyHolder");
+    void showEmpty(bool failed);
 
     class GamesDataSource : public brls::RecyclerDataSource {
     public:

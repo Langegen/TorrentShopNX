@@ -327,6 +327,54 @@ void drawTrash(NVGcontext* vg) {
     strokeLine(vg, 28, 22, 27.4f, 36, kInk, 1.8f);
 }
 
+void drawStar(NVGcontext* vg) {
+    nvgBeginPath(vg);
+    for (int i = 0; i < 10; ++i) {
+        float a = -kPi / 2 + i * kPi / 5;
+        float r = (i % 2 == 0) ? 19.0f : 8.5f;
+        float px = 24 + std::cos(a) * r, py = 25.5f + std::sin(a) * r;
+        if (i == 0) nvgMoveTo(vg, px, py); else nvgLineTo(vg, px, py);
+    }
+    nvgClosePath(vg);
+    fillStroke(vg, rgb(255, 196, 46));
+    highlight(vg, 19, 19, 23);
+}
+
+void drawSearch(NVGcontext* vg) {
+    nvgLineCap(vg, NVG_ROUND);
+    strokeLine(vg, 29, 29, 40, 40, kInk, 7.0f);
+    strokeLine(vg, 29, 29, 40, 40, rgb(120, 132, 150), 3.8f);
+    nvgBeginPath(vg);
+    nvgCircle(vg, 21, 21, 13);
+    fillStroke(vg, rgb(176, 222, 255));
+    nvgBeginPath(vg);
+    nvgCircle(vg, 21, 21, 8.5f);
+    fillStroke(vg, white(), 1.6f);
+    highlight(vg, 16, 16.5f, 20);
+}
+
+void drawCloudError(NVGcontext* vg) {
+    nvgBeginPath(vg);
+    nvgMoveTo(vg, 13, 34);
+    nvgBezierTo(vg, 5, 34, 5, 22, 13, 22);
+    nvgBezierTo(vg, 13, 12, 27, 9, 31, 17);
+    nvgBezierTo(vg, 41, 15, 45, 25, 39, 29);
+    nvgBezierTo(vg, 43, 34, 38, 35, 35, 34);
+    nvgClosePath(vg);
+    fillStroke(vg, rgb(176, 188, 206));
+    highlight(vg, 17, 20, 24);
+
+    nvgBeginPath(vg);
+    nvgCircle(vg, 34, 34, 8.5f);
+    fillStroke(vg, rgb(255, 146, 60));
+    nvgLineCap(vg, NVG_ROUND);
+    strokeLine(vg, 34, 30, 34, 34.5f, white(), 2.6f);
+    nvgBeginPath(vg);
+    nvgCircle(vg, 34, 38, 1.4f);
+    nvgFillColor(vg, white());
+    nvgFill(vg);
+}
+
 } // namespace
 
 DashboardIcon::DashboardIcon(Kind kind, float size) : kind_(kind) {
@@ -361,6 +409,9 @@ void DashboardIcon::draw(NVGcontext* vg, float x, float y, float width, float he
         case Kind::Chip:      drawChip(vg); break;
         case Kind::Database:  drawDatabase(vg); break;
         case Kind::Trash:     drawTrash(vg); break;
+        case Kind::Star:      drawStar(vg); break;
+        case Kind::Search:    drawSearch(vg); break;
+        case Kind::CloudError: drawCloudError(vg); break;
     }
 
     nvgRestore(vg);

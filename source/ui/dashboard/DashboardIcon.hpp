@@ -23,6 +23,9 @@ public:
         Chip,        // download engine
         Database,    // app cache
         Trash,       // unfinished installs to clean
+        Star,        // favorites
+        Search,      // nothing found
+        CloudError,  // could not load
     };
 
     explicit DashboardIcon(Kind kind, float size = 56.0f);

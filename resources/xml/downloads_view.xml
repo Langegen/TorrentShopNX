@@ -16,7 +16,8 @@
         </brls:Box>
     </brls:Box>
 
-    <brls:Label id="emptyLabel" text="@i18n/app/downloads/empty" fontSize="20" textColor="#AAAAAA" />
+    <!-- Shown instead of the list when there are no downloads -->
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
 
     <!-- Recycler Grid -->
     <brls:RecyclerFrame
