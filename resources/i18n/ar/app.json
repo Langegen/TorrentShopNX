@@ -352,6 +352,7 @@
         "badge_mods": "تعديلات",
         "loading_titledb": "جارٍ تحميل قاعدة بيانات إصدارات titledb...",
         "titledb_failed": "خطأ: فشل تحميل titledb. تحقق من اتصال الإنترنت.",
+        "scan_failed": "خطأ أثناء فحص الألعاب المثبتة",
         "scanning_games": "جارٍ فحص الألعاب المثبتة...",
         "installed": "مثبتة",
         "available": "متوفرة",

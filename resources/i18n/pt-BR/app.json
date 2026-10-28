@@ -384,6 +384,7 @@
         "badge_mods": "MODS",
         "loading_titledb": "Carregando TitleDB...",
         "titledb_failed": "Falha ao carregar a TitleDB",
+        "scan_failed": "Erro ao verificar os jogos instalados",
         "scanning_games": "Analisando jogos do console...",
         "installed": "Instalado",
         "release_completed": "Todos os arquivos do lançamento foram baixados: {0}",

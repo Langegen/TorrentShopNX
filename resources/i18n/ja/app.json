@@ -384,6 +384,7 @@
         "badge_mods": "MOD",
         "loading_titledb": "TitleDB を読み込み中...",
         "titledb_failed": "TitleDB の読み込みに失敗しました",
+        "scan_failed": "インストール済みゲームのスキャン中にエラーが発生しました",
         "scanning_games": "本体のゲームを解析中...",
         "installed": "インストール済み",
         "release_completed": "リリースのすべてのファイルがダウンロードされました: {0}",
