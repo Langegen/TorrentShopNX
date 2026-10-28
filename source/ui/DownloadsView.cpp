@@ -1116,7 +1116,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     } else {
         if (cell->loadedCoverUrl != "__fallback__") {
             cell->loadedCoverUrl = "__fallback__";
-            cell->cover->setImageFromFile("romfs:/img/borealis_96.png");
+            cell->cover->setImageFromFile("romfs:/img/cover_blank.png");
         }
     }
 

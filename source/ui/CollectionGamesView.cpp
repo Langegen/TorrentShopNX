@@ -475,7 +475,7 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                                   " url=" + (coverUrl.empty() ? "(none)" : coverUrl));
                 }
                 setImageFromHTTPS(cards[i].cover, coverUrl,
-                                  rowCell->imageToken, "romfs:/img/borealis_96.png",
+                                  rowCell->imageToken, "romfs:/img/cover_blank.png",
                                   false, "", row, i);
 
                 Game matchedCopy;

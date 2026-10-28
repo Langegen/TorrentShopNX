@@ -434,7 +434,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                     }
                 }
                 
-                setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/borealis_96.png", false, "", row, i);
+                setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/cover_blank.png", false, "", row, i);
                 
                 cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
                     bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);

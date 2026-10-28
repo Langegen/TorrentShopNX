@@ -125,7 +125,9 @@ static void addCaption(brls::Box* card, const std::string& caption, const std::s
     brls::Box* row = makeRow();
     row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     row->setWidthPercentage(100.0f);
-    row->addView(makeLabel(caption, kCardCaptionFont, style::textSecondary()));
+    brls::Label* c = makeLabel(caption, kCardCaptionFont, style::textSecondary());
+    c->setLetterSpacing(0.6f);
+    row->addView(c);
     if (!meta.empty()) {
         brls::Label* m = makeLabel(meta, kCaptionFont, style::textSecondary());
         m->setMarginLeft(12.0f);
@@ -227,9 +229,9 @@ public:
         coverImg->setCornerRadius(6.0f);
         coverImg->setScalingType(brls::ImageScalingType::FILL);
         if (!game.cover.empty()) {
-            setImageFromHTTPS(coverImg, game.cover, cardImageToken_, "romfs:/img/borealis_96.png");
+            setImageFromHTTPS(coverImg, game.cover, cardImageToken_, "romfs:/img/cover_blank.png");
         } else {
-            coverImg->setImageFromFile("romfs:/img/borealis_96.png");
+            coverImg->setImageFromFile("romfs:/img/cover_blank.png");
         }
         imgBox->addView(coverImg);
         this->addView(imgBox);
@@ -405,6 +407,14 @@ void DashboardSummaryView::setFocusedIndex(int index) {
     if (active_index_ == index) return;
     active_index_ = index;
     rebuildContent();
+
+    // Fade the new section in instead of swapping it instantly
+    if (content_container_) {
+        content_container_->alpha.stop();
+        content_container_->alpha.reset(0.0f);
+        content_container_->alpha.addStep(1.0f, 180, brls::EasingFunction::quadraticOut);
+        content_container_->alpha.start();
+    }
 }
 
 std::string DashboardSummaryView::idleDownloadsSignature() const {
@@ -463,7 +473,7 @@ void DashboardSummaryView::updateActiveDownloadWidgets(const download::DownloadI
         std::string coverUrl = findCoverForDownload(item, catalog_sample_);
         if (!coverUrl.empty()) {
             dl_loaded_cover_url_ = coverUrl;
-            setImageFromHTTPS(dl_coverImg_, coverUrl, imageToken_, "romfs:/img/borealis_96.png",
+            setImageFromHTTPS(dl_coverImg_, coverUrl, imageToken_, "romfs:/img/cover_blank.png",
                               false, "", -1, -1, 1000000);
         }
     }
@@ -635,7 +645,9 @@ void DashboardSummaryView::addHeader(const std::string& title, const std::string
     row->setPadding(0.0f, 4.0f, 0.0f, 4.0f);
     row->setMarginBottom(8.0f);
     row->setFocusable(false);
-    row->addView(makeLabel(title, kHeaderFont, themeAccent(255)));
+    brls::Label* t = makeLabel(title, kHeaderFont, themeAccent(255));
+    t->setLetterSpacing(0.8f);
+    row->addView(t);
     if (!meta.empty()) row->addView(makeLabel(meta, kCaptionFont, style::textSecondary()));
     content_container_->addView(row);
 }
@@ -857,7 +869,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         dl_coverImg_->setHeight(kCoverH);
         dl_coverImg_->setCornerRadius(6.0f);
         dl_coverImg_->setScalingType(brls::ImageScalingType::FILL);
-        dl_coverImg_->setImageFromFile("romfs:/img/borealis_96.png");
+        dl_coverImg_->setImageFromFile("romfs:/img/cover_blank.png");
         coverBox->addView(dl_coverImg_);
         mainCard->addView(coverBox);
 

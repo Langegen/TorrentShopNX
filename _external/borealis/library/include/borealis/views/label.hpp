@@ -153,6 +153,12 @@ class Label : public View
     int getMaxLines() const { return maxLines; }
 
     /**
+     * Extra space between letters, in px (for small caps captions).
+     */
+    void setLetterSpacing(float spacing);
+    float getLetterSpacing() const { return letterSpacing; }
+
+    /**
      * Simplified Chinese to Traditional Chinese
      */
     static std::string STConverter(const std::string& text);
@@ -182,6 +188,7 @@ class Label : public View
     bool singleLine = false;
     bool isWrapping = false;
     int maxLines    = 0;
+    float letterSpacing = 0.0f;
 
     bool autoAnimate  = true;
     bool animated     = false; // should it animate?

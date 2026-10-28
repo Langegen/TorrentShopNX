@@ -63,7 +63,7 @@ public:
                  const std::string& url,
                  const std::string& cacheKey,
                  std::shared_ptr<bool> token = nullptr,
-                 const std::string& placeholder = "romfs:/img/borealis_96.png",
+                 const std::string& placeholder = "romfs:/img/cover_blank.png",
                  bool bypassCache = false,
                  const std::string& fallbackUrl = "",
                  int row = -1,

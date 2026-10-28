@@ -32,6 +32,15 @@ namespace brls
 
 #define ELLIPSIS "\u2026"
 
+// Sets a label's letter spacing for the current block and puts it back to 0 on
+// exit, so other text drawn later never inherits it.
+struct LetterSpacingScope
+{
+    NVGcontext* vg;
+    LetterSpacingScope(NVGcontext* v, float spacing) : vg(v) { nvgTextLetterSpacing(vg, spacing); }
+    ~LetterSpacingScope() { nvgTextLetterSpacing(vg, 0.0f); }
+};
+
 static std::unordered_map<const Label*, int> s_labelFontScale;
 
 static bool isPrivateUseIconText(const std::string& text)
@@ -134,6 +143,7 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
     nvgFontFaceId(vg, label->getFont());
     nvgTextLineHeight(vg, label->getLineHeight());
+    LetterSpacingScope letterSpacingScope(vg, label->getLetterSpacing());
 
     // Measure the needed width for the ellipsis
     float bounds[4];
@@ -421,6 +431,7 @@ void Label::setText(const std::string& text)
         nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
         nvgFontFaceId(vg, this->font);
         nvgTextLineHeight(vg, this->lineHeight);
+        LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
 
         float bounds[4];
         nvgTextBounds(vg, 0, 0, ELLIPSIS, nullptr, bounds);
@@ -521,6 +532,14 @@ void Label::drawClampedLines(NVGcontext* vg, float x, float y, float width)
         shown += ELLIPSIS;
         nvgTextBox(vg, x, rowY, width, shown.c_str(), nullptr);
     }
+}
+
+void Label::setLetterSpacing(float spacing)
+{
+    if (this->letterSpacing == spacing)
+        return;
+    this->letterSpacing = spacing;
+    this->invalidate();
 }
 
 void Label::setMaxLines(int maxLines)
@@ -627,6 +646,7 @@ void Label::draw(NVGcontext* vg, float x, float y, float width, float height, St
     nvgFontFaceId(vg, this->font);
     nvgFontQuality(vg, this->fontQuality);
     nvgTextLineHeight(vg, this->lineHeight);
+    LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
     nvgFillColor(vg, a(this->textColor));
 
     // Edit cursor
@@ -787,6 +807,7 @@ void Label::onLayout()
         nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
         nvgFontFaceId(vg, this->font);
         nvgTextLineHeight(vg, this->lineHeight);
+        LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
 
         float bounds[4];
         nvgTextBounds(vg, 0, 0, ELLIPSIS, nullptr, bounds);
@@ -807,6 +828,7 @@ void Label::onLayout()
             nvgTextAlign(vg, this->getNVGHorizontalAlign() | this->getNVGVerticalAlign());
             nvgFontFaceId(vg, this->font);
             nvgTextLineHeight(vg, this->lineHeight);
+            LetterSpacingScope letterSpacingScope(vg, this->getLetterSpacing());
 
             std::vector<NVGglyphPosition> positions;
             positions.resize(stringLength);

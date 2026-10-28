@@ -33,7 +33,7 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     this->setFocusable(true);
     this->setHideHighlight(true); // Custom glass border
     this->setWidth(274.0f);
-    this->setHeight(108.0f);
+    this->setHeight(100.0f);
     this->setAxis(brls::Axis::ROW);
     this->setPadding(8.0f, 12.0f, 8.0f, 12.0f);
     this->setCornerRadius(14.0f);
@@ -51,33 +51,28 @@ CollectionCard::CollectionCard(const std::string& icon_type,
     infoCol->setAxis(brls::Axis::COLUMN);
     infoCol->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     infoCol->setGrow(1.0f);
-    infoCol->setHeight(88.0f);
+    infoCol->setHeight(80.0f);
 
-    // Top block: Title + Desc
-    brls::Box* topBox = new brls::Box();
-    topBox->setAxis(brls::Axis::COLUMN);
-    topBox->setWidthPercentage(100.0f);
+    // Title, one-line description and the count badge, spread evenly over the
+    // card height (no gap under the text, no text glued to the title)
 
     title_label_ = new brls::Label();
     title_label_->setText(title);
     title_label_->setFontSize(16.0f);
     title_label_->setTextColor(ThemeManager::instance().getCardTitleColor());
     title_label_->setSingleLine(true);
-    topBox->addView(title_label_);
+    title_label_->setWidthPercentage(100.0f);
+    infoCol->addView(title_label_);
 
-    // At most two lines; manual line breaks from translations are dropped so
-    // the text wraps to the card width instead of overflowing onto the badge.
+    // One line; manual line breaks from translations are dropped
     desc_label_ = new brls::Label();
     desc_label_->setText(flattenLines(desc));
     desc_label_->setFontSize(14.0f);
-    desc_label_->setLineHeight(1.2f);
     desc_label_->setTextColor(style::textSecondary());
-    desc_label_->setMarginTop(2.0f);
-    desc_label_->setSingleLine(false);
-    desc_label_->setMaxLines(2);
+    desc_label_->setSingleLine(true);
     desc_label_->setAutoAnimate(false);
-    topBox->addView(desc_label_);
-    infoCol->addView(topBox);
+    desc_label_->setWidthPercentage(100.0f);
+    infoCol->addView(desc_label_);
 
     // Bottom block: Badge (Aligned exactly with bottom of the emblem)
     brls::Box* badgeRow = new brls::Box();

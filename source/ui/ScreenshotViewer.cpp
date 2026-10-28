@@ -205,7 +205,7 @@ void ScreenshotViewer::loadCurrent() {
     // Clear previous texture safely without deleting shared placeholder
     if (image_) {
         image_->clear();
-        image_->setImageFromFile("romfs:/img/borealis_96.png");
+        image_->setImageFromFile("romfs:/img/cover_blank.png");
         image_->setFreeTexture(false);
     }
     
@@ -223,7 +223,7 @@ void ScreenshotViewer::loadCurrent() {
         nextBtn_->setVisibility(currentIndex_ + 1 < urls_.size() ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 
-    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/borealis_96.png", true, fallbackUrl, -1, -1, 3000000);
+    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/cover_blank.png", true, fallbackUrl, -1, -1, 3000000);
 }
 
 void ScreenshotViewer::nextImage() {
