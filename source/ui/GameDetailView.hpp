@@ -2,6 +2,7 @@
 
 #include <borealis.hpp>
 #include "../GameData.hpp"
+#include "../utils/switch_utils.h"
 
 namespace ui {
 
@@ -22,9 +23,18 @@ public:
     void confirmRetroRemoval();
 
 private:
+    // Switch games: looks the title id up on the console in the background,
+    // then marks the card ("Installed" badge, button text and color).
+    void checkInstalled();
+    void applyInstalledState(const util::InstalledGameInfo& info);
+
     Game game_;
     std::string retro_console_id_;
     std::shared_ptr<bool> imageToken;
+    std::shared_ptr<bool> alive_;
+    bool isSwitchRelease_ = false;
+    bool installCheckRunning_ = false;
+    brls::Box* installedBadge_ = nullptr;
 
     BRLS_BIND(brls::ScrollingFrame, scroll, "scroll");
     BRLS_BIND(brls::Box, contentBox, "contentBox");

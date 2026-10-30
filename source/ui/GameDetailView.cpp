@@ -12,12 +12,85 @@
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/installed_retro_games.h"
+#include "../catalog/release_finder.h"
+#include "../catalog/titledb.h"
 #include "../config/config.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../utils/file_ops.h"
+#include <algorithm>
+#include <cctype>
 #include <sstream>
+#include <vector>
 
 namespace ui {
+
+namespace {
+
+// Download button of a game that is already on the console: green, so the
+// card reads "you have this" before the label is read.
+const brls::ButtonStyle BUTTONSTYLE_INSTALLED = {
+    .shadowType              = brls::ShadowType::GENERIC,
+    .hideHighlightBackground = true,
+
+    .highlightPadding = "brls/button/primary_highlight_padding",
+    .borderThickness  = "",
+
+    .enabledBackgroundColor = "tsnx/button/installed_background",
+    .enabledLabelColor      = "tsnx/button/installed_text",
+    .enabledBorderColor     = "",
+
+    .disabledBackgroundColor = "brls/button/primary_disabled_background",
+    .disabledLabelColor      = "brls/button/primary_disabled_text",
+    .disabledBorderColor     = "",
+};
+
+// " v1.0.3 " -> "1.0.3"
+std::string trimVersion(std::string v) {
+    while (!v.empty() && std::isspace(static_cast<unsigned char>(v.front()))) v.erase(v.begin());
+    while (!v.empty() && std::isspace(static_cast<unsigned char>(v.back()))) v.pop_back();
+    if (v.size() > 1 && (v[0] == 'v' || v[0] == 'V') && std::isdigit(static_cast<unsigned char>(v[1]))) v.erase(0, 1);
+    return v;
+}
+
+// Compares "1.0.10" with "1.0.9" part by part: -1, 0 or 1; 2 when either is
+// not a dotted number.
+int compareDotted(const std::string& a, const std::string& b) {
+    auto parse = [](const std::string& s, std::vector<unsigned long>& out) {
+        size_t i = 0;
+        while (i < s.size()) {
+            if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+            unsigned long n = 0;
+            while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) n = n * 10 + (s[i++] - '0');
+            out.push_back(n);
+            if (i < s.size() && s[i] != '.') break;   // "1.0.3b", "1.2 (rev)": compare the number part
+            ++i;
+        }
+        return !out.empty();
+    };
+    std::vector<unsigned long> pa, pb;
+    if (!parse(a, pa) || !parse(b, pb)) return 2;
+    size_t n = std::max(pa.size(), pb.size());
+    pa.resize(n, 0);
+    pb.resize(n, 0);
+    for (size_t i = 0; i < n; ++i) {
+        if (pa[i] != pb[i]) return pa[i] < pb[i] ? -1 : 1;
+    }
+    return 0;
+}
+
+// Version of the game in the release: "1.0.3", "1.0.3 (update 3)" or
+// "update 3"; "" when the catalog does not know it.
+std::string releaseVersionText(const Game& g) {
+    std::string v = trimVersion(g.version);
+    if (g.update_version) {
+        std::string upd = brls::getStr("app/library/update_label",
+                                       std::to_string(titledb::updateOrdinal(g.update_version)));
+        return v.empty() ? upd : v + " (" + upd + ")";
+    }
+    return v;
+}
+
+} // namespace
 
 class ScrollAndFocusController : public brls::View {
 public:
@@ -90,10 +163,12 @@ GameDetailView::GameDetailView(const Game& game, const std::string& retro_consol
 
 GameDetailView::~GameDetailView() {
     if (imageToken) *imageToken = false;
+    if (alive_) *alive_ = false;
 }
 
 void GameDetailView::onContentAvailable() {
     imageToken = std::make_shared<bool>(true);
+    alive_ = std::make_shared<bool>(true);
     // Fill text and images
     title->setText(cleanTitle(game_.title));
     setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 2000000);
@@ -124,6 +199,7 @@ void GameDetailView::onContentAvailable() {
         }
         addMeta("app/detail_meta/added", added);
     }
+    addMeta("app/detail_meta/version", releaseVersionText(game_));
     // Long ("NSZ, compressed ~58%, installed 0.08 GB"): last, on a row of its own
     addMeta("app/detail_meta/format", game_.image_format, game_.image_format.size() > 32);
 
@@ -374,6 +450,7 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     const bool isPortRelease = retro_console_id_.empty() && (isHomebrewGame(game_) || isHomebrewPort(game_));
+    isSwitchRelease_ = retro_console_id_.empty() && !isPortRelease && catalog::releaseAppId(game_) != 0;
     if (isPortRelease || !retro_console_id_.empty()) {
         // Ports and retro games: picking files by hand is the advanced path, kept on X.
         btnDownload->registerAction("app/detail/select_files_btn"_i18n, brls::ControllerButton::BUTTON_X,
@@ -499,7 +576,71 @@ void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
     updateRetroDownloadButton();
+    checkInstalled();   // again on return: the game may have been installed meanwhile
     brls::Application::giveFocus(btnDownload);
+}
+
+void GameDetailView::checkInstalled() {
+    if (!isSwitchRelease_ || installCheckRunning_ || !alive_) return;
+    installCheckRunning_ = true;
+    const uint64_t appId = catalog::releaseAppId(game_);
+    auto alive = alive_;
+    brls::async([this, alive, appId]() {
+        util::InstalledGameInfo info = util::queryInstalledGame(appId);
+        brls::sync([this, alive, info]() {
+            if (!*alive) return;
+            installCheckRunning_ = false;
+            applyInstalledState(info);
+        });
+    });
+}
+
+void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info) {
+    if (installedBadge_) {
+        badgesBox->removeView(installedBadge_);
+        installedBadge_ = nullptr;
+    }
+    if (!info.installed) {
+        btnDownload->setText("app/detail/download_btn"_i18n);
+        btnDownload->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+        return;
+    }
+
+    const std::string installedVer = trimVersion(info.displayVersion);
+
+    // Green chip first in the badge row: "✓ Installed · 1.0.2"
+    installedBadge_ = new brls::Box();
+    installedBadge_->setPadding(5, 10, 5, 10);
+    installedBadge_->setMarginRight(10);
+    installedBadge_->setMarginBottom(10);
+    installedBadge_->setCornerRadius(6);
+    installedBadge_->setBackgroundColor(style::isLight() ? nvgRGB(223, 244, 231) : nvgRGBA(110, 220, 150, 38));
+    installedBadge_->setBorderThickness(1.0f);
+    installedBadge_->setBorderColor(style::stateOk());
+    brls::Label* badgeLabel = new brls::Label();
+    badgeLabel->setText(std::string("\uE5CA ") +
+                        (installedVer.empty() ? "app/detail/installed_badge"_i18n
+                                              : brls::getStr("app/detail/installed_badge_ver", installedVer)));
+    badgeLabel->setFontSize(14);
+    badgeLabel->setTextColor(style::stateOk());
+    installedBadge_->addView(badgeLabel);
+    badgesBox->addView(installedBadge_, 0);
+
+    // Does this release carry something newer than what is installed?
+    // Version strings decide when both are known; the update number only
+    // when they are not (it alone said "newer" for an equal 1.2.1 install).
+    const std::string releaseVer = trimVersion(game_.version);
+    const int cmp = (!releaseVer.empty() && !installedVer.empty()) ? compareDotted(releaseVer, installedVer) : 2;
+    const bool releaseNewer = (cmp != 2) ? (cmp == 1)
+                                         : (game_.update_version != 0 && game_.update_version > info.patchVersion);
+    if (releaseNewer) {
+        btnDownload->setText(releaseVer.empty() ? "app/detail/update_btn"_i18n
+                                                : brls::getStr("app/detail/update_to_btn", releaseVer));
+        btnDownload->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+    } else {
+        btnDownload->setText("app/detail/check_updates_btn"_i18n);
+        btnDownload->setStyle(&BUTTONSTYLE_INSTALLED);
+    }
 }
 
 void GameDetailView::updateRetroDownloadButton() {

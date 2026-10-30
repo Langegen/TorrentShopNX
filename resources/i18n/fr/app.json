@@ -229,7 +229,14 @@
         "auto_install_not_port": "Release non reconnue comme un port homebrew",
         "choose_version_title": "Choisir la version à installer",
         "select_files_btn": "Sélectionner des fichiers",
-        "download_romset_btn": "Télécharger le ROMset"
+        "download_romset_btn": "Télécharger le ROMset",
+        "installed_badge": "Installé",
+        "installed_badge_ver": "Installé · {0}",
+        "update_btn": "Installer la mise à jour",
+        "update_to_btn": "Mettre à jour en {0}",
+        "check_updates_btn": "Vérifier les mises à jour",
+        "screenshot_loading": "Chargement…",
+        "screenshot_load_failed": "Impossible de charger la capture"
     },
     "fileselect": {
         "title": "Fichiers du torrent",
@@ -1257,7 +1264,8 @@
         "voice": "Langue audio",
         "torrent": "Torrent",
         "torrent_value": "{0} seeds / {1} peers ({2} téléch.)",
-        "added": "Ajouté"
+        "added": "Ajouté",
+        "version": "Version"
     },
     "empty": {
         "downloads_title": "Aucun téléchargement",

@@ -527,6 +527,9 @@ void ThemeManager::applyThemeToBorealis() {
     darkTheme.addColor("brls/text_disabled", nvgRGB(140, 150, 165));
     darkTheme.addColor("brls/header/subtitle", nvgRGBA(180, 195, 210, 230));
     darkTheme.addColor("brls/text_secondary", nvgRGBA(180, 195, 210, 230));
+    // Download button of a game that is already installed
+    darkTheme.addColor("tsnx/button/installed_background", nvgRGB(34, 138, 82));
+    darkTheme.addColor("tsnx/button/installed_text", nvgRGB(255, 255, 255));
 
     brls::Theme& lightTheme = brls::Theme::getLightTheme();
     lightTheme.addColor("brls/accent", primary);
@@ -541,6 +544,8 @@ void ThemeManager::applyThemeToBorealis() {
     lightTheme.addColor("brls/text_disabled", nvgRGB(130, 140, 155));
     lightTheme.addColor("brls/header/subtitle", nvgRGB(90, 99, 114));   // = style::textSecondary()
     lightTheme.addColor("brls/text_secondary", nvgRGB(90, 99, 114));
+    lightTheme.addColor("tsnx/button/installed_background", nvgRGB(29, 122, 70));
+    lightTheme.addColor("tsnx/button/installed_text", nvgRGB(255, 255, 255));
     lightTheme.addColor("brls/sidebar/separator", nvgRGB(220, 226, 235));
     lightTheme.addColor("brls/applet_frame/separator", nvgRGB(215, 222, 232));
     lightTheme.addColor("brls/header/border", nvgRGB(215, 222, 232));

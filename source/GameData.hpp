@@ -179,6 +179,9 @@ struct Game {
     // Newest update package in the release (titledb number, N << 16), 0 = unknown.
     // Filled by the catalog builder from the torrent file list.
     uint32_t update_version = 0;
+    // Game version shipped in the release ("1.0.3"), "" = unknown. Filled by
+    // the catalog builder from the topic ("Версия игры: ...") or file names.
+    std::string version;
 };
 
 // Heuristic and flag checker for romsets / multi-game collections
@@ -248,6 +251,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
         std::string uv = safeGetStr(j, "update_version");
         g.update_version = uv.empty() ? 0 : static_cast<uint32_t>(std::strtoul(uv.c_str(), nullptr, 10));
     }
+    g.version = safeGetStr(j, "version");
 
     g.is_romset = false;
     if (j.contains("is_romset")) {
@@ -286,7 +290,8 @@ inline void to_json(nlohmann::json& j, const Game& g) {
         {"multiplayer", g.multiplayer},
         {"is_romset", g.is_romset},
         {"content_type", g.content_type},
-        {"update_version", g.update_version}
+        {"update_version", g.update_version},
+        {"version", g.version}
     };
 }
 
@@ -607,6 +612,7 @@ private:
         else if (currentKey == "is_romset") currentGame.is_romset = (val == "true" || val == "1");
         else if (currentKey == "content_type") currentGame.content_type = std::move(val);
         else if (currentKey == "update_version") currentGame.update_version = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 10));
+        else if (currentKey == "version") currentGame.version = std::move(val);
     }
 };
 
@@ -694,7 +700,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     writeRaw(magic, 8);
-    uint32_t version = 5;
+    uint32_t version = 6;
     writeRaw(&version, sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     writeRaw(&count, sizeof(count));
@@ -738,6 +744,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.content_type);
         writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
         writeRaw(&g.update_version, sizeof(g.update_version));
+        writeStr(g.version);
     }
 
     fflush(f);
@@ -773,12 +780,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version < 1 || version > 5) {
+    if (version < 1 || version > 6) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
     if (out_needs_upgrade) {
-        *out_needs_upgrade = (version < 5);
+        *out_needs_upgrade = (version < 6);
     }
 
     uint32_t count = 0;
@@ -851,6 +858,9 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
             if (ptr + sizeof(uint32_t) > end) return false;
             std::memcpy(&g.update_version, ptr, sizeof(uint32_t));
             ptr += sizeof(uint32_t);
+        }
+        if (version >= 6) {
+            if (!readStr(g.version)) return false;
         }
         if (g.sort_key.empty()) {
             g.sort_key = computeSortKey(g.title);
@@ -953,14 +963,14 @@ inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std:
         if (loadGamesFromBinaryFile(binPath, games, &needsUpgrade) && !games.empty()) {
             if (!needsUpgrade) return games;
             if (!hasJson) {
-                util::logLine("GameData: upgrading binary cache to version 5");
+                util::logLine("GameData: upgrading binary cache to version 6");
                 saveGamesToBinaryFile(binPath, games);
                 return games;
             }
-            // Older caches lack fields (update_version) that only the JSON
+            // Older caches lack fields (update_version, version) that only the JSON
             // has: rebuild from it. Diffs applied since live only in the old
             // .bin, so drop the diff ETag to have the next diff re-applied.
-            util::logLine("GameData: binary cache predates version 5, rebuilding from JSON");
+            util::logLine("GameData: binary cache predates version 6, rebuilding from JSON");
             std::remove(getCatalogDiffEtagPath().c_str());
         }
         util::logLine("GameData: binary cache invalid or empty, falling back to JSON");

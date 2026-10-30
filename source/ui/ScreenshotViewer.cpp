@@ -2,10 +2,59 @@
 #include "../GameData.hpp"
 #include <borealis.hpp>
 
+using namespace brls::literals;
+
 namespace ui {
 
+namespace {
+
+// How long a new screenshot may load before "Loading…" replaces the
+// previous one. Short enough to feel responsive, long enough that a picture
+// from a fast host appears without anything flashing in between.
+constexpr auto kLoadingDelay = std::chrono::milliseconds(350);
+
+const char* const kPlaceholder = "romfs:/img/cover_blank.png";
+
+// Image that counts texture changes: the downloader sets the placeholder at
+// once and calls innerSetImage again when the picture (or, on failure, the
+// placeholder) arrives.
+class ShotImage : public brls::Image {
+public:
+    void innerSetImage(int tex) override {
+        brls::Image::innerSetImage(tex);
+        ++sets;
+    }
+    int sets = 0;
+};
+
+// Root box that gives the viewer a per-frame hook.
+class ViewerRoot : public brls::Box {
+public:
+    explicit ViewerRoot(std::function<void()> onFrame) : onFrame_(std::move(onFrame)) {}
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style,
+              brls::FrameContext* ctx) override {
+        if (onFrame_) onFrame_();
+        brls::Box::draw(vg, x, y, width, height, style, ctx);
+    }
+
+private:
+    std::function<void()> onFrame_;
+};
+
+} // namespace
+
+struct ScreenshotViewer::Slot {
+    ShotImage* img = nullptr;
+    std::shared_ptr<bool> token;
+    int setsAtStart = 0;     // texture changes made by the enqueue call itself
+    int placeholderTex = 0;  // placeholder texture, to tell a failure from a picture
+
+    bool done() const { return img && img->sets > setsAtStart; }
+    bool failed() const { return done() && img->getTexture() == placeholderTex; }
+};
+
 ScreenshotViewer::ScreenshotViewer(const std::vector<std::string>& urls, size_t startIndex)
-    : currentIndex_(0), imageToken_(std::make_shared<bool>(true)) {
+    : currentIndex_(0) {
     for (const auto& u : urls) {
         if (!u.empty()) urls_.push_back(u);
     }
@@ -15,21 +64,31 @@ ScreenshotViewer::ScreenshotViewer(const std::vector<std::string>& urls, size_t 
 }
 
 brls::View* ScreenshotViewer::createContentView() {
-    brls::Box* root = new brls::Box();
+    brls::Box* root = new ViewerRoot([this]() { refresh(); });
+    root_ = root;
     root->setWidthPercentage(100.0f);
     root->setHeightPercentage(100.0f);
     root->setBackgroundColor(nvgRGB(0, 0, 0));
     root->setAlignItems(brls::AlignItems::CENTER);
     root->setJustifyContent(brls::JustifyContent::CENTER);
-    
+
     // We want the view itself to be focusable to capture gamepad events
     root->setFocusable(true);
 
-    image_ = new brls::Image();
-    image_->setScalingType(brls::ImageScalingType::FIT);
-    image_->setWidthPercentage(100.0f);
-    image_->setHeightPercentage(100.0f);
-    root->addView(image_);
+    // Screenshot layers are inserted at the bottom later (ensureSlot).
+    // Status text in the middle, hidden (alpha 0) until needed.
+    auto makeStatus = [root](const std::string& text) {
+        auto* label = new brls::Label();
+        label->setText(text);
+        label->setFontSize(18.0f);
+        label->setTextColor(nvgRGB(200, 205, 215));
+        label->setAlpha(0.0f);
+        root->addView(label);
+        return label;
+    };
+    loadingLabel_ = makeStatus("app/detail/screenshot_loading"_i18n);
+    failedLabel_ = makeStatus("app/detail/screenshot_load_failed"_i18n);
+    failedLabel_->setPositionType(brls::PositionType::ABSOLUTE);
 
     // ── Floating Top Bar Overlay ─────────────────────────────────────────
     auto* topBar = new brls::Box();
@@ -133,31 +192,24 @@ brls::View* ScreenshotViewer::createContentView() {
             }
         }
     }, brls::PanAxis::HORIZONTAL));
-    
-    // Navigation actions (supports left stick, D-Pad, and bumpers)
+
+    // Navigation: NAV_LEFT / NAV_RIGHT cover the D-pad and both sticks. The
+    // D-pad also sends BUTTON_LEFT / BUTTON_RIGHT, so binding those too made
+    // one press skip two screenshots.
     root->registerAction("Next", brls::ControllerButton::BUTTON_NAV_RIGHT, [this](brls::View* view) {
         nextImage();
         return true;
     });
-    root->registerAction("Next (D-Pad)", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View* view) {
-        nextImage();
-        return true;
-    }, true /* hidden */);
-    
     root->registerAction("Prev", brls::ControllerButton::BUTTON_NAV_LEFT, [this](brls::View* view) {
         prevImage();
         return true;
     });
-    root->registerAction("Prev (D-Pad)", brls::ControllerButton::BUTTON_LEFT, [this](brls::View* view) {
-        prevImage();
-        return true;
-    }, true /* hidden */);
 
     root->registerAction("Next (RB)", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
         nextImage();
         return true;
     });
-    
+
     root->registerAction("Prev (LB)", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
         prevImage();
         return true;
@@ -176,11 +228,9 @@ brls::View* ScreenshotViewer::createContentView() {
 }
 
 ScreenshotViewer::~ScreenshotViewer() {
-    if (imageToken_) {
-        *imageToken_ = false;
-    }
-    if (image_) {
-        image_->clear();
+    // Late downloads must not touch the deleted layers
+    for (auto& kv : slots_) {
+        if (kv.second->token) *kv.second->token = false;
     }
 }
 
@@ -189,30 +239,90 @@ void ScreenshotViewer::onContentAvailable() {
         brls::Application::popActivity();
         return;
     }
-    loadCurrent();
+    goTo(currentIndex_);
     brls::Application::giveFocus(this->getContentView());
 }
 
-void ScreenshotViewer::loadCurrent() {
-    if (urls_.empty() || currentIndex_ >= urls_.size()) return;
-    
-    // Cancel previous image loading if any
-    if (imageToken_) {
-        *imageToken_ = false;
-    }
-    imageToken_ = std::make_shared<bool>(true);
-    
-    // Clear previous texture safely without deleting shared placeholder
-    if (image_) {
-        image_->clear();
-        image_->setImageFromFile("romfs:/img/cover_blank.png");
-        image_->setFreeTexture(false);
-    }
-    
-    std::string rawUrl = urls_[currentIndex_];
-    std::string fallbackUrl = normalizeImageUrl(rawUrl);
-    std::string url = getOriginalImageUrl(fallbackUrl);
+void ScreenshotViewer::ensureSlot(size_t index, int priority) {
+    if (index >= urls_.size() || slots_.count(index)) return;
 
+    auto slot = std::make_unique<Slot>();
+    slot->token = std::make_shared<bool>(true);
+    slot->img = new ShotImage();
+    slot->img->setPositionType(brls::PositionType::ABSOLUTE);
+    slot->img->setPositionTop(0);
+    slot->img->setPositionLeft(0);
+    slot->img->setWidthPercentage(100.0f);
+    slot->img->setHeightPercentage(100.0f);
+    slot->img->setScalingType(brls::ImageScalingType::FIT);
+    slot->img->setAlpha(0.0f);
+    root_->addView(slot->img, 0);   // under the status text, top bar and arrows
+
+    std::string fallbackUrl = normalizeImageUrl(urls_[index]);
+    std::string url = getOriginalImageUrl(fallbackUrl);
+    setImageFromHTTPS(slot->img, url, slot->token, kPlaceholder, true, fallbackUrl, -1, -1, priority);
+    slot->setsAtStart = slot->img->sets;
+    slot->placeholderTex = slot->img->getTexture();
+
+    slots_[index] = std::move(slot);
+}
+
+void ScreenshotViewer::dropFarSlots() {
+    for (auto it = slots_.begin(); it != slots_.end();) {
+        size_t idx = it->first;
+        size_t dist = idx > currentIndex_ ? idx - currentIndex_ : currentIndex_ - idx;
+        // Keep the neighbours, and the picture on screen until the new one replaces it
+        if (dist <= 1 || idx == shownIndex_) {
+            ++it;
+            continue;
+        }
+        *it->second->token = false;
+        root_->removeView(it->second->img, true);
+        it = slots_.erase(it);
+    }
+}
+
+void ScreenshotViewer::goTo(size_t index) {
+    if (urls_.empty() || index >= urls_.size()) return;
+    currentIndex_ = index;
+    waitSince_ = std::chrono::steady_clock::now();
+
+    // Current first, then the neighbours
+    ensureSlot(index, 3000000);
+    ensureSlot(index + 1, 2990000);
+    if (index > 0) ensureSlot(index - 1, 2980000);
+    dropFarSlots();
+    updateChrome();
+    refresh();
+}
+
+void ScreenshotViewer::refresh() {
+    if (slots_.empty() || !loadingLabel_ || !failedLabel_) return;
+    auto it = slots_.find(currentIndex_);
+    const Slot* cur = (it != slots_.end()) ? it->second.get() : nullptr;
+    const bool ready = cur && cur->done();
+    const bool failed = ready && cur->failed();
+    const bool waitedLong = std::chrono::steady_clock::now() - waitSince_ >= kLoadingDelay;
+
+    // The new picture as soon as it is there; until then the previous one,
+    // for kLoadingDelay at most.
+    size_t visible = kNone;
+    if (ready && !failed) {
+        visible = currentIndex_;
+    } else if (!ready && !waitedLong && shownIndex_ != kNone) {
+        auto old = slots_.find(shownIndex_);
+        if (old != slots_.end() && old->second->done() && !old->second->failed()) visible = shownIndex_;
+    }
+    shownIndex_ = visible;
+
+    for (auto& kv : slots_) {
+        kv.second->img->setAlpha(kv.first == visible ? 1.0f : 0.0f);
+    }
+    loadingLabel_->setAlpha(visible == kNone && !ready && waitedLong ? 1.0f : 0.0f);
+    failedLabel_->setAlpha(failed ? 1.0f : 0.0f);
+}
+
+void ScreenshotViewer::updateChrome() {
     if (counterLabel_) {
         counterLabel_->setText(std::to_string(currentIndex_ + 1) + " / " + std::to_string(urls_.size()));
     }
@@ -222,22 +332,14 @@ void ScreenshotViewer::loadCurrent() {
     if (nextBtn_) {
         nextBtn_->setVisibility(currentIndex_ + 1 < urls_.size() ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
-
-    setImageFromHTTPS(image_, url, imageToken_, "romfs:/img/cover_blank.png", true, fallbackUrl, -1, -1, 3000000);
 }
 
 void ScreenshotViewer::nextImage() {
-    if (currentIndex_ + 1 < urls_.size()) {
-        currentIndex_++;
-        loadCurrent();
-    }
+    if (currentIndex_ + 1 < urls_.size()) goTo(currentIndex_ + 1);
 }
 
 void ScreenshotViewer::prevImage() {
-    if (currentIndex_ > 0) {
-        currentIndex_--;
-        loadCurrent();
-    }
+    if (currentIndex_ > 0) goTo(currentIndex_ - 1);
 }
 
 } // namespace ui

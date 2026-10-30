@@ -229,7 +229,14 @@
         "topic": "Open Topic",
         "unknown_genre": "Unknown Genre",
         "unknown_publisher": "Unknown Publisher",
-        "update_available": "Update Available"
+        "update_available": "Update Available",
+        "installed_badge": "Installed",
+        "installed_badge_ver": "Installed · {0}",
+        "update_btn": "Install update",
+        "update_to_btn": "Update to {0}",
+        "check_updates_btn": "Check for updates",
+        "screenshot_loading": "Loading…",
+        "screenshot_load_failed": "Could not load the screenshot"
     },
     "fileselect": {
         "title": "File Selection",
@@ -1261,7 +1268,8 @@
         "voice": "Voice Language",
         "torrent": "Torrent",
         "torrent_value": "{0} seeds / {1} peers ({2} dl)",
-        "added": "Added"
+        "added": "Added",
+        "version": "Version"
     },
     "empty": {
         "downloads_title": "No downloads",

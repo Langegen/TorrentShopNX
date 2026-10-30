@@ -229,7 +229,14 @@
         "auto_install_not_port": "Homebrewポートとして認識されませんでした",
         "choose_version_title": "インストールするバージョンを選択",
         "select_files_btn": "ファイルを選択",
-        "download_romset_btn": "ROMセットをダウンロード"
+        "download_romset_btn": "ROMセットをダウンロード",
+        "installed_badge": "インストール済み",
+        "installed_badge_ver": "インストール済み · {0}",
+        "update_btn": "アップデートを入れる",
+        "update_to_btn": "{0} に更新",
+        "check_updates_btn": "アップデートを確認",
+        "screenshot_loading": "読み込み中…",
+        "screenshot_load_failed": "スクリーンショットを読み込めませんでした"
     },
     "fileselect": {
         "title": "トレント内ファイル",
@@ -1257,7 +1264,8 @@
         "voice": "音声言語",
         "torrent": "トレント",
         "torrent_value": "{0} シード / {1} ピア ({2} DL)",
-        "added": "追加日"
+        "added": "追加日",
+        "version": "バージョン"
     },
     "empty": {
         "downloads_title": "ダウンロードはありません",

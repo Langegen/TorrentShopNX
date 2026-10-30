@@ -229,7 +229,14 @@
         "topic": "فتح الموضوع",
         "unknown_genre": "نوع غير معروف",
         "unknown_publisher": "ناشر غير معروف",
-        "update_available": "يتوفر تحديث"
+        "update_available": "يتوفر تحديث",
+        "installed_badge": "مثبتة",
+        "installed_badge_ver": "مثبتة · {0}",
+        "update_btn": "تثبيت التحديث",
+        "update_to_btn": "تحديث إلى {0}",
+        "check_updates_btn": "التحقق من التحديثات",
+        "screenshot_loading": "جارٍ التحميل…",
+        "screenshot_load_failed": "تعذر تحميل لقطة الشاشة"
     },
     "fileselect": {
         "title": "اختيار الملفات",
@@ -1257,7 +1264,8 @@
         "voice": "لغة الصوت",
         "torrent": "التورنت",
         "torrent_value": "{0} موزع / {1} قرين ({2} تنزيل)",
-        "added": "تاريخ الإضافة"
+        "added": "تاريخ الإضافة",
+        "version": "الإصدار"
     },
     "empty": {
         "downloads_title": "لا توجد تنزيلات",

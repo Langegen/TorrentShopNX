@@ -229,7 +229,14 @@
         "auto_install_not_port": "未识别为自制移植版",
         "choose_version_title": "选择要安装的版本",
         "select_files_btn": "选择文件",
-        "download_romset_btn": "下载 ROM 集"
+        "download_romset_btn": "下载 ROM 集",
+        "installed_badge": "已安装",
+        "installed_badge_ver": "已安装 · {0}",
+        "update_btn": "安装更新",
+        "update_to_btn": "更新到 {0}",
+        "check_updates_btn": "检查更新",
+        "screenshot_loading": "加载中…",
+        "screenshot_load_failed": "无法加载截图"
     },
     "fileselect": {
         "title": "种子包含文件",
@@ -1257,7 +1264,8 @@
         "voice": "语音语言",
         "torrent": "种子统计",
         "torrent_value": "{0} 做种 / {1} 下载中 ({2} 次下载)",
-        "added": "添加时间"
+        "added": "添加时间",
+        "version": "版本"
     },
     "empty": {
         "downloads_title": "没有下载",

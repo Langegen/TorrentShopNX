@@ -229,7 +229,14 @@
         "topic": "Открыть тему",
         "unknown_genre": "Неизвестный жанр",
         "unknown_publisher": "Неизвестный издатель",
-        "update_available": "Доступно обновление"
+        "update_available": "Доступно обновление",
+        "installed_badge": "Установлена",
+        "installed_badge_ver": "Установлена · {0}",
+        "update_btn": "Установить обновление",
+        "update_to_btn": "Обновить до {0}",
+        "check_updates_btn": "Проверить обновления",
+        "screenshot_loading": "Загрузка…",
+        "screenshot_load_failed": "Не удалось загрузить скриншот"
     },
     "fileselect": {
         "title": "Выбор файлов",
@@ -1261,7 +1268,8 @@
         "voice": "Язык озвучки",
         "torrent": "Раздача",
         "torrent_value": "{0} сид. / {1} пир. ({2} загр.)",
-        "added": "Добавлено"
+        "added": "Добавлено",
+        "version": "Версия"
     },
     "empty": {
         "downloads_title": "Нет загрузок",
