@@ -188,10 +188,15 @@ namespace internal
             return stringName;
         }
 
+        // Lookups go through at(): operator[] on a non-const json inserts a
+        // null for a missing key, and strings are looked up from worker
+        // threads too, so two threads inserting into the same object at once
+        // corrupted the heap.
+
         // First look for translated string in current locale
         try
         {
-            return currentLocale[pointer].get<std::string>();
+            return currentLocale.at(pointer).get<std::string>();
         }
         catch (...)
         {
@@ -200,7 +205,7 @@ namespace internal
         // Then look for default locale
         try
         {
-            return defaultLocale[pointer].get<std::string>();
+            return defaultLocale.at(pointer).get<std::string>();
         }
         catch (...)
         {
