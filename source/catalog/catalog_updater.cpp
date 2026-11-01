@@ -87,9 +87,24 @@ void CatalogUpdater::checkAndRunScheduledUpdate() {
     bool was_empty = !initialCatalog || initialCatalog->empty();
     auto& cfg = config::ConfigManager::instance();
 
+    const std::string appVersion = config::ConfigManager::APP_VERSION;
+    const bool versionChanged = cfg.getCatalogAppVersion() != appVersion;
+    // Remember the version once a full download succeeds, so an app update
+    // triggers exactly one full catalog refresh.
+    auto rememberVersion = [appVersion](const CatalogUpdateResult& r) {
+        if (r.success) config::ConfigManager::instance().setCatalogAppVersion(appVersion);
+    };
+
     if (was_empty) {
         util::logLine("catalog_updater: catalog is empty, running initial full update");
-        startUpdate(CatalogUpdateMode::ForceFull, nullptr, true);
+        startUpdate(CatalogUpdateMode::ForceFull, rememberVersion, true);
+    } else if (versionChanged) {
+        util::logLine("catalog_updater: app version changed (" + cfg.getCatalogAppVersion() + " -> " +
+                      appVersion + "), re-downloading full catalog");
+        // Drop the ETag so the server sends the whole catalog instead of 304.
+        std::error_code ec;
+        std::filesystem::remove(getCatalogEtagPath(), ec);
+        startUpdate(CatalogUpdateMode::ForceFull, rememberVersion, true);
     } else if (cfg.shouldUpdateCatalogFull()) {
         util::logLine("catalog_updater: scheduled 48h full update is due");
         startUpdate(CatalogUpdateMode::ForceFull, nullptr, true);

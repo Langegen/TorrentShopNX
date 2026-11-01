@@ -60,6 +60,11 @@ public:
     int64_t getLastCatalogFullTime() const;
     void setLastCatalogFullTime(int64_t timestamp);
 
+    // App version that last downloaded the full catalog. A different value
+    // at startup means the app was updated, so the catalog is re-downloaded.
+    const std::string& getCatalogAppVersion() const;
+    void setCatalogAppVersion(const std::string& version);
+
     bool shouldUpdateCatalogDiff() const;
     bool shouldUpdateCatalogFull() const;
 
@@ -70,7 +75,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.19"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.20"; // Keep in sync with Makefile APP_VERSION
 
     const std::string& getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
@@ -147,6 +152,7 @@ private:
     std::string last_catalog_update_date_;
     int64_t last_catalog_diff_time_ = 0;
     int64_t last_catalog_full_time_ = 0;
+    std::string catalog_app_version_;
     std::string install_location_;
     std::string app_update_url_;
     bool auto_app_update_;
