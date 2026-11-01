@@ -79,7 +79,10 @@ private:
 
     void workerLoop();
     void processTask(const ImageTask& task, class HttpClient& http);
-    int calculatePriority(const ImageTask& task) const;
+    // Priority against one snapshot of the focused cell: the UI thread moves
+    // the focus at any time, and a comparator that changes its mind mid-sort
+    // makes std::stable_sort write outside the queue (heap corruption).
+    int calculatePriority(const ImageTask& task, int focusRow, int focusCol) const;
     void reprioritizeQueueLocked();
     void enqueueInternal(brls::Image* img,
                          const std::string& url,

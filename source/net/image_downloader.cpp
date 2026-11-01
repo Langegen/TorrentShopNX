@@ -258,15 +258,15 @@ void ImageDownloader::markHostSuccess(const std::string& host) {
     failedHosts_.erase(host);
 }
 
-int ImageDownloader::calculatePriority(const ImageTask& task) const {
+int ImageDownloader::calculatePriority(const ImageTask& task, int focusRow, int focusCol) const {
     if (task.priorityOverride > 0) {
         return task.priorityOverride;
     }
 
-    if (task.row < 0 || currentFocusedRow_ < 0) return 100000;
+    if (task.row < 0 || focusRow < 0) return 100000;
 
-    int d_row = std::abs(task.row - currentFocusedRow_);
-    int d_col = (task.col >= 0 && currentFocusedCol_ >= 0) ? std::abs(task.col - currentFocusedCol_) : 0;
+    int d_row = std::abs(task.row - focusRow);
+    int d_col = (task.col >= 0 && focusCol >= 0) ? std::abs(task.col - focusCol) : 0;
 
     if (d_row == 0) {
         if (d_col == 0) {
@@ -278,11 +278,23 @@ int ImageDownloader::calculatePriority(const ImageTask& task) const {
 }
 
 void ImageDownloader::reprioritizeQueueLocked() {
-    if (tasks_.empty()) return;
+    if (tasks_.size() < 2) return;
 
-    std::stable_sort(tasks_.begin(), tasks_.end(), [this](const ImageTask& a, const ImageTask& b) {
-        return calculatePriority(a) > calculatePriority(b);
+    // Keys first, from one focus snapshot: sorting must never see a priority
+    // change (see calculatePriority).
+    const int focusRow = currentFocusedRow_.load(std::memory_order_relaxed);
+    const int focusCol = currentFocusedCol_.load(std::memory_order_relaxed);
+    std::vector<std::pair<int, size_t>> keys;
+    keys.reserve(tasks_.size());
+    for (size_t i = 0; i < tasks_.size(); ++i) {
+        keys.emplace_back(calculatePriority(tasks_[i], focusRow, focusCol), i);
+    }
+    std::stable_sort(keys.begin(), keys.end(), [](const std::pair<int, size_t>& a, const std::pair<int, size_t>& b) {
+        return a.first > b.first;
     });
+    std::deque<ImageTask> sorted;
+    for (const auto& k : keys) sorted.push_back(std::move(tasks_[k.second]));
+    tasks_.swap(sorted);
 }
 
 void ImageDownloader::setFocusedPosition(int row, int col) {
@@ -355,9 +367,12 @@ void ImageDownloader::enqueueInternal(brls::Image* img,
         }
         ImageTask newTask{img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride};
         newTask.enqueuedAt = std::chrono::steady_clock::now();
-        int newPriority = calculatePriority(newTask);
-        auto insertPos = std::lower_bound(tasks_.begin(), tasks_.end(), newPriority, [this](const ImageTask& t, int targetPriority) {
-            return calculatePriority(t) > targetPriority;
+        const int focusRow = currentFocusedRow_.load(std::memory_order_relaxed);
+        const int focusCol = currentFocusedCol_.load(std::memory_order_relaxed);
+        int newPriority = calculatePriority(newTask, focusRow, focusCol);
+        auto insertPos = std::lower_bound(tasks_.begin(), tasks_.end(), newPriority,
+                                          [this, focusRow, focusCol](const ImageTask& t, int targetPriority) {
+            return calculatePriority(t, focusRow, focusCol) > targetPriority;
         });
         tasks_.insert(insertPos, std::move(newTask));
     }
