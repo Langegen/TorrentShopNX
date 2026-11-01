@@ -16,7 +16,8 @@
 #include "../catalog/IgnoredUpdatesManager.hpp"
 #include "../catalog/game_stats_manager.h"
 #include "../catalog/release_picker.hpp"
-#include "../catalog/titledb.h"
+#include "../catalog/game_version.hpp"
+#include "../catalog/release_finder.h"
 #include "../installer/installed_ports.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <cstdlib>
@@ -414,7 +415,7 @@ static void getInstalledComponentsAndSizes(
                             gcd.components.push_back(comp);
                         } else if (cms.meta_type == NcmContentMetaType_Patch) {
                             comp.type = InstalledComponent::Type::Patch;
-                            comp.displayName = brls::getStr("app/library/comp_patch", "#" + std::to_string(titledb::updateOrdinal(cms.version)));
+                            comp.displayName = brls::getStr("app/library/comp_patch", "#" + std::to_string(catalog::updateOrdinal(cms.version)));
                             if (comp.sizeBytes == 0) comp.sizeBytes = gcd.patchSize;
                             gcd.components.push_back(comp);
                         } else if (cms.meta_type == NcmContentMetaType_AddOnContent) {
@@ -528,13 +529,34 @@ struct ScanCacheEntry {
     GameComponentData gcd;
 };
 
+// Version columns and update status of a game from its best catalog release
+// (releases[0]). Only releases found by title ID count. "Ignored" and "not
+// installed" are applied on top by the caller.
+static void applyCatalogVersion(LibraryItem& item) {
+    std::string cur = catalog::versionLabel(item.installedDisplayVersion, item.installedPatchVersion);
+    item.currentVersion = cur.empty() ? "\u2014" : cur;
+    item.latestVersion = "\u2014";
+    item.status = GameUpdateStatus::Unknown;
+    if (!item.matchedByTitleId || item.releases.empty()) return;
+    const Game& best = item.releases.front();
+    std::string latest = catalog::versionLabel(best.version, best.update_version);
+    if (!latest.empty()) item.latestVersion = latest;
+    switch (catalog::compareRelease(best.version, best.update_version,
+                                    item.installedDisplayVersion, item.installedPatchVersion)) {
+        case catalog::VersionCmp::Newer: item.status = GameUpdateStatus::UpdateAvailable; break;
+        case catalog::VersionCmp::Same:
+        case catalog::VersionCmp::Older: item.status = GameUpdateStatus::UpToDate; break;
+        case catalog::VersionCmp::Unknown: break;
+    }
+}
+
 static std::string scanCachePath() { return std::string(TSNX_CACHE_DIR) + "/library_scan.json"; }
 
 static std::string componentLabel(InstalledComponent::Type type, uint32_t version, int dlcIndex) {
     switch (type) {
         case InstalledComponent::Type::BaseGame: return "app/library/comp_base_game"_i18n;
         case InstalledComponent::Type::Patch:
-            return brls::getStr("app/library/comp_patch", "#" + std::to_string(titledb::updateOrdinal(version)));
+            return brls::getStr("app/library/comp_patch", "#" + std::to_string(catalog::updateOrdinal(version)));
         case InstalledComponent::Type::Dlc: return brls::getStr("app/library/comp_dlc", std::to_string(dlcIndex));
         default: return "";
     }
@@ -583,6 +605,30 @@ static std::unordered_map<uint64_t, ScanCacheEntry> loadScanCache() {
         out.clear();
     }
     return out;
+}
+
+std::unordered_map<uint64_t, CachedInstalledGame> cachedInstalledGames() {
+    std::unordered_map<uint64_t, CachedInstalledGame> out;
+    for (auto& kv : loadScanCache()) {
+        CachedInstalledGame g;
+        g.name = std::move(kv.second.name);
+        g.displayVersion = std::move(kv.second.displayVersion);
+        for (const auto& c : kv.second.gcd.components) {
+            if (c.type == InstalledComponent::Type::Patch && c.version > g.patchVersion) g.patchVersion = c.version;
+        }
+        out[kv.first] = std::move(g);
+    }
+    return out;
+}
+
+bool catalogHasNewerVersion(uint64_t appId, const std::string& installedName,
+                            const std::string& displayVersion, uint32_t patchVersion) {
+    auto idx = catalog::releaseIndex();
+    auto it = idx->byApp.find(appId & ~0x1FFFULL);
+    if (it == idx->byApp.end() || it->second.empty()) return false;
+    const Game* best = catalog::rankReleasePtrs(it->second, installedName).front();
+    return catalog::compareRelease(best->version, best->update_version, displayVersion, patchVersion) ==
+           catalog::VersionCmp::Newer;
 }
 
 static void saveScanCache(const std::unordered_map<uint64_t, ScanCacheEntry>& cache) {
@@ -1057,8 +1103,9 @@ void LibraryView::updateAllGames() {
                                                            std::to_string(n + 1), std::to_string(total), name));
                 });
 
-                // Newest update package in the best release; if the best one
-                // has none newer than installed, try the runner-up.
+                // Newest update package in the best release (the newest version
+                // in the catalog); if it has none newer than installed, try the
+                // runner-up.
                 const uint64_t patchId = (item.titleId & ~0x1FFFULL) | 0x800ULL;
                 bool done = false;
                 const size_t tries = std::min<size_t>(item.releases.size(), 2);
@@ -1066,7 +1113,9 @@ void LibraryView::updateAllGames() {
                     const Game& rel = item.releases[r];
                     if (rel.magnet.empty()) continue;
                     // The catalog already says this release has nothing newer
-                    if (rel.update_version && rel.update_version <= item.installedPatchVersion) continue;
+                    auto cmp = catalog::compareRelease(rel.version, rel.update_version,
+                                                       item.installedDisplayVersion, item.installedPatchVersion);
+                    if (cmp == catalog::VersionCmp::Same || cmp == catalog::VersionCmp::Older) continue;
                     std::vector<torrent::TorrentFileInfo> files;
                     std::string err;
                     if (!ui::DownloadManager::instance().getImpl().probeTorrentFiles(rel.magnet, files, &err)) {
@@ -1208,7 +1257,8 @@ void LibraryView::scanForUpdates() {
     isScanning_ = true;
     
     if (statsHint) {
-        statsHint->setText("app/library/loading_titledb"_i18n);
+        // Versions come from the catalog already in memory: no network wait
+        statsHint->setText("app/library/scanning_games"_i18n);
     }
     
     auto cancelToken = cancelToken_;
@@ -1218,35 +1268,10 @@ void LibraryView::scanForUpdates() {
         try {
         if (cancelToken && *cancelToken) return;
 
-        bool dbOk = titledb::ensureDownloaded();
-        if (cancelToken && *cancelToken) return;
-
-        if (!dbOk) {
-            brls::sync([this, cancelToken]() {
-                if (cancelToken && *cancelToken) return;
-                if (statsHint) {
-                    statsHint->setText("app/library/titledb_failed"_i18n);
-                }
-                isScanning_ = false;
-            });
-            return;
-        }
-        
-        brls::sync([this, cancelToken]() {
-            if (cancelToken && *cancelToken) return;
-            if (statsHint) {
-                statsHint->setText("app/library/scanning_games"_i18n);
-            }
-        });
-        
-        auto availableVersionsPtr = titledb::latestVersions();
-        const auto& availableVersions = *availableVersionsPtr;
-        if (cancelToken && *cancelToken) return;
-        
         struct InstalledItem {
             uint64_t titleId;
             std::string name;
-            std::string currentVersionStr;
+            std::string displayVersion;   // NACP display version, "" if unknown
             bool notInstalled = false;   // only a record: no base game or update anywhere
         };
         std::vector<InstalledItem> installedList;
@@ -1364,7 +1389,7 @@ void LibraryView::scanForUpdates() {
         std::unordered_map<uint64_t, GameComponentData> installedCompData;
         for (uint64_t tid : recordTids) {
             const ScanCacheEntry& e = scanCache[tid];
-            installedList.push_back({tid, e.name, e.displayVersion.empty() ? "1.0.0" : e.displayVersion,
+            installedList.push_back({tid, e.name, e.displayVersion,
                                      contentScanned && presentTids.count(tid) == 0});
             baseTids.push_back(tid);
             if (!e.sdk.empty()) installedSdkVersions[tid] = e.sdk;
@@ -1423,90 +1448,54 @@ void LibraryView::scanForUpdates() {
 
         if (cancelToken && *cancelToken) return;
 
-        // Build a catalog index once per scan: exact title id lookup + a
-        // pre-normalized name list, so per-game matching is O(1) instead of
-        // re-running the expensive normalization for every catalog entry.
-        auto catalog = getCatalogSnapshot();
-        struct CatalogIndex {
-            // Every release of a title ID, not just the first one met: the
-            // catalog often holds several (official dump, mods, old uploads).
-            std::unordered_map<uint64_t, std::vector<const Game*>> byTid;
+        // Releases by title ID come from the shared index (built once per
+        // catalog snapshot); names are pre-normalized here once per scan, so
+        // per-game matching does not re-run the expensive normalization for
+        // every catalog entry.
+        auto relIndex = catalog::releaseIndex();
+        const auto& catalog = relIndex->snapshot;
+        struct NameIndex {
             std::vector<std::pair<std::string, const Game*>> byCleanName;
             std::vector<std::pair<std::vector<std::string>, const Game*>> byTokens;
         };
-        CatalogIndex catIndex;
-        catIndex.byTid.reserve(catalog->size());
+        NameIndex catIndex;
         catIndex.byCleanName.reserve(catalog->size());
         catIndex.byTokens.reserve(catalog->size());
         for (const auto& g : *catalog) {
-            uint64_t tid = parseTitleIdFromGame(g);
-            if (tid != 0) {
-                // Releases are indexed under the application ID. Application
-                // IDs have the low 13 bits clear; the patch is |0x800 and DLCs
-                // are +0x1000.., so masking maps any content ID of a release
-                // to its game. The catalog does carry such IDs: the scraper
-                // takes the first ID from the torrent's file list, e.g. Zelda
-                // BotW NSZ (6702315) is filed under its DLC 01007EF00011F000.
-                catIndex.byTid[tid & ~0x1FFFULL].push_back(&g);
-            }
             std::string cn = cleanNameForMatching(g.title);
             if (!cn.empty()) catIndex.byCleanName.emplace_back(std::move(cn), &g);
             auto tokens = tokenizeNameForMatching(g.title);
             if (!tokens.empty()) catIndex.byTokens.emplace_back(std::move(tokens), &g);
         }
 
-        // Best release among several candidates of the same game (see
+        // Best release among several of the same game (see
         // catalog/release_picker.hpp): plain game over mods/ports, then the
-        // most recently re-registered torrent, which carries the newest update.
+        // newest version, then the most recently re-registered torrent.
         auto rankReleases = [](const std::vector<const Game*>& cands, const std::string& installedName) -> std::vector<const Game*> {
             if (cands.size() <= 1) return cands;
-            std::vector<catalog::ReleaseInfo> infos;
-            infos.reserve(cands.size());
-            for (const Game* g : cands) {
-                catalog::ReleaseInfo ri;
-                ri.title = g->title;
-                ri.topic_id = g->topic_id;
-                ri.homebrew = isHomebrewGame(*g);
-                ri.nameMatch = installedName.empty() || catalog::releaseNameMatches(installedName, g->title);
-                ri.updateVersion = g->update_version;
-                catalog::GameStats st;
-                if (catalog::GameStatsManager::instance().copySwitchStats(g->topic_id, st)) {
-                    ri.registered = st.latest_timestamp;
-                    ri.seeds = st.seeds;
-                }
-                infos.push_back(std::move(ri));
-            }
-            auto order = catalog::rankReleases(infos);
-            std::vector<const Game*> ranked;
-            ranked.reserve(order.size());
-            for (size_t i : order) ranked.push_back(cands[i]);
+            auto ranked = catalog::rankReleasePtrs(cands, installedName);
             std::string log = "library: " + std::to_string(cands.size()) + " releases for '" + ranked.front()->title +
-                              "', picked topic " + ranked.front()->topic_id + " (others:";
+                              "', picked topic " + ranked.front()->topic_id + " v'" + ranked.front()->version + "' (others:";
             for (size_t i = 1; i < ranked.size(); ++i) log += " " + ranked[i]->topic_id;
             util::logLine(log + ")");
             return ranked;
         };
         // Adds the item for the best release and remembers all of them.
         auto pushMatched = [&](std::vector<LibraryItem>& out, const std::vector<const Game*>& ranked,
-                               LibraryItem&& item, uint32_t latestPatchVer) {
-            item.latestPatchVersion = latestPatchVer;
+                               LibraryItem&& item) {
             for (const Game* g : ranked) item.releases.push_back(*g);
             out.push_back(std::move(item));
         };
 
-        auto makeItem = [](const Game& g, const std::string& currentVer,
-                           const std::string& latestVer, GameUpdateStatus status,
-                           uint64_t baseTid, const std::string& rawName,
+        auto makeItem = [](const Game& g, uint64_t baseTid, const std::string& rawName,
                            bool hasMods, bool updateIgnored, const std::string& modDetails,
                            const std::string& modPath,
                            const std::string& sdkVersion,
                            const GameComponentData& gcd,
-                           uint32_t installedPatchVer) {
+                           uint32_t installedPatchVer, const std::string& installedVer) {
             LibraryItem item;
             item.game = g;
-            item.currentVersion = currentVer;
-            item.latestVersion = latestVer;
-            item.status = status;
+            item.installedDisplayVersion = installedVer;
             item.titleId = baseTid;
             item.rawName = rawName;
             item.hasMods = hasMods;
@@ -1541,7 +1530,7 @@ void LibraryView::scanForUpdates() {
 
         std::vector<LibraryItem> displayItems;
 
-        // Match installed items with the catalog (g_games) using titledb
+        // Match installed items with the catalog: versions and update status come from it
         for (const auto& inst : installedList) {
             if (cancelToken && *cancelToken) return;
 
@@ -1551,94 +1540,36 @@ void LibraryView::scanForUpdates() {
                 auto gcit = installedCompData.find(baseTid);
                 if (gcit != installedCompData.end()) gcd = gcit->second;
             }
-            uint64_t patchTid = baseTid | 0x800ULL; // Patch ID
-            
             std::string sdkVersion;
             auto sit = installedSdkVersions.find(baseTid);
             if (sit != installedSdkVersions.end()) {
                 sdkVersion = sit->second;
             }
 
-            uint32_t latestVer = 0;
-            bool foundVersionInDb = false;
-            auto it = availableVersions.find(patchTid);
-            if (it != availableVersions.end()) {
-                latestVer = it->second;
-                foundVersionInDb = true;
-            } else {
-                auto bit = availableVersions.find(baseTid);
-                if (bit != availableVersions.end()) {
-                    latestVer = bit->second;
-                    foundVersionInDb = true;
-                } else {
-                    // nx-versions lists only patches: a game with no update
-                    // is recognised through versions.json.
-                    foundVersionInDb = titledb::knownGame(baseTid, &latestVer);
-                }
-            }
-            
-            uint32_t currentVer = 0;
+            uint32_t currentPatch = 0;
             auto iv = installedPatchVersions.find(baseTid);
             if (iv != installedPatchVersions.end()) {
-                currentVer = iv->second;
-            }
-            
-            // titledb numbers updates as N << 16 (1441792 = 22nd update); that
-            // can't be turned into the game's "1.2.3", so the installed side
-            // shows the NACP display version and the latest side the update
-            // ordinal plus its release date from versions.json.
-            bool hasVersionInfo = (latestVer > 0) || foundVersionInDb;
-            GameUpdateStatus status = GameUpdateStatus::Unknown;
-            std::string latestVerStr = "—";
-            std::string currentVerStr = inst.currentVersionStr;
-            if (currentVer > 0) {
-                currentVerStr += " (#" + std::to_string(titledb::updateOrdinal(currentVer)) + ")";
+                currentPatch = iv->second;
             }
 
-            if (hasVersionInfo) {
-                if (latestVer > 0) {
-                    std::string date = titledb::formatDate(titledb::updateDate(baseTid, latestVer));
-                    std::string ord = std::to_string(titledb::updateOrdinal(latestVer));
-                    latestVerStr = date.empty() ? brls::getStr("app/library/update_label", ord)
-                                                : brls::getStr("app/library/update_label_date", ord, date);
-                    bool needsUpdate = false;
-                    if (currentVer > 0) {
-                        needsUpdate = (latestVer > currentVer);
-                    } else {
-                        needsUpdate = true; // an update exists and none is installed
-                    }
-                    status = needsUpdate ? GameUpdateStatus::UpdateAvailable : GameUpdateStatus::UpToDate;
-                } else {
-                    // Base game exists in titledb with no published patches yet (version 0)
-                    latestVerStr = currentVerStr.empty() ? "v0" : currentVerStr;
-                    status = GameUpdateStatus::UpToDate;
-                }
-            }
-
-            // Check if game has mods and if update check is ignored
             auto modInfo = util::detectGameMods(baseTid);
             bool isIgnored = catalog::IgnoredUpdatesManager::instance().isIgnored(baseTid);
-            if (isIgnored) {
-                status = GameUpdateStatus::UpdateIgnored;
-            }
-            // Only a record is left (e.g. installed to another SD card): the
-            // NACP version is from the missing install and there is nothing
-            // to update.
-            if (inst.notInstalled) {
-                status = GameUpdateStatus::NotInstalled;
-                currentVerStr = "—";
-            }
+            auto newItem = [&](const Game& g) {
+                return makeItem(g, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath,
+                                sdkVersion, gcd, currentPatch, inst.displayVersion);
+            };
+            const size_t before = displayItems.size();
 
             // Match by Title ID (indexed): the explicit title_id field from the
-            // catalog JSON, or the [0100...] bracket in the title.
+            // catalog JSON, or the [0100...] bracket in the title. Only these
+            // releases decide the update status.
             bool foundInCatalog = false;
             {
-                auto mit = catIndex.byTid.find(baseTid & ~0x1FFFULL);
-                if (mit != catIndex.byTid.end() && !mit->second.empty()) {
+                auto mit = relIndex->byApp.find(baseTid & ~0x1FFFULL);
+                if (mit != relIndex->byApp.end() && !mit->second.empty()) {
                     auto ranked = rankReleases(mit->second, inst.name);
-                    pushMatched(displayItems, ranked,
-                                makeItem(*ranked.front(), currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer),
-                                latestVer);
+                    pushMatched(displayItems, ranked, newItem(*ranked.front()));
+                    displayItems.back().matchedByTitleId = true;
                     foundInCatalog = true;
                 }
             }
@@ -1655,16 +1586,14 @@ void LibraryView::scanForUpdates() {
                     }
                     if (!sameName.empty()) {
                         auto ranked = rankReleases(sameName, inst.name);
-                        pushMatched(displayItems, ranked,
-                                    makeItem(*ranked.front(), currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer),
-                                    latestVer);
+                        pushMatched(displayItems, ranked, newItem(*ranked.front()));
                         foundInCatalog = true;
                     }
                     // 2. Try token-based matching (e.g. multi-packs like Shovel Knight: Treasure Trove)
                     if (!foundInCatalog && !instTokens.empty()) {
                         for (const auto& entry : catIndex.byTokens) {
                             if (tokensMatchGame(instTokens, entry.first)) {
-                                pushMatched(displayItems, {entry.second}, makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer), latestVer);
+                                pushMatched(displayItems, {entry.second}, newItem(*entry.second));
                                 foundInCatalog = true;
                                 break;
                             }
@@ -1675,7 +1604,7 @@ void LibraryView::scanForUpdates() {
                         for (const auto& entry : catIndex.byCleanName) {
                             const std::string& catClean = entry.first;
                             if (catClean.length() >= 4 && (catClean.find(instClean) != std::string::npos || (catClean.length() >= 8 && instClean.find(catClean) != std::string::npos))) {
-                                pushMatched(displayItems, {entry.second}, makeItem(*entry.second, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer), latestVer);
+                                pushMatched(displayItems, {entry.second}, newItem(*entry.second));
                                 foundInCatalog = true;
                                 break;
                             }
@@ -1683,18 +1612,31 @@ void LibraryView::scanForUpdates() {
                     }
                 }
             }
-            
+
             // If not found in catalog, create a dummy item
             if (!foundInCatalog) {
                 Game dummy;
                 dummy.title = inst.name.empty() ? ("Unknown Game") : inst.name;
                 dummy.cover = "";
                 dummy.size = "";
-                displayItems.push_back(makeItem(dummy, currentVerStr, latestVerStr, status, baseTid, inst.name, modInfo.hasMods, isIgnored, modInfo.summary, modInfo.modPath, sdkVersion, gcd, currentVer));
-                displayItems.back().latestPatchVersion = latestVer;
+                displayItems.push_back(newItem(dummy));
+            }
+
+            // Versions and status from the catalog, then the overrides
+            for (size_t k = before; k < displayItems.size(); ++k) {
+                LibraryItem& item = displayItems[k];
+                applyCatalogVersion(item);
+                if (isIgnored) item.status = GameUpdateStatus::UpdateIgnored;
+                // Only a record is left (e.g. installed to another SD card):
+                // the NACP version is from the missing install and there is
+                // nothing to update.
+                if (inst.notInstalled) {
+                    item.status = GameUpdateStatus::NotInstalled;
+                    item.currentVersion = "\u2014";
+                }
             }
         }
-        
+
         if (cancelToken && *cancelToken) return;
 
         // Ports installed by the auto-installer get their own section. Their
@@ -2074,7 +2016,9 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
                                 if (itm.titleId == currentItem.titleId) {
                                     itm.hasPatch = false;
                                     itm.installedPatchVersion = 0;
-                                    itm.currentVersion = "1.0.0";
+                                    // The NACP version was the update's; the base
+                                    // game's is read on the next scan.
+                                    itm.installedDisplayVersion.clear();
                                     if (itm.totalSizeBytes >= itm.patchSizeBytes) itm.totalSizeBytes -= itm.patchSizeBytes;
                                     itm.patchSizeBytes = 0;
                                     for (auto it = itm.components.begin(); it != itm.components.end(); ++it) {
@@ -2083,6 +2027,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
                                             break;
                                         }
                                     }
+                                    applyCatalogVersion(itm);
                                     break;
                                 }
                             }

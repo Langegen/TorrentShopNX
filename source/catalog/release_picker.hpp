@@ -14,8 +14,9 @@
 //      against catalog entries carrying a wrong title_id: "Don't Starve" filed
 //      under Crash Bandicoot's ID);
 //   1. not a mod / port / homebrew build of the game;
-//   1b. the newer update package, when the catalog knows it for both
-//       (update_version, filled by the catalog builder);
+//   1b. the newer game version, when the catalog knows it for both
+//       (version, "1.0.3"), else the newer update package (update_version);
+//       both are filled by the catalog builder;
 //   2. most recently (re-)registered torrent: rutracker re-registers a release
 //      when the uploader replaces it, so a newer date means a newer update;
 //   3. more seeders;
@@ -29,6 +30,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "game_version.hpp"
+
 namespace catalog {
 
 struct ReleaseInfo {
@@ -39,6 +42,7 @@ struct ReleaseInfo {
     int32_t seeds = 0;
     bool nameMatch = true;          // shares a word with the installed game's name
     uint32_t updateVersion = 0;     // newest update package in the torrent, 0 = unknown
+    std::string version;            // game version in the release ("1.0.3"), "" = unknown
 };
 
 namespace detail {
@@ -165,7 +169,9 @@ inline bool releaseBetter(const ReleaseInfo& a, const ReleaseInfo& b) {
     bool aPlain = !a.homebrew && !isModdedRelease(a.title);
     bool bPlain = !b.homebrew && !isModdedRelease(b.title);
     if (aPlain != bPlain) return aPlain;
-    // Both releases say which update they carry: the newer one wins.
+    // Both releases say which version they carry: the newer one wins.
+    int vc = compareVersions(a.version, b.version);
+    if (vc == 1 || vc == -1) return vc > 0;
     if (a.updateVersion && b.updateVersion && a.updateVersion != b.updateVersion)
         return a.updateVersion > b.updateVersion;
     if (a.registered != b.registered) return a.registered > b.registered;

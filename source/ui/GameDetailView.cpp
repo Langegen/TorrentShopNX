@@ -13,12 +13,13 @@
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/installed_retro_games.h"
 #include "../catalog/release_finder.h"
-#include "../catalog/titledb.h"
+#include "../catalog/game_version.hpp"
 #include "../config/config.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../utils/file_ops.h"
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <sstream>
 #include <vector>
 
@@ -44,50 +45,56 @@ const brls::ButtonStyle BUTTONSTYLE_INSTALLED = {
     .disabledBorderColor     = "",
 };
 
-// " v1.0.3 " -> "1.0.3"
-std::string trimVersion(std::string v) {
-    while (!v.empty() && std::isspace(static_cast<unsigned char>(v.front()))) v.erase(v.begin());
-    while (!v.empty() && std::isspace(static_cast<unsigned char>(v.back()))) v.pop_back();
-    if (v.size() > 1 && (v[0] == 'v' || v[0] == 'V') && std::isdigit(static_cast<unsigned char>(v[1]))) v.erase(0, 1);
-    return v;
+// Characters, not bytes, of a UTF-8 string.
+size_t utf8Length(const std::string& s) {
+    size_t n = 0;
+    for (unsigned char c : s) n += (c & 0xC0) != 0x80;
+    return n;
 }
 
-// Compares "1.0.10" with "1.0.9" part by part: -1, 0 or 1; 2 when either is
-// not a dotted number.
-int compareDotted(const std::string& a, const std::string& b) {
-    auto parse = [](const std::string& s, std::vector<unsigned long>& out) {
-        size_t i = 0;
-        while (i < s.size()) {
-            if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
-            unsigned long n = 0;
-            while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) n = n * 10 + (s[i++] - '0');
-            out.push_back(n);
-            if (i < s.size() && s[i] != '.') break;   // "1.0.3b", "1.2 (rev)": compare the number part
-            ++i;
+// ".NSZ (сжато ~87%, установленный объём 1.00 ГБ)" -> "NSZ · 1.00 ГБ after
+// install": the compression ratio says little, and the full text needed a
+// row of its own. Anything after the brackets (", чужое", "[DEMO]") stays;
+// other formats are returned unchanged.
+std::string compactImageFormat(const std::string& raw) {
+    size_t p = 0;
+    while (p < raw.size() && std::isspace(static_cast<unsigned char>(raw[p]))) ++p;
+    if (p < raw.size() && raw[p] == '.') ++p;
+    if (raw.size() < p + 3) return raw;
+    std::string fmt = raw.substr(p, 3);
+    for (char& c : fmt) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (fmt != "NSZ" && fmt != "XCZ") return raw;
+    size_t open = raw.find_first_not_of(" \t", p + 3);
+    if (open == std::string::npos || raw[open] != '(') return raw;
+    size_t close = raw.find(')', open);
+    if (close == std::string::npos) return raw;
+    const std::string inner = raw.substr(open + 1, close - open - 1);
+
+    // Installed size: a number followed by GB/MB in Latin or Cyrillic
+    std::string size;
+    static const char* kUnits[] = {"GB", "MB", "\xD0\x93\xD0\x91", "\xD0\x9C\xD0\x91",      // ГБ МБ
+                                   "\xD0\x93\xD0\xB1", "\xD0\x9C\xD0\xB1"};                 // Гб Мб
+    for (size_t i = 0; i < inner.size() && size.empty(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(inner[i]))) continue;
+        size_t j = i;
+        while (j < inner.size() && (std::isdigit(static_cast<unsigned char>(inner[j])) || inner[j] == '.' || inner[j] == ',')) ++j;
+        size_t u = j;
+        while (u < inner.size() && inner[u] == ' ') ++u;
+        for (const char* unit : kUnits) {
+            if (inner.compare(u, std::strlen(unit), unit) == 0) {
+                size = inner.substr(i, j - i) + " " + unit;
+                break;
+            }
         }
-        return !out.empty();
-    };
-    std::vector<unsigned long> pa, pb;
-    if (!parse(a, pa) || !parse(b, pb)) return 2;
-    size_t n = std::max(pa.size(), pb.size());
-    pa.resize(n, 0);
-    pb.resize(n, 0);
-    for (size_t i = 0; i < n; ++i) {
-        if (pa[i] != pb[i]) return pa[i] < pb[i] ? -1 : 1;
+        i = j;
     }
-    return 0;
-}
 
-// Version of the game in the release: "1.0.3", "1.0.3 (update 3)" or
-// "update 3"; "" when the catalog does not know it.
-std::string releaseVersionText(const Game& g) {
-    std::string v = trimVersion(g.version);
-    if (g.update_version) {
-        std::string upd = brls::getStr("app/library/update_label",
-                                       std::to_string(titledb::updateOrdinal(g.update_version)));
-        return v.empty() ? upd : v + " (" + upd + ")";
-    }
-    return v;
+    std::string out = size.empty() ? fmt : brls::getStr("app/detail_meta/format_installed", fmt, size);
+    std::string rest = raw.substr(close + 1);
+    while (!rest.empty() && std::isspace(static_cast<unsigned char>(rest.front()))) rest.erase(rest.begin());
+    while (!rest.empty() && std::isspace(static_cast<unsigned char>(rest.back()))) rest.pop_back();
+    if (!rest.empty()) out += (rest[0] == ',' ? "" : " ") + rest;
+    return out;
 }
 
 } // namespace
@@ -199,9 +206,10 @@ void GameDetailView::onContentAvailable() {
         }
         addMeta("app/detail_meta/added", added);
     }
-    addMeta("app/detail_meta/version", releaseVersionText(game_));
-    // Long ("NSZ, compressed ~58%, installed 0.08 GB"): last, on a row of its own
-    addMeta("app/detail_meta/format", game_.image_format, game_.image_format.size() > 32);
+    addMeta("app/detail_meta/version", catalog::versionLabel(game_.version, game_.update_version));
+    // Last; only a still long value gets a row of its own
+    const std::string format = compactImageFormat(game_.image_format);
+    addMeta("app/detail_meta/format", format, utf8Length(format) > 40);
 
     if (metaBox) {
         metaBox->clearViews();
@@ -334,17 +342,18 @@ void GameDetailView::onContentAvailable() {
     }
 
     // Add language badge
-    std::string lang = extractLangBadge(game_.interface_lang);
-    if (!lang.empty()) {
+    // Same text and color as the catalog cards (RUS red, ENG blue, MULTI violet)
+    GameLangBadge langInfo = getGameLangBadge(game_.interface_lang, brls::Application::getLocale());
+    if (!langInfo.text.empty()) {
         brls::Box* langBadge = new brls::Box();
         langBadge->setPadding(5, 10, 5, 10);
         langBadge->setMarginRight(10);
         langBadge->setMarginBottom(10);
-        langBadge->setBackgroundColor(nvgRGB(233, 30, 99)); // Pink lang badge
+        langBadge->setBackgroundColor(langInfo.color);
         langBadge->setCornerRadius(6);
 
         brls::Label* langLabel = new brls::Label();
-        langLabel->setText(lang);
+        langLabel->setText(langInfo.text);
         langLabel->setFontSize(14);
         langLabel->setTextColor(nvgRGB(255, 255, 255));
         langBadge->addView(langLabel);
@@ -606,7 +615,7 @@ void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info) {
         return;
     }
 
-    const std::string installedVer = trimVersion(info.displayVersion);
+    const std::string installedVer = catalog::trimVersion(info.displayVersion);
 
     // Green chip first in the badge row: "✓ Installed · 1.0.2"
     installedBadge_ = new brls::Box();
@@ -627,12 +636,10 @@ void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info) {
     badgesBox->addView(installedBadge_, 0);
 
     // Does this release carry something newer than what is installed?
-    // Version strings decide when both are known; the update number only
-    // when they are not (it alone said "newer" for an equal 1.2.1 install).
-    const std::string releaseVer = trimVersion(game_.version);
-    const int cmp = (!releaseVer.empty() && !installedVer.empty()) ? compareDotted(releaseVer, installedVer) : 2;
-    const bool releaseNewer = (cmp != 2) ? (cmp == 1)
-                                         : (game_.update_version != 0 && game_.update_version > info.patchVersion);
+    // Same rule as the game manager (catalog/game_version.hpp).
+    const bool releaseNewer = catalog::compareRelease(game_.version, game_.update_version,
+                                                      info.displayVersion, info.patchVersion) == catalog::VersionCmp::Newer;
+    const std::string releaseVer = catalog::isPlausibleVersion(game_.version) ? catalog::trimVersion(game_.version) : "";
     if (releaseNewer) {
         btnDownload->setText(releaseVer.empty() ? "app/detail/update_btn"_i18n
                                                 : brls::getStr("app/detail/update_to_btn", releaseVer));

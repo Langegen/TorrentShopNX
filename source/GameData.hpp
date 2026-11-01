@@ -176,7 +176,7 @@ struct Game {
     bool is_romset = false;
     std::string content_type;
     std::string sort_key;
-    // Newest update package in the release (titledb number, N << 16), 0 = unknown.
+    // Newest update package in the release (Nintendo's number, N << 16), 0 = unknown.
     // Filled by the catalog builder from the torrent file list.
     uint32_t update_version = 0;
     // Game version shipped in the release ("1.0.3"), "" = unknown. Filled by
@@ -1256,6 +1256,15 @@ inline void sweepExpiredFiles(const std::string& dir, std::time_t max_age_second
 // the cache/<type> + data/ layout and prunes stale cache entries by age.
 inline void migrateStorageLayout() {
     ensureAppDirs();
+
+    // Version databases of the game manager up to 2.19 (titledb): versions
+    // now come from the catalog.
+    for (const char* obsolete : {TSNX_DATA_DIR "/versions.txt", TSNX_DATA_DIR "/versions.txt.tmp",
+                                 TSNX_DATA_DIR "/versions.json", TSNX_DATA_DIR "/versions.json.tmp",
+                                 TSNX_BASE_DIR "/versions.txt"}) {
+        std::error_code ec;
+        if (std::filesystem::remove(obsolete, ec)) util::logLine(std::string("GameData: removed ") + obsolete);
+    }
     const std::string marker = std::string(TSNX_DATA_DIR) + "/.migrated_v2";
     std::error_code ecMarker;
     if (std::filesystem::exists(marker, ecMarker)) {
@@ -1270,7 +1279,6 @@ inline void migrateStorageLayout() {
     migrateFile(TSNX_OLD_CATALOG_BIN_EN,  TSNX_CATALOG_BIN_EN);
     migrateFile(TSNX_OLD_CATALOG_JSON,    TSNX_CATALOG_JSON_RU); // legacy single-lang
     migrateFile(TSNX_OLD_CATALOG_BIN,     TSNX_CATALOG_BIN_RU);
-    migrateFile(TSNX_OLD_VERSIONS,        TSNX_VERSIONS_PATH);
     migrateFile(TSNX_OLD_FAVORITES,       TSNX_FAVORITES_PATH);
     migrateFile(TSNX_OLD_SOURCES,         TSNX_SOURCES_PATH);
 

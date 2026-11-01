@@ -420,7 +420,7 @@ void MainMenu::onTileFocused(int index) {
                     }
 
                     // Patch title IDs of the installed games: the only rows of
-                    // versions.txt and of the ncm database we care about.
+                    // the ncm database we care about.
                     std::unordered_set<uint64_t> wantedPatchTids;
                     for (uint64_t baseTid : baseTids) wantedPatchTids.insert(baseTid | 0x800ULL);
 
@@ -463,55 +463,27 @@ void MainMenu::onTileFocused(int index) {
                         }
                     }
 
-                    // Latest versions from versions.txt (~3 MB, "tid|...|version"
-                    // per line). Read in one go and scanned in place, keeping only
-                    // the installed games: no per-line strings, so this thread
-                    // doesn't hog the global malloc lock the UI thread needs too.
-                    std::unordered_map<uint64_t, uint32_t> availableVersions;
-                    if (!wantedPatchTids.empty()) {
-                        std::string buf;
-                        if (FILE* vf = std::fopen(TSNX_VERSIONS_PATH, "rb")) {
-                            std::fseek(vf, 0, SEEK_END);
-                            long len = std::ftell(vf);
-                            std::fseek(vf, 0, SEEK_SET);
-                            if (len > 0) {
-                                buf.resize(static_cast<size_t>(len));
-                                buf.resize(std::fread(&buf[0], 1, buf.size(), vf));
-                            }
-                            std::fclose(vf);
-                        }
-                        const char* p = buf.data();
-                        const char* end = p + buf.size();
-                        while (p < end) {
-                            const char* eol = static_cast<const char*>(std::memchr(p, '\n', static_cast<size_t>(end - p)));
-                            if (!eol) eol = end;
-                            char* tidEnd = nullptr;
-                            uint64_t tid = std::strtoull(p, &tidEnd, 16);
-                            if (tidEnd != p && tidEnd < eol && *tidEnd == '|' && wantedPatchTids.count(tid)) {
-                                const char* lastPipe = eol;
-                                while (lastPipe > tidEnd && *(lastPipe - 1) != '|') --lastPipe;
-                                // lastPipe now points just after the last '|'
-                                availableVersions[tid] = static_cast<uint32_t>(std::strtoul(lastPipe, nullptr, 10));
-                            }
-                            p = eol + 1;
-                        }
-                    }
-
-                    // Count updates
+                    // Count updates by the game manager's rule: the catalog has
+                    // a newer version. The NACP version comes from the manager's
+                    // scan cache, trusted only while the installed update is
+                    // still the one it was read with; otherwise update numbers
+                    // alone decide.
+                    auto cached = ui::cachedInstalledGames();
                     for (uint64_t baseTid : baseTids) {
                         if (catalog::IgnoredUpdatesManager::instance().isIgnored(baseTid)) {
                             continue;
                         }
-                        uint64_t patchTid = baseTid | 0x800ULL;
-                        auto it = availableVersions.find(patchTid);
-                        if (it != availableVersions.end() && it->second > 0) {
-                            uint32_t latestVer = it->second;
-                            uint32_t currentVer = 0;
-                            auto iv = installedPatchVersions.find(patchTid);
-                            if (iv != installedPatchVersions.end()) currentVer = iv->second;
-                            if (latestVer > currentVer) {
-                                updatesCount++;
-                            }
+                        uint32_t currentVer = 0;
+                        auto iv = installedPatchVersions.find(baseTid | 0x800ULL);
+                        if (iv != installedPatchVersions.end()) currentVer = iv->second;
+                        std::string name, displayVer;
+                        auto cit = cached.find(baseTid);
+                        if (cit != cached.end()) {
+                            name = cit->second.name;
+                            if (cit->second.patchVersion == currentVer) displayVer = cit->second.displayVersion;
+                        }
+                        if (ui::catalogHasNewerVersion(baseTid, name, displayVer, currentVer)) {
+                            updatesCount++;
                         }
                     }
 #else
@@ -546,7 +518,7 @@ void MainMenu::onTileFocused(int index) {
             // Asynchronously compute total application cache (sum of all caches) and leftovers in background
             if (!s_settingsStatsCalculated && !s_calculatingSettingsStats.exchange(true)) {
                 brls::async([this, modeStr]() {
-                    uint64_t totalCache = util::dirSizeRecursive(TSNX_CACHE_DIR) + util::pathSize(TSNX_VERSIONS_PATH);
+                    uint64_t totalCache = util::dirSizeRecursive(TSNX_CACHE_DIR);
                     uint64_t tempSize = util::dirSizeRecursive(TSNX_CACHE_STREAM) +
                                         util::dirSizeRecursive(TSNX_CACHE_TMP) +
                                         util::dirSizeRecursive(TSNX_CACHE_LOCALENGINE);

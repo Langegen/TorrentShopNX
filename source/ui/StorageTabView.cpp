@@ -58,7 +58,6 @@ StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
     addCacheRow("app/settings/cache_meta"_i18n, TSNX_CACHE_META, false);
     addCacheRow("app/settings/cache_collections"_i18n, TSNX_CACHE_COLLECTIONS, false);
     addCacheRow("app/settings/cache_icons"_i18n, TSNX_CACHE_ICONS, false);
-    addCacheRow("app/settings/cache_versions"_i18n, TSNX_VERSIONS_PATH, true);
     addCacheRow("app/settings/cache_temp"_i18n, "", false,
                  []() {
                      return util::dirSizeRecursive(TSNX_CACHE_STREAM) +
