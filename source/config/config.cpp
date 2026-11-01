@@ -68,7 +68,8 @@ bool parseConfigBody(const std::string& body,
                      bool& show_bottom_dashboard,
                      int& font_scale,
                      bool& sound_effects_enabled,
-                     bool& rumble_enabled) {
+                     bool& rumble_enabled,
+                     std::string& catalog_app_version) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
 
@@ -175,6 +176,9 @@ bool parseConfigBody(const std::string& body,
                 } else if (key == "joycon_rumble") {
                     rumble_enabled = parseBool(val, rumble_enabled);
                     parsed_known_keys = true;
+                } else if (key == "catalog_app_version") {
+                    catalog_app_version = val;
+                    parsed_known_keys = true;
                 }
             } else if (legacy_single_value.empty()) {
                 // Legacy format: config.txt contained only TorrServer URL in one line.
@@ -278,7 +282,8 @@ void ConfigManager::load() {
                         theme_, background_mode_, custom_background_path_,
                         background_blur_, background_dim_,
                         show_bottom_dashboard_, font_scale_,
-                        sound_effects_enabled_, rumble_enabled_);
+                        sound_effects_enabled_, rumble_enabled_,
+                        catalog_app_version_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -311,7 +316,8 @@ void ConfigManager::load() {
                         theme_, background_mode_, custom_background_path_,
                         background_blur_, background_dim_,
                         show_bottom_dashboard_, font_scale_,
-                        sound_effects_enabled_, rumble_enabled_);
+                        sound_effects_enabled_, rumble_enabled_,
+                        catalog_app_version_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -365,6 +371,7 @@ void ConfigManager::save() {
     file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
     file << "last_catalog_diff_time=" << last_catalog_diff_time_ << "\n";
     file << "last_catalog_full_time=" << last_catalog_full_time_ << "\n";
+    file << "catalog_app_version=" << catalog_app_version_ << "\n";
     file << "install_location=" << install_location_ << "\n";
     file << "app_update_url=" << app_update_url_ << "\n";
     file << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
@@ -562,6 +569,15 @@ int64_t ConfigManager::getLastCatalogFullTime() const {
 
 void ConfigManager::setLastCatalogFullTime(int64_t timestamp) {
     last_catalog_full_time_ = timestamp;
+    save();
+}
+
+const std::string& ConfigManager::getCatalogAppVersion() const {
+    return catalog_app_version_;
+}
+
+void ConfigManager::setCatalogAppVersion(const std::string& version) {
+    catalog_app_version_ = version;
     save();
 }
 

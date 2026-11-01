@@ -1,6 +1,9 @@
 #include "switch_utils.h"
 #include "log.h"
 #include "../config/config.h"
+#include "nacp_text.h"
+#include <cstdlib>
+#include <memory>
 #include <string>
 #include <chrono>
 #include <cctype>
@@ -645,6 +648,76 @@ uint32_t parseVersionFromFileName(const std::string& name) {
         }
     }
     return 0;
+}
+
+
+InstalledGameInfo queryInstalledGame(uint64_t appId) {
+    InstalledGameInfo info;
+    if (appId == 0) return info;
+    appId &= ~0x1FFFULL;
+#ifdef __SWITCH__
+    const uint64_t patchId = appId | 0x800ULL;
+    {
+        std::lock_guard<std::recursive_mutex> lock(g_switch_service_mutex);
+        if (R_SUCCEEDED(ncmInitialize())) {
+            for (NcmStorageId sid : {NcmStorageId_SdCard, NcmStorageId_BuiltInUser, NcmStorageId_GameCard}) {
+                NcmContentMetaDatabase db;
+                if (R_FAILED(ncmOpenContentMetaDatabase(&db, sid))) continue;
+                NcmContentMetaKey key = {};
+                if (R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, appId))) {
+                    info.installed = true;
+                }
+                if (R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, patchId))) {
+                    info.installed = true;
+                    if (key.version > info.patchVersion) info.patchVersion = key.version;
+                }
+                ncmContentMetaDatabaseClose(&db);
+            }
+            ncmExit();
+        }
+    }
+    if (!info.installed) return info;
+
+    // The NACP of the installed base + update holds the "1.0.3" string
+    auto ctrl = std::make_unique<NsApplicationControlData>();
+    size_t ctrlSize = 0;
+    std::lock_guard<std::recursive_mutex> lock(g_switch_service_mutex);
+    if (R_SUCCEEDED(nsInitialize())) {
+        if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_Storage, appId, ctrl.get(),
+                                                    sizeof(NsApplicationControlData), &ctrlSize)) &&
+            ctrlSize >= sizeof(ctrl->nacp)) {
+            info.displayVersion = sanitizeUtf8(ctrl->nacp.display_version, sizeof(ctrl->nacp.display_version));
+        }
+        nsExit();
+    }
+#else
+    const char* env = std::getenv("TSNX_FAKE_INSTALLED");
+    if (!env) return info;
+    std::string list = env;
+    size_t pos = 0;
+    while (pos <= list.size()) {
+        size_t comma = list.find(',', pos);
+        std::string item = list.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        pos = (comma == std::string::npos) ? list.size() + 1 : comma + 1;
+        std::string ver;
+        size_t eq = item.find('=');
+        if (eq != std::string::npos) {
+            ver = item.substr(eq + 1);
+            item = item.substr(0, eq);
+        }
+        if ((std::strtoull(item.c_str(), nullptr, 16) & ~0x1FFFULL) != appId) continue;
+        // "1.0.2@131072": installed update number after '@'
+        size_t at = ver.find('@');
+        if (at != std::string::npos) {
+            info.patchVersion = static_cast<uint32_t>(std::strtoul(ver.c_str() + at + 1, nullptr, 10));
+            ver = ver.substr(0, at);
+        }
+        info.installed = true;
+        info.displayVersion = ver.empty() ? "1.0.0" : ver;
+        break;
+    }
+#endif
+    return info;
 }
 
 } // namespace util

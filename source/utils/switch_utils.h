@@ -163,5 +163,19 @@ uint64_t parseTitleIdFromFileName(const std::string& name);
 // Parses integer version from filename (e.g. "[v3276800]", "(v65536)", "[v0]"). Returns 0 if absent/v0.
 uint32_t parseVersionFromFileName(const std::string& name);
 
+// What of a game is on the console (SD card, system memory or game card).
+struct InstalledGameInfo {
+    bool installed = false;      // base game or its update is present
+    uint32_t patchVersion = 0;   // installed update (N << 16), 0 = none
+    std::string displayVersion;  // version from the game's NACP ("1.0.3"), "" if unknown
+};
+
+// Looks up one game by its application id (title id & ~0x1FFF).
+// Blocking ns/ncm IPC: call from a worker thread, not the UI thread.
+// Off-Switch, TSNX_FAKE_INSTALLED lists installed games for testing:
+// "010059C002AC2000=1.0.2@131072,01007EF00011E000" (version, then the
+// installed update number after '@').
+InstalledGameInfo queryInstalledGame(uint64_t appId);
+
 } // namespace util
 

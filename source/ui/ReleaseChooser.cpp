@@ -4,7 +4,8 @@
 #include <memory>
 
 #include "../catalog/game_stats_manager.h"
-#include "../catalog/titledb.h"
+#include "../catalog/game_version.hpp"
+#include "../catalog/release_finder.h"
 
 using namespace brls::literals;
 
@@ -18,14 +19,12 @@ void showReleaseChooser(const std::vector<Game>& releases, std::function<void(co
         const Game& g = releases[i];
         std::string label = (i == 0 ? "★ " : "") + cleanTitle(g.title);
         if (!g.size.empty()) label += "  •  " + g.size;
-        if (g.update_version) {
-            label += "  •  " + brls::getStr("app/library/update_label",
-                                                std::to_string(titledb::updateOrdinal(g.update_version)));
-        }
+        std::string ver = catalog::versionLabel(g.version, g.update_version);
+        if (!ver.empty()) label += "  •  " + ver;
         catalog::GameStats st;
         if (catalog::GameStatsManager::instance().copySwitchStats(g.topic_id, st)) {
             if (st.registered_at.size() >= 10) {
-                label += "  •  " + titledb::formatDate(st.registered_at.substr(0, 10));
+                label += "  •  " + catalog::formatIsoDate(st.registered_at.substr(0, 10));
             }
             label += "  •  " + brls::getStr("app/library/release_seeds", std::to_string(st.seeds));
         }

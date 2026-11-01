@@ -14,7 +14,7 @@
 #include "../installer/ncz_parser.h"
 #include "../utils/app_paths.h"
 #include "../catalog/release_finder.h"
-#include "../catalog/titledb.h"
+#include "../catalog/game_version.hpp"
 #include "GameDetailView.hpp"
 #include "ReleaseChooser.hpp"
 #include <iomanip>
@@ -334,55 +334,54 @@ void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file) 
 
 namespace {
 
-// What the release offers against what is installed and what titledb knows.
+// This release against the newest release of the game in the catalog and
+// the installed game.
 struct ReleaseUpdateCheck {
     bool warn = false;
-    uint32_t inRelease = 0;     // newest update package in the torrent, 0 = none
-    uint32_t latest = 0;        // newest update in titledb
-    uint32_t installed = 0;     // installed update, 0 = none
-    std::string latestDate;
-    std::vector<Game> others;   // other catalog releases of the game, best first
+    std::string inRelease;      // version of this release
+    std::string newest;         // version of the newest catalog release
+    std::string installed;      // installed version, "" = not installed
+    std::vector<Game> others;   // other catalog releases of the game, newest first
 };
 
-// Runs on a worker: titledb parse and ncm queries are too slow for the UI thread.
-ReleaseUpdateCheck checkReleaseUpdate(const Game& game, const std::vector<torrent::TorrentFileInfo>& files) {
+// Runs on a worker: the ncm query is too slow for the UI thread.
+ReleaseUpdateCheck checkReleaseUpdate(const Game& game) {
     ReleaseUpdateCheck r;
     uint64_t appId = catalog::releaseAppId(game);
     if (appId == 0) return r;
-    uint64_t patchId = appId | 0x800ULL;
-
-    for (const auto& f : files) {
-        if (!isSwitchGameFile(f.name)) continue;
-        uint64_t tid = resolveFileTitleId(f.name, game.title_id);
-        if (tid != patchId) continue;
-        uint32_t v = util::parseVersionFromFileName(f.name);
-        if (v > r.inRelease) r.inRelease = v;
+    auto releases = catalog::findReleases(appId);
+    if (releases.empty() || releases.front().topic_id == game.topic_id) return r;
+    const Game& newest = releases.front();
+    if (catalog::compareRelease(newest.version, newest.update_version, game.version, game.update_version) !=
+        catalog::VersionCmp::Newer) {
+        return r;
     }
-    r.latest = titledb::latestUpdateVersion(appId);
-    {
-        SwitchServiceGuard guard;
-        r.installed = guard.installedVersion(patchId);
+    util::InstalledGameInfo info = util::queryInstalledGame(appId);
+    // The newer version is already on the console: nothing to miss
+    if (info.installed && catalog::compareRelease(newest.version, newest.update_version, info.displayVersion,
+                                                  info.patchVersion) != catalog::VersionCmp::Newer) {
+        return r;
     }
-    if (r.latest == 0 || r.inRelease >= r.latest || r.installed >= r.latest) return r;
 
     r.warn = true;
-    r.latestDate = titledb::formatDate(titledb::updateDate(appId, r.latest));
-    for (auto& g : catalog::findReleases(appId)) {
+    r.inRelease = catalog::versionLabel(game.version, game.update_version);
+    r.newest = catalog::versionLabel(newest.version, newest.update_version);
+    if (info.installed) {
+        r.installed = catalog::versionLabel(info.displayVersion, info.patchVersion);
+        if (r.installed.empty()) r.installed = "app/fileselect/installed_unknown_ver"_i18n;
+    }
+    for (auto& g : releases) {
         if (g.topic_id != game.topic_id) r.others.push_back(std::move(g));
     }
-    util::logLine("FileSelectView: release " + game.topic_id + " has update " + std::to_string(r.inRelease) +
-                  ", latest " + std::to_string(r.latest) + ", installed " + std::to_string(r.installed) +
-                  ", other releases: " + std::to_string(r.others.size()));
+    util::logLine("FileSelectView: release " + game.topic_id + " has '" + game.version + "', topic " +
+                  newest.topic_id + " has '" + newest.version + "', installed '" + info.displayVersion +
+                  "', other releases: " + std::to_string(r.others.size()));
     return r;
 }
 
 void showOldUpdateWarning(const ReleaseUpdateCheck& r) {
-    auto upd = [](uint32_t v) { return "#" + std::to_string(titledb::updateOrdinal(v)); };
-    std::string inRelease = r.inRelease ? brls::getStr("app/fileselect/update_n", upd(r.inRelease))
-                                        : "app/fileselect/no_update_in_release"_i18n;
-    std::string latest = upd(r.latest) + (r.latestDate.empty() ? "" : " (" + r.latestDate + ")");
-    std::string installed = r.installed ? upd(r.installed) : "app/fileselect/update_none"_i18n;
-    auto* dialog = new brls::Dialog(brls::getStr("app/fileselect/old_update_warn", inRelease, latest, installed));
+    std::string installed = r.installed.empty() ? "app/fileselect/update_none"_i18n : r.installed;
+    auto* dialog = new brls::Dialog(brls::getStr("app/fileselect/newer_release_warn", r.inRelease, r.newest, installed));
     if (!r.others.empty()) {
         auto others = r.others;
         dialog->addButton("app/fileselect/other_releases"_i18n, [others]() {
@@ -600,11 +599,11 @@ void FileSelectView::startProbe() {
 
         status_running->store(false);
 
-        // Does this release carry the newest update? Checked here, on the
-        // worker: it parses titledb and queries ncm.
+        // Is there a newer release of the game in the catalog? Checked here,
+        // on the worker: it queries ncm.
         auto updateCheck = std::make_shared<ReleaseUpdateCheck>();
         if (success && switchMode && alive->load()) {
-            *updateCheck = checkReleaseUpdate(gameCopy, probedFiles);
+            *updateCheck = checkReleaseUpdate(gameCopy);
         }
 
         brls::sync([this, success, probedFiles, err, alive, updateCheck]() {

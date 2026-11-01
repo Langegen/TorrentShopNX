@@ -6,6 +6,7 @@
 #include <atomic>
 #include <ctime>
 #include <functional>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -59,10 +60,14 @@ struct LibraryItem {
     int dlcCount = 0;
     std::vector<InstalledComponent> components;
 
-    // Raw titledb numbers (Nintendo counts updates as N << 16)
-    uint32_t latestPatchVersion = 0;
-    // Every catalog release of this game, best first (releases[0] == game).
+    // Installed version from the game's NACP ("1.0.3"), "" if unknown.
+    std::string installedDisplayVersion;
+    // Every catalog release of this game, best first (releases[0] == game):
+    // the newest version of the plain game on top.
     std::vector<Game> releases;
+    // Releases were found by title ID. Only then do their versions decide the
+    // update status: a name match may be another region or another game.
+    bool matchedByTitleId = false;
 
     // Homebrew port installed by the auto-installer (its own section)
     bool isPort = false;
@@ -72,6 +77,20 @@ struct LibraryItem {
     std::time_t portInstalledAt = 0;
     std::vector<uint64_t> portForwarders;
 };
+
+// Name, NACP version and installed update of each game from the game
+// manager's scan cache on the SD card; empty until the manager was opened.
+struct CachedInstalledGame {
+    std::string name;
+    std::string displayVersion;
+    uint32_t patchVersion = 0;
+};
+std::unordered_map<uint64_t, CachedInstalledGame> cachedInstalledGames();
+
+// The game manager's rule: the best catalog release of the game (found by
+// title ID) has a newer version than the installed one.
+bool catalogHasNewerVersion(uint64_t appId, const std::string& installedName,
+                            const std::string& displayVersion, uint32_t patchVersion);
 
 struct LibrarySection {
     std::string title;

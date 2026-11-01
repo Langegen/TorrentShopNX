@@ -94,8 +94,6 @@
 #define TSNX_CATALOG_JSON_CUSTOM TSNX_DATA_DIR "/switch_games_custom.json"
 #define TSNX_CATALOG_BIN_CUSTOM  TSNX_DATA_DIR "/switch_games_custom.bin"
 
-#define TSNX_VERSIONS_PATH       TSNX_DATA_DIR "/versions.txt"
-#define TSNX_VERSION_DATES_PATH  TSNX_DATA_DIR "/versions.json"
 #define TSNX_FAVORITES_PATH      TSNX_DATA_DIR "/favorites.json"
 #define TSNX_SOURCES_PATH        TSNX_DATA_DIR "/sources.json"
 #define TSNX_IGNORED_UPDATES_PATH TSNX_DATA_DIR "/ignored_updates.json"
@@ -111,7 +109,6 @@
 #define TSNX_OLD_CATALOG_BIN_EN  TSNX_BASE_DIR "/switch_games_en.bin"
 #define TSNX_OLD_CATALOG_JSON    TSNX_BASE_DIR "/switch_games.json"
 #define TSNX_OLD_CATALOG_BIN     TSNX_BASE_DIR "/switch_games.bin"
-#define TSNX_OLD_VERSIONS        TSNX_BASE_DIR "/versions.txt"
 #define TSNX_OLD_FAVORITES       TSNX_BASE_DIR "/favorites.json"
 #define TSNX_OLD_SOURCES         TSNX_BASE_DIR "/sources.json"
 #define TSNX_OLD_DHT_CACHE       TSNX_BASE_DIR "/dht_cache.bin"

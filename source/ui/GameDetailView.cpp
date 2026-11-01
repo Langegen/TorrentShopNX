@@ -12,12 +12,92 @@
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/installed_retro_games.h"
+#include "../catalog/release_finder.h"
+#include "../catalog/game_version.hpp"
 #include "../config/config.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../utils/file_ops.h"
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <sstream>
+#include <vector>
 
 namespace ui {
+
+namespace {
+
+// Download button of a game that is already on the console: green, so the
+// card reads "you have this" before the label is read.
+const brls::ButtonStyle BUTTONSTYLE_INSTALLED = {
+    .shadowType              = brls::ShadowType::GENERIC,
+    .hideHighlightBackground = true,
+
+    .highlightPadding = "brls/button/primary_highlight_padding",
+    .borderThickness  = "",
+
+    .enabledBackgroundColor = "tsnx/button/installed_background",
+    .enabledLabelColor      = "tsnx/button/installed_text",
+    .enabledBorderColor     = "",
+
+    .disabledBackgroundColor = "brls/button/primary_disabled_background",
+    .disabledLabelColor      = "brls/button/primary_disabled_text",
+    .disabledBorderColor     = "",
+};
+
+// Characters, not bytes, of a UTF-8 string.
+size_t utf8Length(const std::string& s) {
+    size_t n = 0;
+    for (unsigned char c : s) n += (c & 0xC0) != 0x80;
+    return n;
+}
+
+// ".NSZ (сжато ~87%, установленный объём 1.00 ГБ)" -> "NSZ · 1.00 ГБ after
+// install": the compression ratio says little, and the full text needed a
+// row of its own. Anything after the brackets (", чужое", "[DEMO]") stays;
+// other formats are returned unchanged.
+std::string compactImageFormat(const std::string& raw) {
+    size_t p = 0;
+    while (p < raw.size() && std::isspace(static_cast<unsigned char>(raw[p]))) ++p;
+    if (p < raw.size() && raw[p] == '.') ++p;
+    if (raw.size() < p + 3) return raw;
+    std::string fmt = raw.substr(p, 3);
+    for (char& c : fmt) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (fmt != "NSZ" && fmt != "XCZ") return raw;
+    size_t open = raw.find_first_not_of(" \t", p + 3);
+    if (open == std::string::npos || raw[open] != '(') return raw;
+    size_t close = raw.find(')', open);
+    if (close == std::string::npos) return raw;
+    const std::string inner = raw.substr(open + 1, close - open - 1);
+
+    // Installed size: a number followed by GB/MB in Latin or Cyrillic
+    std::string size;
+    static const char* kUnits[] = {"GB", "MB", "\xD0\x93\xD0\x91", "\xD0\x9C\xD0\x91",      // ГБ МБ
+                                   "\xD0\x93\xD0\xB1", "\xD0\x9C\xD0\xB1"};                 // Гб Мб
+    for (size_t i = 0; i < inner.size() && size.empty(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(inner[i]))) continue;
+        size_t j = i;
+        while (j < inner.size() && (std::isdigit(static_cast<unsigned char>(inner[j])) || inner[j] == '.' || inner[j] == ',')) ++j;
+        size_t u = j;
+        while (u < inner.size() && inner[u] == ' ') ++u;
+        for (const char* unit : kUnits) {
+            if (inner.compare(u, std::strlen(unit), unit) == 0) {
+                size = inner.substr(i, j - i) + " " + unit;
+                break;
+            }
+        }
+        i = j;
+    }
+
+    std::string out = size.empty() ? fmt : brls::getStr("app/detail_meta/format_installed", fmt, size);
+    std::string rest = raw.substr(close + 1);
+    while (!rest.empty() && std::isspace(static_cast<unsigned char>(rest.front()))) rest.erase(rest.begin());
+    while (!rest.empty() && std::isspace(static_cast<unsigned char>(rest.back()))) rest.pop_back();
+    if (!rest.empty()) out += (rest[0] == ',' ? "" : " ") + rest;
+    return out;
+}
+
+} // namespace
 
 class ScrollAndFocusController : public brls::View {
 public:
@@ -90,10 +170,12 @@ GameDetailView::GameDetailView(const Game& game, const std::string& retro_consol
 
 GameDetailView::~GameDetailView() {
     if (imageToken) *imageToken = false;
+    if (alive_) *alive_ = false;
 }
 
 void GameDetailView::onContentAvailable() {
     imageToken = std::make_shared<bool>(true);
+    alive_ = std::make_shared<bool>(true);
     // Fill text and images
     title->setText(cleanTitle(game_.title));
     setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 2000000);
@@ -124,8 +206,10 @@ void GameDetailView::onContentAvailable() {
         }
         addMeta("app/detail_meta/added", added);
     }
-    // Long ("NSZ, compressed ~58%, installed 0.08 GB"): last, on a row of its own
-    addMeta("app/detail_meta/format", game_.image_format, game_.image_format.size() > 32);
+    addMeta("app/detail_meta/version", catalog::versionLabel(game_.version, game_.update_version));
+    // Last; only a still long value gets a row of its own
+    const std::string format = compactImageFormat(game_.image_format);
+    addMeta("app/detail_meta/format", format, utf8Length(format) > 40);
 
     if (metaBox) {
         metaBox->clearViews();
@@ -258,17 +342,18 @@ void GameDetailView::onContentAvailable() {
     }
 
     // Add language badge
-    std::string lang = extractLangBadge(game_.interface_lang);
-    if (!lang.empty()) {
+    // Same text and color as the catalog cards (RUS red, ENG blue, MULTI violet)
+    GameLangBadge langInfo = getGameLangBadge(game_.interface_lang, brls::Application::getLocale());
+    if (!langInfo.text.empty()) {
         brls::Box* langBadge = new brls::Box();
         langBadge->setPadding(5, 10, 5, 10);
         langBadge->setMarginRight(10);
         langBadge->setMarginBottom(10);
-        langBadge->setBackgroundColor(nvgRGB(233, 30, 99)); // Pink lang badge
+        langBadge->setBackgroundColor(langInfo.color);
         langBadge->setCornerRadius(6);
 
         brls::Label* langLabel = new brls::Label();
-        langLabel->setText(lang);
+        langLabel->setText(langInfo.text);
         langLabel->setFontSize(14);
         langLabel->setTextColor(nvgRGB(255, 255, 255));
         langBadge->addView(langLabel);
@@ -374,6 +459,7 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     const bool isPortRelease = retro_console_id_.empty() && (isHomebrewGame(game_) || isHomebrewPort(game_));
+    isSwitchRelease_ = retro_console_id_.empty() && !isPortRelease && catalog::releaseAppId(game_) != 0;
     if (isPortRelease || !retro_console_id_.empty()) {
         // Ports and retro games: picking files by hand is the advanced path, kept on X.
         btnDownload->registerAction("app/detail/select_files_btn"_i18n, brls::ControllerButton::BUTTON_X,
@@ -499,7 +585,69 @@ void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
     updateRetroDownloadButton();
+    checkInstalled();   // again on return: the game may have been installed meanwhile
     brls::Application::giveFocus(btnDownload);
+}
+
+void GameDetailView::checkInstalled() {
+    if (!isSwitchRelease_ || installCheckRunning_ || !alive_) return;
+    installCheckRunning_ = true;
+    const uint64_t appId = catalog::releaseAppId(game_);
+    auto alive = alive_;
+    brls::async([this, alive, appId]() {
+        util::InstalledGameInfo info = util::queryInstalledGame(appId);
+        brls::sync([this, alive, info]() {
+            if (!*alive) return;
+            installCheckRunning_ = false;
+            applyInstalledState(info);
+        });
+    });
+}
+
+void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info) {
+    if (installedBadge_) {
+        badgesBox->removeView(installedBadge_);
+        installedBadge_ = nullptr;
+    }
+    if (!info.installed) {
+        btnDownload->setText("app/detail/download_btn"_i18n);
+        btnDownload->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+        return;
+    }
+
+    const std::string installedVer = catalog::trimVersion(info.displayVersion);
+
+    // Green chip first in the badge row: "✓ Installed · 1.0.2"
+    installedBadge_ = new brls::Box();
+    installedBadge_->setPadding(5, 10, 5, 10);
+    installedBadge_->setMarginRight(10);
+    installedBadge_->setMarginBottom(10);
+    installedBadge_->setCornerRadius(6);
+    installedBadge_->setBackgroundColor(style::isLight() ? nvgRGB(223, 244, 231) : nvgRGBA(110, 220, 150, 38));
+    installedBadge_->setBorderThickness(1.0f);
+    installedBadge_->setBorderColor(style::stateOk());
+    brls::Label* badgeLabel = new brls::Label();
+    badgeLabel->setText(std::string("\uE5CA ") +
+                        (installedVer.empty() ? "app/detail/installed_badge"_i18n
+                                              : brls::getStr("app/detail/installed_badge_ver", installedVer)));
+    badgeLabel->setFontSize(14);
+    badgeLabel->setTextColor(style::stateOk());
+    installedBadge_->addView(badgeLabel);
+    badgesBox->addView(installedBadge_, 0);
+
+    // Does this release carry something newer than what is installed?
+    // Same rule as the game manager (catalog/game_version.hpp).
+    const bool releaseNewer = catalog::compareRelease(game_.version, game_.update_version,
+                                                      info.displayVersion, info.patchVersion) == catalog::VersionCmp::Newer;
+    const std::string releaseVer = catalog::isPlausibleVersion(game_.version) ? catalog::trimVersion(game_.version) : "";
+    if (releaseNewer) {
+        btnDownload->setText(releaseVer.empty() ? "app/detail/update_btn"_i18n
+                                                : brls::getStr("app/detail/update_to_btn", releaseVer));
+        btnDownload->setStyle(&brls::BUTTONSTYLE_PRIMARY);
+    } else {
+        btnDownload->setText("app/detail/check_updates_btn"_i18n);
+        btnDownload->setStyle(&BUTTONSTYLE_INSTALLED);
+    }
 }
 
 void GameDetailView::updateRetroDownloadButton() {
