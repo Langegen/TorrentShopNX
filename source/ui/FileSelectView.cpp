@@ -342,30 +342,36 @@ struct ReleaseUpdateCheck {
     std::string newest;         // version of the newest catalog release
     std::string installed;      // installed version, "" = not installed
     std::vector<Game> others;   // other catalog releases of the game, newest first
+    uint64_t appId = 0;         // the game
 };
 
 // Runs on a worker: the ncm query is too slow for the UI thread.
 ReleaseUpdateCheck checkReleaseUpdate(const Game& game) {
     ReleaseUpdateCheck r;
-    uint64_t appId = catalog::releaseAppId(game);
-    if (appId == 0) return r;
+    // Only a single-game release: in a multi-game one the files picked may
+    // belong to any of its games.
+    auto appIds = catalog::releaseAppIds(game);
+    if (appIds.size() != 1) return r;
+    const uint64_t appId = appIds.front();
     auto releases = catalog::findReleases(appId);
     if (releases.empty() || releases.front().topic_id == game.topic_id) return r;
     const Game& newest = releases.front();
-    if (catalog::compareRelease(newest.version, newest.update_version, game.version, game.update_version) !=
-        catalog::VersionCmp::Newer) {
+    const catalog::TitleVersion newestVer = catalog::titleVersion(newest, appId);
+    const catalog::TitleVersion thisVer = catalog::titleVersion(game, appId);
+    if (catalog::compareRelease(newestVer, thisVer.version, thisVer.update) != catalog::VersionCmp::Newer) {
         return r;
     }
     util::InstalledGameInfo info = util::queryInstalledGame(appId);
     // The newer version is already on the console: nothing to miss
-    if (info.installed && catalog::compareRelease(newest.version, newest.update_version, info.displayVersion,
-                                                  info.patchVersion) != catalog::VersionCmp::Newer) {
+    if (info.installed &&
+        catalog::compareRelease(newestVer, info.displayVersion, info.patchVersion) != catalog::VersionCmp::Newer) {
         return r;
     }
 
     r.warn = true;
-    r.inRelease = catalog::versionLabel(game.version, game.update_version);
-    r.newest = catalog::versionLabel(newest.version, newest.update_version);
+    r.appId = appId;
+    r.inRelease = catalog::versionLabel(thisVer);
+    r.newest = catalog::versionLabel(newestVer);
     if (info.installed) {
         r.installed = catalog::versionLabel(info.displayVersion, info.patchVersion);
         if (r.installed.empty()) r.installed = "app/fileselect/installed_unknown_ver"_i18n;
@@ -373,8 +379,8 @@ ReleaseUpdateCheck checkReleaseUpdate(const Game& game) {
     for (auto& g : releases) {
         if (g.topic_id != game.topic_id) r.others.push_back(std::move(g));
     }
-    util::logLine("FileSelectView: release " + game.topic_id + " has '" + game.version + "', topic " +
-                  newest.topic_id + " has '" + newest.version + "', installed '" + info.displayVersion +
+    util::logLine("FileSelectView: release " + game.topic_id + " has '" + thisVer.version + "', topic " +
+                  newest.topic_id + " has '" + newestVer.version + "', installed '" + info.displayVersion +
                   "', other releases: " + std::to_string(r.others.size()));
     return r;
 }
@@ -384,10 +390,11 @@ void showOldUpdateWarning(const ReleaseUpdateCheck& r) {
     auto* dialog = new brls::Dialog(brls::getStr("app/fileselect/newer_release_warn", r.inRelease, r.newest, installed));
     if (!r.others.empty()) {
         auto others = r.others;
-        dialog->addButton("app/fileselect/other_releases"_i18n, [others]() {
+        const uint64_t appId = r.appId;
+        dialog->addButton("app/fileselect/other_releases"_i18n, [others, appId]() {
             showReleaseChooser(others, [](const Game& g) {
                 brls::Application::pushActivity(new GameDetailView(g));
-            });
+            }, appId);
         });
     }
     dialog->addButton("app/common/continue"_i18n, []() {});

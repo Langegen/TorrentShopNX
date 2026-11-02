@@ -155,6 +155,16 @@ inline std::string computeSortKey(const std::string& title) {
     return util::toLowerUtf8(normalizeTitleForSortView(title));
 }
 
+// One game inside a release, from the torrent's file names. A release can hold
+// several games (Coffee Talk / Episode 2 / Tokyo), each with its own ID and
+// update; the single title_id of the release names only one of them.
+struct ReleaseTitle {
+    uint64_t app_id = 0;            // application ID (low 13 bits clear)
+    uint32_t update_version = 0;    // newest update in the release, N << 16
+    bool update_known = false;      // the files carry [vN]: 0 = base game only
+    std::string version;            // "1.2" from the file names, "" = unknown
+};
+
 struct Game {
     std::string title;
     std::string title_id;
@@ -182,7 +192,63 @@ struct Game {
     // Game version shipped in the release ("1.0.3"), "" = unknown. Filled by
     // the catalog builder from the topic ("Версия игры: ...") or file names.
     std::string version;
+    // Every game in the release (catalog field "titles"), empty in older
+    // catalogs. See catalog::releaseAppIds / catalog::titleVersion.
+    std::vector<ReleaseTitle> titles;
 };
+
+// Catalog field "titles": "ID:update:version;ID:update:version", e.g.
+// "010066200E1E6000:524288:;01004670193D6000:196608:1.2". The update is
+// empty when the files carry no [vN]. A string, not an array: the streaming
+// parser before 2.21 ends the whole game list at a nested array's end.
+inline std::vector<ReleaseTitle> parseReleaseTitles(const std::string& s) {
+    std::vector<ReleaseTitle> out;
+    size_t pos = 0;
+    while (pos < s.size()) {
+        size_t semi = s.find(';', pos);
+        if (semi == std::string::npos) semi = s.size();
+        std::string entry = s.substr(pos, semi - pos);
+        pos = semi + 1;
+        size_t c1 = entry.find(':');
+        std::string id = entry.substr(0, c1);
+        if (id.size() != 16) continue;
+        char* endp = nullptr;
+        unsigned long long v = std::strtoull(id.c_str(), &endp, 16);
+        if (!endp || *endp != '\0' || v == 0) continue;
+        ReleaseTitle t;
+        t.app_id = static_cast<uint64_t>(v) & ~0x1FFFULL;
+        if (c1 != std::string::npos) {
+            size_t c2 = entry.find(':', c1 + 1);
+            std::string upd = entry.substr(c1 + 1, c2 == std::string::npos ? std::string::npos : c2 - c1 - 1);
+            if (!upd.empty()) {
+                char* uend = nullptr;
+                unsigned long long u = std::strtoull(upd.c_str(), &uend, 10);
+                if (uend && *uend == '\0' && u <= 0xFFFFFFFFULL) {
+                    t.update_version = static_cast<uint32_t>(u);
+                    t.update_known = true;
+                }
+            }
+            if (c2 != std::string::npos) t.version = entry.substr(c2 + 1);
+        }
+        out.push_back(std::move(t));
+    }
+    return out;
+}
+
+inline std::string releaseTitlesToString(const std::vector<ReleaseTitle>& titles) {
+    std::string out;
+    for (const auto& t : titles) {
+        char hex[24];
+        std::snprintf(hex, sizeof(hex), "%016llX", static_cast<unsigned long long>(t.app_id));
+        if (!out.empty()) out += ';';
+        out += hex;
+        out += ':';
+        if (t.update_known) out += std::to_string(t.update_version);
+        out += ':';
+        out += t.version;
+    }
+    return out;
+}
 
 // Heuristic and flag checker for romsets / multi-game collections
 inline bool isRomsetGame(const Game& g) {
@@ -252,6 +318,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
         g.update_version = uv.empty() ? 0 : static_cast<uint32_t>(std::strtoul(uv.c_str(), nullptr, 10));
     }
     g.version = safeGetStr(j, "version");
+    g.titles = parseReleaseTitles(safeGetStr(j, "titles"));
 
     g.is_romset = false;
     if (j.contains("is_romset")) {
@@ -293,6 +360,7 @@ inline void to_json(nlohmann::json& j, const Game& g) {
         {"update_version", g.update_version},
         {"version", g.version}
     };
+    if (!g.titles.empty()) j["titles"] = releaseTitlesToString(g.titles);
 }
 
 
@@ -613,6 +681,7 @@ private:
         else if (currentKey == "content_type") currentGame.content_type = std::move(val);
         else if (currentKey == "update_version") currentGame.update_version = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 10));
         else if (currentKey == "version") currentGame.version = std::move(val);
+        else if (currentKey == "titles") currentGame.titles = parseReleaseTitles(val);
     }
 };
 
@@ -700,7 +769,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     writeRaw(magic, 8);
-    uint32_t version = 6;
+    uint32_t version = 7;
     writeRaw(&version, sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     writeRaw(&count, sizeof(count));
@@ -745,6 +814,17 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
         writeRaw(&g.update_version, sizeof(g.update_version));
         writeStr(g.version);
+        // v7: games of the release
+        uint16_t tCount = static_cast<uint16_t>(std::min<size_t>(g.titles.size(), 65535));
+        writeRaw(&tCount, sizeof(tCount));
+        for (size_t i = 0; i < tCount; ++i) {
+            const ReleaseTitle& t = g.titles[i];
+            writeRaw(&t.app_id, sizeof(t.app_id));
+            writeRaw(&t.update_version, sizeof(t.update_version));
+            uint8_t known = t.update_known ? 1 : 0;
+            writeRaw(&known, sizeof(known));
+            writeStr(t.version);
+        }
     }
 
     fflush(f);
@@ -780,12 +860,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version < 1 || version > 6) {
+    if (version < 1 || version > 7) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
     if (out_needs_upgrade) {
-        *out_needs_upgrade = (version < 6);
+        *out_needs_upgrade = (version < 7);
     }
 
     uint32_t count = 0;
@@ -861,6 +941,25 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
         }
         if (version >= 6) {
             if (!readStr(g.version)) return false;
+        }
+        if (version >= 7) {
+            if (ptr + sizeof(uint16_t) > end) return false;
+            uint16_t tCount = 0;
+            std::memcpy(&tCount, ptr, sizeof(tCount));
+            ptr += sizeof(tCount);
+            g.titles.reserve(tCount);
+            for (uint16_t t = 0; t < tCount; ++t) {
+                ReleaseTitle rt;
+                if (ptr + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint8_t) > end) return false;
+                std::memcpy(&rt.app_id, ptr, sizeof(uint64_t));
+                ptr += sizeof(uint64_t);
+                std::memcpy(&rt.update_version, ptr, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+                rt.update_known = (*ptr != 0);
+                ptr += sizeof(uint8_t);
+                if (!readStr(rt.version)) return false;
+                g.titles.push_back(std::move(rt));
+            }
         }
         if (g.sort_key.empty()) {
             g.sort_key = computeSortKey(g.title);
@@ -963,14 +1062,14 @@ inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std:
         if (loadGamesFromBinaryFile(binPath, games, &needsUpgrade) && !games.empty()) {
             if (!needsUpgrade) return games;
             if (!hasJson) {
-                util::logLine("GameData: upgrading binary cache to version 6");
+                util::logLine("GameData: upgrading binary cache to version 7");
                 saveGamesToBinaryFile(binPath, games);
                 return games;
             }
-            // Older caches lack fields (update_version, version) that only the JSON
-            // has: rebuild from it. Diffs applied since live only in the old
-            // .bin, so drop the diff ETag to have the next diff re-applied.
-            util::logLine("GameData: binary cache predates version 6, rebuilding from JSON");
+            // Older caches lack fields (update_version, version, titles) that
+            // only the JSON has: rebuild from it. Diffs applied since live only
+            // in the old .bin, so drop the diff ETag to have the next diff re-applied.
+            util::logLine("GameData: binary cache predates version 7, rebuilding from JSON");
             std::remove(getCatalogDiffEtagPath().c_str());
         }
         util::logLine("GameData: binary cache invalid or empty, falling back to JSON");

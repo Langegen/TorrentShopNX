@@ -1,6 +1,7 @@
 #include "release_finder.h"
 
 #include <borealis.hpp>
+#include <algorithm>
 #include <mutex>
 
 #include "game_stats_manager.h"
@@ -14,6 +15,31 @@ uint64_t releaseAppId(const Game& g) {
     // Application IDs have the low 13 bits clear; patch (|0x800) and DLC
     // (+0x1000..) IDs found in the catalog map back to their game.
     return tid ? (tid & ~0x1FFFULL) : 0;
+}
+
+// 0100000000000000 is a placeholder ID homebrew releases carry, not one game.
+static constexpr uint64_t kHomebrewPlaceholder = 0x0100000000000000ULL;
+
+std::vector<uint64_t> releaseAppIds(const Game& g) {
+    std::vector<uint64_t> out;
+    if (!g.titles.empty()) {
+        for (const auto& t : g.titles) {
+            if (t.app_id == 0 || t.app_id == kHomebrewPlaceholder) continue;
+            if (std::find(out.begin(), out.end(), t.app_id) == out.end()) out.push_back(t.app_id);
+        }
+        return out;
+    }
+    uint64_t app = releaseAppId(g);
+    if (app != 0 && app != kHomebrewPlaceholder) out.push_back(app);
+    return out;
+}
+
+bool releaseHasApp(const Game& g, uint64_t appId) {
+    if (appId == 0) return false;
+    for (uint64_t a : releaseAppIds(g)) {
+        if (a == appId) return true;
+    }
+    return false;
 }
 
 std::shared_ptr<const ReleaseIndex> releaseIndex() {
@@ -30,14 +56,10 @@ std::shared_ptr<const ReleaseIndex> releaseIndex() {
     if (snap) {
         idx->byApp.reserve(snap->size());
         for (const Game& g : *snap) {
-            uint64_t app = releaseAppId(g);
-            // 0100000000000000 is a placeholder ID homebrew releases carry,
-            // not one game.
-            if (app == 0 || app == 0x0100000000000000ULL) continue;
-            // The catalog does carry patch and DLC IDs: the scraper takes the
-            // first ID from the torrent's file list, e.g. Zelda BotW NSZ
-            // (6702315) is filed under its DLC 01007EF00011F000.
-            idx->byApp[app].push_back(&g);
+            // Every game of a multi-game release. Older catalogs carry patch
+            // and DLC IDs as title_id (Zelda BotW NSZ 6702315 is filed under
+            // its DLC 01007EF00011F000): releaseAppId masks them to the game.
+            for (uint64_t app : releaseAppIds(g)) idx->byApp[app].push_back(&g);
         }
     }
     std::lock_guard<std::mutex> lock(mtx);
@@ -45,7 +67,8 @@ std::shared_ptr<const ReleaseIndex> releaseIndex() {
     return cached;
 }
 
-std::vector<const Game*> rankReleasePtrs(std::vector<const Game*> releases, const std::string& installedName) {
+std::vector<const Game*> rankReleasePtrs(std::vector<const Game*> releases, const std::string& installedName,
+                                         uint64_t appId) {
     if (releases.size() <= 1) return releases;
     std::vector<ReleaseInfo> infos;
     infos.reserve(releases.size());
@@ -54,9 +77,18 @@ std::vector<const Game*> rankReleasePtrs(std::vector<const Game*> releases, cons
         ri.title = g->title;
         ri.topic_id = g->topic_id;
         ri.homebrew = isHomebrewGame(*g);
-        ri.nameMatch = installedName.empty() || releaseNameMatches(installedName, g->title);
-        ri.updateVersion = g->update_version;
-        ri.version = g->version;
+        // The torrent's file names name the game: no need to guard against a
+        // wrong title_id by the release title (a multi-game title like
+        // "Coffee Talk / Episode 2 ..." need not share words with the game).
+        bool idFromFiles = false;
+        for (const auto& t : g->titles) {
+            if (t.app_id == appId) { idFromFiles = true; break; }
+        }
+        ri.nameMatch = idFromFiles || installedName.empty() || releaseNameMatches(installedName, g->title);
+        TitleVersion tv = titleVersion(*g, appId);
+        ri.updateVersion = tv.update;
+        ri.version = tv.version;
+        ri.versionKnown = tv.known();
         GameStats st;
         if (GameStatsManager::instance().copySwitchStats(g->topic_id, st)) {
             ri.registered = st.latest_timestamp;
@@ -70,14 +102,14 @@ std::vector<const Game*> rankReleasePtrs(std::vector<const Game*> releases, cons
     return out;
 }
 
-std::vector<Game> rankReleasesOf(std::vector<Game> releases, const std::string& installedName) {
+std::vector<Game> rankReleasesOf(std::vector<Game> releases, const std::string& installedName, uint64_t appId) {
     if (releases.size() <= 1) return releases;
     std::vector<const Game*> ptrs;
     ptrs.reserve(releases.size());
     for (const Game& g : releases) ptrs.push_back(&g);
     std::vector<Game> out;
     out.reserve(releases.size());
-    for (const Game* g : rankReleasePtrs(std::move(ptrs), installedName)) out.push_back(*g);
+    for (const Game* g : rankReleasePtrs(std::move(ptrs), installedName, appId)) out.push_back(*g);
     return out;
 }
 
@@ -87,7 +119,7 @@ std::vector<Game> findReleases(uint64_t appId, const std::string& installedName)
     auto idx = releaseIndex();
     auto it = idx->byApp.find(appId);
     if (it == idx->byApp.end()) return found;
-    for (const Game* g : rankReleasePtrs(it->second, installedName)) found.push_back(*g);
+    for (const Game* g : rankReleasePtrs(it->second, installedName, appId)) found.push_back(*g);
     return found;
 }
 

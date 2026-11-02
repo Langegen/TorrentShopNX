@@ -592,19 +592,27 @@ void GameDetailView::willAppear(bool resetState) {
 void GameDetailView::checkInstalled() {
     if (!isSwitchRelease_ || installCheckRunning_ || !alive_) return;
     installCheckRunning_ = true;
-    const uint64_t appId = catalog::releaseAppId(game_);
+    // Every game of the release: the first one installed decides the badge
+    // (Coffee Talk / Episode 2 / Tokyo shows "installed" for any of them).
+    std::vector<uint64_t> appIds = catalog::releaseAppIds(game_);
+    if (appIds.empty()) appIds.push_back(catalog::releaseAppId(game_));
     auto alive = alive_;
-    brls::async([this, alive, appId]() {
-        util::InstalledGameInfo info = util::queryInstalledGame(appId);
-        brls::sync([this, alive, info]() {
+    brls::async([this, alive, appIds]() {
+        util::InstalledGameInfo info;
+        uint64_t foundApp = appIds.front();
+        for (uint64_t app : appIds) {
+            info = util::queryInstalledGame(app);
+            if (info.installed) { foundApp = app; break; }
+        }
+        brls::sync([this, alive, info, foundApp]() {
             if (!*alive) return;
             installCheckRunning_ = false;
-            applyInstalledState(info);
+            applyInstalledState(info, foundApp);
         });
     });
 }
 
-void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info) {
+void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info, uint64_t appId) {
     if (installedBadge_) {
         badgesBox->removeView(installedBadge_);
         installedBadge_ = nullptr;
@@ -637,9 +645,11 @@ void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info) {
 
     // Does this release carry something newer than what is installed?
     // Same rule as the game manager (catalog/game_version.hpp).
-    const bool releaseNewer = catalog::compareRelease(game_.version, game_.update_version,
-                                                      info.displayVersion, info.patchVersion) == catalog::VersionCmp::Newer;
-    const std::string releaseVer = catalog::isPlausibleVersion(game_.version) ? catalog::trimVersion(game_.version) : "";
+    // A multi-game release: the version of the installed game in it.
+    const catalog::TitleVersion rel = catalog::titleVersion(game_, appId);
+    const bool releaseNewer = catalog::compareRelease(rel, info.displayVersion, info.patchVersion) ==
+                              catalog::VersionCmp::Newer;
+    const std::string releaseVer = catalog::isPlausibleVersion(rel.version) ? catalog::trimVersion(rel.version) : "";
     if (releaseNewer) {
         btnDownload->setText(releaseVer.empty() ? "app/detail/update_btn"_i18n
                                                 : brls::getStr("app/detail/update_to_btn", releaseVer));

@@ -26,7 +26,8 @@ private:
     // Switch games: looks the title id up on the console in the background,
     // then marks the card ("Installed" badge, button text and color).
     void checkInstalled();
-    void applyInstalledState(const util::InstalledGameInfo& info);
+    // `appId`: the release's game that is installed (a multi-game release holds several)
+    void applyInstalledState(const util::InstalledGameInfo& info, uint64_t appId);
 
     Game game_;
     std::string retro_console_id_;

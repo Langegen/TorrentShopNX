@@ -11,7 +11,8 @@ using namespace brls::literals;
 
 namespace ui {
 
-void showReleaseChooser(const std::vector<Game>& releases, std::function<void(const Game&)> onPick) {
+void showReleaseChooser(const std::vector<Game>& releases, std::function<void(const Game&)> onPick,
+                        uint64_t appId) {
     if (releases.empty()) return;
 
     std::vector<std::string> labels;
@@ -19,7 +20,8 @@ void showReleaseChooser(const std::vector<Game>& releases, std::function<void(co
         const Game& g = releases[i];
         std::string label = (i == 0 ? "★ " : "") + cleanTitle(g.title);
         if (!g.size.empty()) label += "  •  " + g.size;
-        std::string ver = catalog::versionLabel(g.version, g.update_version);
+        std::string ver = appId ? catalog::versionLabel(catalog::titleVersion(g, appId))
+                                : catalog::versionLabel(g.version, g.update_version);
         if (!ver.empty()) label += "  •  " + ver;
         catalog::GameStats st;
         if (catalog::GameStatsManager::instance().copySwitchStats(g.topic_id, st)) {
