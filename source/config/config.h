@@ -15,6 +15,12 @@ public:
     const std::string& getTorrServerUrl() const;
     void setTorrServerUrl(const std::string& url);
 
+    // Login for a TorrServer started with --httpauth; empty = none. Stored
+    // as plain text in config.ini, like the rest of the settings.
+    const std::string& getTorrServerLogin() const;
+    const std::string& getTorrServerPassword() const;
+    void setTorrServerCredentials(const std::string& login, const std::string& password);
+
     static constexpr const char* DEFAULT_CATALOG_URL_RU = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_EN = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_ES = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/ES_catalog.json";
@@ -75,7 +81,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.20"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.21"; // Keep in sync with Makefile APP_VERSION
 
     const std::string& getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
@@ -143,6 +149,8 @@ private:
     ~ConfigManager() = default;
 
     std::string torrserver_url_;
+    std::string torrserver_login_;
+    std::string torrserver_password_;
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;

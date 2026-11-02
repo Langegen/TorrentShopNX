@@ -10,6 +10,7 @@
 #include <poll.h>
 #include <errno.h>
 
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <algorithm>
@@ -26,6 +27,80 @@
 #endif
 
 namespace net {
+
+// =============================================================================
+// Basic auth for the TorrServer
+// =============================================================================
+namespace {
+
+std::mutex g_authMutex;
+std::string g_authOrigin;   // "http://host:port", "" = no auth
+std::string g_authHeader;   // "Authorization: Basic ..."
+
+std::string base64(const std::string& in) {
+    static const char* tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((in.size() + 2) / 3 * 4);
+    size_t i = 0;
+    for (; i + 2 < in.size(); i += 3) {
+        unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (static_cast<unsigned char>(in[i + 1]) << 8) |
+                     static_cast<unsigned char>(in[i + 2]);
+        out += tbl[(v >> 18) & 63]; out += tbl[(v >> 12) & 63]; out += tbl[(v >> 6) & 63]; out += tbl[v & 63];
+    }
+    if (i + 1 == in.size()) {
+        unsigned v = static_cast<unsigned char>(in[i]) << 16;
+        out += tbl[(v >> 18) & 63]; out += tbl[(v >> 12) & 63]; out += "==";
+    } else if (i + 2 == in.size()) {
+        unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (static_cast<unsigned char>(in[i + 1]) << 8);
+        out += tbl[(v >> 18) & 63]; out += tbl[(v >> 12) & 63]; out += tbl[(v >> 6) & 63]; out += '=';
+    }
+    return out;
+}
+
+// "scheme://host:port" of a URL, lower-cased, default port filled in. A URL
+// without a scheme is http (the settings accept "192.168.1.5:8090").
+std::string originOf(const std::string& url) {
+    size_t b = 0, e = url.size();
+    while (b < e && std::isspace(static_cast<unsigned char>(url[b]))) ++b;
+    while (e > b && std::isspace(static_cast<unsigned char>(url[e - 1]))) --e;
+    std::string s = url.substr(b, e - b);
+    std::string scheme = "http";
+    size_t sep = s.find("://");
+    if (sep != std::string::npos) {
+        scheme = s.substr(0, sep);
+        s = s.substr(sep + 3);
+    }
+    s = s.substr(0, s.find_first_of("/?#"));
+    size_t at = s.rfind('@');
+    if (at != std::string::npos) s = s.substr(at + 1);
+    std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (s.empty()) return "";
+    size_t bracket = s.rfind(']');
+    size_t colon = s.rfind(':');
+    bool hasPort = colon != std::string::npos && (bracket == std::string::npos || colon > bracket);
+    if (!hasPort) s += (scheme == "https") ? ":443" : ":80";
+    return scheme + "://" + s;
+}
+
+} // namespace
+
+void setServerAuth(const std::string& serverUrl, const std::string& user, const std::string& password) {
+    std::lock_guard<std::mutex> lock(g_authMutex);
+    if (user.empty()) {
+        g_authOrigin.clear();
+        g_authHeader.clear();
+        return;
+    }
+    g_authOrigin = originOf(serverUrl);
+    g_authHeader = "Authorization: Basic " + base64(user + ":" + password);
+}
+
+std::string authHeaderFor(const std::string& url) {
+    std::lock_guard<std::mutex> lock(g_authMutex);
+    if (g_authOrigin.empty() || originOf(url) != g_authOrigin) return "";
+    return g_authHeader;
+}
 
 HttpClient::HttpClient() = default;
 
@@ -260,6 +335,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         for (const auto& h : extra_headers) {
             headers = curl_slist_append(headers, h.c_str());
         }
+        const std::string auth = authHeaderFor(url);
+        if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
         CurlXferContext xfer_ctx{cancel_flag_, progress_cb_};
 
@@ -393,6 +470,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
     for (const auto& h : extra_headers) {
         req << h << "\r\n";
     }
+    const std::string auth = authHeaderFor(url);
+    if (!auth.empty()) req << auth << "\r\n";
     // For simple request/response mode over raw sockets, close is safer:
     // some servers keep HTTP/1.1 connections alive and recv() would block.
     req << "Connection: close\r\n\r\n";
@@ -481,6 +560,8 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
         headers = curl_slist_append(headers, "Connection: keep-alive");
     }
     headers = curl_slist_append(headers, "Accept-Encoding: identity");
+    const std::string auth = authHeaderFor(url);
+    if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
     CurlStreamCtx ctx;
     ctx.cb = &cb;
@@ -603,6 +684,8 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     for (const auto& h : extra_headers) {
         headers = curl_slist_append(headers, h.c_str());
     }
+    const std::string auth = authHeaderFor(url);
+    if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
     bool hasAcceptEncoding = false;
     for (const auto& h : extra_headers) {

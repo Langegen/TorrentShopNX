@@ -405,6 +405,8 @@ bool RemoteDataSource::resolveFileSize() {
 
         struct curl_slist* headers = nullptr;
         headers = curl_slist_append(headers, "Range: bytes=0-0");
+        const std::string auth = net::authHeaderFor(url);
+        if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
         curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curlParseHeader);
@@ -480,6 +482,8 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
             headers = curl_slist_append(headers, range_hdr.str().c_str());
             headers = curl_slist_append(headers, "Connection: keep-alive");
             headers = curl_slist_append(headers, "Accept-Encoding: identity");
+            const std::string auth = net::authHeaderFor(url);
+            if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -508,6 +512,10 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
 
             curl_slist_free_all(headers);
 
+            if (http_code == 401) {
+                util::logLine(auth.empty() ? "remote_ds: TorrServer asks for a login (401), none is set"
+                                           : "remote_ds: TorrServer rejected the login (401)");
+            }
             if (http_code == 404) {
                 saw_404 = true;
                 last_failure_ = ReadFailureKind::NotFound404;

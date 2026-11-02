@@ -11,11 +11,14 @@
 
 #include <engine/engine.h>
 #include "../net/image_downloader.h"
+#include "../net/http_client.h"
 
 namespace ui {
 
 void DownloadManager::init() {
     auto& cfg = config::ConfigManager::instance();
+    // Before the first TorrServer request: the login goes with every one
+    net::setServerAuth(cfg.getTorrServerUrl(), cfg.getTorrServerLogin(), cfg.getTorrServerPassword());
     impl_.dataSourceManager().setRemoteUrl(cfg.getTorrServerUrl());
     const std::string mode = cfg.getDataMode();
     if (mode == "local_client" || mode == "custom_engine") {

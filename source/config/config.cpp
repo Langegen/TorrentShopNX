@@ -196,6 +196,27 @@ bool parseConfigBody(const std::string& body,
     return parsed_known_keys;
 }
 
+// Value of `key=...` in the config body; `out` is left alone when the key is
+// missing. Only the leading spaces of the value are dropped, so a password
+// may end with a space.
+void readRawKey(const std::string& body, const std::string& key, std::string& out) {
+    size_t pos = 0;
+    while (pos < body.size()) {
+        size_t end = body.find('\n', pos);
+        std::string line = (end == std::string::npos) ? body.substr(pos) : body.substr(pos, end - pos);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        size_t eq = line.find('=');
+        if (eq != std::string::npos && trim(line.substr(0, eq)) == key) {
+            size_t v = eq + 1;
+            while (v < line.size() && (line[v] == ' ' || line[v] == '\t')) ++v;
+            out = line.substr(v);
+            return;
+        }
+        if (end == std::string::npos) break;
+        pos = end + 1;
+    }
+}
+
 bool readWholeFile(const std::string& path, std::string& out) {
     std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in.is_open()) return false;
@@ -284,6 +305,8 @@ void ConfigManager::load() {
                         show_bottom_dashboard_, font_scale_,
                         sound_effects_enabled_, rumble_enabled_,
                         catalog_app_version_);
+        readRawKey(body, "torrserver_login", torrserver_login_);
+        readRawKey(body, "torrserver_password", torrserver_password_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -301,7 +324,9 @@ void ConfigManager::load() {
         if (background_blur_ < 0 || background_blur_ > 3) background_blur_ = 0;
         if (background_dim_ < 0 || background_dim_ > 4) background_dim_ = 2;
         if (font_scale_ < 0 || font_scale_ > 2) font_scale_ = 0;
-        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", theme: " + theme_ + ", background_mode: " + background_mode_);
+        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ +
+                      (torrserver_login_.empty() ? "" : " (with login)") + ", theme: " + theme_ +
+                      ", background_mode: " + background_mode_);
         return;
     }
 
@@ -362,6 +387,8 @@ void ConfigManager::save() {
 
     file << "[general]\n";
     file << "torrserver_url=" << torrserver_url_ << "\n";
+    file << "torrserver_login=" << torrserver_login_ << "\n";
+    file << "torrserver_password=" << torrserver_password_ << "\n";
     file << "catalog_source_url=" << catalog_source_url_ << "\n";
     file << "data_mode=" << data_mode_ << "\n";
     file << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
@@ -403,6 +430,20 @@ const std::string& ConfigManager::getTorrServerUrl() const {
 
 void ConfigManager::setTorrServerUrl(const std::string& url) {
     torrserver_url_ = url;
+    save();
+}
+
+const std::string& ConfigManager::getTorrServerLogin() const {
+    return torrserver_login_;
+}
+
+const std::string& ConfigManager::getTorrServerPassword() const {
+    return torrserver_password_;
+}
+
+void ConfigManager::setTorrServerCredentials(const std::string& login, const std::string& password) {
+    torrserver_login_ = login;
+    torrserver_password_ = login.empty() ? std::string() : password;
     save();
 }
 

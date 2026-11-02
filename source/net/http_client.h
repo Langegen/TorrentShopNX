@@ -19,6 +19,15 @@ struct HttpResponse {
 using StreamCallback = std::function<size_t(const void* data, size_t size)>;
 using ProgressCallback = std::function<void(int64_t dltotal, int64_t dlnow)>;
 
+/// HTTP Basic auth for one server (TorrServer started with --httpauth).
+/// Requests whose URL has the same scheme, host and port as `serverUrl`
+/// carry "Authorization: Basic ..."; requests to any other host never do.
+/// An empty `user` turns it off.
+void setServerAuth(const std::string& serverUrl, const std::string& user, const std::string& password);
+
+/// The "Authorization: Basic ..." header for `url`, "" when it needs none.
+std::string authHeaderFor(const std::string& url);
+
 /// HTTP-клиент с поддержкой Range-запросов и Keep-Alive.
 /// Работает через сокеты (HTTP) или libcurl (HTTPS).
 class HttpClient {
