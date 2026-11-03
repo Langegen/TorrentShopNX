@@ -44,6 +44,9 @@ private:
     bool isFolderHierarchyMode() const { return !retro_console_id_.empty() || isHomebrewGame(game_); }
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;
+    // Per file: is its title already installed? Filled once per probe result
+    // (rebuildSwitchFileList runs on every checkbox toggle).
+    std::vector<signed char> installedCache_;
     std::vector<brls::Label*> checkboxLabels_;
     std::shared_ptr<std::atomic<bool>> alive_flag_;
 
@@ -99,6 +102,8 @@ private:
     void updateRowSelectionState(size_t idx);
     void calculateUncompressedSizes();
     void startProbe();
+    void scheduleProbeStatusPoll(std::shared_ptr<std::atomic<bool>> alive,
+                                 std::shared_ptr<std::atomic<bool>> running);
     bool probeInFlight_ = false;  // Y must not start a second probe and poller
 };
 

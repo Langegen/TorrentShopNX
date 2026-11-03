@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -1903,7 +1904,7 @@ inline bool compareVersions(const std::string& current, const std::string& avail
 
 extern std::vector<Game> g_games;
 
-inline std::string findCoverForDownload(const download::DownloadItem& item, const std::vector<Game>& fallbackSample = {}) {
+inline std::string findCoverForDownloadUncached(const download::DownloadItem& item, const std::vector<Game>& fallbackSample) {
     if (!item.cover_url.empty()) {
         return item.cover_url;
     }
@@ -1984,5 +1985,42 @@ inline std::string findCoverForDownload(const download::DownloadItem& item, cons
     }
 
     return "";
+}
+
+// The lookup above scans the whole catalog (~7000 games, up to three passes)
+// and the downloads screen and the dashboard ask on every progress tick, the
+// first one while holding the queue lock. Remember each answer, "not found"
+// included, until the catalog snapshot changes.
+inline std::string findCoverForDownload(const download::DownloadItem& item, const std::vector<Game>& fallbackSample = {}) {
+    if (!item.cover_url.empty()) {
+        return item.cover_url;
+    }
+    struct CoverCache {
+        std::mutex m;
+        const void* catalog = nullptr;
+        std::unordered_map<std::string, std::string> map;
+    };
+    static CoverCache cc;
+    auto catalog = getCatalogSnapshot();
+    const std::string key = item.topic_id + '\x1f' + item.title + '\x1f' + item.forced_stream_name +
+                            '\x1f' + std::to_string(fallbackSample.size());
+    {
+        std::lock_guard<std::mutex> lock(cc.m);
+        if (cc.catalog != catalog.get()) {
+            cc.map.clear();
+            cc.catalog = catalog.get();
+        }
+        auto it = cc.map.find(key);
+        if (it != cc.map.end()) return it->second;
+    }
+    std::string cover = findCoverForDownloadUncached(item, fallbackSample);
+    {
+        std::lock_guard<std::mutex> lock(cc.m);
+        if (cc.catalog == catalog.get()) {
+            if (cc.map.size() > 1024) cc.map.clear();
+            cc.map[key] = cover;
+        }
+    }
+    return cover;
 }
 

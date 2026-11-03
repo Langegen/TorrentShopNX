@@ -928,36 +928,48 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
 
     auto& ignoredMgr = catalog::IgnoredUpdatesManager::instance();
 
-    for (auto item : rawItems_) {
+    for (const auto& src : rawItems_) {
+        LibraryItem item = src;   // one copy per item (it was copied twice)
         if (item.isPort) {
-            portItems.push_back(item);
+            portItems.push_back(std::move(item));
             continue;
         }
         if (item.status == GameUpdateStatus::NotInstalled) {
-            notInstalledItems.push_back(item);
+            notInstalledItems.push_back(std::move(item));
             continue;
         }
         item.updateIgnored = ignoredMgr.isIgnored(item.titleId);
         if (item.updateIgnored) {
             item.status = GameUpdateStatus::UpdateIgnored;
-            ignoredItems.push_back(item);
+            ignoredItems.push_back(std::move(item));
         } else if (item.status == GameUpdateStatus::UpdateAvailable) {
             if (item.hasMods) {
-                modsUpdates.push_back(item);
+                modsUpdates.push_back(std::move(item));
             } else {
-                normalUpdates.push_back(item);
+                normalUpdates.push_back(std::move(item));
             }
         } else if (item.status == GameUpdateStatus::UpToDate) {
-            upToDateItems.push_back(item);
+            upToDateItems.push_back(std::move(item));
         } else {
-            otherItems.push_back(item);
+            otherItems.push_back(std::move(item));
         }
     }
 
     auto sortAlpha = [](std::vector<LibraryItem>& list) {
-        std::sort(list.begin(), list.end(), [](const LibraryItem& a, const LibraryItem& b) {
-            return cleanTitle(a.game.title) < cleanTitle(b.game.title);
+        // cleanTitle() builds a new string: compute each key once instead of
+        // twice per comparison.
+        std::vector<std::pair<std::string, size_t>> keys;
+        keys.reserve(list.size());
+        for (size_t i = 0; i < list.size(); ++i) {
+            keys.emplace_back(cleanTitle(list[i].game.title), i);
+        }
+        std::stable_sort(keys.begin(), keys.end(), [](const auto& a, const auto& b) {
+            return a.first < b.first;
         });
+        std::vector<LibraryItem> sorted;
+        sorted.reserve(list.size());
+        for (const auto& k : keys) sorted.push_back(std::move(list[k.second]));
+        list = std::move(sorted);
     };
 
     sortAlpha(modsUpdates);
@@ -1231,18 +1243,24 @@ void LibraryView::updateStatsAndSpace() {
 }
 
 void LibraryView::updateSpaceHint() {
-    if (spaceHint) {
+    if (!spaceHint) return;
+    // The query goes through ncm under g_switch_service_mutex, which a scan or
+    // an uninstall can hold for seconds: run it in the pool, not on the UI.
+    auto cancelToken = cancelToken_;
+    brls::async([this, cancelToken]() {
         int64_t sdFree = 0;
         int64_t nandFree = 0;
         bool sdOk = util::getStorageFreeSpace(1, sdFree);
         bool nandOk = util::getStorageFreeSpace(0, nandFree);
-
-        std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
-        std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
-
-        spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
-        spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
-    }
+        brls::sync([this, cancelToken, sdOk, nandOk, sdFree, nandFree]() {
+            if (cancelToken && *cancelToken) return;
+            if (!spaceHint) return;
+            std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
+            std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
+            spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
+            spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
+        });
+    });
 
     if (consoleSdkHint) {
         auto cSdk = util::getConsoleSdkVersion();

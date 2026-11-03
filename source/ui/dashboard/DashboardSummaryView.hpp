@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include <borealis.hpp>
 #include <vector>
 #include <deque>
@@ -69,6 +71,12 @@ private:
 
     brls::Box* content_container_ = nullptr;
     std::shared_ptr<bool> imageToken_;
+    // Rebuilding a section creates ~40 views. Moving quickly across the tiles
+    // rebuilds once at the end of the burst instead of once per tile.
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
+    std::chrono::steady_clock::time_point lastFocusRebuild_{};
+    bool focusRebuildPending_ = false;
+    void rebuildWithFade();
     std::deque<float> speed_history_;
 
     // Library section: storage widgets updated in place

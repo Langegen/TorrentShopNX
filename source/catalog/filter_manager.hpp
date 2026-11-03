@@ -294,6 +294,45 @@ inline bool checkPlayersMatch(int maxP, PlayersFilter pf) {
     }
 }
 
+namespace filter_detail {
+
+// matchesGameFilter() runs once per game (~7000) on every filter pass: the
+// i18n lookups and the query lower-casing used to happen per game too.
+// Language changes need an app restart, so caching the texts is safe.
+inline const std::string& allGenresText() {
+    static const std::string s = "app/filter/all_genres"_i18n;
+    return s;
+}
+inline const std::string& allYearsText() {
+    static const std::string s = "app/filter/all_years"_i18n;
+    return s;
+}
+
+struct PreparedQuery {
+    std::string raw;
+    std::string lower;
+    std::string norm;   // lower-case without : - , . ' " ! ?
+    bool valid = false;
+};
+
+inline const PreparedQuery& preparedQuery(const std::string& q) {
+    thread_local PreparedQuery pq;
+    if (!pq.valid || pq.raw != q) {
+        pq.raw = q;
+        pq.lower = toLowerUtf8(q);
+        pq.norm.clear();
+        for (char c : pq.lower) {
+            if (c != ':' && c != '-' && c != ',' && c != '.' && c != '\'' && c != '\"' && c != '!' && c != '?') {
+                pq.norm.push_back(c);
+            }
+        }
+        pq.valid = true;
+    }
+    return pq;
+}
+
+} // namespace filter_detail
+
 // Check if game matches filter state
 inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bool isFavorite) {
     // 1. Favorite filter
@@ -305,13 +344,13 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
     if (!state.genres.empty()) {
         bool matchAny = false;
         for (const auto& gId : state.genres) {
-            if (gId.empty() || gId == "Все жанры" || gId == "app/filter/all_genres"_i18n || gameMatchesGenre(game, gId)) {
+            if (gId.empty() || gId == "Все жанры" || gId == filter_detail::allGenresText() || gameMatchesGenre(game, gId)) {
                 matchAny = true;
                 break;
             }
         }
         if (!matchAny) return false;
-    } else if (!state.genre.empty() && state.genre != "Все жанры" && state.genre != "app/filter/all_genres"_i18n) {
+    } else if (!state.genre.empty() && state.genre != "Все жанры" && state.genre != filter_detail::allGenresText()) {
         if (!gameMatchesGenre(game, state.genre)) {
             return false;
         }
@@ -340,7 +379,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
         int gameYear = parseYear(game.year);
         bool matchAny = false;
         for (const auto& yStr : state.years) {
-            if (yStr.empty() || yStr == "Все года" || yStr == "Все годы" || yStr == "app/filter/all_years"_i18n) {
+            if (yStr.empty() || yStr == "Все года" || yStr == "Все годы" || yStr == filter_detail::allYearsText()) {
                 matchAny = true;
                 break;
             }
@@ -351,7 +390,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
             }
         }
         if (!matchAny) return false;
-    } else if (!state.year.empty() && state.year != "Все годы" && state.year != "Все года" && state.year != "app/filter/all_years"_i18n) {
+    } else if (!state.year.empty() && state.year != "Все годы" && state.year != "Все года" && state.year != filter_detail::allYearsText()) {
         int targetYear = std::atoi(state.year.c_str());
         if (targetYear > 0 && parseYear(game.year) != targetYear) {
             return false;
@@ -378,7 +417,8 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
 
     // 6. Search query filter
     if (!state.searchQuery.empty()) {
-        std::string lowerQuery = toLowerUtf8(state.searchQuery);
+        const auto& query = filter_detail::preparedQuery(state.searchQuery);
+        const std::string& lowerQuery = query.lower;
         bool match = false;
 
         // Check Title ID (e.g. "01006F8002326000")
@@ -403,7 +443,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
                     }
                     return res;
                 };
-                std::string normQuery = stripPunct(lowerQuery);
+                const std::string& normQuery = query.norm;
                 std::string normTitle = stripPunct(lowerTitle);
                 if (!normQuery.empty() && normTitle.find(normQuery) != std::string::npos) {
                     match = true;

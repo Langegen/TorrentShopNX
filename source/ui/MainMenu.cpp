@@ -817,20 +817,27 @@ void MainMenu::onContentAvailable() {
                 g_pathsToDelete.clear();
             }
 
-            // Delay stale cache sweep by 15s to allow smooth initial UI & thumbnail loading without SD contention
-            for (int s = 0; s < 30; ++s) {
-                if (g_cleanupCancelled.load()) break;
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-
-            if (!g_cleanupCancelled.load()) {
-                sweepStaleCaches();
-            }
         } catch (const std::exception& e) {
             util::logLine(std::string("MainMenu: exception in background cleanup: ") + e.what());
         } catch (...) {
             util::logLine("MainMenu: unknown exception in background cleanup");
         }
-        g_cleanupRunning = false;
+        // Sweep stale caches 15 s later, when the first screens and covers
+        // have loaded. The wait is a main-thread timer: sleeping here held one
+        // of the 2-3 pool threads that cover decoding needs.
+        brls::sync([]() {
+            brls::delay(15000, []() {
+                brls::async([]() {
+                    try {
+                        if (!g_cleanupCancelled.load()) {
+                            sweepStaleCaches();
+                        }
+                    } catch (...) {
+                        util::logLine("MainMenu: exception in stale cache sweep");
+                    }
+                    g_cleanupRunning = false;
+                });
+            });
+        });
     });
 }

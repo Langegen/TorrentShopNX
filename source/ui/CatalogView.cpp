@@ -432,16 +432,20 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 
                 setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/cover_blank.png", false, "", row, i);
                 
-                cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
-                    bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
+                // The lambdas keep the catalog snapshot alive and point into it
+                // instead of copying the whole Game into each one.
+                const Game* gamePtr = &game;
+                auto snapshot = parent_->catalogSnapshot_;
+                cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [gamePtr, snapshot](brls::View* view) {
+                    bool fav = catalog::FavoritesManager::instance().toggleFavorite(*gamePtr);
                     util::triggerHapticFeedback(3);
                     brls::Application::notify(fav ? "app/favorites/added"_i18n : "app/favorites/removed"_i18n);
                     return true;
                 });
 
-                cardBox->registerClickAction([game](brls::View* view) {
+                cardBox->registerClickAction([gamePtr, snapshot](brls::View* view) {
                     util::triggerHapticFeedback(2);
-                    brls::Application::pushActivity(new GameDetailView(game));
+                    brls::Application::pushActivity(new GameDetailView(*gamePtr));
                     return true;
                 });
             } catch (const std::exception& e) {

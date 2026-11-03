@@ -78,19 +78,14 @@ public:
         headerLabel->setText("app/catalog/db_updated"_i18n);
         statusLabel->setText(msg);
 
-        // Auto dismiss after 3 seconds with cancellation token
+        // Auto dismiss after 3 seconds. A main-thread timer, not a pool task
+        // that sleeps: the pool has only 2-3 threads on the Switch.
         auto token = aliveToken_;
-        brls::async([this, token]() {
-            for (int i = 0; i < 30; ++i) {
-                usleep(100000); // 100ms chunks
-                if (!token || !*token) return;
+        brls::delay(3000, [this, token]() {
+            if (!token || !*token) return;
+            if (this->hasParent()) {
+                this->getParent()->removeView(this);
             }
-            brls::sync([this, token]() {
-                if (!token || !*token) return;
-                if (this->hasParent()) {
-                    this->getParent()->removeView(this);
-                }
-            });
         });
     }
 
@@ -99,19 +94,13 @@ public:
         headerLabel->setText("app/catalog/update_error"_i18n);
         statusLabel->setText(msg);
 
-        // Auto dismiss after 4 seconds with cancellation token
+        // Auto dismiss after 4 seconds (main-thread timer, see above).
         auto token = aliveToken_;
-        brls::async([this, token]() {
-            for (int i = 0; i < 40; ++i) {
-                usleep(100000); // 100ms chunks
-                if (!token || !*token) return;
+        brls::delay(4000, [this, token]() {
+            if (!token || !*token) return;
+            if (this->hasParent()) {
+                this->getParent()->removeView(this);
             }
-            brls::sync([this, token]() {
-                if (!token || !*token) return;
-                if (this->hasParent()) {
-                    this->getParent()->removeView(this);
-                }
-            });
         });
     }
 

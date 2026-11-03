@@ -398,6 +398,7 @@ DashboardSummaryView::DashboardSummaryView() {
 }
 
 DashboardSummaryView::~DashboardSummaryView() {
+    *alive_ = false;
     ThemeManager::instance().unsubscribe(themeSub_);
     if (imageToken_) {
         *imageToken_ = false;
@@ -407,6 +408,28 @@ DashboardSummaryView::~DashboardSummaryView() {
 void DashboardSummaryView::setFocusedIndex(int index) {
     if (active_index_ == index) return;
     active_index_ = index;
+
+    constexpr auto kBurst = std::chrono::milliseconds(150);
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastFocusRebuild_ < kBurst) {
+        // Another tile within 150 ms: show the section where the user stops.
+        if (!focusRebuildPending_) {
+            focusRebuildPending_ = true;
+            auto alive = alive_;
+            brls::delay(kBurst.count(), [this, alive]() {
+                if (!*alive) return;
+                focusRebuildPending_ = false;
+                lastFocusRebuild_ = std::chrono::steady_clock::now();
+                rebuildWithFade();
+            });
+        }
+        return;
+    }
+    lastFocusRebuild_ = now;
+    rebuildWithFade();
+}
+
+void DashboardSummaryView::rebuildWithFade() {
     rebuildContent();
 
     // Fade the new section in instead of swapping it instantly

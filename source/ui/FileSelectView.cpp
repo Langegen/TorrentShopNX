@@ -563,22 +563,17 @@ void FileSelectView::onContentAvailable() {
     util::logLine("FileSelectView: onContentAvailable end");
 }
 
-void FileSelectView::startProbe() {
-    probeInFlight_ = true;
-    subtitle->setText("app/fileselect/probing"_i18n);
-    auto alive = alive_flag_;
-    auto status_running = std::make_shared<std::atomic<bool>>(true);
-    brls::async([this, status_running, alive]() {
-        while (status_running->load() && alive->load() && !g_appExiting.load()) {
-            for (int i = 0; i < 10; ++i) {
-                if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-            if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
-
+// Shows the probe progress once a second. The wait is a main-thread timer and
+// only the status query runs in the pool: a polling loop used to keep one of
+// the 2-3 pool threads busy for the whole probe.
+void FileSelectView::scheduleProbeStatusPoll(std::shared_ptr<std::atomic<bool>> alive,
+                                             std::shared_ptr<std::atomic<bool>> running) {
+    brls::delay(1000, [this, alive, running]() {
+        if (!alive->load() || !running->load() || g_appExiting.load()) return;
+        brls::async([this, alive, running]() {
             auto status = datasource::CustomEngineClient::instance().probeStatus();
-            brls::sync([this, status, status_running, alive]() {
-                if (!alive->load() || !status_running->load() || g_appExiting.load()) return;
+            brls::sync([this, status, alive, running]() {
+                if (!alive->load() || !running->load() || g_appExiting.load()) return;
                 std::string text = "app/fileselect/probing"_i18n;
                 if (status.active && status.meta_peers_total > 0) {
                     text += brls::getStr("app/fileselect/meta_peers", std::to_string(status.meta_peers_tried), std::to_string(status.meta_peers_total));
@@ -588,9 +583,18 @@ void FileSelectView::startProbe() {
                     text += brls::getStr("app/fileselect/swarm_stats", std::to_string(status.seeds), std::to_string(status.peers), std::to_string(status.dht_nodes));
                 }
                 subtitle->setText(text);
+                scheduleProbeStatusPoll(alive, running);
             });
-        }
+        });
     });
+}
+
+void FileSelectView::startProbe() {
+    probeInFlight_ = true;
+    subtitle->setText("app/fileselect/probing"_i18n);
+    auto alive = alive_flag_;
+    auto status_running = std::make_shared<std::atomic<bool>>(true);
+    scheduleProbeStatusPoll(alive, status_running);
 
     Game gameCopy = game_;
     bool switchMode = !isFolderHierarchyMode();
@@ -626,6 +630,7 @@ void FileSelectView::startProbe() {
 
             if (success && !probedFiles.empty()) {
                 files_    = probedFiles;
+                installedCache_.clear();
                 selected_.assign(files_.size(), false);
                 if (isFolderHierarchyMode()) {
                     baseFolder_ = computeBaseFolder(files_);
@@ -1256,7 +1261,16 @@ void FileSelectView::rebuildSwitchFileList() {
     fileListBox->clearViews();
     checkboxLabels_.assign(files_.size(), nullptr);
 
-    SwitchServiceGuard guard;
+    if (installedCache_.size() != files_.size()) {
+        SwitchServiceGuard guard;
+        installedCache_.assign(files_.size(), 0);
+        for (size_t i = 0; i < files_.size(); ++i) {
+            if (!isSwitchGameFile(files_[i].name)) continue;
+            uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+            uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+            installedCache_[i] = isTitleIdInstalled(tid, guard, ver) ? 1 : 0;
+        }
+    }
     std::map<std::string, brls::View*> focusMap;
     brls::View* firstFocusable = nullptr;
     brls::View* lastFocusable = nullptr;
@@ -1288,9 +1302,7 @@ void FileSelectView::rebuildSwitchFileList() {
     addHeaderRow("app/fileselect/group_uninstalled"_i18n, false);
     bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
-        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard, ver)) {
+        if (isSwitchGameFile(files_[i].name) && !installedCache_[i]) {
             hasUninstalled = true;
             size_t idx = i;
             const auto& file = files_[idx];
@@ -1431,9 +1443,7 @@ void FileSelectView::rebuildSwitchFileList() {
     addHeaderRow("app/fileselect/group_installed"_i18n, false);
     bool hasInstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
-        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard, ver)) {
+        if (isSwitchGameFile(files_[i].name) && installedCache_[i]) {
             hasInstalled = true;
             size_t idx = i;
             const auto& file = files_[idx];
@@ -1590,35 +1600,34 @@ void FileSelectView::updateTotalSize() {
         totalSizeText->setText(sizeStr);
     }
 
-    if (isFolderHierarchyMode()) {
+    // Free space comes from ncm under g_switch_service_mutex, which an install
+    // can hold: query it in the pool. This runs on every selection toggle.
+    const bool folderMode = isFolderHierarchyMode();
+    if (folderMode && freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+    auto alive = alive_flag_;
+    brls::async([this, alive, folderMode]() {
         int64_t sdFree = 0;
-        if (freeSpaceSdText) {
-            if (util::getStorageFreeSpace(1, sdFree)) {
-                freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
+        int64_t nandFree = 0;
+        bool sdOk = util::getStorageFreeSpace(1, sdFree);
+        bool nandOk = !folderMode && util::getStorageFreeSpace(0, nandFree);
+        brls::sync([this, alive, folderMode, sdOk, nandOk, sdFree, nandFree]() {
+            if (!alive->load()) return;
+            if (freeSpaceSdText) {
+                if (sdOk) {
+                    freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
+                } else if (!folderMode) {
+                    freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", "app/fileselect/free_unknown"_i18n));
+                }
             }
-        }
-        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
-        return;
-    }
-
-    // Update free space displays
-    int64_t sdFree = 0;
-    int64_t nandFree = 0;
-    if (freeSpaceSdText) {
-        if (util::getStorageFreeSpace(1, sdFree)) {
-            freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
-        } else {
-            freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", "app/fileselect/free_unknown"_i18n));
-        }
-    }
-
-    if (freeSpaceNandText) {
-        if (util::getStorageFreeSpace(0, nandFree)) {
-            freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", formatBytes(nandFree)));
-        } else {
-            freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
-        }
-    }
+            if (!folderMode && freeSpaceNandText) {
+                if (nandOk) {
+                    freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", formatBytes(nandFree)));
+                } else {
+                    freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
+                }
+            }
+        });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

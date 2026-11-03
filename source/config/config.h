@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include <mutex>
+#include <atomic>
 
 namespace config {
 
@@ -186,6 +187,8 @@ private:
     // threads (catalog updater, emulator manifest check). Every accessor takes
     // this lock; getters return copies. Recursive: setters call save().
     mutable std::recursive_mutex mutex_;
+    // Every Label reads the font scale on every frame: keep a lock-free copy.
+    std::atomic<int> font_scale_fast_{0};
     std::mutex save_mutex_;  // one writer of config.ini at a time
 };
 

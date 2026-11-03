@@ -328,8 +328,12 @@ void ImageDownloader::enqueue(brls::Image* img,
         img->setImageFromFile(placeholder);
         img->setFreeTexture(false);
     } else {
-        if (brls::TextureCache::instance().getCache(cacheKey) > 0) {
+        if (int tex = brls::TextureCache::instance().getCache(cacheKey); tex > 0) {
             img->setImageFromFile(cacheKey);
+            // setImageFromFile took its own reference: drop the one from the
+            // lookup above, or the texture stays pinned and the cache can
+            // never evict it (GPU memory grew with every scroll).
+            brls::TextureCache::instance().removeCache(tex);
             return;
         }
         img->setImageFromFile(placeholder);
@@ -522,6 +526,9 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                     stbi_image_free(rgba);
                 }
                 if (token && !*token) {
+                    // The cell scrolled away: release the reference taken by
+                    // addCache/getCache above so the texture can be evicted.
+                    if (tex > 0) brls::TextureCache::instance().removeCache(tex);
                     return;
                 }
                 if (tex > 0 && img) {
@@ -713,6 +720,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 if (token && !*token) {
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
+                    if (tex > 0) brls::TextureCache::instance().removeCache(tex);
                     return;
                 }
                 if (tex > 0 && img) {

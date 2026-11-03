@@ -291,6 +291,7 @@ ConfigManager::ConfigManager() {
     show_bottom_dashboard_ = true;
     font_scale_ = 0;
     load();
+    font_scale_fast_.store(font_scale_, std::memory_order_relaxed);
 }
 
 void ConfigManager::load() {
@@ -922,8 +923,7 @@ void ConfigManager::setShowBottomDashboard(bool enabled) {
 }
 
 int ConfigManager::getFontScale() const {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
-    return font_scale_;
+    return font_scale_fast_.load(std::memory_order_relaxed);
 }
 
 void ConfigManager::setFontScale(int level) {
@@ -931,12 +931,12 @@ void ConfigManager::setFontScale(int level) {
     if (level < 0) level = 0;
     if (level > 2) level = 2;
     font_scale_ = level;
+    font_scale_fast_.store(level, std::memory_order_relaxed);
     save();
 }
 
 float ConfigManager::getFontScaleMultiplier() const {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
-    switch (font_scale_) {
+    switch (font_scale_fast_.load(std::memory_order_relaxed)) {
         case 1: return 1.15f;
         case 2: return 1.30f;
         default: return 1.0f;
