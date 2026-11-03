@@ -1795,10 +1795,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             cell->headerBox->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
                 std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
                 const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                // Collect ids first: every delete erases from the queue and
+                // shifts the indices of the remaining items.
+                std::vector<std::string> ids;
                 for (size_t qidx : group.item_indices) {
-                    if (qidx < q.size()) {
-                        ui::DownloadManager::instance().deleteDownload(q[qidx].topic_id);
-                    }
+                    if (qidx < q.size()) ids.push_back(q[qidx].topic_id);
+                }
+                for (const auto& id : ids) {
+                    ui::DownloadManager::instance().deleteDownload(id);
                 }
                 return true;
             });

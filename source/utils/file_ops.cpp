@@ -1,5 +1,6 @@
 #include "file_ops.h"
 #include "log.h"
+#include "big_file.h"
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
@@ -226,6 +227,13 @@ static bool copySingleFile(const std::string& src, const std::string& dst, std::
         return false;
     }
 
+    // Files over 4 GiB need the FAT32 concatenation attribute on the console.
+    {
+        std::error_code sizeEc;
+        uint64_t srcSize = std::filesystem::file_size(cleanSrc, sizeEc);
+        if (!sizeEc) prepareBigFile(cleanDst, srcSize);
+    }
+
     FILE* out = fopen(cleanDst.c_str(), "wb");
     if (!out) {
         std::remove(cleanDst.c_str());
@@ -237,7 +245,8 @@ static bool copySingleFile(const std::string& src, const std::string& dst, std::
         return false;
     }
 
-    constexpr size_t BUF_SZ = 64 * 1024;
+    // SD card writes are much faster in big blocks than in 64 KB ones.
+    constexpr size_t BUF_SZ = 1024 * 1024;
     std::vector<char> buf(BUF_SZ);
     bool ok = true;
 
@@ -255,10 +264,13 @@ static bool copySingleFile(const std::string& src, const std::string& dst, std::
     }
 
     fclose(in);
-    fclose(out);
+    if (fclose(out) != 0 && ok) {  // the last buffered block is written here
+        outError = "Write error to " + dst;
+        ok = false;
+    }
 
     if (!ok) {
-        std::remove(dst.c_str());
+        std::remove(cleanDst.c_str());
     }
     return ok;
 }
@@ -360,6 +372,32 @@ bool copyPathRecursive(
     return true;
 }
 
+// Moves src over dst without deleting dst first: an existing dst is parked
+// as dst.tsnx-old and put back if the move fails, so a failed move never
+// loses the destination file.
+static bool renameOver(const std::string& src, const std::string& dst) {
+    if (std::rename(src.c_str(), dst.c_str()) == 0) return true;
+    const std::string parked = dst + ".tsnx-old";
+    std::remove(parked.c_str());
+    if (std::rename(dst.c_str(), parked.c_str()) != 0) return false;
+    if (std::rename(src.c_str(), dst.c_str()) == 0) {
+        std::remove(parked.c_str());
+        return true;
+    }
+    std::rename(parked.c_str(), dst.c_str());
+    return false;
+}
+
+static bool moveFileOver(const std::string& src, const std::string& dst, std::string& outError) {
+    if (renameOver(src, dst)) return true;
+    // Different device: copy, then drop the source only once the copy is complete.
+    if (copySingleFile(src, dst, outError)) {
+        std::remove(src.c_str());
+        return true;
+    }
+    return false;
+}
+
 bool movePath(const std::string& src, const std::string& dst, std::string& outError) {
     std::string cleanSrc = normalizeFsPath(src);
     std::string cleanDst = normalizeFsPath(dst);
@@ -400,14 +438,8 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
         if (lastSlash != std::string::npos) {
             safeCreateDirectories(cleanDst.substr(0, lastSlash));
         }
-        std::remove(cleanDst.c_str());
-        if (std::rename(cleanSrc.c_str(), cleanDst.c_str()) == 0) {
-            util::logLine("file_ops: movePath file rename succeeded");
-            return true;
-        }
-        // Fallback: copy file and delete source
-        if (copySingleFile(cleanSrc, cleanDst, outError)) {
-            std::remove(cleanSrc.c_str());
+        if (moveFileOver(cleanSrc, cleanDst, outError)) {
+            util::logLine("file_ops: movePath file move succeeded");
             return true;
         }
         return false;
@@ -441,41 +473,53 @@ bool movePath(const std::string& src, const std::string& dst, std::string& outEr
 
     util::logLine("file_ops: movePath starting directory merge: " + srcBase + " -> " + cleanDst);
 
-    // Iterate all items in source directory
+    // List the tree first, then move. Renaming entries out of the tree while
+    // a directory iterator walks it can make the iterator skip entries, and
+    // the old code then deleted the whole source tree, skipped files included.
+    std::vector<std::string> srcDirs;
+    std::vector<std::string> srcFiles;
     for (const auto& entry : std::filesystem::recursive_directory_iterator(srcP, std::filesystem::directory_options::skip_permission_denied, ec)) {
         std::string entryPath = normalizeFsPath(entry.path().generic_string());
+        if (entry.is_directory(ec)) srcDirs.push_back(entryPath);
+        else if (entry.is_regular_file(ec)) srcFiles.push_back(entryPath);
+    }
+
+    auto targetFor = [&](const std::string& entryPath) {
         std::string rel = entryPath.substr(srcBase.length());
         while (!rel.empty() && (rel.front() == '/' || rel.front() == '\\')) {
             rel.erase(0, 1);
         }
-        if (rel.empty()) continue;
-
         std::string target = cleanDst;
         if (!target.empty() && target.back() != '/') target += '/';
-        target += rel;
+        return target + rel;
+    };
 
-        if (entry.is_directory(ec)) {
-            safeCreateDirectories(target);
-        } else if (entry.is_regular_file(ec)) {
-            size_t tSlash = target.find_last_of("/\\");
-            if (tSlash != std::string::npos) {
-                safeCreateDirectories(target.substr(0, tSlash));
-            }
-            std::remove(target.c_str());
-            if (std::rename(entryPath.c_str(), target.c_str()) != 0) {
-                if (!copySingleFile(entryPath, target, outError)) {
-                    util::logLine("file_ops: movePath copySingleFile fallback failed: " + entryPath + " -> " + target);
-                    return false;
-                }
-                std::remove(entryPath.c_str());
-            }
+    for (const auto& d : srcDirs) {
+        safeCreateDirectories(targetFor(d));
+    }
+    for (const auto& entryPath : srcFiles) {
+        std::string target = targetFor(entryPath);
+        size_t tSlash = target.find_last_of("/\\");
+        if (tSlash != std::string::npos) {
+            safeCreateDirectories(target.substr(0, tSlash));
+        }
+        if (!moveFileOver(entryPath, target, outError)) {
+            util::logLine("file_ops: movePath failed: " + entryPath + " -> " + target);
+            return false;
         }
     }
 
-    // Now delete the empty source directory tree
-    std::string delErr;
-    if (!deletePathRecursive(cleanSrc, delErr)) {
-        util::logLine("file_ops: movePath clean up source dir warning: " + delErr);
+    // Remove the source folders, deepest first. remove() refuses non-empty
+    // folders, so anything that was not moved stays where it was.
+    std::sort(srcDirs.begin(), srcDirs.end(), [](const std::string& a, const std::string& b) {
+        return a.size() > b.size();
+    });
+    for (const auto& d : srcDirs) {
+        std::filesystem::remove(d, ec);
+    }
+    std::filesystem::remove(srcP, ec);
+    if (std::filesystem::exists(srcP, ec)) {
+        util::logLine("file_ops: movePath: source folder not empty after move, kept: " + cleanSrc);
     }
 
     util::logLine("file_ops: movePath directory merge finished successfully");

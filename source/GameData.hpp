@@ -18,6 +18,7 @@
 #include "net/http_client.h"
 #include "net/image_downloader.h"
 #include "config/config.h"
+#include "utils/atomic_file.h"
 #include "utils/log.h"
 #include "utils/app_paths.h"
 #include "utils/string_utils.h"
@@ -503,6 +504,9 @@ inline std::string extractLangBadge(const std::string& interface_lang) {
 // Fast file reading into a preallocated std::string buffer
 inline bool readFileFast(const std::string& path, std::string& out) {
     FILE* f = fopen(path.c_str(), "rb");
+    // A crash between the two renames of util::atomicWriteFile leaves only
+    // the .bak copy.
+    if (!f) f = fopen((path + ".bak").c_str(), "rb");
     if (!f) return false;
 
     if (fseek(f, 0, SEEK_END) != 0) {
@@ -518,10 +522,7 @@ inline bool readFileFast(const std::string& path, std::string& out) {
 
     out.resize(static_cast<size_t>(size));
     if (size > 0) {
-        // Use a 256 KB I/O buffer for fast block reads from Switch SD card
-        std::vector<char> ioBuf(256 * 1024);
-        setvbuf(f, ioBuf.data(), _IOFBF, ioBuf.size());
-
+        // One fread of the whole file: a stdio buffer would only add a copy.
         size_t readBytes = fread(&out[0], 1, static_cast<size_t>(size), f);
         if (readBytes != static_cast<size_t>(size)) {
             out.resize(readBytes);
@@ -714,6 +715,15 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
         util::logLine("GameData: SAX parsed from string, count=" + std::to_string(games.size()));
         return games;
     }
+    if (!ok) {
+        // Malformed or truncated JSON: whatever was parsed so far is a partial
+        // catalog that callers would save over the good one. The DOM parser
+        // below would fail on the same input (and needs ~10x the RAM).
+        util::logLine("GameData: JSON is malformed, discarding " + std::to_string(games.size()) + " partially parsed games");
+        games.clear();
+        return games;
+    }
+    games.clear();
 
     // Fallback to DOM parse if needed
     try {
@@ -745,9 +755,10 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         std::filesystem::create_directories(p.parent_path(), ec);
     }
 
-    FILE* f = fopen(binPath.c_str(), "wb");
+    const std::string tmpPath = binPath + ".part";
+    FILE* f = fopen(tmpPath.c_str(), "wb");
     if (!f) {
-        util::logLine("GameData: failed to open bin file for writing: " + binPath);
+        util::logLine("GameData: failed to open bin file for writing: " + tmpPath);
         return false;
     }
 
@@ -827,10 +838,15 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         }
     }
 
-    fflush(f);
-    fclose(f);
+    if (fflush(f) != 0) writeError = true;
+    if (fclose(f) != 0) writeError = true;  // the final flush can fail on a full card
 
     bool ok = !writeError;
+    if (ok) {
+        ok = util::atomicReplaceFile(tmpPath, binPath);
+    } else {
+        std::remove(tmpPath.c_str());
+    }
     util::logLine("GameData: saved binary cache to " + binPath + " count=" + std::to_string(games.size()) +
                   " size=" + std::to_string(totalWritten) + " bytes ok=" + std::to_string(ok));
     return ok;
@@ -1129,14 +1145,18 @@ inline bool writeTextFile(const std::string& path, const std::string& body) {
         std::error_code ec;
         std::filesystem::create_directories(p.parent_path(), ec);
     }
-    std::ofstream out(path, std::ios::binary);
-    if (!out.is_open()) return false;
-    out.write(body.data(), body.size());
+    // Port recipes, ETags, collections and the catalog JSON go through here:
+    // write a temp file and rename it so a crash never leaves a truncated one.
+    std::string err;
+    if (!util::atomicWriteFile(path, body, &err)) {
+        util::logLine("GameData: writeTextFile failed: " + err);
+        return false;
+    }
     return true;
 }
 
 inline std::string readTextFile(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(util::existingOrBackup(path), std::ios::binary);
     if (!in.is_open()) return {};
     std::string s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     return s;
@@ -1242,11 +1262,12 @@ inline void migrateFile(const std::string& oldPath, const std::string& newPath) 
         bool o = stat(oldPath.c_str(), &sOld) == 0;
         bool n = stat(newPath.c_str(), &sNew) == 0;
         if (o && n && sOld.st_mtime > sNew.st_mtime) {
+            // The legacy copy is newer: replace the new one with it below.
             std::filesystem::remove(newPath, ec);
         } else {
             std::filesystem::remove(oldPath, ec);
+            return;
         }
-        return;
     }
     std::filesystem::rename(oldPath, newPath, ec);
     if (ec) {

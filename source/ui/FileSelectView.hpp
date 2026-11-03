@@ -99,6 +99,7 @@ private:
     void updateRowSelectionState(size_t idx);
     void calculateUncompressedSizes();
     void startProbe();
+    bool probeInFlight_ = false;  // Y must not start a second probe and poller
 };
 
 } // namespace ui

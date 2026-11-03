@@ -747,8 +747,14 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     }
 
     curl_slist_free_all(headers);
-    std::fflush(fp);
-    std::fclose(fp);
+    // A failed final flush means a truncated file (e.g. full SD card): the
+    // caller must not rename it over a good catalog.
+    bool flushed = std::fflush(fp) == 0;
+    if (std::fclose(fp) != 0) flushed = false;
+    if (!flushed && res == CURLE_OK) {
+        res = CURLE_WRITE_ERROR;
+        util::logLine("HttpClient: downloadToFileEx: write to " + dest_path + " failed");
+    }
 
     result.http_code = static_cast<int>(http_code);
     result.etag = hdr_ctx.etag;

@@ -550,7 +550,7 @@ void FileSelectView::onContentAvailable() {
     });
 
     this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        if (files_.empty()) {
+        if (files_.empty() && !probeInFlight_) {
             startProbe();
             return true;
         }
@@ -564,6 +564,7 @@ void FileSelectView::onContentAvailable() {
 }
 
 void FileSelectView::startProbe() {
+    probeInFlight_ = true;
     subtitle->setText("app/fileselect/probing"_i18n);
     auto alive = alive_flag_;
     auto status_running = std::make_shared<std::atomic<bool>>(true);
@@ -618,6 +619,7 @@ void FileSelectView::startProbe() {
                 util::logLine("FileSelectView: view already destroyed, aborting sync");
                 return;
             }
+            probeInFlight_ = false;
             util::logLine("FileSelectView: sync callback, success=" +
                           std::to_string(success) + " count=" +
                           std::to_string(probedFiles.size()));

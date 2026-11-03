@@ -57,6 +57,10 @@ private:
     std::shared_ptr<std::atomic<bool>> cancelToken_;
     std::shared_ptr<std::atomic<bool>> aliveToken_;
     std::atomic<bool> closed_{false};
+    // The "cancel extraction?" question, while it is on screen. Dialog::close()
+    // pops the top activity, so it must be closed before this dialog.
+    brls::Dialog* confirmDlg_ = nullptr;
+    void closeSelf(std::function<void()> cb = [] {});
 
     brls::Box* contentBox_ = nullptr;
     brls::Label* titleLabel_ = nullptr;

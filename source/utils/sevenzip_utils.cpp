@@ -610,7 +610,7 @@ static bool extract7zInternal(
             if (outSizeProcessed > 0) {
                 written = fwrite(outBuffer + offset, 1, outSizeProcessed, outFile);
             }
-            fclose(outFile);
+            if (fclose(outFile) != 0) written = 0;  // final flush failed (full card)
 
             if (written != outSizeProcessed) {
                 outError = "Ошибка записи на диск: " + fullPath;

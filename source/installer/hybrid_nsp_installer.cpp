@@ -1273,6 +1273,17 @@ cleanup_sha:
         }
     }
 
+#ifdef __SWITCH__
+    // A failed or cancelled install must not leave NCAs behind: drop the open
+    // placeholders and the contents already registered by this install.
+    if (state_.load() == InstallState::Completed) {
+        ncm_.forgetRegistered();
+    } else {
+        ncm_.cleanup();
+        ncm_.rollbackRegistered();
+    }
+#endif
+
     if (source_) {
         source_->notifyStreamingComplete(!cancel_requested_ && !hasError());
     }
@@ -1392,8 +1403,15 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     }
 
     if (!cnmt_ready) {
+#ifdef __SWITCH__
+        // Without the CNMT the title is never registered: the NCAs would sit
+        // on storage and the game would not show up, so this is a failure.
+        setError("CNMT parse failed, title not registered");
+        return false;
+#else
         util::logLine("hybrid: warning - CNMT parse failed, metadata registration skipped");
         return true;
+#endif
     }
     cnmt_data_ = cnmt;
 
@@ -1440,8 +1458,8 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     }
 
     if (content_infos.empty()) {
-        util::logLine("hybrid: no content records for ContentMetaDatabaseSet");
-        return true;
+        setError("no content records for ContentMetaDatabaseSet");
+        return false;
     }
 
     // Для патчей (0x81) выделяем дополнительное место под extended_data_size
@@ -1495,17 +1513,17 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     NcmContentMetaDatabase meta_db;
     Result rc = ncmOpenContentMetaDatabase(&meta_db, config_.storage);
     if (R_FAILED(rc)) {
-        util::logLine("hybrid: ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));
-        return true;
+        setError("ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));
+        return false;
     }
 
     NcmContentMetaKey key = cnmt.toKey();
 
     rc = ncmContentMetaDatabaseSet(&meta_db, &key, meta_buf.data(), meta_buf.size());
     if (R_FAILED(rc)) {
-        util::logLine("hybrid: ncmContentMetaDatabaseSet failed, rc=" + std::to_string(rc));
         ncmContentMetaDatabaseClose(&meta_db);
-        return true;
+        setError("ncmContentMetaDatabaseSet failed, rc=" + std::to_string(rc));
+        return false;
     }
 
     rc = ncmContentMetaDatabaseCommit(&meta_db);
@@ -1513,7 +1531,9 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         util::logLine("hybrid: ContentMetaDatabase commit OK, title_id=0x"
                        + std::to_string(cnmt.title_id));
     } else {
-        util::logLine("hybrid: ncmContentMetaDatabaseCommit failed, rc=" + std::to_string(rc));
+        ncmContentMetaDatabaseClose(&meta_db);
+        setError("ncmContentMetaDatabaseCommit failed, rc=" + std::to_string(rc));
+        return false;
     }
     ncmContentMetaDatabaseClose(&meta_db);
 

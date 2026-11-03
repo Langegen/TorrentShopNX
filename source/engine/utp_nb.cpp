@@ -304,13 +304,21 @@ int utp_nb_read(utp_nb_sess *c, void *buf, int len) {
     return (int)rb_pop(c, (uint8_t *)buf, (size_t)len);
 }
 
+// Queues as much of buf as the write buffer holds and returns the count
+// (0 when it is full), like a non-blocking send(). It used to refuse the whole
+// write when it did not fit, and the caller treated that as a dead session:
+// every uTP peer we uploaded to got closed.
 int utp_nb_write(utp_nb_sess *c, const void *buf, int len) {
     if (!c || !c->in_use) return -1;
     if (c->state == ST_ERROR || c->state == ST_EOF) return -1;
-    if ((size_t)len > wb_free(c)) return -1;
-    wb_push(c, (const uint8_t *)buf, (size_t)len);
-    if (c->sock && c->state == ST_CONNECTED) UTP_Write(c->sock, (size_t)len);
-    return len;
+    if (len <= 0) return 0;
+    size_t n = (size_t)len;
+    size_t room = wb_free(c);
+    if (n > room) n = room;
+    if (n == 0) return 0;
+    wb_push(c, (const uint8_t *)buf, n);
+    if (c->sock && c->state == ST_CONNECTED) UTP_Write(c->sock, n);
+    return (int)n;
 }
 
 int utp_nb_state(const utp_nb_sess *c) {

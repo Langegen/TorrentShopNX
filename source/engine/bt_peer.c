@@ -883,7 +883,10 @@ int peer_nb_next(peer_nb *p, uint8_t *id, uint8_t **payload, uint32_t *plen) {
             p->rx_off += 4;
             continue;
         }
-        if (len > MAX_MSG_LEN) return -1;
+        // A BITFIELD is 1 + ceil(pieces / 8) bytes: over 135k pieces it is
+        // longer than MAX_MSG_LEN. Accept it as long as it fits the rx buffer.
+        if (len > MAX_MSG_LEN &&
+            (len > 1 + p->bitfield_len || len > PEER_RX_CAP - 4)) return -1;
         if (avail < 4 + (size_t)len) {
             nb_compact(p);
             return 0;  // message still on the wire
@@ -929,6 +932,11 @@ static int nb_tx_append(peer_nb *p, const void *buf, size_t len) {
                       p->tx + p->tx_len, len);
     p->tx_len += len;
     return 0;
+}
+
+int peer_nb_queue_keepalive(peer_nb *p) {
+    static const uint8_t ka[4] = {0, 0, 0, 0};
+    return nb_tx_append(p, ka, sizeof(ka));
 }
 
 int peer_nb_queue(peer_nb *p, uint8_t id, const void *payload, uint32_t plen) {

@@ -98,6 +98,9 @@ typedef struct {
 // Set `sock` non-blocking and attach buffers. Takes ownership of sock.
 // Returns 0, or -1 on allocation failure (sock untouched).
 int peer_nb_init(peer_nb *p, int sock, int64_t piece_count);
+// Queue a 4-byte keep-alive through the tx queue (so uTP sessions get it
+// too, and it is never interleaved with a partly sent message).
+int peer_nb_queue_keepalive(peer_nb *p);
 // Same, but uses a µTP session instead of a TCP socket.
 int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count);
 void peer_nb_apply_speed_opts(peer_nb *p);

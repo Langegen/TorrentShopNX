@@ -833,7 +833,12 @@ static bool extractLibarchiveInternal(
 
             {
                 const auto closeStart = std::chrono::steady_clock::now();
-                fclose(outFile);   // flushes the rest of the buffer
+                // fclose flushes the rest of the buffer: on a full card this
+                // is where the write fails, and the file must not count as done.
+                if (fclose(outFile) != 0 && success) {
+                    outError = "Disk write failed: " + fullPath;
+                    success = false;
+                }
                 writeUs += elapsedUs(closeStart);
             }
 
@@ -1233,22 +1238,30 @@ bool createZipArchive(
             archive_write_finish_entry(a);
             progress.entriesProcessed++;
         } else {
+            // Open the file before writing its header: a header that promises
+            // N bytes followed by no data made the whole zip unreadable.
+            FILE* fp = std::fopen(it.fullPath.c_str(), "rb");
+            if (!fp) {
+                archive_entry_free(entry);
+                outError = "Cannot open " + it.fullPath;
+                success = false;
+                break;
+            }
+
             archive_entry_set_filetype(entry, AE_IFREG);
             archive_entry_set_perm(entry, 0644);
             archive_entry_set_size(entry, static_cast<la_int64_t>(it.size));
             int hr = archive_write_header(a, entry);
             archive_entry_free(entry);
             if (hr < ARCHIVE_OK) {
+                std::fclose(fp);
                 const char* err = archive_error_string(a);
                 outError = err ? err : "Failed to write file entry header";
                 success = false;
                 break;
             }
 
-            FILE* fp = std::fopen(it.fullPath.c_str(), "rb");
-            if (!fp) {
-                util::logLine("archive_utils: warning: could not open file " + it.fullPath);
-            } else {
+            {
                 while (true) {
                     if (cancelToken && cancelToken->load()) {
                         outError = "Cancelled";
@@ -1298,7 +1311,13 @@ bool createZipArchive(
         }
     }
 
-    archive_write_close(a);
+    // close writes the zip's central directory: without it the archive is
+    // unreadable, so its result decides success too.
+    if (archive_write_close(a) != ARCHIVE_OK && success) {
+        const char* err = archive_error_string(a);
+        outError = err ? err : "Failed to finish archive";
+        success = false;
+    }
     archive_write_free(a);
 
     if (!success || (cancelToken && cancelToken->load())) {
@@ -1306,8 +1325,8 @@ bool createZipArchive(
         return false;
     }
 
+    // movePath keeps an existing archive until the new one is in place.
     std::string moveErr;
-    std::filesystem::remove(archivePath, ec);
     if (!util::movePath(tmpArchivePath, archivePath, moveErr)) {
         outError = "Failed to finalize archive: " + moveErr;
         std::filesystem::remove(tmpArchivePath, ec);

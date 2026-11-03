@@ -200,10 +200,12 @@ void ArchiveProgressDialog::requestCancel() {
 
     auto* confirmDlg = new brls::Dialog(confirmMsg);
     confirmDlg->setCancelable(false);
-    confirmDlg->addButton(noText, []() {
+    confirmDlg->addButton(noText, [this]() {
         // Dismiss confirmation, continue extraction
+        confirmDlg_ = nullptr;
     });
     confirmDlg->addButton(yesText, [this]() {
+        confirmDlg_ = nullptr;
         if (cancelToken_) {
             cancelToken_->store(true);
         }
@@ -211,7 +213,19 @@ void ArchiveProgressDialog::requestCancel() {
             currentFileLabel_->setText("app/archive/cancelling"_i18n);
         }
     });
+    confirmDlg_ = confirmDlg;
     confirmDlg->open();
+}
+
+void ArchiveProgressDialog::closeSelf(std::function<void()> cb) {
+    if (confirmDlg_) {
+        // The question is on top: close it first, then this dialog.
+        brls::Dialog* q = confirmDlg_;
+        confirmDlg_ = nullptr;
+        q->close([this, cb]() { this->close(cb); });
+        return;
+    }
+    this->close(cb);
 }
 
 void ArchiveProgressDialog::updateUi(const util::ArchiveProgress& progress) {
@@ -301,12 +315,12 @@ void ArchiveProgressDialog::startExtraction() {
             threadClose(&thread_);
             threadStarted_ = false;
             if (onComplete_) onComplete_(false, "Failed to start extraction thread");
-            if (!closed_.exchange(true)) this->close();
+            if (!closed_.exchange(true)) closeSelf();
         }
     } else {
         util::logLine("ArchiveProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
         if (onComplete_) onComplete_(false, "Failed to create extraction thread");
-        if (!closed_.exchange(true)) this->close();
+        if (!closed_.exchange(true)) closeSelf();
     }
 #else
     workerThread_ = std::thread([this]() { runExtraction(); });
@@ -379,7 +393,7 @@ void ArchiveProgressDialog::runExtraction() {
             return;
         }
         if (!closed_.exchange(true)) {
-            this->close([onComplete, ok, err]() {
+            closeSelf([onComplete, ok, err]() {
                 if (onComplete) {
                     onComplete(ok, err);
                 }
@@ -415,12 +429,12 @@ void ArchiveProgressDialog::startCreation() {
             threadClose(&thread_);
             threadStarted_ = false;
             if (onComplete_) onComplete_(false, "Failed to start creation thread");
-            if (!closed_.exchange(true)) this->close();
+            if (!closed_.exchange(true)) closeSelf();
         }
     } else {
         util::logLine("ArchiveProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
         if (onComplete_) onComplete_(false, "Failed to create creation thread");
-        if (!closed_.exchange(true)) this->close();
+        if (!closed_.exchange(true)) closeSelf();
     }
 #else
     workerThread_ = std::thread([this]() { runCreation(); });
@@ -495,7 +509,7 @@ void ArchiveProgressDialog::runCreation() {
             return;
         }
         if (!closed_.exchange(true)) {
-            this->close([onComplete, ok, err]() {
+            closeSelf([onComplete, ok, err]() {
                 if (onComplete) {
                     onComplete(ok, err);
                 }
