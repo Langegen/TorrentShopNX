@@ -134,7 +134,7 @@ bool parseArchiveVirtualPath(
     return false;
 }
 
-static std::string sanitizeEntryPath(const std::string& raw) {
+std::string sanitizeArchiveEntryPath(const std::string& raw) {
     std::string clean = raw;
     for (char& c : clean) if (c == '\\') c = '/';
     while (!clean.empty() && (clean.front() == '/' || clean.front() == ' ')) {
@@ -206,7 +206,7 @@ bool listArchiveFolder(
             continue;
         }
 
-        std::string clean = sanitizeEntryPath(rawPath);
+        std::string clean = sanitizeArchiveEntryPath(rawPath);
         if (clean.empty()) {
             archive_read_data_skip(a);
             continue;
@@ -415,7 +415,7 @@ bool iterateArchiveEntries(
             continue;
         }
 
-        std::string clean = sanitizeEntryPath(rawPath);
+        std::string clean = sanitizeArchiveEntryPath(rawPath);
         if (clean.empty()) {
             archive_read_data_skip(a);
             continue;
@@ -660,7 +660,7 @@ static bool extractLibarchiveInternal(
     struct archive_entry* entry = nullptr;
     bool success = true;
 
-    std::string normFilter = sanitizeEntryPath(singleEntryFilter);
+    std::string normFilter = sanitizeArchiveEntryPath(singleEntryFilter);
 
     while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK || r == ARCHIVE_WARN) {
         if (r == ARCHIVE_WARN) {
@@ -694,7 +694,7 @@ static bool extractLibarchiveInternal(
             continue;
         }
 
-        std::string cleanName = sanitizeEntryPath(currentEntryName);
+        std::string cleanName = sanitizeArchiveEntryPath(currentEntryName);
         if (cleanName.empty()) {
             archive_read_data_skip(a);
             continue;
