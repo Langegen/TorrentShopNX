@@ -894,6 +894,26 @@ void CollectionCard::drawIconGlyph(NVGcontext* vg, float bx, float by, float bw,
         nvgCircle(vg, cx, cy - 12.0f, 5.0f);
         nvgCircle(vg, cx + 12.0f, cy, 5.0f);
         nvgFill(vg);
+    } else if (icon_type_ == "racing") {
+        // Checkered Flag on a Pole
+        nvgStrokeWidth(vg, 3.0f);
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, cx - 14.0f, cy - 18.0f);
+        nvgLineTo(vg, cx - 14.0f, cy + 18.0f);
+        nvgStroke(vg);
+        const float fx = cx - 12.0f, fy = cy - 17.0f, cell = 6.5f;
+        for (int r = 0; r < 4; ++r) {
+            for (int c = 0; c < 4; ++c) {
+                if ((r + c) % 2 != 0) continue;
+                nvgBeginPath(vg);
+                nvgRect(vg, fx + c * cell, fy + r * cell, cell, cell);
+                nvgFill(vg);
+            }
+        }
+        nvgBeginPath(vg);
+        nvgRect(vg, fx, fy, cell * 4.0f, cell * 4.0f);
+        nvgStrokeWidth(vg, 1.5f);
+        nvgStroke(vg);
     } else if (icon_type_ == "roguelike_roguelite") {
         // Large D6 Die with Dots
         nvgBeginPath(vg);
@@ -931,6 +951,21 @@ void CollectionCard::drawIconGlyph(NVGcontext* vg, float bx, float by, float bw,
         nvgQuadTo(vg, cx - 17.0f, cy - 3.5f, cx, cy - 17.0f);
         nvgQuadTo(vg, cx + 17.0f, cy - 3.5f, cx, cy + 15.0f);
         nvgFill(vg);
+    } else if (icon_type_ == "sports") {
+        // Ball with Seams
+        nvgBeginPath(vg);
+        nvgCircle(vg, cx, cy, 16.0f);
+        nvgFill(vg);
+        nvgStrokeColor(vg, nvgRGBA(18, 18, 22, 255));
+        nvgStrokeWidth(vg, 2.4f);
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, cx - 16.0f, cy);
+        nvgLineTo(vg, cx + 16.0f, cy);
+        nvgMoveTo(vg, cx - 6.0f, cy - 15.0f);
+        nvgQuadTo(vg, cx + 6.0f, cy, cx - 6.0f, cy + 15.0f);
+        nvgMoveTo(vg, cx + 6.0f, cy - 15.0f);
+        nvgQuadTo(vg, cx - 6.0f, cy, cx + 6.0f, cy + 15.0f);
+        nvgStroke(vg);
     } else if (icon_type_ == "strategy_tactics") {
         // Castle Battlements / Rook
         nvgBeginPath(vg);
