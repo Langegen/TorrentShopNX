@@ -22,6 +22,7 @@ std::vector<uint8_t> g_shared_buffer_pool;
   #define RB_WAIT_NF()     condvarWait(&cond_not_full_,  &mutex_)
   #define RB_SIGNAL_NE()   condvarWakeOne(&cond_not_empty_)
   #define RB_SIGNAL_NF()   condvarWakeOne(&cond_not_full_)
+  #define RB_WAKE_ALL()    do { condvarWakeAll(&cond_not_empty_); condvarWakeAll(&cond_not_full_); } while (0)
 #else
   // std::unique_lock используется в wait(), но нам нужен manual lock/unlock
   // поэтому оборачиваем через unique_lock в месте ожидания
@@ -30,6 +31,7 @@ std::vector<uint8_t> g_shared_buffer_pool;
   // Для host: используем lambdas ниже напрямую
   #define RB_SIGNAL_NE()   cond_not_empty_.notify_one()
   #define RB_SIGNAL_NF()   cond_not_full_.notify_one()
+  #define RB_WAKE_ALL()    do { cond_not_empty_.notify_all(); cond_not_full_.notify_all(); } while (0)
 #endif
 
 RingBuffer::RingBuffer(size_t capacity)
@@ -196,7 +198,8 @@ void RingBuffer::reset() {
     read_pos_  = 0;
     write_pos_ = 0;
     stored_    = 0;
-    eof_       = false;
+    eof_       = capacity_ == 0;  // no storage: nothing can ever be written
+    RB_WAKE_ALL();
     RB_UNLOCK();
 }
 
@@ -214,7 +217,10 @@ void RingBuffer::clear() {
     read_pos_  = 0;
     write_pos_ = 0;
     stored_    = 0;
-    eof_       = false;
+    // With capacity 0 a blocked writer would wait forever: mark EOF and wake
+    // everyone so they return. reinit() clears it again.
+    eof_       = true;
+    RB_WAKE_ALL();
     RB_UNLOCK();
 }
 
@@ -268,7 +274,8 @@ void RingBuffer::reinit(size_t capacity) {
     read_pos_  = 0;
     write_pos_ = 0;
     stored_    = 0;
-    eof_       = false;
+    eof_       = capacity_ == 0;  // allocation failed: fail fast instead of blocking
+    RB_WAKE_ALL();
     RB_UNLOCK();
 }
 

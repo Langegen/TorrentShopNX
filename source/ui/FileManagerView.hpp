@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_set>
 #include <memory>
+#include <atomic>
 
 namespace ui {
 
@@ -70,7 +71,7 @@ public:
     CONTENT_FROM_XML_RES("file_manager_view.xml");
 
     FileManagerView(const std::string& initialPath = "", const std::string& focusChild = "", const std::string& rootDir = "");
-    ~FileManagerView() override = default;
+    ~FileManagerView() override { alive_->store(false); }
 
     void onContentAvailable() override;
     void willAppear(bool resetState = false) override;
@@ -143,6 +144,9 @@ public:
     BRLS_BIND(brls::Label,         splitToggleHint,    "splitToggleHint");
 
 private:
+    // Copy/move jobs run for minutes; their completion must not touch a view
+    // the user already closed.
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
     PanelState panels_[2];
     int activePanel_ = 0;
     bool isSplitMode_ = false;

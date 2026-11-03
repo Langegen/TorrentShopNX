@@ -22,6 +22,7 @@ private:
     void rebuildGrid();
 
     std::shared_ptr<std::atomic<bool>> alive_flag_;
+    int themeSub_ = 0;
     std::unordered_map<std::string, CollectionCard*> collection_cards_;
     std::vector<std::vector<CollectionCard*>> grid_;
 

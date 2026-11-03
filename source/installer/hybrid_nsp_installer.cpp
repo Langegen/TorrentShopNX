@@ -116,14 +116,24 @@ void sleepPrebufferPoll() {
 #ifdef __SWITCH__
 void collectorThreadEntry(void* arg) {
     auto* self = static_cast<HybridNspInstaller*>(arg);
-    self->collectorThreadFunc();
+    self->runGuarded(&HybridNspInstaller::collectorThreadFunc, "collector");
 }
 
 void installerThreadEntry(void* arg) {
     auto* self = static_cast<HybridNspInstaller*>(arg);
-    self->installerThreadFunc();
+    self->runGuarded(&HybridNspInstaller::installerThreadFunc, "installer");
 }
 #endif
+
+void HybridNspInstaller::runGuarded(void (HybridNspInstaller::*fn)(), const char* name) {
+    try {
+        (this->*fn)();
+    } catch (const std::exception& e) {
+        setError(std::string("internal error in ") + name + " thread: " + e.what());
+    } catch (...) {
+        setError(std::string("internal error in ") + name + " thread");
+    }
+}
 
 // =============================================================================
 // Конструктор / Деструктор
@@ -487,8 +497,10 @@ bool HybridNspInstaller::startStreamingPhase() {
 #else
     // На хосте — запуск через std::thread
     threads_started_ = true;
-    collector_thread_ = std::thread(&HybridNspInstaller::collectorThreadFunc, this);
-    installer_thread_ = std::thread(&HybridNspInstaller::installerThreadFunc, this);
+    collector_thread_ = std::thread(&HybridNspInstaller::runGuarded, this,
+                                    &HybridNspInstaller::collectorThreadFunc, "collector");
+    installer_thread_ = std::thread(&HybridNspInstaller::runGuarded, this,
+                                    &HybridNspInstaller::installerThreadFunc, "installer");
 #endif
 
     return true;

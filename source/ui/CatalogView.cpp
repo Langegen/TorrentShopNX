@@ -131,9 +131,7 @@ void CatalogView::onContentAvailable() {
         ? catalog::SortOption::TITLE_ASC
         : filterState_.sort;
 
-    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game* a, const Game* b) {
-        return catalog::compareGames(a, b, sortOpt);
-    });
+    catalog::sortGamesBy(filteredGames_, sortOpt, [](const Game* g) { return g; });
 
     std::string countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
     statsHint->setText(ui::style::headerMeta(countStr, {
@@ -272,9 +270,7 @@ void CatalogView::filterCatalog() {
         ? catalog::SortOption::TITLE_ASC
         : filterState_.sort;
 
-    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game* a, const Game* b) {
-        return catalog::compareGames(a, b, sortOpt);
-    });
+    catalog::sortGamesBy(filteredGames_, sortOpt, [](const Game* g) { return g; });
 
     if (statsHint) {
         std::string countStr;
@@ -423,7 +419,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cards[i].stats->setVisibility(brls::Visibility::GONE);
 
                 cards[i].size->setText(game.size);
-                const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+                const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
                 if (cards[i].statsBox) {
                     if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
                         cards[i].statsBox->setVisibility(brls::Visibility::VISIBLE);

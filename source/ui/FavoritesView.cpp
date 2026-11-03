@@ -102,9 +102,7 @@ void FavoritesView::filterFavorites() {
     }
 
     if (filterState_.sort != catalog::SortOption::DEFAULT) {
-        std::stable_sort(filtered.begin(), filtered.end(), [this](const Game& a, const Game& b) {
-            return catalog::compareGames(a, b, filterState_.sort);
-        });
+        catalog::sortGamesBy(filtered, filterState_.sort, [](const Game& g) { return &g; });
     }
 
     filteredFavorites_ = std::move(filtered);
@@ -216,7 +214,7 @@ brls::RecyclerCell* FavoritesView::FavoritesDataSource::cellForRow(brls::Recycle
             cards[i].stats->setVisibility(brls::Visibility::GONE);
 
             cards[i].size->setText(game.size);
-            const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+            const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
             if (cards[i].statsBox) {
                 if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
                     cards[i].statsBox->setVisibility(brls::Visibility::VISIBLE);

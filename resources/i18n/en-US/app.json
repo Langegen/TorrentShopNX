@@ -798,6 +798,7 @@
         "folder_created": "Folder created",
         "renamed_success": "Renamed successfully",
         "paste_success": "Paste completed",
+        "operation_busy": "Another copy or move is still running",
         "action_btn": "Actions",
         "item_folder_1": "folder",
         "item_folder_few": "folders",

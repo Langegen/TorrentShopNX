@@ -86,7 +86,10 @@ public:
 
     // Listener callbacks
     using ThemeChangeCallback = std::function<void()>;
-    void subscribe(ThemeChangeCallback cb);
+    // Returns an id for unsubscribe(). Views that can be destroyed must
+    // unsubscribe in their destructor.
+    int subscribe(ThemeChangeCallback cb);
+    void unsubscribe(int id);
 
 private:
     ThemeManager();
@@ -97,7 +100,9 @@ private:
     std::vector<ThemePalette> themes_;
     size_t currentThemeIdx_ = 5; // Default to "light" theme
     uint32_t wallpaperVersion_ = 1;
-    std::vector<ThemeChangeCallback> listeners_;
+    std::vector<std::pair<int, ThemeChangeCallback>> listeners_;
+    int nextListenerId_ = 1;
+    void notifyListeners();
 };
 
 } // namespace ui

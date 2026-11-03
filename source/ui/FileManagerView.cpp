@@ -18,6 +18,18 @@ namespace ui {
 
 namespace {
 
+// One copy/move job at a time (also across reopened file manager screens).
+std::atomic<bool> g_fileOpBusy{false};
+
+bool beginFileOp() {
+    bool expected = false;
+    if (!g_fileOpBusy.compare_exchange_strong(expected, true)) {
+        brls::Application::notify("app/file_manager/operation_busy"_i18n);
+        return false;
+    }
+    return true;
+}
+
 bool isTextFile(const std::string& path) {
     static const std::unordered_set<std::string> textExts = {
         ".txt", ".log", ".ini", ".cfg", ".conf", ".json", ".xml",
@@ -1533,7 +1545,8 @@ void FileManagerView::pasteClipboard() {
     int actIdx = activePanel_;
     std::string targetDir = panels_[actIdx].currentDir;
 
-    brls::async([this, paths, isCut, actIdx, targetDir]() {
+    if (!beginFileOp()) return;
+    brls::async([this, alive = alive_, paths, isCut, actIdx, targetDir]() {
         bool allOk = true;
         std::string lastErr;
 
@@ -1567,12 +1580,14 @@ void FileManagerView::pasteClipboard() {
             util::clearClipboard();
         }
 
-        brls::sync([this, allOk, lastErr, actIdx]() {
+        g_fileOpBusy.store(false);
+        brls::sync([this, alive, allOk, lastErr, actIdx]() {
             if (allOk) {
                 brls::Application::notify("app/file_manager/paste_success"_i18n);
             } else {
                 brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
             }
+            if (!alive->load()) return;
             refresh(actIdx);
             if (isSplitMode_) refresh(1 - actIdx);
         });
@@ -1624,7 +1639,8 @@ void FileManagerView::copyToOppositePanel() {
     }
 
     int actIdx = activePanel_;
-    brls::async([this, targets, cleanOpp, actIdx, oppIdx]() {
+    if (!beginFileOp()) return;
+    brls::async([this, alive = alive_, targets, cleanOpp, actIdx, oppIdx]() {
         bool allOk = true;
         std::string lastErr;
         for (const auto& src : targets) {
@@ -1652,12 +1668,14 @@ void FileManagerView::copyToOppositePanel() {
                 lastErr = err;
             }
         }
-        brls::sync([this, allOk, lastErr, actIdx, oppIdx]() {
+        g_fileOpBusy.store(false);
+        brls::sync([this, alive, allOk, lastErr, actIdx, oppIdx]() {
             if (allOk) {
                 brls::Application::notify("app/file_manager/copied_success"_i18n);
             } else {
                 brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
             }
+            if (!alive->load()) return;
             refresh(actIdx);
             refresh(oppIdx);
         });
@@ -1717,7 +1735,8 @@ void FileManagerView::moveToOppositePanel() {
     }
 
     int actIdx = activePanel_;
-    brls::async([this, targets, cleanOpp, actIdx, oppIdx]() {
+    if (!beginFileOp()) return;
+    brls::async([this, alive = alive_, targets, cleanOpp, actIdx, oppIdx]() {
         bool allOk = true;
         std::string lastErr;
         for (const auto& src : targets) {
@@ -1733,7 +1752,13 @@ void FileManagerView::moveToOppositePanel() {
                 lastErr = err;
             }
         }
-        brls::sync([this, allOk, lastErr, actIdx, oppIdx]() {
+        g_fileOpBusy.store(false);
+        brls::sync([this, alive, allOk, lastErr, actIdx, oppIdx]() {
+            if (!alive->load()) {
+                brls::Application::notify(allOk ? "app/file_manager/move_success"_i18n
+                                                : (lastErr.empty() ? "app/common/error"_i18n : lastErr));
+                return;
+            }
             if (allOk) {
                 panels_[actIdx].selectedPaths.clear();
                 brls::Application::notify("app/file_manager/move_success"_i18n);

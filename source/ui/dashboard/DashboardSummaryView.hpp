@@ -18,6 +18,7 @@ class DashboardSummaryView : public brls::Box {
 public:
     DashboardSummaryView();
     ~DashboardSummaryView() override;
+    int themeSub_ = 0;
 
     void setFocusedIndex(int index);
     void updateDownloads(const std::vector<download::DownloadItem>& items);

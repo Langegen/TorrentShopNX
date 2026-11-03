@@ -444,6 +444,7 @@ struct torrentfs {
     volatile bool stop;
     volatile bool cancel_reader;
     volatile int pending_select_file; // -1 = none, >= 0 = file index to switch to on netloop thread
+    volatile int select_gen;          // bumped by the netloop after each applied switch
 
     aq_entry aq[AQ_MAX];
     int16_t *aq_of_piece;      // piece -> aq slot hint (validated by aq[slot].idx)
@@ -1850,12 +1851,12 @@ static void send_cancel_one(torrentfs *t, sess *s, int ep, int eb) {
     v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
     memcpy(pl + 8, &v, 4);
     peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
-    // Flush immediately to drop duplicate transfers on the wire right away
-    if (peer_nb_tx_pending(&s->nb)) {
-        if (peer_nb_flush(&s->nb) != 0) {
-            sess_close(t, s, true);
-        }
-    }
+    // Flush immediately to drop duplicate transfers on the wire right away.
+    // A failed flush is NOT handled here: callers are in the middle of walking
+    // this session's request ring, and closing it under them corrupts req_n.
+    // The netloop's regular POLLOUT flush hits the same error and closes it.
+    if (peer_nb_tx_pending(&s->nb))
+        (void)peer_nb_flush(&s->nb);
 }
 
 // Drop a session's outstanding requests without cancelling them on the wire:
@@ -3558,6 +3559,8 @@ static void netloop_main(void *arg) {
             int claimed = __atomic_exchange_n(&t->pending_select_file, -1, __ATOMIC_ACQ_REL);
             if (claimed >= 0) {
                 torrentfs_apply_select_file(t, claimed);
+                __atomic_add_fetch(&t->select_gen, 1, __ATOMIC_ACQ_REL);
+                condvarWakeAll(&t->piece_cv);  // select_file waits on it
                 last_upkeep = 0; // force immediate request_scan for the newly selected file
             }
         }
@@ -4532,18 +4535,30 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->cancel_reader = true;
     tfs->read_blocked_piece = -1;
 
-    // 2. Delegate aq[] / S[] reconfiguration to the netloop thread to avoid data races
+    // 2. Delegate aq[] / S[] reconfiguration to the netloop thread. It must
+    //    never run here while the netloop is alive: it frees aq[].buf that the
+    //    netloop may be writing into.
     if (tfs->netloop_started && !tfs->stop) {
+        int gen0 = __atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE);
         __atomic_store_n(&tfs->pending_select_file, file_index, __ATOMIC_RELEASE);
-        for (int wait_i = 0; wait_i < 500 && !tfs->stop; wait_i++) {
-            if (__atomic_load_n(&tfs->pending_select_file, __ATOMIC_ACQUIRE) < 0) {
-                break;
-            }
-            svcSleepThread(2000000ULL); // 2 ms
+        mutexLock(&tfs->lock);
+        for (int wait_i = 0; wait_i < 250 && !tfs->stop; wait_i++) {   // ~5 s
+            if (__atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE) != gen0) break;
+            condvarWaitTimeout(&tfs->piece_cv, &tfs->lock, 20000000ULL);
         }
-        int leftover = __atomic_exchange_n(&tfs->pending_select_file, -1, __ATOMIC_ACQ_REL);
-        if (leftover >= 0) {
-            torrentfs_apply_select_file(tfs, leftover);
+        mutexUnlock(&tfs->lock);
+        if (__atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE) == gen0) {
+            int leftover = __atomic_exchange_n(&tfs->pending_select_file, -1, __ATOMIC_ACQ_REL);
+            if (leftover >= 0 || tfs->stop) {
+                // The netloop never picked it up (or is stopping): let the
+                // caller reopen the stream on the new file instead.
+                tfs->cancel_reader = false;
+                engine_log(ENGINE_LOG_WARN, "[torrentfs] select_file: netloop busy, switch not applied");
+                return false;
+            }
+            // Claimed and being applied right now: it is short, wait it out.
+            while (__atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE) == gen0 && !tfs->stop)
+                svcSleepThread(2000000ULL);
         }
     } else {
         torrentfs_apply_select_file(tfs, file_index);

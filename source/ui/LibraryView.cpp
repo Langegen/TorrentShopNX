@@ -1808,7 +1808,16 @@ void LibraryView::uninstallPort(const LibraryItem& item, int currentSection, int
 
 void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods) {
     auto cancelToken = cancelToken_;
-    brls::async([this, titleId, displayName, currentSection, currentRow, deleteMods, cancelToken]() {
+    // Read the view's data here, on the main thread: the worker below runs for
+    // seconds and the list may be rescanned (or the view closed) meanwhile.
+    std::string modPath;
+    for (const auto& itm : rawItems_) {
+        if (itm.titleId == titleId) {
+            modPath = itm.modPath;
+            break;
+        }
+    }
+    brls::async([this, titleId, displayName, currentSection, currentRow, deleteMods, cancelToken, modPath]() {
         try {
             if (cancelToken && *cancelToken) return;
 
@@ -1830,13 +1839,6 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
             ok = true; // PC mock: allow uninstall
 #endif
             if (ok && deleteMods) {
-                std::string modPath;
-                for (const auto& itm : rawItems_) {
-                    if (itm.titleId == titleId) {
-                        modPath = itm.modPath;
-                        break;
-                    }
-                }
                 deleteGameMods(titleId, modPath);
             }
 

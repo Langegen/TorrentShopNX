@@ -3,10 +3,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Nesting deeper than this is rejected. Real torrents, tracker replies and
+// peer extension messages stay under ~8 levels; without a cap a peer can send
+// "llll..." and overflow the parsing thread's stack.
+#define BE_MAX_DEPTH 64
+
 typedef struct {
     const char *buf;
     size_t len;
     size_t pos;
+    int depth;
 } be_parser;
 
 static be_node *parse_value(be_parser *p);
@@ -46,7 +52,9 @@ static be_node *parse_int(be_parser *p) {
     if (peek(p) < '0' || peek(p) > '9') return NULL;
     int64_t v = 0;
     while (peek(p) >= '0' && peek(p) <= '9') {
-        v = v * 10 + (p->buf[p->pos] - '0');
+        int d = p->buf[p->pos] - '0';
+        if (v > (INT64_MAX - d) / 10) return NULL;  // overflow
+        v = v * 10 + d;
         p->pos++;
     }
     if (peek(p) != 'e') return NULL;
@@ -60,13 +68,18 @@ static be_node *parse_list(be_parser *p) {
     p->pos++; // skip 'l'
     be_node *n = node_new(BE_LIST);
     if (!n) return NULL;
+    size_t cap = 0;
     while (peek(p) != 'e') {
         if (peek(p) < 0) { be_free(n); return NULL; }
         be_node *item = parse_value(p);
         if (!item) { be_free(n); return NULL; }
-        be_node **grown = realloc(n->list.items, (n->list.count + 1) * sizeof(be_node *));
-        if (!grown) { be_free(item); be_free(n); return NULL; }
-        n->list.items = grown;
+        if (n->list.count == cap) {
+            size_t ncap = cap ? cap * 2 : 4;
+            be_node **grown = realloc(n->list.items, ncap * sizeof(be_node *));
+            if (!grown) { be_free(item); be_free(n); return NULL; }
+            n->list.items = grown;
+            cap = ncap;
+        }
         n->list.items[n->list.count++] = item;
     }
     p->pos++; // skip 'e'
@@ -77,15 +90,20 @@ static be_node *parse_dict(be_parser *p) {
     p->pos++; // skip 'd'
     be_node *n = node_new(BE_DICT);
     if (!n) return NULL;
+    size_t cap = 0;
     while (peek(p) != 'e') {
         const char *key;
         size_t keylen;
         if (parse_rawstr(p, &key, &keylen) != 0) { be_free(n); return NULL; }
         be_node *val = parse_value(p);
         if (!val) { be_free(n); return NULL; }
-        be_dict_entry *grown = realloc(n->dict.items, (n->dict.count + 1) * sizeof(be_dict_entry));
-        if (!grown) { be_free(val); be_free(n); return NULL; }
-        n->dict.items = grown;
+        if (n->dict.count == cap) {
+            size_t ncap = cap ? cap * 2 : 4;
+            be_dict_entry *grown = realloc(n->dict.items, ncap * sizeof(be_dict_entry));
+            if (!grown) { be_free(val); be_free(n); return NULL; }
+            n->dict.items = grown;
+            cap = ncap;
+        }
         n->dict.items[n->dict.count].key = key;
         n->dict.items[n->dict.count].keylen = keylen;
         n->dict.items[n->dict.count].val = val;
@@ -100,8 +118,13 @@ static be_node *parse_value(be_parser *p) {
     be_node *n;
     switch (peek(p)) {
         case 'i': n = parse_int(p); break;
-        case 'l': n = parse_list(p); break;
-        case 'd': n = parse_dict(p); break;
+        case 'l':
+        case 'd':
+            if (p->depth >= BE_MAX_DEPTH) return NULL;
+            p->depth++;
+            n = peek(p) == 'l' ? parse_list(p) : parse_dict(p);
+            p->depth--;
+            break;
         default: {
             n = node_new(BE_STR);
             if (!n) return NULL;
@@ -120,7 +143,7 @@ static be_node *parse_value(be_parser *p) {
 }
 
 be_node *be_parse(const char *buf, size_t len) {
-    be_parser p = { buf, len, 0 };
+    be_parser p = { buf, len, 0, 0 };
     return parse_value(&p);
 }
 

@@ -798,6 +798,7 @@
         "folder_created": "Папка создана",
         "renamed_success": "Переименовано",
         "paste_success": "Вставка завершена",
+        "operation_busy": "Уже идёт копирование или перемещение",
         "action_btn": "Действия",
         "item_folder_1": "папка",
         "item_folder_few": "папки",

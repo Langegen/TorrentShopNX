@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <mutex>
@@ -22,13 +23,13 @@ class GameStatsManager {
 public:
     static GameStatsManager& instance();
 
-    // Fast O(1) thread-safe lookups
-    const GameStats* getSwitchStats(const std::string& topic_id) const;
-    // Copy taken under the lock: safe from worker threads while a background
-    // stats refresh replaces the map (the pointer getters above are not).
+    // O(1) thread-safe lookups. They return copies taken under the lock: a
+    // background stats refresh replaces the maps, so a pointer into them
+    // could dangle by the time the caller reads it.
+    std::optional<GameStats> getSwitchStats(const std::string& topic_id) const;
     bool copySwitchStats(const std::string& topic_id, GameStats& out) const;
-    const GameStats* getConsoleStats(const std::string& topic_id) const;
-    const GameStats* getAnyStats(const std::string& topic_id) const;
+    std::optional<GameStats> getConsoleStats(const std::string& topic_id) const;
+    std::optional<GameStats> getAnyStats(const std::string& topic_id) const;
 
     // Load cached stats from SD / disk
     void loadFromDisk();

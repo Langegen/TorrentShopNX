@@ -206,9 +206,7 @@ void ThemeManager::setTheme(const std::string& themeId) {
         notifyWallpaperChanged();
     }
 
-    for (const auto& cb : listeners_) {
-        if (cb) cb();
-    }
+    notifyListeners();
     util::logLine("ThemeManager: theme set to " + getCurrentThemeId());
 }
 
@@ -495,13 +493,32 @@ std::string ThemeManager::getEffectiveWallpaperPath() const {
 void ThemeManager::notifyWallpaperChanged() {
     wallpaperVersion_++;
     util::logLine("ThemeManager: wallpaper changed, version=" + std::to_string(wallpaperVersion_) + " path=" + getEffectiveWallpaperPath());
-    for (const auto& cb : listeners_) {
-        if (cb) cb();
+    notifyListeners();
+}
+
+void ThemeManager::notifyListeners() {
+    // Callbacks rebuild views, which may subscribe or unsubscribe: iterate a
+    // copy and skip listeners removed in the meantime.
+    auto snapshot = listeners_;
+    for (const auto& entry : snapshot) {
+        bool still = false;
+        for (const auto& cur : listeners_) {
+            if (cur.first == entry.first) { still = true; break; }
+        }
+        if (still && entry.second) entry.second();
     }
 }
 
-void ThemeManager::subscribe(ThemeChangeCallback cb) {
-    listeners_.push_back(std::move(cb));
+int ThemeManager::subscribe(ThemeChangeCallback cb) {
+    int id = nextListenerId_++;
+    listeners_.emplace_back(id, std::move(cb));
+    return id;
+}
+
+void ThemeManager::unsubscribe(int id) {
+    for (auto it = listeners_.begin(); it != listeners_.end(); ++it) {
+        if (it->first == id) { listeners_.erase(it); return; }
+    }
 }
 
 void ThemeManager::applyThemeToBorealis() {

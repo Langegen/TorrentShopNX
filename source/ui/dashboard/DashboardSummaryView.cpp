@@ -392,12 +392,13 @@ DashboardSummaryView::DashboardSummaryView() {
 
     rebuildContent();
 
-    ThemeManager::instance().subscribe([this]() {
+    themeSub_ = ThemeManager::instance().subscribe([this]() {
         rebuildContent();
     });
 }
 
 DashboardSummaryView::~DashboardSummaryView() {
+    ThemeManager::instance().unsubscribe(themeSub_);
     if (imageToken_) {
         *imageToken_ = false;
     }

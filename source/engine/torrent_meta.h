@@ -13,6 +13,7 @@ extern "C" {
 
 #define MAX_TRACKERS 64
 #define MAX_TORRENT_FILES 65536
+#define TORRENT_MAX_PIECE_LEN (64LL * 1024 * 1024)
 
 // One file within the torrent, with its byte offset in the concatenated piece
 // layout (offset 0 for single-file torrents).

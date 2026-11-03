@@ -503,11 +503,8 @@ void RetroCatalogView::filterCatalog() {
     }
 
     if (filterState_.sort != catalog::SortOption::DEFAULT) {
-        auto sortFunc = [this](const Game& a, const Game& b) {
-            return catalog::compareGames(a, b, filterState_.sort);
-        };
-        std::sort(filteredRomsets_.begin(), filteredRomsets_.end(), sortFunc);
-        std::sort(filteredStandalone_.begin(), filteredStandalone_.end(), sortFunc);
+        catalog::sortGamesBy(filteredRomsets_, filterState_.sort, [](const Game& g) { return &g; });
+        catalog::sortGamesBy(filteredStandalone_, filterState_.sort, [](const Game& g) { return &g; });
     }
 
     // Single games first: collections are large and rarely what people look for.
@@ -676,7 +673,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
             cell->actionLabel->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_A, "app/retro/btn_download_rom"_i18n));
         }
 
-        const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+        const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
         if (cell->statsBox) {
             if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
                 cell->statsBox->setVisibility(brls::Visibility::VISIBLE);
@@ -785,7 +782,7 @@ brls::RecyclerCell* RetroCatalogView::RetroDataSource::cellForRow(brls::Recycler
                 cards[i].romBadge->setTextColor(nvgRGB(255, 255, 255));
             }
 
-            const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+            const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
             if (cards[i].statsBox) {
                 if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
                     cards[i].statsBox->setVisibility(brls::Visibility::VISIBLE);

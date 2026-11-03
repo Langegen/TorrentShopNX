@@ -192,7 +192,7 @@ void GameDetailView::onContentAvailable() {
     addMeta("app/detail_meta/release", game_.year);
     addMeta("app/detail_meta/voice", game_.voice_lang);
 
-    const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game_.topic_id);
+    const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game_.topic_id);
     if (statsData && (statsData->seeds >= 0 || statsData->downloads >= 0)) {
         addMeta("app/detail_meta/torrent",
                 brls::getStr("app/detail_meta/torrent_value",

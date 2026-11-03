@@ -226,6 +226,7 @@ function Build-ExtractSafetyTest {
         "source\utils\sevenzip_utils.cpp",
         "source\utils\extraction_journal.cpp",
         "source\utils\file_ops.cpp",
+        "source\utils\big_file.cpp",
         "source\utils\log.cpp"
     )
     foreach ($src in $XS_CPP) {

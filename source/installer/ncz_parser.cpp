@@ -147,6 +147,13 @@ bool NczDecompressor::init() {
         return false;
     }
 
+    // Real NCZ files have a handful of sections; a corrupt header must not
+    // make us reserve gigabytes (bad_alloc would terminate the installer).
+    if (section_count == 0 || section_count > 64) {
+        util::logLine("ncz: invalid section count " + std::to_string(section_count));
+        return false;
+    }
+
     std::vector<NczSection> raw_sections;
     raw_sections.reserve(static_cast<size_t>(section_count));
 
@@ -210,7 +217,18 @@ bool NczDecompressor::init() {
             return false;
         }
 
+        // NCZ writers use 2^14..2^20; allow up to 2^30. Shifting by >= 32 is
+        // undefined, and a huge block count would exhaust memory.
+        if (block_size_exp < 14 || block_size_exp > 30) {
+            util::logLine("ncz: invalid block size exponent " + std::to_string(block_size_exp));
+            return false;
+        }
         block_size_ = 1u << block_size_exp;
+        const uint64_t max_blocks = (block_body_size >> block_size_exp) + 1;
+        if (num_blocks == 0 || num_blocks > max_blocks) {
+            util::logLine("ncz: invalid block count " + std::to_string(num_blocks));
+            return false;
+        }
         compressed_block_sizes_.resize(num_blocks);
         for (uint32_t i = 0; i < num_blocks; ++i) {
             if (!read_exact(&compressed_block_sizes_[i], sizeof(compressed_block_sizes_[i]), "NCZBLOCK compressed block size")) {
@@ -378,6 +396,12 @@ size_t NczDecompressor::read(void* buffer, size_t size) {
                 }
                 
                 uint32_t comp_size = compressed_block_sizes_[current_block_id_++];
+                // A compressed block is never much bigger than the raw block.
+                if (comp_size == 0 || comp_size > block_size_ + 65536u) {
+                    util::logLine("ncz: invalid compressed block size " + std::to_string(comp_size));
+                    failed_ = true;
+                    break;
+                }
                 
                 // Calculate expected decompressed size for this block
                 // but since we read blocks sequentially, current_block_id_ * block_size_ is the offset in compressed area.

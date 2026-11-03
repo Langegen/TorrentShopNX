@@ -884,6 +884,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     };
 
     games.clear();
+    // Every record has at least five 2-byte string lengths: a count larger
+    // than the file allows is corruption, not a reason to reserve gigabytes.
+    if (count > static_cast<size_t>(end - ptr) / 10) {
+        util::logLine("GameData: bin cache count too large " + std::to_string(count));
+        return false;
+    }
     games.reserve(count);
 
     for (uint32_t i = 0; i < count; ++i) {

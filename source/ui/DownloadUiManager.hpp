@@ -4,6 +4,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include "../download/download_manager.h"
 #include "../GameData.hpp"
 
@@ -48,9 +49,23 @@ public:
     void loadDownloads();
 
     // Progress updates callback
+    // Set from the UI thread, called from the download thread: the callback
+    // is swapped as a shared_ptr under a lock and called on a local copy, so
+    // replacing it never frees the function object that is running.
     using ProgressCallback = std::function<void()>;
-    void setProgressCallback(ProgressCallback cb) { progress_callback_ = cb; }
-    void triggerCallback() { if (progress_callback_) progress_callback_(); }
+    void setProgressCallback(ProgressCallback cb) {
+        auto p = cb ? std::make_shared<ProgressCallback>(std::move(cb)) : nullptr;
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        progress_callback_ = std::move(p);
+    }
+    void triggerCallback() {
+        std::shared_ptr<ProgressCallback> cb;
+        {
+            std::lock_guard<std::mutex> lock(callback_mutex_);
+            cb = progress_callback_;
+        }
+        if (cb && *cb) (*cb)();
+    }
 
 private:
     DownloadManager() = default;
@@ -59,7 +74,8 @@ private:
     DownloadManager& operator=(const DownloadManager&) = delete;
 
     download::DownloadManager impl_;
-    ProgressCallback progress_callback_ = nullptr;
+    std::mutex callback_mutex_;
+    std::shared_ptr<ProgressCallback> progress_callback_;
 };
 
 } // namespace ui

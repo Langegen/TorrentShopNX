@@ -127,9 +127,13 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     progressDialog->setCancelable(false);
     
     auto progressObj = std::make_shared<AppDownloadProgress>();
+    // The Cancel button dismisses (and frees) the dialog by itself; after that
+    // nothing may touch progressDialog or statusLabel again.
+    auto dialogClosed = std::make_shared<std::atomic<bool>>(false);
     
-    progressDialog->addButton("app/common/cancel"_i18n, [progressObj]() {
+    progressDialog->addButton("app/common/cancel"_i18n, [progressObj, dialogClosed]() {
         progressObj->aborted.store(true);
+        dialogClosed->store(true);
     });
     
     auto timer = std::make_shared<brls::RepeatingTimer>();
@@ -158,7 +162,7 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     
     std::string tmpPath = g_nroPath + ".tmp";
     
-    brls::async([url, tmpPath, progressObj, progressDialog, timer, version]() {
+    brls::async([url, tmpPath, progressObj, progressDialog, timer, version, dialogClosed]() {
         CURL* curl = curl_easy_init();
         CURLcode res = CURLE_FAILED_INIT;
         long http_code = 0;
@@ -200,8 +204,14 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         bool userCancelled = progressObj->aborted.load();
         progressObj->aborted.store(true);
         
-        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled]() {
+        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled, dialogClosed]() {
             timer->stop();
+            if (dialogClosed->load()) {
+                std::error_code ec;
+                std::filesystem::remove(tmpPath, ec);
+                util::logLine("downloadAndInstallAppUpdate: cancelled by user");
+                return;
+            }
             progressDialog->close([res, http_code, tmpPath, userCancelled]() {
                 if (userCancelled) {
                     std::error_code ec;
