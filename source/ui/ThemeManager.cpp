@@ -206,9 +206,7 @@ void ThemeManager::setTheme(const std::string& themeId) {
         notifyWallpaperChanged();
     }
 
-    for (const auto& cb : listeners_) {
-        if (cb) cb();
-    }
+    notifyListeners();
     util::logLine("ThemeManager: theme set to " + getCurrentThemeId());
 }
 
@@ -283,10 +281,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(240, 195, 60, 255);
         if (genreId == "platformers")         return nvgRGBA(255, 140, 25, 255);
         if (genreId == "puzzles")             return nvgRGBA(225, 170, 75, 255);
+        if (genreId == "racing")              return nvgRGBA(255, 120, 40, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(190, 130, 80, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(255, 130, 70, 255);
         if (genreId == "shooters")            return nvgRGBA(245, 90, 35, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(220, 185, 90, 255);
+        if (genreId == "sports")              return nvgRGBA(235, 175, 55, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(180, 145, 110, 255);
         if (genreId == "visual_novels")       return nvgRGBA(235, 150, 95, 255);
         if (genreId == "ports_homebrew")      return nvgRGBA(255, 165, 40, 255);
@@ -298,10 +298,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(0, 245, 180, 255);
         if (genreId == "platformers")         return nvgRGBA(0, 190, 255, 255);
         if (genreId == "puzzles")             return nvgRGBA(130, 90, 255, 255);
+        if (genreId == "racing")              return nvgRGBA(255, 90, 60, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(170, 140, 220, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(255, 80, 200, 255);
         if (genreId == "shooters")            return nvgRGBA(255, 60, 100, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(0, 230, 210, 255);
+        if (genreId == "sports")              return nvgRGBA(120, 255, 90, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(90, 160, 230, 255);
         if (genreId == "visual_novels")       return nvgRGBA(220, 100, 255, 255);
         if (genreId == "ports_homebrew")      return nvgRGBA(0, 210, 255, 255);
@@ -313,10 +315,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(255, 135, 105, 255);
         if (genreId == "platformers")         return nvgRGBA(255, 60, 60, 255);
         if (genreId == "puzzles")             return nvgRGBA(235, 105, 105, 255);
+        if (genreId == "racing")              return nvgRGBA(255, 95, 85, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(195, 95, 95, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(255, 80, 120, 255);
         if (genreId == "shooters")            return nvgRGBA(240, 50, 50, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(255, 145, 130, 255);
+        if (genreId == "sports")              return nvgRGBA(250, 125, 95, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(180, 110, 110, 255);
         if (genreId == "visual_novels")       return nvgRGBA(245, 110, 140, 255);
         if (genreId == "ports_homebrew")      return nvgRGBA(255, 70, 70, 255);
@@ -328,10 +332,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(210, 140, 255, 255);
         if (genreId == "platformers")         return nvgRGBA(170, 75, 240, 255);
         if (genreId == "puzzles")             return nvgRGBA(190, 110, 250, 255);
+        if (genreId == "racing")              return nvgRGBA(200, 100, 250, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(150, 105, 195, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(225, 90, 235, 255);
         if (genreId == "shooters")            return nvgRGBA(185, 65, 220, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(205, 150, 255, 255);
+        if (genreId == "sports")              return nvgRGBA(180, 130, 240, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(140, 115, 180, 255);
         if (genreId == "visual_novels")       return nvgRGBA(220, 125, 245, 255);
     } else if (th == "light") {
@@ -342,10 +348,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(230, 110, 30, 255);
         if (genreId == "platformers")         return nvgRGBA(0, 150, 220, 255);
         if (genreId == "puzzles")             return nvgRGBA(150, 100, 210, 255);
+        if (genreId == "racing")              return nvgRGBA(215, 90, 40, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(180, 90, 70, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(190, 60, 120, 255);
         if (genreId == "shooters")            return nvgRGBA(220, 70, 60, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(30, 170, 140, 255);
+        if (genreId == "sports")              return nvgRGBA(40, 150, 80, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(70, 120, 190, 255);
         if (genreId == "visual_novels")       return nvgRGBA(200, 70, 150, 255);
         if (genreId == "ports_homebrew")      return nvgRGBA(0, 160, 220, 255);
@@ -357,10 +365,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(210, 220, 235, 255);
         if (genreId == "platformers")         return nvgRGBA(195, 205, 220, 255);
         if (genreId == "puzzles")             return nvgRGBA(180, 190, 205, 255);
+        if (genreId == "racing")              return nvgRGBA(200, 210, 225, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(160, 170, 185, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(215, 225, 240, 255);
         if (genreId == "shooters")            return nvgRGBA(175, 185, 200, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(195, 205, 218, 255);
+        if (genreId == "sports")              return nvgRGBA(180, 192, 208, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(165, 175, 190, 255);
         if (genreId == "visual_novels")       return nvgRGBA(200, 210, 225, 255);
         if (genreId == "ports_homebrew")      return nvgRGBA(190, 200, 215, 255);
@@ -373,10 +383,12 @@ NVGcolor ThemeManager::getGenreColor(const std::string& genreId) const {
         if (genreId == "party_multiplayer")   return nvgRGBA(80, 235, 150, 255);
         if (genreId == "platformers")         return nvgRGBA(0, 215, 165, 255);
         if (genreId == "puzzles")             return nvgRGBA(40, 220, 180, 255);
+        if (genreId == "racing")              return nvgRGBA(30, 235, 150, 255);
         if (genreId == "roguelike_roguelite") return nvgRGBA(60, 180, 140, 255);
         if (genreId == "rpg_jrpg")            return nvgRGBA(0, 240, 160, 255);
         if (genreId == "shooters")            return nvgRGBA(10, 210, 130, 255);
         if (genreId == "simulation_cozy")     return nvgRGBA(100, 230, 130, 255);
+        if (genreId == "sports")              return nvgRGBA(70, 215, 120, 255);
         if (genreId == "strategy_tactics")    return nvgRGBA(80, 175, 155, 255);
         if (genreId == "visual_novels")       return nvgRGBA(30, 225, 190, 255);
         if (genreId == "ports_homebrew")      return nvgRGBA(0, 210, 180, 255);
@@ -495,13 +507,32 @@ std::string ThemeManager::getEffectiveWallpaperPath() const {
 void ThemeManager::notifyWallpaperChanged() {
     wallpaperVersion_++;
     util::logLine("ThemeManager: wallpaper changed, version=" + std::to_string(wallpaperVersion_) + " path=" + getEffectiveWallpaperPath());
-    for (const auto& cb : listeners_) {
-        if (cb) cb();
+    notifyListeners();
+}
+
+void ThemeManager::notifyListeners() {
+    // Callbacks rebuild views, which may subscribe or unsubscribe: iterate a
+    // copy and skip listeners removed in the meantime.
+    auto snapshot = listeners_;
+    for (const auto& entry : snapshot) {
+        bool still = false;
+        for (const auto& cur : listeners_) {
+            if (cur.first == entry.first) { still = true; break; }
+        }
+        if (still && entry.second) entry.second();
     }
 }
 
-void ThemeManager::subscribe(ThemeChangeCallback cb) {
-    listeners_.push_back(std::move(cb));
+int ThemeManager::subscribe(ThemeChangeCallback cb) {
+    int id = nextListenerId_++;
+    listeners_.emplace_back(id, std::move(cb));
+    return id;
+}
+
+void ThemeManager::unsubscribe(int id) {
+    for (auto it = listeners_.begin(); it != listeners_.end(); ++it) {
+        if (it->first == id) { listeners_.erase(it); return; }
+    }
 }
 
 void ThemeManager::applyThemeToBorealis() {

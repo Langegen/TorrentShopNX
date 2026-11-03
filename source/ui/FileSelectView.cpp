@@ -1,4 +1,5 @@
 #include "FileSelectView.hpp"
+#include "../utils/file_ops.h"
 #include "../utils/i18n_plural.h"
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
@@ -32,16 +33,6 @@ namespace ui {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
-    return std::string(buf);
-}
 
 static bool isRomFile(const std::string& filename) {
     std::string lower = filename;
@@ -342,30 +333,36 @@ struct ReleaseUpdateCheck {
     std::string newest;         // version of the newest catalog release
     std::string installed;      // installed version, "" = not installed
     std::vector<Game> others;   // other catalog releases of the game, newest first
+    uint64_t appId = 0;         // the game
 };
 
 // Runs on a worker: the ncm query is too slow for the UI thread.
 ReleaseUpdateCheck checkReleaseUpdate(const Game& game) {
     ReleaseUpdateCheck r;
-    uint64_t appId = catalog::releaseAppId(game);
-    if (appId == 0) return r;
+    // Only a single-game release: in a multi-game one the files picked may
+    // belong to any of its games.
+    auto appIds = catalog::releaseAppIds(game);
+    if (appIds.size() != 1) return r;
+    const uint64_t appId = appIds.front();
     auto releases = catalog::findReleases(appId);
     if (releases.empty() || releases.front().topic_id == game.topic_id) return r;
     const Game& newest = releases.front();
-    if (catalog::compareRelease(newest.version, newest.update_version, game.version, game.update_version) !=
-        catalog::VersionCmp::Newer) {
+    const catalog::TitleVersion newestVer = catalog::titleVersion(newest, appId);
+    const catalog::TitleVersion thisVer = catalog::titleVersion(game, appId);
+    if (catalog::compareRelease(newestVer, thisVer.version, thisVer.update) != catalog::VersionCmp::Newer) {
         return r;
     }
     util::InstalledGameInfo info = util::queryInstalledGame(appId);
     // The newer version is already on the console: nothing to miss
-    if (info.installed && catalog::compareRelease(newest.version, newest.update_version, info.displayVersion,
-                                                  info.patchVersion) != catalog::VersionCmp::Newer) {
+    if (info.installed &&
+        catalog::compareRelease(newestVer, info.displayVersion, info.patchVersion) != catalog::VersionCmp::Newer) {
         return r;
     }
 
     r.warn = true;
-    r.inRelease = catalog::versionLabel(game.version, game.update_version);
-    r.newest = catalog::versionLabel(newest.version, newest.update_version);
+    r.appId = appId;
+    r.inRelease = catalog::versionLabel(thisVer);
+    r.newest = catalog::versionLabel(newestVer);
     if (info.installed) {
         r.installed = catalog::versionLabel(info.displayVersion, info.patchVersion);
         if (r.installed.empty()) r.installed = "app/fileselect/installed_unknown_ver"_i18n;
@@ -373,8 +370,8 @@ ReleaseUpdateCheck checkReleaseUpdate(const Game& game) {
     for (auto& g : releases) {
         if (g.topic_id != game.topic_id) r.others.push_back(std::move(g));
     }
-    util::logLine("FileSelectView: release " + game.topic_id + " has '" + game.version + "', topic " +
-                  newest.topic_id + " has '" + newest.version + "', installed '" + info.displayVersion +
+    util::logLine("FileSelectView: release " + game.topic_id + " has '" + thisVer.version + "', topic " +
+                  newest.topic_id + " has '" + newestVer.version + "', installed '" + info.displayVersion +
                   "', other releases: " + std::to_string(r.others.size()));
     return r;
 }
@@ -384,10 +381,11 @@ void showOldUpdateWarning(const ReleaseUpdateCheck& r) {
     auto* dialog = new brls::Dialog(brls::getStr("app/fileselect/newer_release_warn", r.inRelease, r.newest, installed));
     if (!r.others.empty()) {
         auto others = r.others;
-        dialog->addButton("app/fileselect/other_releases"_i18n, [others]() {
+        const uint64_t appId = r.appId;
+        dialog->addButton("app/fileselect/other_releases"_i18n, [others, appId]() {
             showReleaseChooser(others, [](const Game& g) {
                 brls::Application::pushActivity(new GameDetailView(g));
-            });
+            }, appId);
         });
     }
     dialog->addButton("app/common/continue"_i18n, []() {});
@@ -543,7 +541,7 @@ void FileSelectView::onContentAvailable() {
     });
 
     this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        if (files_.empty()) {
+        if (files_.empty() && !probeInFlight_) {
             startProbe();
             return true;
         }
@@ -556,21 +554,17 @@ void FileSelectView::onContentAvailable() {
     util::logLine("FileSelectView: onContentAvailable end");
 }
 
-void FileSelectView::startProbe() {
-    subtitle->setText("app/fileselect/probing"_i18n);
-    auto alive = alive_flag_;
-    auto status_running = std::make_shared<std::atomic<bool>>(true);
-    brls::async([this, status_running, alive]() {
-        while (status_running->load() && alive->load() && !g_appExiting.load()) {
-            for (int i = 0; i < 10; ++i) {
-                if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-            if (!status_running->load() || !alive->load() || g_appExiting.load()) break;
-
+// Shows the probe progress once a second. The wait is a main-thread timer and
+// only the status query runs in the pool: a polling loop used to keep one of
+// the 2-3 pool threads busy for the whole probe.
+void FileSelectView::scheduleProbeStatusPoll(std::shared_ptr<std::atomic<bool>> alive,
+                                             std::shared_ptr<std::atomic<bool>> running) {
+    brls::delay(1000, [this, alive, running]() {
+        if (!alive->load() || !running->load() || g_appExiting.load()) return;
+        brls::async([this, alive, running]() {
             auto status = datasource::CustomEngineClient::instance().probeStatus();
-            brls::sync([this, status, status_running, alive]() {
-                if (!alive->load() || !status_running->load() || g_appExiting.load()) return;
+            brls::sync([this, status, alive, running]() {
+                if (!alive->load() || !running->load() || g_appExiting.load()) return;
                 std::string text = "app/fileselect/probing"_i18n;
                 if (status.active && status.meta_peers_total > 0) {
                     text += brls::getStr("app/fileselect/meta_peers", std::to_string(status.meta_peers_tried), std::to_string(status.meta_peers_total));
@@ -580,9 +574,18 @@ void FileSelectView::startProbe() {
                     text += brls::getStr("app/fileselect/swarm_stats", std::to_string(status.seeds), std::to_string(status.peers), std::to_string(status.dht_nodes));
                 }
                 subtitle->setText(text);
+                scheduleProbeStatusPoll(alive, running);
             });
-        }
+        });
     });
+}
+
+void FileSelectView::startProbe() {
+    probeInFlight_ = true;
+    subtitle->setText("app/fileselect/probing"_i18n);
+    auto alive = alive_flag_;
+    auto status_running = std::make_shared<std::atomic<bool>>(true);
+    scheduleProbeStatusPoll(alive, status_running);
 
     Game gameCopy = game_;
     bool switchMode = !isFolderHierarchyMode();
@@ -611,12 +614,14 @@ void FileSelectView::startProbe() {
                 util::logLine("FileSelectView: view already destroyed, aborting sync");
                 return;
             }
+            probeInFlight_ = false;
             util::logLine("FileSelectView: sync callback, success=" +
                           std::to_string(success) + " count=" +
                           std::to_string(probedFiles.size()));
 
             if (success && !probedFiles.empty()) {
                 files_    = probedFiles;
+                installedCache_.clear();
                 selected_.assign(files_.size(), false);
                 if (isFolderHierarchyMode()) {
                     baseFolder_ = computeBaseFolder(files_);
@@ -766,7 +771,7 @@ void FileSelectView::updateRetroSubtitle() {
     }
 
     std::string pathText = "app/fileselect/folder_prefix"_i18n + displayPath;
-    std::string selText = brls::getStr("app/fileselect/files_selected", std::to_string(selCount)) + " (" + formatBytes(selBytes) + ")";
+    std::string selText = brls::getStr("app/fileselect/files_selected", std::to_string(selCount)) + " (" + util::formatFileSize(selBytes) + ")";
     subtitle->setText(pathText + "  |  " + selText);
 }
 
@@ -925,7 +930,7 @@ void FileSelectView::rebuildRetroFolderList() {
         infoLbl->setWidth(160);
         infoLbl->setHeight(brls::View::AUTO);
         infoLbl->setFontSize(14);
-        infoLbl->setText(std::to_string(sInfo.fileIndices.size()) + " | " + formatBytes(sInfo.totalSize));
+        infoLbl->setText(std::to_string(sInfo.fileIndices.size()) + " | " + util::formatFileSize(sInfo.totalSize));
         infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(infoLbl);
 
@@ -1017,7 +1022,7 @@ void FileSelectView::rebuildRetroFolderList() {
         sizeLbl->setWidth(140);
         sizeLbl->setHeight(brls::View::AUTO);
         sizeLbl->setFontSize(14);
-        sizeLbl->setText(formatBytes(file.size));
+        sizeLbl->setText(util::formatFileSize(file.size));
         sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(sizeLbl);
 
@@ -1122,7 +1127,7 @@ void FileSelectView::renderOtherFilesTree(const OtherFileTreeNode& node, int dep
         infoLbl->setWidth(160);
         infoLbl->setHeight(brls::View::AUTO);
         infoLbl->setFontSize(14);
-        infoLbl->setText(std::to_string(sub.totalFiles) + " | " + formatBytes(sub.size));
+        infoLbl->setText(std::to_string(sub.totalFiles) + " | " + util::formatFileSize(sub.size));
         infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(infoLbl);
 
@@ -1218,7 +1223,7 @@ void FileSelectView::renderOtherFilesTree(const OtherFileTreeNode& node, int dep
         sizeLbl->setWidth(140);
         sizeLbl->setHeight(brls::View::AUTO);
         sizeLbl->setFontSize(14);
-        sizeLbl->setText(formatBytes(item.size));
+        sizeLbl->setText(util::formatFileSize(item.size));
         sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(sizeLbl);
 
@@ -1247,7 +1252,16 @@ void FileSelectView::rebuildSwitchFileList() {
     fileListBox->clearViews();
     checkboxLabels_.assign(files_.size(), nullptr);
 
-    SwitchServiceGuard guard;
+    if (installedCache_.size() != files_.size()) {
+        SwitchServiceGuard guard;
+        installedCache_.assign(files_.size(), 0);
+        for (size_t i = 0; i < files_.size(); ++i) {
+            if (!isSwitchGameFile(files_[i].name)) continue;
+            uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
+            uint32_t ver = util::parseVersionFromFileName(files_[i].name);
+            installedCache_[i] = isTitleIdInstalled(tid, guard, ver) ? 1 : 0;
+        }
+    }
     std::map<std::string, brls::View*> focusMap;
     brls::View* firstFocusable = nullptr;
     brls::View* lastFocusable = nullptr;
@@ -1279,9 +1293,7 @@ void FileSelectView::rebuildSwitchFileList() {
     addHeaderRow("app/fileselect/group_uninstalled"_i18n, false);
     bool hasUninstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
-        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && !isTitleIdInstalled(tid, guard, ver)) {
+        if (isSwitchGameFile(files_[i].name) && !installedCache_[i]) {
             hasUninstalled = true;
             size_t idx = i;
             const auto& file = files_[idx];
@@ -1319,7 +1331,7 @@ void FileSelectView::rebuildSwitchFileList() {
             sizeLbl->setWidth(140);
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
-            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setText(util::formatFileSize(file.size));
             sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
@@ -1422,9 +1434,7 @@ void FileSelectView::rebuildSwitchFileList() {
     addHeaderRow("app/fileselect/group_installed"_i18n, false);
     bool hasInstalled = false;
     for (size_t i = 0; i < files_.size(); ++i) {
-        uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
-        uint32_t ver = util::parseVersionFromFileName(files_[i].name);
-        if (isSwitchGameFile(files_[i].name) && isTitleIdInstalled(tid, guard, ver)) {
+        if (isSwitchGameFile(files_[i].name) && installedCache_[i]) {
             hasInstalled = true;
             size_t idx = i;
             const auto& file = files_[idx];
@@ -1462,7 +1472,7 @@ void FileSelectView::rebuildSwitchFileList() {
             sizeLbl->setWidth(140);
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
-            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setText(util::formatFileSize(file.size));
             sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
@@ -1569,47 +1579,46 @@ void FileSelectView::updateTotalSize() {
     }
 
     if (totalSizeText) {
-        std::string sizeStr = formatBytes(totalCompressed);
+        std::string sizeStr = util::formatFileSize(totalCompressed);
         if (totalUnpacked > totalCompressed) {
             std::string prefix = brls::getStr("app/fileselect/unpacked_prefix");
             if (anyEstimated) {
-                sizeStr += " (" + prefix + ": ~" + formatBytes(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
+                sizeStr += " (" + prefix + ": ~" + util::formatFileSize(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
             } else {
-                sizeStr += " (" + prefix + ": " + formatBytes(totalUnpacked) + ")";
+                sizeStr += " (" + prefix + ": " + util::formatFileSize(totalUnpacked) + ")";
             }
         }
         totalSizeText->setText(sizeStr);
     }
 
-    if (isFolderHierarchyMode()) {
+    // Free space comes from ncm under g_switch_service_mutex, which an install
+    // can hold: query it in the pool. This runs on every selection toggle.
+    const bool folderMode = isFolderHierarchyMode();
+    if (folderMode && freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+    auto alive = alive_flag_;
+    brls::async([this, alive, folderMode]() {
         int64_t sdFree = 0;
-        if (freeSpaceSdText) {
-            if (util::getStorageFreeSpace(1, sdFree)) {
-                freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
+        int64_t nandFree = 0;
+        bool sdOk = util::getStorageFreeSpace(1, sdFree);
+        bool nandOk = !folderMode && util::getStorageFreeSpace(0, nandFree);
+        brls::sync([this, alive, folderMode, sdOk, nandOk, sdFree, nandFree]() {
+            if (!alive->load()) return;
+            if (freeSpaceSdText) {
+                if (sdOk) {
+                    freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", util::formatFileSize(sdFree)));
+                } else if (!folderMode) {
+                    freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", "app/fileselect/free_unknown"_i18n));
+                }
             }
-        }
-        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
-        return;
-    }
-
-    // Update free space displays
-    int64_t sdFree = 0;
-    int64_t nandFree = 0;
-    if (freeSpaceSdText) {
-        if (util::getStorageFreeSpace(1, sdFree)) {
-            freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
-        } else {
-            freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", "app/fileselect/free_unknown"_i18n));
-        }
-    }
-
-    if (freeSpaceNandText) {
-        if (util::getStorageFreeSpace(0, nandFree)) {
-            freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", formatBytes(nandFree)));
-        } else {
-            freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
-        }
-    }
+            if (!folderMode && freeSpaceNandText) {
+                if (nandOk) {
+                    freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", util::formatFileSize(nandFree)));
+                } else {
+                    freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
+                }
+            }
+        });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1715,7 +1724,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         int64_t freeSpace = 0;
         util::getStorageFreeSpace(1, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
-            std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", formatBytes(totalNeededSize), formatBytes(freeSpace));
+            std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", util::formatFileSize(totalNeededSize), util::formatFileSize(freeSpace));
             brls::Dialog* dialog = new brls::Dialog(msg);
             dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName]() {
                 this->promptAndExecuteDownloads(selectedIndices, forcedIndex, forcedName);
@@ -1766,7 +1775,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     }
 
     if (!checkPassed) {
-        std::string msg = brls::getStr("app/fileselect/low_space_prompt", targetStorageName, formatBytes(totalNeededSize), formatBytes(freeSpace));
+        std::string msg = brls::getStr("app/fileselect/low_space_prompt", targetStorageName, util::formatFileSize(totalNeededSize), util::formatFileSize(freeSpace));
         
         brls::Dialog* dialog = new brls::Dialog(msg);
         // Dialog closes itself via Dialog::buttonClick; do NOT call close() here

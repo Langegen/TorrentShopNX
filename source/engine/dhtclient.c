@@ -521,10 +521,18 @@ static void dht_bg_main(void *arg) {
             dht_periodic(NULL, 0, NULL, 0, &tosleep, bg_on_event, NULL);
         }
 
-        int good = 0, dubious = 0;
-        dht_nodes(AF_INET, &good, &dubious, NULL, NULL);
-        s_last_good = good;
-        s_last_dubious = dubious;
+        // Counting nodes walks the whole routing table: once a second is
+        // plenty for the bootstrap decisions below (it ran per packet).
+        static u64 last_count = 0;
+        if (last_count == 0 || now - last_count >= freq) {
+            int g = 0, d = 0;
+            dht_nodes(AF_INET, &g, &d, NULL, NULL);
+            s_last_good = g;
+            s_last_dubious = d;
+            last_count = now;
+        }
+        int good = s_last_good;
+        int dubious = s_last_dubious;
 
         int boot_count = 0;
         if (!s_bg_bootstrapped) {

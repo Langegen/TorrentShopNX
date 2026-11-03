@@ -45,6 +45,9 @@ private:
     const std::atomic<bool>* cancel_flag_ = nullptr;
     void*       curl_handle_   = nullptr;
     ReadFailureKind last_failure_ = ReadFailureKind::None;
+    // Index of the stream URL variant that last worked: tried first next time
+    // instead of always starting from candidate 0.
+    size_t preferred_candidate_ = 0;
 };
 
 } // namespace datasource

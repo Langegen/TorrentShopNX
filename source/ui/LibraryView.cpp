@@ -294,6 +294,28 @@ static bool deleteGameMods(uint64_t titleId, const std::string& modPath) {
     return deletedAny;
 }
 
+// Version columns and update status of a game from its best catalog release
+// (releases[0]). Only releases found by title ID count. "Ignored" and "not
+// installed" are applied on top by the caller.
+static void applyCatalogVersion(LibraryItem& item) {
+    std::string cur = catalog::versionLabel(item.installedDisplayVersion, item.installedPatchVersion);
+    item.currentVersion = cur.empty() ? "—" : cur;
+    item.latestVersion = "—";
+    item.status = GameUpdateStatus::Unknown;
+    if (!item.matchedByTitleId || item.releases.empty()) return;
+    // The version of this game in the release: a multi-game release has one
+    // per game (Coffee Talk 1.47, Episode 2 1.2).
+    const catalog::TitleVersion best = catalog::titleVersion(item.releases.front(), item.titleId & ~0x1FFFULL);
+    std::string latest = catalog::versionLabel(best);
+    if (!latest.empty()) item.latestVersion = latest;
+    switch (catalog::compareRelease(best, item.installedDisplayVersion, item.installedPatchVersion)) {
+        case catalog::VersionCmp::Newer: item.status = GameUpdateStatus::UpdateAvailable; break;
+        case catalog::VersionCmp::Same:
+        case catalog::VersionCmp::Older: item.status = GameUpdateStatus::UpToDate; break;
+        case catalog::VersionCmp::Unknown: break;
+    }
+}
+
 #ifdef __SWITCH__
 static bool deleteNcmComponent(uint8_t storageId, const NcmContentMetaKey& metaKey) {
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
@@ -529,27 +551,6 @@ struct ScanCacheEntry {
     GameComponentData gcd;
 };
 
-// Version columns and update status of a game from its best catalog release
-// (releases[0]). Only releases found by title ID count. "Ignored" and "not
-// installed" are applied on top by the caller.
-static void applyCatalogVersion(LibraryItem& item) {
-    std::string cur = catalog::versionLabel(item.installedDisplayVersion, item.installedPatchVersion);
-    item.currentVersion = cur.empty() ? "\u2014" : cur;
-    item.latestVersion = "\u2014";
-    item.status = GameUpdateStatus::Unknown;
-    if (!item.matchedByTitleId || item.releases.empty()) return;
-    const Game& best = item.releases.front();
-    std::string latest = catalog::versionLabel(best.version, best.update_version);
-    if (!latest.empty()) item.latestVersion = latest;
-    switch (catalog::compareRelease(best.version, best.update_version,
-                                    item.installedDisplayVersion, item.installedPatchVersion)) {
-        case catalog::VersionCmp::Newer: item.status = GameUpdateStatus::UpdateAvailable; break;
-        case catalog::VersionCmp::Same:
-        case catalog::VersionCmp::Older: item.status = GameUpdateStatus::UpToDate; break;
-        case catalog::VersionCmp::Unknown: break;
-    }
-}
-
 static std::string scanCachePath() { return std::string(TSNX_CACHE_DIR) + "/library_scan.json"; }
 
 static std::string componentLabel(InstalledComponent::Type type, uint32_t version, int dlcIndex) {
@@ -623,11 +624,12 @@ std::unordered_map<uint64_t, CachedInstalledGame> cachedInstalledGames() {
 
 bool catalogHasNewerVersion(uint64_t appId, const std::string& installedName,
                             const std::string& displayVersion, uint32_t patchVersion) {
+    const uint64_t app = appId & ~0x1FFFULL;
     auto idx = catalog::releaseIndex();
-    auto it = idx->byApp.find(appId & ~0x1FFFULL);
+    auto it = idx->byApp.find(app);
     if (it == idx->byApp.end() || it->second.empty()) return false;
-    const Game* best = catalog::rankReleasePtrs(it->second, installedName).front();
-    return catalog::compareRelease(best->version, best->update_version, displayVersion, patchVersion) ==
+    const Game* best = catalog::rankReleasePtrs(it->second, installedName, app).front();
+    return catalog::compareRelease(catalog::titleVersion(*best, app), displayVersion, patchVersion) ==
            catalog::VersionCmp::Newer;
 }
 
@@ -669,16 +671,6 @@ static void saveScanCache(const std::unordered_map<uint64_t, ScanCacheEntry>& ca
 }
 #endif
 
-
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.1f %s", size, units[unit]);
-    return std::string(buf);
-}
 
 LibraryRowCell::LibraryRowCell() {
     this->inflateFromXMLRes("xml/library_row_cell.xml");
@@ -926,36 +918,48 @@ void LibraryView::rebuildSections(int targetSection, int targetRow) {
 
     auto& ignoredMgr = catalog::IgnoredUpdatesManager::instance();
 
-    for (auto item : rawItems_) {
+    for (const auto& src : rawItems_) {
+        LibraryItem item = src;   // one copy per item (it was copied twice)
         if (item.isPort) {
-            portItems.push_back(item);
+            portItems.push_back(std::move(item));
             continue;
         }
         if (item.status == GameUpdateStatus::NotInstalled) {
-            notInstalledItems.push_back(item);
+            notInstalledItems.push_back(std::move(item));
             continue;
         }
         item.updateIgnored = ignoredMgr.isIgnored(item.titleId);
         if (item.updateIgnored) {
             item.status = GameUpdateStatus::UpdateIgnored;
-            ignoredItems.push_back(item);
+            ignoredItems.push_back(std::move(item));
         } else if (item.status == GameUpdateStatus::UpdateAvailable) {
             if (item.hasMods) {
-                modsUpdates.push_back(item);
+                modsUpdates.push_back(std::move(item));
             } else {
-                normalUpdates.push_back(item);
+                normalUpdates.push_back(std::move(item));
             }
         } else if (item.status == GameUpdateStatus::UpToDate) {
-            upToDateItems.push_back(item);
+            upToDateItems.push_back(std::move(item));
         } else {
-            otherItems.push_back(item);
+            otherItems.push_back(std::move(item));
         }
     }
 
     auto sortAlpha = [](std::vector<LibraryItem>& list) {
-        std::sort(list.begin(), list.end(), [](const LibraryItem& a, const LibraryItem& b) {
-            return cleanTitle(a.game.title) < cleanTitle(b.game.title);
+        // cleanTitle() builds a new string: compute each key once instead of
+        // twice per comparison.
+        std::vector<std::pair<std::string, size_t>> keys;
+        keys.reserve(list.size());
+        for (size_t i = 0; i < list.size(); ++i) {
+            keys.emplace_back(cleanTitle(list[i].game.title), i);
+        }
+        std::stable_sort(keys.begin(), keys.end(), [](const auto& a, const auto& b) {
+            return a.first < b.first;
         });
+        std::vector<LibraryItem> sorted;
+        sorted.reserve(list.size());
+        for (const auto& k : keys) sorted.push_back(std::move(list[k.second]));
+        list = std::move(sorted);
     };
 
     sortAlpha(modsUpdates);
@@ -1057,7 +1061,7 @@ void LibraryView::openRelease(const LibraryItem& item) {
     }
 
     // Several releases: let the user pick, best one on top
-    showReleaseChooser(item.releases, openGame);
+    showReleaseChooser(item.releases, openGame, item.matchedByTitleId ? (item.titleId & ~0x1FFFULL) : 0);
 }
 
 namespace {
@@ -1113,9 +1117,12 @@ void LibraryView::updateAllGames() {
                     const Game& rel = item.releases[r];
                     if (rel.magnet.empty()) continue;
                     // The catalog already says this release has nothing newer
-                    auto cmp = catalog::compareRelease(rel.version, rel.update_version,
+                    auto cmp = catalog::compareRelease(catalog::titleVersion(rel, item.titleId & ~0x1FFFULL),
                                                        item.installedDisplayVersion, item.installedPatchVersion);
                     if (cmp == catalog::VersionCmp::Same || cmp == catalog::VersionCmp::Older) continue;
+                    // A file name without an ID belongs to the release's game only
+                    // when the release holds one game.
+                    const std::string fallbackTid = rel.titles.size() > 1 ? std::string() : rel.title_id;
                     std::vector<torrent::TorrentFileInfo> files;
                     std::string err;
                     if (!ui::DownloadManager::instance().getImpl().probeTorrentFiles(rel.magnet, files, &err)) {
@@ -1126,7 +1133,7 @@ void LibraryView::updateAllGames() {
                     uint32_t bestVer = 0;
                     for (const auto& f : files) {
                         if (!isSwitchPackageFile(f.name)) continue;
-                        if (torrentFileTitleId(f.name, rel.title_id) != patchId) continue;
+                        if (torrentFileTitleId(f.name, fallbackTid) != patchId) continue;
                         uint32_t v = util::parseVersionFromFileName(f.name);
                         if (v > item.installedPatchVersion && v >= bestVer) {
                             best = &f;
@@ -1226,18 +1233,24 @@ void LibraryView::updateStatsAndSpace() {
 }
 
 void LibraryView::updateSpaceHint() {
-    if (spaceHint) {
+    if (!spaceHint) return;
+    // The query goes through ncm under g_switch_service_mutex, which a scan or
+    // an uninstall can hold for seconds: run it in the pool, not on the UI.
+    auto cancelToken = cancelToken_;
+    brls::async([this, cancelToken]() {
         int64_t sdFree = 0;
         int64_t nandFree = 0;
         bool sdOk = util::getStorageFreeSpace(1, sdFree);
         bool nandOk = util::getStorageFreeSpace(0, nandFree);
-
-        std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
-        std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
-
-        spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
-        spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
-    }
+        brls::sync([this, cancelToken, sdOk, nandOk, sdFree, nandFree]() {
+            if (cancelToken && *cancelToken) return;
+            if (!spaceHint) return;
+            std::string sdStr = sdOk ? util::formatFileSize(static_cast<unsigned long long>(sdFree), 1) : "app/library/space_unknown"_i18n;
+            std::string nandStr = nandOk ? util::formatFileSize(static_cast<unsigned long long>(nandFree), 1) : "app/library/space_unknown"_i18n;
+            spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
+            spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
+        });
+    });
 
     if (consoleSdkHint) {
         auto cSdk = util::getConsoleSdkVersion();
@@ -1401,8 +1414,16 @@ void LibraryView::scanForUpdates() {
         installedList.push_back({0x01007ef00011e000ULL, "The Legend of Zelda: Breath of the Wild", "1.0.0"});
         installedList.push_back({0x0100000000020000ULL, "Unmatched Dummy Game", "1.1.0"});
         installedList.push_back({0x0100000000030000ULL, "Game On Another SD Card", "1.2.3", true});
+        // Games of a multi-game release (Coffee Talk / Episode 2 / Tokyo) and
+        // a single-game release whose topic names another region's ID
+        // (Rhythm Heaven Groove): found through the release's "titles".
+        installedList.push_back({0x010066200E1E6000ULL, "Coffee Talk", "1.47"});
+        installedList.push_back({0x01004670193D6000ULL, "Coffee Talk Episode 2: Hibiscus & Butterfly", "1.1"});
+        installedList.push_back({0x0100D9F01D474000ULL, "Rhythm Paradise Groove", "1.0.0"});
         std::unordered_map<uint64_t, uint32_t> installedPatchVersions;
         std::unordered_map<uint64_t, std::string> installedSdkVersions;
+        installedPatchVersions[0x010066200E1E6000ULL] = 524288;
+        installedPatchVersions[0x01004670193D6000ULL] = 131072;
         installedSdkVersions[0x0100000000010000ULL] = "17.0.0";
         installedSdkVersions[0x01007ef00011e000ULL] = "18.1.0";
         installedSdkVersions[0x0100000000020000ULL] = "16.0.3";
@@ -1471,11 +1492,13 @@ void LibraryView::scanForUpdates() {
         // Best release among several of the same game (see
         // catalog/release_picker.hpp): plain game over mods/ports, then the
         // newest version, then the most recently re-registered torrent.
-        auto rankReleases = [](const std::vector<const Game*>& cands, const std::string& installedName) -> std::vector<const Game*> {
+        auto rankReleases = [](const std::vector<const Game*>& cands, const std::string& installedName,
+                               uint64_t appId) -> std::vector<const Game*> {
             if (cands.size() <= 1) return cands;
-            auto ranked = catalog::rankReleasePtrs(cands, installedName);
+            auto ranked = catalog::rankReleasePtrs(cands, installedName, appId);
             std::string log = "library: " + std::to_string(cands.size()) + " releases for '" + ranked.front()->title +
-                              "', picked topic " + ranked.front()->topic_id + " v'" + ranked.front()->version + "' (others:";
+                              "', picked topic " + ranked.front()->topic_id + " v'" +
+                              catalog::titleVersion(*ranked.front(), appId).version + "' (others:";
             for (size_t i = 1; i < ranked.size(); ++i) log += " " + ranked[i]->topic_id;
             util::logLine(log + ")");
             return ranked;
@@ -1567,7 +1590,7 @@ void LibraryView::scanForUpdates() {
             {
                 auto mit = relIndex->byApp.find(baseTid & ~0x1FFFULL);
                 if (mit != relIndex->byApp.end() && !mit->second.empty()) {
-                    auto ranked = rankReleases(mit->second, inst.name);
+                    auto ranked = rankReleases(mit->second, inst.name, baseTid & ~0x1FFFULL);
                     pushMatched(displayItems, ranked, newItem(*ranked.front()));
                     displayItems.back().matchedByTitleId = true;
                     foundInCatalog = true;
@@ -1585,7 +1608,7 @@ void LibraryView::scanForUpdates() {
                         if (entry.first == instClean) sameName.push_back(entry.second);
                     }
                     if (!sameName.empty()) {
-                        auto ranked = rankReleases(sameName, inst.name);
+                        auto ranked = rankReleases(sameName, inst.name, baseTid & ~0x1FFFULL);
                         pushMatched(displayItems, ranked, newItem(*ranked.front()));
                         foundInCatalog = true;
                     }
@@ -1793,7 +1816,16 @@ void LibraryView::uninstallPort(const LibraryItem& item, int currentSection, int
 
 void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName, int currentSection, int currentRow, bool deleteMods) {
     auto cancelToken = cancelToken_;
-    brls::async([this, titleId, displayName, currentSection, currentRow, deleteMods, cancelToken]() {
+    // Read the view's data here, on the main thread: the worker below runs for
+    // seconds and the list may be rescanned (or the view closed) meanwhile.
+    std::string modPath;
+    for (const auto& itm : rawItems_) {
+        if (itm.titleId == titleId) {
+            modPath = itm.modPath;
+            break;
+        }
+    }
+    brls::async([this, titleId, displayName, currentSection, currentRow, deleteMods, cancelToken, modPath]() {
         try {
             if (cancelToken && *cancelToken) return;
 
@@ -1815,13 +1847,6 @@ void LibraryView::uninstallGame(uint64_t titleId, const std::string& displayName
             ok = true; // PC mock: allow uninstall
 #endif
             if (ok && deleteMods) {
-                std::string modPath;
-                for (const auto& itm : rawItems_) {
-                    if (itm.titleId == titleId) {
-                        modPath = itm.modPath;
-                        break;
-                    }
-                }
                 deleteGameMods(titleId, modPath);
             }
 
@@ -1879,7 +1904,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
     rootBox->addView(titleLabel);
 
     auto* subtitleLabel = new brls::Label();
-    std::string subText = "Общий размер: " + formatBytes(currentItem.totalSizeBytes);
+    std::string subText = "Общий размер: " + util::formatFileSize(currentItem.totalSizeBytes, 1);
     if (currentItem.dlcCount > 0) {
         subText += " • DLC: " + std::to_string(currentItem.dlcCount);
     }
@@ -1969,7 +1994,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
             auto* nameLabel = new brls::Label();
             std::string nameStr = comp.displayName;
             if (comp.sizeBytes > 0) {
-                nameStr += " • " + formatBytes(comp.sizeBytes);
+                nameStr += " • " + util::formatFileSize(comp.sizeBytes, 1);
             }
             nameLabel->setText(nameStr);
             nameLabel->setFontSize(14.0f);
@@ -2201,7 +2226,7 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         if (item.isPort) {
             // Homebrew port: files on the SD card plus its shortcuts.
             std::string line = brls::getStr("app/ports/library_line", std::to_string(item.portFiles));
-            if (item.totalSizeBytes > 0) line += " • " + formatBytes(item.totalSizeBytes);
+            if (item.totalSizeBytes > 0) line += " • " + util::formatFileSize(item.totalSizeBytes, 1);
             cell->titleId->setText(line);
             if (cell->patchBadgeBox) cell->patchBadgeBox->setVisibility(brls::Visibility::GONE);
             if (cell->dlcBadgeBox) cell->dlcBadgeBox->setVisibility(brls::Visibility::GONE);
@@ -2264,7 +2289,7 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
 
         std::string tidLine = "ID: " + tidStrUpper;
         if (item.totalSizeBytes > 0) {
-            tidLine += " • " + formatBytes(item.totalSizeBytes);
+            tidLine += " • " + util::formatFileSize(item.totalSizeBytes, 1);
         }
         if (!item.sdkVersion.empty()) {
             tidLine += " • SDK " + item.sdkVersion;

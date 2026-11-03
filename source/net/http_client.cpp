@@ -1,15 +1,7 @@
 #include "http_client.h"
 #include "../utils/log.h"
 
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <errno.h>
-
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <algorithm>
@@ -27,6 +19,80 @@
 
 namespace net {
 
+// =============================================================================
+// Basic auth for the TorrServer
+// =============================================================================
+namespace {
+
+std::mutex g_authMutex;
+std::string g_authOrigin;   // "http://host:port", "" = no auth
+std::string g_authHeader;   // "Authorization: Basic ..."
+
+std::string base64(const std::string& in) {
+    static const char* tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((in.size() + 2) / 3 * 4);
+    size_t i = 0;
+    for (; i + 2 < in.size(); i += 3) {
+        unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (static_cast<unsigned char>(in[i + 1]) << 8) |
+                     static_cast<unsigned char>(in[i + 2]);
+        out += tbl[(v >> 18) & 63]; out += tbl[(v >> 12) & 63]; out += tbl[(v >> 6) & 63]; out += tbl[v & 63];
+    }
+    if (i + 1 == in.size()) {
+        unsigned v = static_cast<unsigned char>(in[i]) << 16;
+        out += tbl[(v >> 18) & 63]; out += tbl[(v >> 12) & 63]; out += "==";
+    } else if (i + 2 == in.size()) {
+        unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (static_cast<unsigned char>(in[i + 1]) << 8);
+        out += tbl[(v >> 18) & 63]; out += tbl[(v >> 12) & 63]; out += tbl[(v >> 6) & 63]; out += '=';
+    }
+    return out;
+}
+
+// "scheme://host:port" of a URL, lower-cased, default port filled in. A URL
+// without a scheme is http (the settings accept "192.168.1.5:8090").
+std::string originOf(const std::string& url) {
+    size_t b = 0, e = url.size();
+    while (b < e && std::isspace(static_cast<unsigned char>(url[b]))) ++b;
+    while (e > b && std::isspace(static_cast<unsigned char>(url[e - 1]))) --e;
+    std::string s = url.substr(b, e - b);
+    std::string scheme = "http";
+    size_t sep = s.find("://");
+    if (sep != std::string::npos) {
+        scheme = s.substr(0, sep);
+        s = s.substr(sep + 3);
+    }
+    s = s.substr(0, s.find_first_of("/?#"));
+    size_t at = s.rfind('@');
+    if (at != std::string::npos) s = s.substr(at + 1);
+    std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (s.empty()) return "";
+    size_t bracket = s.rfind(']');
+    size_t colon = s.rfind(':');
+    bool hasPort = colon != std::string::npos && (bracket == std::string::npos || colon > bracket);
+    if (!hasPort) s += (scheme == "https") ? ":443" : ":80";
+    return scheme + "://" + s;
+}
+
+} // namespace
+
+void setServerAuth(const std::string& serverUrl, const std::string& user, const std::string& password) {
+    std::lock_guard<std::mutex> lock(g_authMutex);
+    if (user.empty()) {
+        g_authOrigin.clear();
+        g_authHeader.clear();
+        return;
+    }
+    g_authOrigin = originOf(serverUrl);
+    g_authHeader = "Authorization: Basic " + base64(user + ":" + password);
+}
+
+std::string authHeaderFor(const std::string& url) {
+    std::lock_guard<std::mutex> lock(g_authMutex);
+    if (g_authOrigin.empty() || originOf(url) != g_authOrigin) return "";
+    return g_authHeader;
+}
+
 HttpClient::HttpClient() = default;
 
 HttpClient::~HttpClient() {
@@ -36,73 +102,6 @@ HttpClient::~HttpClient() {
         curl_handle_ = nullptr;
     }
 #endif
-}
-
-// =============================================================================
-// URL-парсинг
-// =============================================================================
-// Non-blocking connect with timeout. Avoids blocking the caller for the OS
-// default TCP timeout when a host is unreachable (common for dead image hosts).
-static int connect_with_timeout(int sock, const struct sockaddr* addr,
-                                socklen_t addrlen, int timeout_sec) {
-    int flags = fcntl(sock, F_GETFL, 0);
-    if (flags < 0) return -1;
-    if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) return -1;
-
-    int rc = connect(sock, addr, addrlen);
-    if (rc == 0) {
-        fcntl(sock, F_SETFL, flags);
-        return 0;
-    }
-    if (errno != EINPROGRESS) {
-        fcntl(sock, F_SETFL, flags);
-        return -1;
-    }
-
-    struct pollfd pfd;
-    pfd.fd = sock;
-    pfd.events = POLLOUT;
-    rc = poll(&pfd, 1, timeout_sec * 1000);
-    if (rc <= 0) {
-        fcntl(sock, F_SETFL, flags);
-        return -1;
-    }
-
-    int soerr = 0;
-    socklen_t len = sizeof(soerr);
-    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &len) < 0 || soerr != 0) {
-        fcntl(sock, F_SETFL, flags);
-        return -1;
-    }
-
-    fcntl(sock, F_SETFL, flags);
-    return 0;
-}
-
-bool HttpClient::parseUrl(const std::string& url, std::string& host, std::string& path, int& port) {
-    host.clear();
-    path = "/";
-    port = 80;
-
-    const std::string http_prefix = "http://";
-    if (url.rfind(http_prefix, 0) != 0) {
-        return false;
-    }
-    std::string rest = url.substr(http_prefix.size());
-    std::string::size_type slash = rest.find('/');
-    if (slash != std::string::npos) {
-        host = rest.substr(0, slash);
-        path = rest.substr(slash);
-    } else {
-        host = rest;
-    }
-
-    std::string::size_type colon = host.find(':');
-    if (colon != std::string::npos) {
-        port = std::atoi(host.substr(colon + 1).c_str());
-        host = host.substr(0, colon);
-    }
-    return !host.empty();
 }
 
 static bool isHttps(const std::string& url) {
@@ -260,6 +259,8 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         for (const auto& h : extra_headers) {
             headers = curl_slist_append(headers, h.c_str());
         }
+        const std::string auth = authHeaderFor(url);
+        if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
         CurlXferContext xfer_ctx{cancel_flag_, progress_cb_};
 
@@ -328,116 +329,9 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
 #endif
     }
 
-    // HTTP через сокеты
-    std::string host, path;
-    int port = 80;
-    if (!parseUrl(url, host, path, port)) {
-        resp.status_code = 0;
-        resp.body = "Unsupported URL";
-        return resp;
-    }
-
-    struct addrinfo hints;
-    std::memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    struct addrinfo* result = nullptr;
-    std::string port_str = std::to_string(port);
-    if (getaddrinfo(host.c_str(), port_str.c_str(), &hints, &result) != 0) {
-        resp.status_code = 0;
-        resp.body = "DNS lookup failed";
-        return resp;
-    }
-
-    int sock = -1;
-    int last_errno = 0;
-    for (struct addrinfo* rp = result; rp != nullptr; rp = rp->ai_next) {
-        sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sock == -1) {
-            last_errno = errno;
-            continue;
-        }
-        int conn_to = std::min(timeout_sec_ > 0 ? timeout_sec_ : 30, 4);
-        if (connect_with_timeout(sock, rp->ai_addr, rp->ai_addrlen, conn_to) == 0) {
-            break;
-        }
-        last_errno = errno;
-        close(sock);
-        sock = -1;
-    }
-    freeaddrinfo(result);
-
-    if (sock == -1) {
-        resp.status_code = 0;
-        resp.body = "Connection failed errno=" + std::to_string(last_errno);
-        util::logLine("HttpClient: connection failed errno=" + std::to_string(last_errno) + " url=" + url);
-        return resp;
-    }
-
-    // Prevent indefinite blocking on send/recv when peer keeps socket open.
-    timeval tv{};
-    tv.tv_sec = timeout_sec_ > 0 ? timeout_sec_ : 30;
-    tv.tv_usec = 0;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-    std::ostringstream req;
-    req << method << " " << path << " HTTP/1.1\r\n";
-    req << "Host: " << host << "\r\n";
-    req << "User-Agent: TorrentShopNX/0.2\r\n";
-    if (method == "POST") {
-        req << "Content-Type: application/json\r\n";
-        req << "Content-Length: " << body.size() << "\r\n";
-    }
-    for (const auto& h : extra_headers) {
-        req << h << "\r\n";
-    }
-    // For simple request/response mode over raw sockets, close is safer:
-    // some servers keep HTTP/1.1 connections alive and recv() would block.
-    req << "Connection: close\r\n\r\n";
-    if (method == "POST") {
-        req << body;
-    }
-
-    std::string req_str = req.str();
-    size_t sent_total = 0;
-    while (sent_total < req_str.size()) {
-        int sent = send(sock, req_str.data() + sent_total, req_str.size() - sent_total, 0);
-        if (sent <= 0) {
-            close(sock);
-            resp.status_code = 0;
-            resp.body = "Send failed";
-            return resp;
-        }
-        sent_total += static_cast<size_t>(sent);
-    }
-
-    std::string response;
-    char buffer[4096];
-    int n = 0;
-    while ((n = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
-        buffer[n] = 0;
-        response.append(buffer);
-    }
-    close(sock);
-
-    // Разделяем заголовки и тело
-    std::string::size_type header_end = response.find("\r\n\r\n");
-    if (header_end == std::string::npos) {
-        resp.status_code = 0;
-        resp.body = response;
-        return resp;
-    }
-
-    resp.headers = response.substr(0, header_end);
-    resp.body = response.substr(header_end + 4);
-
-    // Парсим код статуса
-    std::istringstream status_line(resp.headers);
-    std::string http_ver;
-    status_line >> http_ver >> resp.status_code;
-
+    // Only http:// and https:// are supported (both go through curl above).
+    resp.status_code = 0;
+    resp.body = "Unsupported URL";
     return resp;
 }
 
@@ -481,6 +375,8 @@ int HttpClient::httpGetStream(const std::string& url, uint64_t offset, uint64_t 
         headers = curl_slist_append(headers, "Connection: keep-alive");
     }
     headers = curl_slist_append(headers, "Accept-Encoding: identity");
+    const std::string auth = authHeaderFor(url);
+    if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
     CurlStreamCtx ctx;
     ctx.cb = &cb;
@@ -603,6 +499,8 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     for (const auto& h : extra_headers) {
         headers = curl_slist_append(headers, h.c_str());
     }
+    const std::string auth = authHeaderFor(url);
+    if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
     bool hasAcceptEncoding = false;
     for (const auto& h : extra_headers) {
@@ -664,8 +562,14 @@ HttpClient::DownloadResult HttpClient::downloadToFileEx(const std::string& url, 
     }
 
     curl_slist_free_all(headers);
-    std::fflush(fp);
-    std::fclose(fp);
+    // A failed final flush means a truncated file (e.g. full SD card): the
+    // caller must not rename it over a good catalog.
+    bool flushed = std::fflush(fp) == 0;
+    if (std::fclose(fp) != 0) flushed = false;
+    if (!flushed && res == CURLE_OK) {
+        res = CURLE_WRITE_ERROR;
+        util::logLine("HttpClient: downloadToFileEx: write to " + dest_path + " failed");
+    }
 
     result.http_code = static_cast<int>(http_code);
     result.etag = hdr_ctx.etag;

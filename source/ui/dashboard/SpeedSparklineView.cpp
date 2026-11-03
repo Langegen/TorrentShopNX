@@ -83,7 +83,8 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
         nvgFontFace(vg, "default");
         nvgFillColor(vg, ThemeManager::instance().getTextSecondaryColor());
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        std::string collStr = "app/dashboard/sparkline_collecting"_i18n;
+        // draw() runs every frame; translations only change after a restart.
+        static const std::string collStr = "app/dashboard/sparkline_collecting"_i18n;
         nvgText(vg, x + width * 0.5f, y + height * 0.5f, collStr.c_str(), nullptr);
         return;
     }
@@ -96,7 +97,8 @@ void SpeedSparklineView::draw(NVGcontext* vg, float x, float y, float width, flo
     max_val_ = peak * 1.15f; // Add 15% headroom for aesthetic curve
 
     // Draw Peak Label in top-right
-    std::string peakStr = "app/dashboard/sparkline_peak"_i18n + formatSpeedShort(peak);
+    static const std::string peakPrefix = "app/dashboard/sparkline_peak"_i18n;
+    std::string peakStr = peakPrefix + formatSpeedShort(peak);
     nvgFontSize(vg, 10.0f * fontMult);
     NVGcolor accent = ThemeManager::instance().getAccentColor();
     nvgFillColor(vg, nvgRGBA(accent.r * 255, accent.g * 255, accent.b * 255, 220));

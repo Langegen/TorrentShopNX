@@ -230,6 +230,12 @@ static int parse_info_fields(torrent_meta *t, be_node *info, char *err, size_t e
         set_err(err, errlen, "missing 'piece length'");
         return -1;
     }
+    // Real torrents use 16 KB..32 MB pieces. A huge value would make the
+    // engine allocate absurd piece buffers.
+    if (plen->i > TORRENT_MAX_PIECE_LEN) {
+        set_err(err, errlen, "'piece length' too large");
+        return -1;
+    }
     t->piece_len = plen->i;
 
     be_node *pieces = be_dict_get(info, "pieces");
@@ -247,8 +253,14 @@ static int parse_info_fields(torrent_meta *t, be_node *info, char *err, size_t e
         t->file_capacity = 0;
     }
 
+    t->total_len = 0;
+    int truncated = 0;
     be_node *length = be_dict_get(info, "length");
     if (length && length->type == BE_INT) {
+        if (length->i <= 0) {
+            set_err(err, errlen, "invalid 'length'");
+            return -1;
+        }
         // Single-file torrent: synthesize one file entry so callers can treat
         // single- and multi-file torrents uniformly.
         t->total_len = length->i;
@@ -282,13 +294,17 @@ static int parse_info_fields(torrent_meta *t, be_node *info, char *err, size_t e
         for (size_t i = 0; i < files->list.count && t->file_count < MAX_TORRENT_FILES; i++) {
             be_node *flen = be_dict_get(files->list.items[i], "length");
             if (!flen || flen->type != BE_INT) continue;
+            if (flen->i < 0 || flen->i > INT64_MAX - off) {
+                set_err(err, errlen, "invalid file 'length'");
+                return -1;
+            }
 
             if (t->file_count >= t->file_capacity) {
                 int new_cap = t->file_capacity * 2;
                 if (new_cap > MAX_TORRENT_FILES) new_cap = MAX_TORRENT_FILES;
-                if (new_cap <= t->file_capacity) break;
+                if (new_cap <= t->file_capacity) { truncated = 1; break; }
                 torrent_file *new_files = (torrent_file *)realloc(t->files, (size_t)new_cap * sizeof(torrent_file));
-                if (!new_files) break;
+                if (!new_files) { truncated = 1; break; }
                 t->files = new_files;
                 t->file_capacity = new_cap;
             }
@@ -316,6 +332,21 @@ static int parse_info_fields(torrent_meta *t, be_node *info, char *err, size_t e
                 }
             }
         }
+        if (t->file_count < (int)files->list.count && t->file_count >= MAX_TORRENT_FILES)
+            truncated = 1;
+    }
+
+    // The piece table must cover exactly the payload. Otherwise piece/offset
+    // math downstream (file_last_piece, last piece length) walks past the
+    // per-piece arrays. A list cut at MAX_TORRENT_FILES only has to fit.
+    if (t->total_len <= 0 || t->piece_count <= 0) {
+        set_err(err, errlen, "empty torrent");
+        return -1;
+    }
+    int64_t want_pieces = (t->total_len + t->piece_len - 1) / t->piece_len;
+    if (truncated ? want_pieces > t->piece_count : want_pieces != t->piece_count) {
+        set_err(err, errlen, "'pieces' does not match total length");
+        return -1;
     }
     return 0;
 }

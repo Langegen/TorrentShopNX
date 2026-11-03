@@ -74,6 +74,11 @@ public:
     /// Очистить все созданные плейсхолдеры (вызывается при ошибке)
     void cleanup();
 
+    /// Delete the contents registered by finalizePlaceHolder() during this
+    /// install (failed or cancelled install), or forget them once it succeeded.
+    void rollbackRegistered();
+    void forgetRegistered() { registered_.clear(); }
+
     bool isInitialized() const { return initialized_; }
     NcmStorageId storageId() const { return storage_id_; }
 
@@ -82,6 +87,8 @@ public:
     bool begin(int storage) { (void)storage; return true; }
     bool isInitialized() const { return false; }
     void cleanup() {}
+    void rollbackRegistered() {}
+    void forgetRegistered() {}
 #endif
 
 private:
@@ -95,6 +102,8 @@ private:
 
     /// Список созданных плейсхолдеров (для cleanup в случае ошибки)
     std::vector<NcmContentId> placeholders_;
+    /// Contents registered by this install (for rollbackRegistered)
+    std::vector<NcmContentId> registered_;
 #else
     bool initialized_ = false;
 #endif

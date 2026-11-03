@@ -405,6 +405,8 @@ bool RemoteDataSource::resolveFileSize() {
 
         struct curl_slist* headers = nullptr;
         headers = curl_slist_append(headers, "Range: bytes=0-0");
+        const std::string auth = net::authHeaderFor(url);
+        if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
         curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curlParseHeader);
@@ -419,8 +421,8 @@ bool RemoteDataSource::resolveFileSize() {
         }
 
         if (res == CURLE_OK) {
-            double cl = 0;
-            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+            curl_off_t cl = 0;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
             if (cl > 0) {
                 file_size_ = static_cast<uint64_t>(cl);
                 return true;
@@ -451,6 +453,10 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
 
 #if TSNX_HAVE_CURL
     auto urls = buildStreamUrlCandidates(offset, requested_size);
+    if (preferred_candidate_ > 0 && preferred_candidate_ < urls.size()) {
+        std::rotate(urls.begin(), urls.begin() + preferred_candidate_, urls.end());
+    }
+    const auto all_urls = buildStreamUrlCandidates(offset, requested_size);
     bool saw_timeout = false;
     bool saw_404 = false;
     bool saw_no_response = false;
@@ -462,6 +468,7 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
 
     for (int attempt = 0; attempt < max_retries_; ++attempt) {
         if (g_appExiting.load() || (cancel_flag_ && cancel_flag_->load())) return 0;
+        size_t not_found = 0;
         for (const auto& url : urls) {
             if (g_appExiting.load() || (cancel_flag_ && cancel_flag_->load())) return 0;
             curl_easy_reset(curl);
@@ -480,6 +487,8 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
             headers = curl_slist_append(headers, range_hdr.str().c_str());
             headers = curl_slist_append(headers, "Connection: keep-alive");
             headers = curl_slist_append(headers, "Accept-Encoding: identity");
+            const std::string auth = net::authHeaderFor(url);
+            if (!auth.empty()) headers = curl_slist_append(headers, auth.c_str());
 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -508,11 +517,17 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
 
             curl_slist_free_all(headers);
 
+            if (http_code == 401) {
+                util::logLine(auth.empty() ? "remote_ds: TorrServer asks for a login (401), none is set"
+                                           : "remote_ds: TorrServer rejected the login (401)");
+            }
             if (http_code == 404) {
+                // Another URL form may work (older TorrServer routes): try
+                // the next candidate instead of failing the whole read.
                 saw_404 = true;
-                last_failure_ = ReadFailureKind::NotFound404;
+                ++not_found;
                 util::logLine("remote_ds: stream returned 404, switching candidate");
-                return 0;
+                continue;
             }
 
             if (res == CURLE_OK) {
@@ -521,6 +536,10 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
                                           ctx.written, ctx.overflowed, file_size_, reason)) {
                     if (file_size_ == 0 && range_info.has_total_size) {
                         file_size_ = range_info.total_size;
+                    }
+                    auto it = std::find(all_urls.begin(), all_urls.end(), url);
+                    if (it != all_urls.end()) {
+                        preferred_candidate_ = static_cast<size_t>(it - all_urls.begin());
                     }
                     last_failure_ = ReadFailureKind::None;
                     return ctx.written;
@@ -537,6 +556,11 @@ size_t RemoteDataSource::readSingleRange(uint64_t offset, void* buf, size_t size
             }
         }
 
+        if (not_found == urls.size()) {
+            // Every URL form says "not found": retrying will not change that.
+            last_failure_ = ReadFailureKind::NotFound404;
+            return 0;
+        }
         if (attempt < max_retries_ - 1) {
             util::logLine("remote_ds: retry " + std::to_string(attempt + 1) +
                           "/" + std::to_string(max_retries_) +

@@ -1,5 +1,6 @@
 #include "sevenzip_utils.h"
 #include "archive_peek.h"
+#include "archive_utils.h"
 #include "extraction_journal.h"
 #include "file_ops.h"
 #include "../datasource/i_data_source.h"
@@ -261,24 +262,6 @@ static std::string utf16leToUtf8(const UInt16* s, size_t units) {
     return out;
 }
 
-// Same path hardening rules as the libarchive extraction path.
-static std::string sanitizeEntryName(const std::string& raw) {
-    std::string clean = raw;
-    while (!clean.empty() && (clean.front() == '/' || clean.front() == '\\')) {
-        clean.erase(clean.begin());
-    }
-    size_t dotdot;
-    while ((dotdot = clean.find("..")) != std::string::npos) {
-        clean.replace(dotdot, 2, "__");
-    }
-    for (char& c : clean) {
-        if (c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
-            c = '_';
-        }
-    }
-    return clean;
-}
-
 static const char* sresToMessage(SRes res) {
     switch (res) {
     case SZ_OK:                 return "";
@@ -507,7 +490,7 @@ static bool extract7zInternal(
             SzArEx_GetFileNameUtf16(&db, i, nameBuf);
 
             const bool isDir = SzArEx_IsDir(&db, i) != 0;
-            std::string cleanName = sanitizeEntryName(utf16leToUtf8(nameBuf, nameLen - 1));
+            std::string cleanName = sanitizeArchiveEntryPath(utf16leToUtf8(nameBuf, nameLen - 1));
             if (cleanName.empty()) {
                 continue;
             }
@@ -610,7 +593,7 @@ static bool extract7zInternal(
             if (outSizeProcessed > 0) {
                 written = fwrite(outBuffer + offset, 1, outSizeProcessed, outFile);
             }
-            fclose(outFile);
+            if (fclose(outFile) != 0) written = 0;  // final flush failed (full card)
 
             if (written != outSizeProcessed) {
                 outError = "Ошибка записи на диск: " + fullPath;
@@ -799,7 +782,7 @@ bool peek7zArchiveFromSource(datasource::IDataSource* source,
             if (!nameBuf) break;
         }
         SzArEx_GetFileNameUtf16(&db, i, nameBuf);
-        std::string clean = sanitizeEntryName(utf16leToUtf8(nameBuf, nameLen - 1));
+        std::string clean = sanitizeArchiveEntryPath(utf16leToUtf8(nameBuf, nameLen - 1));
         for (char& c : clean) {
             if (c == '\\') c = '/';
         }
@@ -902,7 +885,7 @@ bool list7zArchiveFolder(
         }
         SzArEx_GetFileNameUtf16(&db, i, nameBuf);
         std::string rawName = utf16leToUtf8(nameBuf, nameLen - 1);
-        std::string clean = sanitizeEntryName(rawName);
+        std::string clean = sanitizeArchiveEntryPath(rawName);
         for (char& c : clean) {
             if (c == '\\') c = '/';
         }
@@ -1137,7 +1120,7 @@ bool iterate7zArchiveEntries(
         }
         SzArEx_GetFileNameUtf16(&db, i, nameBuf);
         std::string rawName = utf16leToUtf8(nameBuf, nameLen - 1);
-        std::string clean = sanitizeEntryName(rawName);
+        std::string clean = sanitizeArchiveEntryPath(rawName);
         for (char& c : clean) {
             if (c == '\\') c = '/';
         }

@@ -47,8 +47,8 @@ EmptyState::EmptyState() {
     this->addView(button_);
 }
 
-void EmptyState::show(DashboardIcon::Kind kind, const std::string& title, const std::string& sub,
-                      const std::string& actionLabel, std::function<void()> action) {
+void EmptyState::setContent(DashboardIcon::Kind kind, const std::string& title, const std::string& sub,
+                            const std::string& actionLabel, std::function<void()> action) {
     iconHolder_->clearViews();
     iconHolder_->addView(new DashboardIcon(kind, 112.0f));
 

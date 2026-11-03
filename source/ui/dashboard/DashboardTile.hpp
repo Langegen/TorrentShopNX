@@ -10,6 +10,7 @@ class DashboardTile : public brls::Box {
 public:
     DashboardTile(int index, const std::string& icon_res, const std::string& title,
                   std::function<void(int)> on_focus, std::function<void(int)> on_click);
+    ~DashboardTile() override;
 
     void setBadge(const std::string& text);
     void setTitle(const std::string& title);
@@ -33,6 +34,7 @@ private:
     brls::Label* sub_badge_ = nullptr;
     brls::Label* title_label_ = nullptr;
 
+    int themeSub_ = 0;
     float scale_ = 1.0f;
     float glow_  = 0.0f;
 };

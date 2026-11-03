@@ -214,6 +214,8 @@ static void normalizeNroPath() {
     }
 }
 
+#ifdef __SWITCH__
+// Self-update of the NRO: only the console build replaces its own file.
 static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     std::ifstream in(src, std::ios::binary | std::ios::ate);
     if (!in.is_open()) return false;
@@ -305,7 +307,6 @@ extern "C" u32 __nx_applet_exit_mode;
 //                  be alive in the shared process, and once hbloader maps the
 //                  next NRO over their code they crash the whole title.
 static void prepareExitAfterUpdate(const std::string& nroPath, bool relaunch) {
-#ifdef __SWITCH__
     if (relaunch && envHasNextLoad()) {
         std::string quotedArg = "\"" + nroPath + "\"";
         envSetNextLoad(nroPath.c_str(), quotedArg.c_str());
@@ -316,17 +317,11 @@ static void prepareExitAfterUpdate(const std::string& nroPath, bool relaunch) {
         util::updateJournal(relaunch ? "loader has no next-load support, exiting to HOME"
                                      : "update applied at exit, closing to HOME");
     }
-#else
-    (void)nroPath;
-    (void)relaunch;
-#endif
 }
 
 static bool checkAndApplyPendingUpdate(bool relaunch) {
-#ifdef __SWITCH__
     // Ensure RomFS is not mounted while we manipulate NRO files
     util::unmountRomfs();
-#endif
 
     // 1. If we are running AS the .update file (e.g. TorrentShopNX.nro.update)
     if (g_nroPath.find(".update") != std::string::npos) {
@@ -380,6 +375,7 @@ static bool checkAndApplyPendingUpdate(bool relaunch) {
     }
     return false;
 }
+#endif // __SWITCH__
 
 int main(int argc, char** argv) {
     std::set_terminate([]() {

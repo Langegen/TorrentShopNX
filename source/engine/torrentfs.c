@@ -317,9 +317,38 @@ typedef struct {
     uint8_t *req_by;
     int nblocks;
     int have_cnt;
+    // Blocks with no data and no outstanding request. Every change of req[]
+    // goes through aq_req_inc / aq_req_dec / aq_req_set to keep it exact.
+    int unreq_cnt;
+    // Lower bound of when an outstanding request of this piece can first be
+    // "stalled" (older than the background steal timer). Until then, with
+    // unreq_cnt == 0, a background pass over the piece cannot pick anything.
+    u64 stall_check_at;
     int next_req;       // scan cursor for the next block to request
     u64 last_deliver;   // last time a block of this piece arrived (diagnostics)
 } aq_entry;
+
+// The only writers of aq_entry.req[]: they keep unreq_cnt exact. A count of
+// 255 is sticky (as before), so it is never decremented.
+static inline void aq_req_inc(aq_entry *a, int b) {
+    if (a->req[b] == 0 && !a->have[b]) a->unreq_cnt--;
+    if (a->req[b] < 255) a->req[b]++;
+}
+
+static inline void aq_req_dec(aq_entry *a, int b) {
+    if (a->req[b] > 0 && a->req[b] < 255) {
+        a->req[b]--;
+        if (a->req[b] == 0 && !a->have[b]) a->unreq_cnt++;
+    }
+}
+
+static inline void aq_req_set(aq_entry *a, int b, uint8_t v) {
+    if (!a->have[b]) {
+        if (a->req[b] == 0 && v != 0) a->unreq_cnt--;
+        else if (a->req[b] != 0 && v == 0) a->unreq_cnt++;
+    }
+    a->req[b] = v;
+}
 
 typedef struct {
     bool active;
@@ -444,6 +473,7 @@ struct torrentfs {
     volatile bool stop;
     volatile bool cancel_reader;
     volatile int pending_select_file; // -1 = none, >= 0 = file index to switch to on netloop thread
+    volatile int select_gen;          // bumped by the netloop after each applied switch
 
     aq_entry aq[AQ_MAX];
     int16_t *aq_of_piece;      // piece -> aq slot hint (validated by aq[slot].idx)
@@ -519,6 +549,7 @@ struct torrentfs {
     uint8_t peer_src[TFS_MAX_PEERS];     // where the address came from (PEER_SRC_*)
     uint8_t peer_fail_kind[TFS_MAX_PEERS];  // last failure: 1 = connect timeout, 2 = other
     uint8_t peer_sha_fails[TFS_MAX_PEERS];  // accumulated sha1 check failures from this peer
+    uint8_t peer_gen[TFS_MAX_PEERS];        // bumped when a pool slot gets a new address
     // Speed history: the best capability (KB/s) any session to this address
     // reached, and how often it was rotated out for being slow. Dial order and
     // pool eviction prefer addresses that were fast before.
@@ -842,6 +873,13 @@ static size_t cache_read_upto(torrentfs *t, int64_t off, void *buf, size_t len) 
 // Lock order note: this takes t->lock while holding cache_lock. No path takes
 // them the other way round (the writer's SD path releases cache_lock before it
 // touches t->lock), so the nesting cannot deadlock.
+// Block attribution for SHA-fail bans: pool slot in the low 11 bits plus the
+// slot's 4-bit generation, so a slot reused by another address is not blamed.
+#define PEER_FROM_SLOT_MASK 0x7FF
+static inline int16_t peer_from_tag(const torrentfs *t, int pidx) {
+    return (int16_t)((pidx & PEER_FROM_SLOT_MASK) | ((t->peer_gen[pidx] & 0xF) << 11));
+}
+
 static void ram_evict(torrentfs *t) {   // caller holds t->cache_lock
     int64_t ph = t->playhead_piece;
     int64_t pin_limit = t->file_first_piece +
@@ -911,6 +949,16 @@ static void ram_store(torrentfs *t, int64_t idx, uint8_t *buf) {
     t->ram_resident += t->meta.piece_len;
     if (idx < t->ram_lo) t->ram_lo = idx;   // seek-back reload below the cursor
     if (t->ram_resident > t->ram_peak) t->ram_peak = t->ram_resident;
+    // Mark the piece DONE before eviction runs: if it is evicted right away
+    // (stored behind the playhead while over budget), ram_evict must be able
+    // to reset it to NEEDED. Marking it afterwards left a "done" piece with no
+    // data that was never fetched again.
+    mutexLock(&t->lock);
+    if (t->status[idx] != PIECE_DONE) {
+        t->status[idx] = PIECE_DONE;
+        t->pieces_done++;
+    }
+    mutexUnlock(&t->lock);
     ram_evict(t);
     mutexUnlock(&t->cache_lock);
 }
@@ -968,6 +1016,8 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         c->last_deliver = armGetSystemTick();
         c->nblocks  =
             (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
+        c->unreq_cnt = c->nblocks;
+        c->stall_check_at = 0;
         memset(c->have, 0, (size_t)t->blocks_per_piece);
         memset(c->req, 0, (size_t)t->blocks_per_piece);
         memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
@@ -1105,6 +1155,7 @@ static void add_peers_src(torrentfs *t, const peer_addr *peers, int n, int src) 
             }
         }
         if (slot < 0) continue;
+        t->peer_gen[slot]++;   // blocks attributed to the old address no longer match
         t->peers[slot]         = peers[i];
         pool_hash_insert(t, peers[i].ip, peers[i].port, slot);
         t->peer_fails[slot]    = 0;
@@ -1446,13 +1497,9 @@ static void writer_main(void *arg) {
             // No SD write at all: hand the buffer to the RAM window and mark the
             // piece done. This is the whole point of the mode -- the per-piece
             // FAT write that stutters playback simply never happens.
-            ram_store(t, j.idx, j.buf);
+            ram_store(t, j.idx, j.buf);            // also marks the piece DONE
             j.buf = NULL;                          // ownership moved to the window
             mutexLock(&t->lock);
-            if (t->status[j.idx] != PIECE_DONE) {
-                t->status[j.idx] = PIECE_DONE;
-                t->pieces_done++;
-            }
             condvarWakeAll(&t->piece_cv);
             mark_ever_done(t, j.idx);
             t->st_piece_ok++;
@@ -1505,11 +1552,15 @@ static void writer_main(void *arg) {
             if (j.peer_from && nb > 0) {
                 u64 now_t = armGetSystemTick();
                 for (int b = 0; b < nb; b++) {
-                    int16_t p = j.peer_from[b];
-                    if (p >= 0 && p < TFS_MAX_PEERS) {
+                    int16_t tag = j.peer_from[b];
+                    int p = tag >= 0 ? (tag & PEER_FROM_SLOT_MASK) : -1;
+                    // The block's sender may have closed and its pool slot
+                    // been reused by another address before this hash check:
+                    // only blame the slot if it still holds the same peer.
+                    if (p >= 0 && p < TFS_MAX_PEERS && tag == peer_from_tag(t, p)) {
                         int cnt = 0;
                         for (int k = 0; k < nb; k++) {
-                            if (j.peer_from[k] == p) cnt++;
+                            if (j.peer_from[k] == tag) cnt++;
                         }
                         if (cnt * 4 >= nb || (nb <= 4 && cnt >= 1)) {
                             t->peer_sha_fails[p]++;
@@ -1521,7 +1572,7 @@ static void writer_main(void *arg) {
                                            p, t->peer_sha_fails[p], cnt, nb);
                             }
                             for (int k = b + 1; k < nb; k++) {
-                                if (j.peer_from[k] == p) j.peer_from[k] = -1;
+                                if (j.peer_from[k] == tag) j.peer_from[k] = -1;
                             }
                         }
                     }
@@ -1850,12 +1901,12 @@ static void send_cancel_one(torrentfs *t, sess *s, int ep, int eb) {
     v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
     memcpy(pl + 8, &v, 4);
     peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
-    // Flush immediately to drop duplicate transfers on the wire right away
-    if (peer_nb_tx_pending(&s->nb)) {
-        if (peer_nb_flush(&s->nb) != 0) {
-            sess_close(t, s, true);
-        }
-    }
+    // Flush immediately to drop duplicate transfers on the wire right away.
+    // A failed flush is NOT handled here: callers are in the middle of walking
+    // this session's request ring, and closing it under them corrupts req_n.
+    // The netloop's regular POLLOUT flush hits the same error and closes it.
+    if (peer_nb_tx_pending(&s->nb))
+        (void)peer_nb_flush(&s->nb);
 }
 
 // Drop a session's outstanding requests without cancelling them on the wire:
@@ -1870,7 +1921,7 @@ static void sess_drop_requests(torrentfs *t, sess *s) {
         int eb = s->req_block[i];
         aq_entry *ea = aq_find(t, ep);
         if (ea && eb >= 0 && eb < ea->nblocks) {
-            if (ea->req[eb] > 0 && ea->req[eb] < 255) ea->req[eb]--;
+            aq_req_dec(ea, eb);
             rb_clr(ea, eb, sid);
         }
     }
@@ -2133,10 +2184,21 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     u64 hedge_timeout_ticks = (is_endgame || (is_critical && remaining_blocks <= tail_threshold))
                               ? (t->freq / 2) : ((u64)DUP_REQ_SECS * t->freq);
 
+    // Background piece with every missing block already on order: the pass
+    // below can only pick a block whose request is older than the steal
+    // timer (or, on a head piece, one held only by slow sessions). Until the
+    // oldest request can be that old, skip the walk over up to 1024 blocks:
+    // it ran for every active piece on every request of every session.
+    const u64 steal_ticks = (u64)2500 * (t->freq / 1000);
+    const bool background = (max_dup <= 1) && !(is_head && !s->slow);
+    if (background && a->unreq_cnt <= 0 && now < a->stall_check_at) return -1;
+    u64 oldest_req = now;   // requests made after this pass are newer still
+
     for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
         a->next_req = (b + 1) % a->nblocks;
         if (a->have[b]) continue;
+        if (a->req[b] && a->req_ts[b] < oldest_req) oldest_req = a->req_ts[b];
         if (rb_has(a, b, (int)(s - t->S))) continue;   // already on order here
         uint8_t r = a->req[b];
         if (r == 0) return b; // Fresh unrequested block: always grab
@@ -2150,11 +2212,11 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
             // For background pieces, steal/hedge if the existing request has
             // stalled > 2.5s and its holder is not simply working through
             // its queue.
-            if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000) &&
+            if (now - a->req_ts[b] > steal_ticks &&
                 !holder_on_schedule(t, a, b, now)) {
                 uint8_t actual_r = 0;
                 int healthy = active_healthy_reqs(t, a, b, now, &actual_r);
-                a->req[b] = actual_r;
+                aq_req_set(a, b, actual_r);
                 if (actual_r < 2 || healthy == 0)
                     return b;
             }
@@ -2174,11 +2236,14 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
         if (now - a->req_ts[b] > (u64)2000 * (t->freq / 1000)) {
             uint8_t actual_r = 0;
             int healthy = active_healthy_reqs(t, a, b, now, &actual_r);
-            a->req[b] = actual_r;
+            aq_req_set(a, b, actual_r);
             if (actual_r < max_dup || healthy < 2)
                 return b;
         }
     }
+    // A full pass found nothing: no request is older than oldest_req, so
+    // none can pass the steal timer before oldest_req + steal_ticks.
+    if (max_dup <= 1) a->stall_check_at = oldest_req + steal_ticks;
     return -1;
 }
 
@@ -2337,8 +2402,7 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
                 stale = true;
             } else if (s->req_time[i] > 0 && (now - s->req_time[i] > req_timeout_ticks)) {
                 // Individual block request timed out (> 4.0s): release lock on block
-                if (ea->req[eb] > 0 && ea->req[eb] < 255)
-                    ea->req[eb]--;
+                aq_req_dec(ea, eb);
                 rb_clr(ea, eb, sid);
                 send_cancel_one(t, s, ep, eb);
                 stale = true;
@@ -2375,7 +2439,7 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
         if (peer_nb_queue(&s->nb, MSG_REQUEST, pl, 12) != 0) break;
         aq_entry *a = aq_find(t, pi);
         if (a) {
-            if (a->req[b] < 255) a->req[b]++;
+            aq_req_inc(a, b);
             a->req_ts[b] = now;
             rb_set(a, b, sid);
         }
@@ -2684,24 +2748,24 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             // We only serve pieces that are verified AND resident in the RAM
             // window (status under t->lock, buffer under cache_lock: nesting
             // t->lock -> cache_lock is safe, no path takes them the other way).
-            uint8_t blk[BLOCK_LEN];
             mutexLock(&t->lock);
             bool ok = t->status[r_idx] == PIECE_DONE;
             mutexUnlock(&t->lock);
+            // The block goes straight from the RAM window into the message
+            // (it used to be copied into a separate 16 KB stack buffer first).
+            uint8_t msg[8 + BLOCK_LEN];
             uint8_t *src = NULL;
             if (ok) {
                 mutexLock(&t->cache_lock);
                 if (t->ram_piece) src = t->ram_piece[r_idx];
-                if (src) memcpy(blk, src + r_begin, r_len);
+                if (src) memcpy(msg + 8, src + r_begin, r_len);
                 mutexUnlock(&t->cache_lock);
             }
             if (!src) break;
             {
-                uint8_t msg[8 + BLOCK_LEN];
                 uint32_t v;
                 v = htonl(r_idx);   memcpy(msg, &v, 4);
                 v = htonl(r_begin); memcpy(msg + 4, &v, 4);
-                memcpy(msg + 8, blk, r_len);
                 if (peer_nb_queue(&s->nb, MSG_PIECE, msg, 8 + r_len) == 0) {
                     t->st_up_blocks++;
                     t->st_up_bytes += r_len;
@@ -2729,11 +2793,16 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 memcpy(s->nb.bitfield, pl, plen);
                 s->have_in_file = count_have_in_file(t, s);
                 t->st_bf_ok++;
+                // One pass over the bytes: whole bytes must be 0xFF for a
+                // seed, only the last partial byte needs per-bit checks.
                 bool empty = true;
                 bool full = true;
-                for (size_t b = 0; b < plen; b++)
+                const size_t whole = (size_t)(t->meta.piece_count / 8);
+                for (size_t b = 0; b < plen; b++) {
                     if (pl[b]) empty = false;
-                for (int64_t p = 0; p < t->meta.piece_count && full; p++)
+                    if (b < whole && pl[b] != 0xFF) full = false;
+                }
+                for (int64_t p = (int64_t)whole * 8; p < t->meta.piece_count && full; p++)
                     if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p))
                         full = false;
                 engine_log(ENGINE_LOG_DEBUG,
@@ -2756,7 +2825,9 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                                "[sess %d] close: peer has 0 needed pieces (empty=%d)",
                                (int)(s - t->S), empty ? 1 : 0);
                     if (s->pidx >= 0 && s->pidx < TFS_MAX_PEERS) {
+                        mutexLock(&t->lock);   // discovery/DHT threads update it too
                         t->peer_next_try[s->pidx] = now + (u64)600 * t->freq;
+                        mutexUnlock(&t->lock);
                     }
                     s->fail_kind = PEER_FAIL_CHOKE_ROTATE;
                     sess_close(t, s, true);
@@ -2784,8 +2855,11 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             t->st_bytes_recv += dlen;
             s->last_block = now;
             s->rx_total += dlen;
-            if (s->pidx >= 0 && s->pidx < TFS_MAX_PEERS)
+            if (s->pidx >= 0 && s->pidx < TFS_MAX_PEERS && !t->peer_ok[s->pidx]) {
+                mutexLock(&t->lock);   // discovery/DHT threads update it too
                 t->peer_ok[s->pidx] = 1;
+                mutexUnlock(&t->lock);
+            }
 
             {
                 aq_entry *da = aq_find(t, idx);
@@ -2833,7 +2907,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             aq_entry *a = aq_find(t, idx);
             if (!a || b >= a->nblocks || a->have[b]) {
                 if (a && b < a->nblocks) {
-                    if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+                    aq_req_dec(a, b);
                     t->st_dup_have += dlen;
                 } else {
                     t->st_dup_gone += dlen;
@@ -2847,12 +2921,13 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             }
             memcpy(a->buf + begin, pl + 8, dlen);
             if (a->peer_from && b < a->nblocks) {
-                a->peer_from[b] = (int16_t)s->pidx;
+                a->peer_from[b] = peer_from_tag(t, s->pidx);
             }
             // Release so the streaming reader's acquire load of have[] (RAM
             // mode partial reads) can never observe the flag before the data.
+            if (a->req[b] == 0) a->unreq_cnt--;   // it was counted as unrequested
             __atomic_store_n(&a->have[b], 1, __ATOMIC_RELEASE);
-            if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+            aq_req_dec(a, b);
             a->have_cnt++;
             // A non-strict reader streams partial pieces block by block.
             if ((int64_t)idx == t->read_blocked_piece && !t->strict_verify)
@@ -2881,7 +2956,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                             send_cancel_one(t, other, (int)idx, b);
                             sent_cancel = true;
                         }
-                        if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+                        aq_req_dec(a, b);
                         other->req_piece[k] = other->req_piece[other->req_n - 1];
                         other->req_block[k] = other->req_block[other->req_n - 1];
                         other->req_time[k]  = other->req_time[other->req_n - 1];
@@ -3558,6 +3633,8 @@ static void netloop_main(void *arg) {
             int claimed = __atomic_exchange_n(&t->pending_select_file, -1, __ATOMIC_ACQ_REL);
             if (claimed >= 0) {
                 torrentfs_apply_select_file(t, claimed);
+                __atomic_add_fetch(&t->select_gen, 1, __ATOMIC_ACQ_REL);
+                condvarWakeAll(&t->piece_cv);  // select_file waits on it
                 last_upkeep = 0; // force immediate request_scan for the newly selected file
             }
         }
@@ -3744,13 +3821,15 @@ static void netloop_main(void *arg) {
                     s->snubbed = true;
                     engine_log(ENGINE_LOG_DEBUG, "[sess %d] snubbed", i);
                 }
-                // Keep-alive: raw 4 zero bytes, only when the tx queue is
-                // empty (an atomic small send cannot interleave mid-message).
+                // Keep-alive: 4 zero bytes through the tx queue. A raw send()
+                // skipped uTP sessions (sock = -1), which then timed out on
+                // the remote side, and could split on EAGAIN. A flush error
+                // is left to the regular POLLOUT path, which closes the session.
                 if (!s->connecting && s->nb.handshaked &&
                     now - s->last_ka > (u64)KEEPALIVE_SECS * t->freq &&
                     !peer_nb_tx_pending(&s->nb)) {
-                    uint8_t ka[4] = {0};
-                    send(s->nb.sock, ka, 4, 0);
+                    if (peer_nb_queue_keepalive(&s->nb) == 0)
+                        (void)peer_nb_flush(&s->nb);
                     s->last_ka = now;
                 }
                 // PEX: hand live addresses to extension-speaking peers; they
@@ -3971,6 +4050,9 @@ static void netloop_main(void *arg) {
                 mutexLock(&t->lock);
                 if (t->status[a->idx] == PIECE_ACTIVE) {
                     t->status[a->idx] = PIECE_NEEDED;  // discard partial, re-DL
+                    // The dropped blocks no longer count as held data.
+                    t->st_blocks_have -= a->have_cnt;
+                    if (t->st_blocks_have < 0) t->st_blocks_have = 0;
                     a->idx = -1;                       // release slot + buffer
                     if (t->n_active_aq > 0) t->n_active_aq--;
                 }
@@ -4326,7 +4408,8 @@ void torrentfs_close(torrentfs *tfs) {
     mutexUnlock(&tfs->inc_q.lock);
     for (int i = 0; i < CACHE_MAX_CHUNKS; i++)
         if (tfs->chunks[i] >= 0) { close(tfs->chunks[i]); tfs->chunks[i] = -1; }
-    cache_delete_all(tfs);  // per-playback scratch, not a library
+    if (!tfs->ram_mode)     // RAM mode never creates cache files
+        cache_delete_all(tfs);  // per-playback scratch, not a library
     for (int i = 0; i < AQ_MAX; i++) {
         free(tfs->aq[i].buf);
         free(tfs->aq[i].have);
@@ -4443,7 +4526,7 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
                 } else {
                     aq_entry *ea = aq_find(tfs, ep);
                     if (ea && eb >= 0 && eb < ea->nblocks) {
-                        if (ea->req[eb] > 0 && ea->req[eb] < 255) ea->req[eb]--;
+                        aq_req_dec(ea, eb);
                         rb_clr(ea, eb, i);
                     }
                 }
@@ -4532,18 +4615,30 @@ bool torrentfs_select_file(torrentfs *tfs, int file_index) {
     tfs->cancel_reader = true;
     tfs->read_blocked_piece = -1;
 
-    // 2. Delegate aq[] / S[] reconfiguration to the netloop thread to avoid data races
+    // 2. Delegate aq[] / S[] reconfiguration to the netloop thread. It must
+    //    never run here while the netloop is alive: it frees aq[].buf that the
+    //    netloop may be writing into.
     if (tfs->netloop_started && !tfs->stop) {
+        int gen0 = __atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE);
         __atomic_store_n(&tfs->pending_select_file, file_index, __ATOMIC_RELEASE);
-        for (int wait_i = 0; wait_i < 500 && !tfs->stop; wait_i++) {
-            if (__atomic_load_n(&tfs->pending_select_file, __ATOMIC_ACQUIRE) < 0) {
-                break;
-            }
-            svcSleepThread(2000000ULL); // 2 ms
+        mutexLock(&tfs->lock);
+        for (int wait_i = 0; wait_i < 250 && !tfs->stop; wait_i++) {   // ~5 s
+            if (__atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE) != gen0) break;
+            condvarWaitTimeout(&tfs->piece_cv, &tfs->lock, 20000000ULL);
         }
-        int leftover = __atomic_exchange_n(&tfs->pending_select_file, -1, __ATOMIC_ACQ_REL);
-        if (leftover >= 0) {
-            torrentfs_apply_select_file(tfs, leftover);
+        mutexUnlock(&tfs->lock);
+        if (__atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE) == gen0) {
+            int leftover = __atomic_exchange_n(&tfs->pending_select_file, -1, __ATOMIC_ACQ_REL);
+            if (leftover >= 0 || tfs->stop) {
+                // The netloop never picked it up (or is stopping): let the
+                // caller reopen the stream on the new file instead.
+                tfs->cancel_reader = false;
+                engine_log(ENGINE_LOG_WARN, "[torrentfs] select_file: netloop busy, switch not applied");
+                return false;
+            }
+            // Claimed and being applied right now: it is short, wait it out.
+            while (__atomic_load_n(&tfs->select_gen, __ATOMIC_ACQUIRE) == gen0 && !tfs->stop)
+                svcSleepThread(2000000ULL);
         }
     } else {
         torrentfs_apply_select_file(tfs, file_index);

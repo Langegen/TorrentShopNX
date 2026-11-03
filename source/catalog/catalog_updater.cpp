@@ -1,3 +1,4 @@
+#include "../utils/atomic_file.h"
 #include "catalog_updater.h"
 #include "catalog_manager.h"
 #include "collections_manager.h"
@@ -423,10 +424,8 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     std::error_code ec;
-    std::filesystem::remove(getCatalogBinPath(), ec);
-    std::filesystem::rename(tempBin, getCatalogBinPath(), ec);
-    if (ec) {
-        util::logLine("catalog_updater: rename bin failed: " + ec.message());
+    if (!util::atomicReplaceFile(tempBin, getCatalogBinPath())) {
+        util::logLine("catalog_updater: rename bin failed");
         std::filesystem::remove(tempDiffPath, ec);
         res.success = false;
         return res;
@@ -571,16 +570,14 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
                 std::filesystem::remove(tempBinPath, ec);
                 std::filesystem::remove(tempJsonPath, ec);
             } else {
-                std::filesystem::remove(getCatalogBinPath(), ec);
-                std::filesystem::rename(tempBinPath, getCatalogBinPath(), ec);
-                binOk = !ec;
+                // Old files go to .bak first: a crash between remove and
+                // rename used to leave no catalog at all.
+                binOk = util::atomicReplaceFile(tempBinPath, getCatalogBinPath());
                 if (!binOk) {
-                    util::logLine("catalog_updater: rename bin failed: " + ec.message());
+                    util::logLine("catalog_updater: rename bin failed");
                 }
 
-                std::filesystem::remove(getCatalogPath(), ec);
-                std::filesystem::rename(tempJsonPath, getCatalogPath(), ec);
-                jsonOk = !ec;
+                jsonOk = util::atomicReplaceFile(tempJsonPath, getCatalogPath());
             }
 
             updated = jsonOk && binOk;
@@ -615,9 +612,12 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
 
             if (!online_games.empty()) {
                 nlohmann::json jg = online_games;
-                writeTextFile(getCatalogPath(), jg.dump(2));
-                saveGamesToBinaryFile(getCatalogBinPath(), online_games);
-                updated = true;
+                bool jsonSaved = writeTextFile(getCatalogPath(), jg.dump(2));
+                bool binSaved = saveGamesToBinaryFile(getCatalogBinPath(), online_games);
+                updated = jsonSaved && binSaved;
+                if (!updated) {
+                    util::logLine("catalog_updater: failed to save fallback catalog");
+                }
             }
         }
     }

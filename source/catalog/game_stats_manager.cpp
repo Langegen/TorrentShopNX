@@ -170,13 +170,13 @@ void GameStatsManager::loadFromDiskInternal() {
     loaded_from_disk_.store(true, std::memory_order_release);
 }
 
-const GameStats* GameStatsManager::getSwitchStats(const std::string& topic_id) const {
-    if (topic_id.empty()) return nullptr;
+std::optional<GameStats> GameStatsManager::getSwitchStats(const std::string& topic_id) const {
+    if (topic_id.empty()) return std::nullopt;
     ensureLoaded();
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = switch_stats_.find(topic_id);
-    if (it != switch_stats_.end()) return &it->second;
-    return nullptr;
+    if (it != switch_stats_.end()) return it->second;
+    return std::nullopt;
 }
 
 bool GameStatsManager::copySwitchStats(const std::string& topic_id, GameStats& out) const {
@@ -189,24 +189,24 @@ bool GameStatsManager::copySwitchStats(const std::string& topic_id, GameStats& o
     return true;
 }
 
-const GameStats* GameStatsManager::getConsoleStats(const std::string& topic_id) const {
-    if (topic_id.empty()) return nullptr;
+std::optional<GameStats> GameStatsManager::getConsoleStats(const std::string& topic_id) const {
+    if (topic_id.empty()) return std::nullopt;
     ensureLoaded();
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = console_stats_.find(topic_id);
-    if (it != console_stats_.end()) return &it->second;
-    return nullptr;
+    if (it != console_stats_.end()) return it->second;
+    return std::nullopt;
 }
 
-const GameStats* GameStatsManager::getAnyStats(const std::string& topic_id) const {
-    if (topic_id.empty()) return nullptr;
+std::optional<GameStats> GameStatsManager::getAnyStats(const std::string& topic_id) const {
+    if (topic_id.empty()) return std::nullopt;
     ensureLoaded();
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = switch_stats_.find(topic_id);
-    if (it != switch_stats_.end()) return &it->second;
+    if (it != switch_stats_.end()) return it->second;
     auto itC = console_stats_.find(topic_id);
-    if (itC != console_stats_.end()) return &itC->second;
-    return nullptr;
+    if (itC != console_stats_.end()) return itC->second;
+    return std::nullopt;
 }
 
 void GameStatsManager::updateStatsInBackground(std::function<void(bool success)> onDone) {

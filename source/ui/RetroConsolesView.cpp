@@ -92,9 +92,9 @@ void RetroConsolesView::onContentAvailable() {
         return true;
     });
 
-    rebuildGrid();
-    refreshGameCounts();
-    refreshStatuses();
+    // The grid, counts and statuses are built in willAppear(), which
+    // pushActivity() calls right after this. Building them here too created a
+    // second set of cards while count jobs still pointed at the first one.
 
     // Once per launch: bring folders written by older versions to the current
     // layout, and offer to move PS Vita / Wii U games to their emulators.
@@ -219,19 +219,21 @@ void RetroConsolesView::refreshGameCounts() {
     for (const auto& c : mgr.consoles()) {
         std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
         std::string cid = c.id;
-        auto it = console_cards_.find(cid);
-        CollectionCard* card = (it != console_cards_.end()) ? it->second : nullptr;
 
-        brls::async([flag, card, cid, &mgr]() {
+        brls::async([this, flag, cid, &mgr]() {
             int count = mgr.getCachedGameCount(cid);
-            if (flag->load() && card) {
-                brls::sync([flag, card, count]() {
-                    if (flag->load() && card) {
-                        if (count > 0) {
-                            card->setCountText(util::pluralize("app/plural/games", count));
-                        } else {
-                            card->setCountText("app/retro/catalog_badge"_i18n);
-                        }
+            if (flag->load()) {
+                brls::sync([this, flag, cid, count]() {
+                    if (!flag->load()) return;
+                    // Look the card up now: the grid may have been rebuilt
+                    // (and the old cards freed) while the count was computed.
+                    auto it = console_cards_.find(cid);
+                    if (it == console_cards_.end() || !it->second) return;
+                    CollectionCard* card = it->second;
+                    if (count > 0) {
+                        card->setCountText(util::pluralize("app/plural/games", count));
+                    } else {
+                        card->setCountText("app/retro/catalog_badge"_i18n);
                     }
                 });
             }

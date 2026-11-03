@@ -1,4 +1,5 @@
 #include "SettingsTab.hpp"
+#include "../utils/file_ops.h"
 #include "../utils/i18n_plural.h"
 #include "ThemeManager.hpp"
 #include "BackgroundFilePicker.hpp"
@@ -29,16 +30,6 @@
 extern std::string g_nroPath;
 
 namespace ui {
-
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
-    return std::string(buf);
-}
 
 struct AppDownloadProgress {
     std::atomic<uint64_t> downloaded{0};
@@ -127,9 +118,13 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     progressDialog->setCancelable(false);
     
     auto progressObj = std::make_shared<AppDownloadProgress>();
+    // The Cancel button dismisses (and frees) the dialog by itself; after that
+    // nothing may touch progressDialog or statusLabel again.
+    auto dialogClosed = std::make_shared<std::atomic<bool>>(false);
     
-    progressDialog->addButton("app/common/cancel"_i18n, [progressObj]() {
+    progressDialog->addButton("app/common/cancel"_i18n, [progressObj, dialogClosed]() {
         progressObj->aborted.store(true);
+        dialogClosed->store(true);
     });
     
     auto timer = std::make_shared<brls::RepeatingTimer>();
@@ -146,9 +141,9 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
             double percent = (double)dl / (double)tot * 100.0;
             char pctBuf[32];
             std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", percent);
-            progressInfo = std::string(pctBuf) + " (" + formatBytes(dl) + " / " + formatBytes(tot) + ")";
+            progressInfo = std::string(pctBuf) + " (" + util::formatFileSize(dl) + " / " + util::formatFileSize(tot) + ")";
         } else {
-            progressInfo = formatBytes(dl);
+            progressInfo = util::formatFileSize(dl);
         }
         statusLabel->setText(brls::getStr("app/settings/downloading_update", version, progressInfo));
     });
@@ -158,7 +153,7 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     
     std::string tmpPath = g_nroPath + ".tmp";
     
-    brls::async([url, tmpPath, progressObj, progressDialog, timer, version]() {
+    brls::async([url, tmpPath, progressObj, progressDialog, timer, version, dialogClosed]() {
         CURL* curl = curl_easy_init();
         CURLcode res = CURLE_FAILED_INIT;
         long http_code = 0;
@@ -200,8 +195,14 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         bool userCancelled = progressObj->aborted.load();
         progressObj->aborted.store(true);
         
-        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled]() {
+        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled, dialogClosed]() {
             timer->stop();
+            if (dialogClosed->load()) {
+                std::error_code ec;
+                std::filesystem::remove(tmpPath, ec);
+                util::logLine("downloadAndInstallAppUpdate: cancelled by user");
+                return;
+            }
             progressDialog->close([res, http_code, tmpPath, userCancelled]() {
                 if (userCancelled) {
                     std::error_code ec;
@@ -921,11 +922,17 @@ brls::View* SettingsTab::buildDownloadsTab() {
         remoteUrlCell->setDetailText(url);
     };
     updateRemoteUrlDisplay();
-    remoteUrlCell->registerClickAction([remoteUrlCell, updateRemoteUrlDisplay, &cfg, &dm](brls::View* view) {
+    // The login goes only to the TorrServer's address (net::setServerAuth),
+    // so it is re-applied whenever the address or the login changes.
+    auto applyServerAuth = [&cfg]() {
+        net::setServerAuth(cfg.getTorrServerUrl(), cfg.getTorrServerLogin(), cfg.getTorrServerPassword());
+    };
+    remoteUrlCell->registerClickAction([remoteUrlCell, updateRemoteUrlDisplay, applyServerAuth, &cfg, &dm](brls::View* view) {
         brls::Application::getImeManager()->openForText(
-            [updateRemoteUrlDisplay, &cfg, &dm](std::string text) {
+            [updateRemoteUrlDisplay, applyServerAuth, &cfg, &dm](std::string text) {
                 if (!text.empty()) {
                     cfg.setTorrServerUrl(text);
+                    applyServerAuth();
                     dm.dataSourceManager().setRemoteUrl(text);
                     cfg.save();
                     brls::Application::notify("app/settings/remote_url_updated"_i18n);
@@ -941,24 +948,84 @@ brls::View* SettingsTab::buildDownloadsTab() {
         return true;
     });
 
+    // Login and password, for a TorrServer started with --httpauth
+    auto* loginCell = new brls::DetailCell();
+    loginCell->setText("app/settings/server_login"_i18n);
+    auto* passwordCell = new brls::DetailCell();
+    passwordCell->setText("app/settings/server_password"_i18n);
+    auto updateLoginDisplay = [loginCell, passwordCell, &cfg]() {
+        const std::string& login = cfg.getTorrServerLogin();
+        loginCell->setDetailText(login.empty() ? "app/settings/server_login_none"_i18n
+                                               : (login.size() > 35 ? login.substr(0, 32) + "..." : login));
+        // Never shown: dots only, one per character up to 8
+        const size_t n = std::min<size_t>(cfg.getTorrServerPassword().size(), 8);
+        std::string dots;
+        for (size_t i = 0; i < n; ++i) dots += "•";
+        passwordCell->setDetailText(n == 0 ? "app/settings/server_login_none"_i18n : dots);
+    };
+    updateLoginDisplay();
+    loginCell->registerClickAction([updateLoginDisplay, applyServerAuth, &cfg](brls::View*) {
+        brls::Application::getImeManager()->openForText(
+            [updateLoginDisplay, applyServerAuth, &cfg](std::string text) {
+                // Empty login turns the login off (the password goes with it)
+                cfg.setTorrServerCredentials(text, cfg.getTorrServerPassword());
+                applyServerAuth();
+                brls::Application::notify("app/settings/server_login_updated"_i18n);
+                updateLoginDisplay();
+            },
+            "app/settings/server_login"_i18n,
+            "app/settings/server_login_hint"_i18n,
+            128,
+            cfg.getTorrServerLogin(),
+            0);
+        return true;
+    });
+    passwordCell->registerClickAction([updateLoginDisplay, applyServerAuth, &cfg](brls::View*) {
+        if (cfg.getTorrServerLogin().empty()) {
+            brls::Application::notify("app/settings/server_password_need_login"_i18n);
+            return true;
+        }
+        // Starts empty: the saved password is never put on screen
+        brls::Application::getImeManager()->openForText(
+            [updateLoginDisplay, applyServerAuth, &cfg](std::string text) {
+                cfg.setTorrServerCredentials(cfg.getTorrServerLogin(), text);
+                applyServerAuth();
+                brls::Application::notify("app/settings/server_login_updated"_i18n);
+                updateLoginDisplay();
+            },
+            "app/settings/server_password"_i18n,
+            "app/settings/server_password_hint"_i18n,
+            128,
+            "",
+            0);
+        return true;
+    });
+
     auto* modeCell = new brls::SelectorCell();
-    modeCell->init("app/settings/data_mode"_i18n, modes, initialMode, [](int selected) {}, [&cfg, &dm, remoteUrlCell](int selected) {
+    modeCell->init("app/settings/data_mode"_i18n, modes, initialMode, [](int selected) {}, [&cfg, &dm, remoteUrlCell, loginCell, passwordCell](int selected) {
+        const auto vis = (selected == 1) ? brls::Visibility::GONE : brls::Visibility::VISIBLE;
         if (selected == 1) {
             cfg.setDataMode("custom_engine");
             dm.dataSourceManager().setMode(datasource::DataSourceMode::CustomEngine);
-            remoteUrlCell->setVisibility(brls::Visibility::GONE);
         } else {
             cfg.setDataMode("torrserver");
             dm.dataSourceManager().setMode(datasource::DataSourceMode::Remote);
-            remoteUrlCell->setVisibility(brls::Visibility::VISIBLE);
         }
+        remoteUrlCell->setVisibility(vis);
+        loginCell->setVisibility(vis);
+        passwordCell->setVisibility(vis);
         cfg.save();
         brls::Application::notify("app/settings/mode_changed"_i18n);
     });
     box->addView(modeCell);
 
-    remoteUrlCell->setVisibility((initialMode == 0) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    const auto serverVis = (initialMode == 0) ? brls::Visibility::VISIBLE : brls::Visibility::GONE;
+    remoteUrlCell->setVisibility(serverVis);
+    loginCell->setVisibility(serverVis);
+    passwordCell->setVisibility(serverVis);
     box->addView(remoteUrlCell);
+    box->addView(loginCell);
+    box->addView(passwordCell);
 
     return scroll;
 }

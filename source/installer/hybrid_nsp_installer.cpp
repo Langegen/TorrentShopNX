@@ -116,14 +116,24 @@ void sleepPrebufferPoll() {
 #ifdef __SWITCH__
 void collectorThreadEntry(void* arg) {
     auto* self = static_cast<HybridNspInstaller*>(arg);
-    self->collectorThreadFunc();
+    self->runGuarded(&HybridNspInstaller::collectorThreadFunc, "collector");
 }
 
 void installerThreadEntry(void* arg) {
     auto* self = static_cast<HybridNspInstaller*>(arg);
-    self->installerThreadFunc();
+    self->runGuarded(&HybridNspInstaller::installerThreadFunc, "installer");
 }
 #endif
+
+void HybridNspInstaller::runGuarded(void (HybridNspInstaller::*fn)(), const char* name) {
+    try {
+        (this->*fn)();
+    } catch (const std::exception& e) {
+        setError(std::string("internal error in ") + name + " thread: " + e.what());
+    } catch (...) {
+        setError(std::string("internal error in ") + name + " thread");
+    }
+}
 
 // =============================================================================
 // Конструктор / Деструктор
@@ -487,8 +497,10 @@ bool HybridNspInstaller::startStreamingPhase() {
 #else
     // На хосте — запуск через std::thread
     threads_started_ = true;
-    collector_thread_ = std::thread(&HybridNspInstaller::collectorThreadFunc, this);
-    installer_thread_ = std::thread(&HybridNspInstaller::installerThreadFunc, this);
+    collector_thread_ = std::thread(&HybridNspInstaller::runGuarded, this,
+                                    &HybridNspInstaller::collectorThreadFunc, "collector");
+    installer_thread_ = std::thread(&HybridNspInstaller::runGuarded, this,
+                                    &HybridNspInstaller::installerThreadFunc, "installer");
 #endif
 
     return true;
@@ -919,8 +931,17 @@ void HybridNspInstaller::installerThreadFunc() {
             }
 
             if (!current_entry) {
-                ++processed;
-                ++stream_pos;
+                // Padding between entries (XCI partitions have large gaps):
+                // jump to the next entry or the end of the chunk at once. It
+                // used to advance one byte per loop, each with a full scan.
+                uint64_t next_start = UINT64_MAX;
+                for (const auto& e : entries) {
+                    if (e.offset > stream_pos && e.offset < next_start) next_start = e.offset;
+                }
+                uint64_t skip = static_cast<uint64_t>(read - processed);
+                if (next_start != UINT64_MAX && next_start - stream_pos < skip) skip = next_start - stream_pos;
+                processed  += static_cast<size_t>(skip);
+                stream_pos += skip;
                 continue;
             }
 
@@ -1146,8 +1167,10 @@ void HybridNspInstaller::installerThreadFunc() {
                                               chunk_buf.data() + processed + to_process);
                     }
 
-                    util::logLine("installer: [NcaWrite] start content=" + current_entry->name + 
-                                  " offset=" + std::to_string(offset_in_file) + " size=" + std::to_string(to_process));
+                    if (offset_in_file == 0) {   // once per NCA, not per chunk
+                        util::logLine("installer: [NcaWrite] start content=" + current_entry->name +
+                                      " size=" + std::to_string(current_entry->size));
+                    }
                     if (!ncm_.writePlaceHolder(current_entry->content_id,
                                                 offset_in_file,
                                                 chunk_buf.data() + processed,
@@ -1156,14 +1179,10 @@ void HybridNspInstaller::installerThreadFunc() {
                         ring_buffer_.setEof();
                         goto cleanup_sha;
                     }
-                    util::logLine("installer: [NcaWrite] success");
-
                     if (config_.verify_sha256 && hashing_active) {
-                        util::logLine("installer: [SHA256] update start");
                         sha256ContextUpdate(&sha_ctx,
                                             chunk_buf.data() + processed,
                                             to_process);
-                        util::logLine("installer: [SHA256] update success");
                     }
 
                     if (offset_in_file + to_process >= current_entry->size) {
@@ -1261,6 +1280,17 @@ cleanup_sha:
         }
     }
 
+#ifdef __SWITCH__
+    // A failed or cancelled install must not leave NCAs behind: drop the open
+    // placeholders and the contents already registered by this install.
+    if (state_.load() == InstallState::Completed) {
+        ncm_.forgetRegistered();
+    } else {
+        ncm_.cleanup();
+        ncm_.rollbackRegistered();
+    }
+#endif
+
     if (source_) {
         source_->notifyStreamingComplete(!cancel_requested_ && !hasError());
     }
@@ -1311,10 +1341,10 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     state_ = InstallState::RegisteringMeta;
     util::logLine("hybrid: phase 5 - registering CNMT metadata");
 
+#ifdef __SWITCH__
     CnmtData cnmt;
     bool cnmt_ready = false;
 
-#ifdef __SWITCH__
     // =========================================================================
     // 1) Основной путь: читаем CNMT NCA из установленного контента через
     //    FsFileSystemType_ContentMeta. Работает всегда: NCA уже финализирован
@@ -1380,8 +1410,10 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     }
 
     if (!cnmt_ready) {
-        util::logLine("hybrid: warning - CNMT parse failed, metadata registration skipped");
-        return true;
+        // Without the CNMT the title is never registered: the NCAs would sit
+        // on storage and the game would not show up, so this is a failure.
+        setError("CNMT parse failed, title not registered");
+        return false;
     }
     cnmt_data_ = cnmt;
 
@@ -1428,8 +1460,8 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     }
 
     if (content_infos.empty()) {
-        util::logLine("hybrid: no content records for ContentMetaDatabaseSet");
-        return true;
+        setError("no content records for ContentMetaDatabaseSet");
+        return false;
     }
 
     // Для патчей (0x81) выделяем дополнительное место под extended_data_size
@@ -1483,17 +1515,17 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     NcmContentMetaDatabase meta_db;
     Result rc = ncmOpenContentMetaDatabase(&meta_db, config_.storage);
     if (R_FAILED(rc)) {
-        util::logLine("hybrid: ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));
-        return true;
+        setError("ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));
+        return false;
     }
 
     NcmContentMetaKey key = cnmt.toKey();
 
     rc = ncmContentMetaDatabaseSet(&meta_db, &key, meta_buf.data(), meta_buf.size());
     if (R_FAILED(rc)) {
-        util::logLine("hybrid: ncmContentMetaDatabaseSet failed, rc=" + std::to_string(rc));
         ncmContentMetaDatabaseClose(&meta_db);
-        return true;
+        setError("ncmContentMetaDatabaseSet failed, rc=" + std::to_string(rc));
+        return false;
     }
 
     rc = ncmContentMetaDatabaseCommit(&meta_db);
@@ -1501,7 +1533,9 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         util::logLine("hybrid: ContentMetaDatabase commit OK, title_id=0x"
                        + std::to_string(cnmt.title_id));
     } else {
-        util::logLine("hybrid: ncmContentMetaDatabaseCommit failed, rc=" + std::to_string(rc));
+        ncmContentMetaDatabaseClose(&meta_db);
+        setError("ncmContentMetaDatabaseCommit failed, rc=" + std::to_string(rc));
+        return false;
     }
     ncmContentMetaDatabaseClose(&meta_db);
 

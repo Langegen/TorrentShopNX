@@ -37,40 +37,43 @@ static utp_nb_sess g_sess[SESS_MAX];
 static size_t rb_free(utp_nb_sess *c) { return RBUF_SIZE - c->rcount; }
 static size_t wb_free(utp_nb_sess *c) { return WBUF_SIZE - c->wcount; }
 
+// Ring copies in at most two memcpy calls (the wrap point splits them). All
+// uTP payload goes through these; the old loops copied byte by byte with a
+// modulo per byte. Callers never push more than the free space.
+static void ring_push(uint8_t *ring, size_t size, size_t head, size_t *count,
+                      const uint8_t *p, size_t n) {
+    size_t tail = (head + *count) % size;
+    size_t first = n < size - tail ? n : size - tail;
+    memcpy(ring + tail, p, first);
+    if (n > first) memcpy(ring, p + first, n - first);
+    *count += n;
+}
+
+static size_t ring_pop(const uint8_t *ring, size_t size, size_t *head, size_t *count,
+                       uint8_t *p, size_t n) {
+    if (n > *count) n = *count;
+    size_t first = n < size - *head ? n : size - *head;
+    memcpy(p, ring + *head, first);
+    if (n > first) memcpy(p + first, ring, n - first);
+    *head = (*head + n) % size;
+    *count -= n;
+    return n;
+}
+
 static void rb_push(utp_nb_sess *c, const uint8_t *p, size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        size_t tail = (c->rhead + c->rcount) % RBUF_SIZE;
-        c->rbuf[tail] = p[i];
-        c->rcount++;
-    }
+    ring_push(c->rbuf, RBUF_SIZE, c->rhead, &c->rcount, p, n);
 }
 
 static size_t rb_pop(utp_nb_sess *c, uint8_t *p, size_t n) {
-    size_t got = 0;
-    while (got < n && c->rcount > 0) {
-        p[got++] = c->rbuf[c->rhead];
-        c->rhead = (c->rhead + 1) % RBUF_SIZE;
-        c->rcount--;
-    }
-    return got;
+    return ring_pop(c->rbuf, RBUF_SIZE, &c->rhead, &c->rcount, p, n);
 }
 
 static void wb_push(utp_nb_sess *c, const uint8_t *p, size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        size_t tail = (c->whead + c->wcount) % WBUF_SIZE;
-        c->wbuf[tail] = p[i];
-        c->wcount++;
-    }
+    ring_push(c->wbuf, WBUF_SIZE, c->whead, &c->wcount, p, n);
 }
 
 static size_t wb_pop(utp_nb_sess *c, uint8_t *p, size_t n) {
-    size_t got = 0;
-    while (got < n && c->wcount > 0) {
-        p[got++] = c->wbuf[c->whead];
-        c->whead = (c->whead + 1) % WBUF_SIZE;
-        c->wcount--;
-    }
-    return got;
+    return ring_pop(c->wbuf, WBUF_SIZE, &c->whead, &c->wcount, p, n);
 }
 
 static void free_sess(utp_nb_sess *c) {
@@ -221,7 +224,9 @@ void utp_nb_service(void) {
             break;
         }
         if (n == 0) break;
-        if (getenv("UTP_DBG")) {
+        static int utp_dbg = -1;   // getenv once, not per datagram
+        if (utp_dbg < 0) utp_dbg = getenv("UTP_DBG") != NULL;
+        if (utp_dbg) {
             fprintf(stderr, "[utp_nb] rx %u bytes from %u.%u.%u.%u:%u\n", (unsigned)n,
                     (unsigned)(from.sin_addr.s_addr & 0xff), (unsigned)((from.sin_addr.s_addr >> 8) & 0xff),
                     (unsigned)((from.sin_addr.s_addr >> 16) & 0xff), (unsigned)((from.sin_addr.s_addr >> 24) & 0xff),
@@ -304,13 +309,21 @@ int utp_nb_read(utp_nb_sess *c, void *buf, int len) {
     return (int)rb_pop(c, (uint8_t *)buf, (size_t)len);
 }
 
+// Queues as much of buf as the write buffer holds and returns the count
+// (0 when it is full), like a non-blocking send(). It used to refuse the whole
+// write when it did not fit, and the caller treated that as a dead session:
+// every uTP peer we uploaded to got closed.
 int utp_nb_write(utp_nb_sess *c, const void *buf, int len) {
     if (!c || !c->in_use) return -1;
     if (c->state == ST_ERROR || c->state == ST_EOF) return -1;
-    if ((size_t)len > wb_free(c)) return -1;
-    wb_push(c, (const uint8_t *)buf, (size_t)len);
-    if (c->sock && c->state == ST_CONNECTED) UTP_Write(c->sock, (size_t)len);
-    return len;
+    if (len <= 0) return 0;
+    size_t n = (size_t)len;
+    size_t room = wb_free(c);
+    if (n > room) n = room;
+    if (n == 0) return 0;
+    wb_push(c, (const uint8_t *)buf, n);
+    if (c->sock && c->state == ST_CONNECTED) UTP_Write(c->sock, n);
+    return (int)n;
 }
 
 int utp_nb_state(const utp_nb_sess *c) {

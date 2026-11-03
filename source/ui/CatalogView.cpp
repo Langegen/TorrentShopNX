@@ -131,9 +131,7 @@ void CatalogView::onContentAvailable() {
         ? catalog::SortOption::TITLE_ASC
         : filterState_.sort;
 
-    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game* a, const Game* b) {
-        return catalog::compareGames(a, b, sortOpt);
-    });
+    catalog::sortGamesBy(filteredGames_, sortOpt, [](const Game* g) { return g; });
 
     std::string countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
     statsHint->setText(ui::style::headerMeta(countStr, {
@@ -272,9 +270,7 @@ void CatalogView::filterCatalog() {
         ? catalog::SortOption::TITLE_ASC
         : filterState_.sort;
 
-    std::stable_sort(filteredGames_.begin(), filteredGames_.end(), [sortOpt](const Game* a, const Game* b) {
-        return catalog::compareGames(a, b, sortOpt);
-    });
+    catalog::sortGamesBy(filteredGames_, sortOpt, [](const Game* g) { return g; });
 
     if (statsHint) {
         std::string countStr;
@@ -294,9 +290,9 @@ void CatalogView::filterCatalog() {
         const bool empty = filteredGames_.empty();
         if (empty && !emptyState_) {
             emptyState_ = new EmptyState();
-            emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
-                              "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
-                              [this]() { resetFilters(); });
+            emptyState_->setContent(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                                    "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                                    [this]() { resetFilters(); });
             emptyHolder->addView(emptyState_);
         }
         emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
@@ -423,7 +419,7 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 cards[i].stats->setVisibility(brls::Visibility::GONE);
 
                 cards[i].size->setText(game.size);
-                const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
+                const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game.topic_id);
                 if (cards[i].statsBox) {
                     if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
                         cards[i].statsBox->setVisibility(brls::Visibility::VISIBLE);
@@ -436,16 +432,20 @@ brls::RecyclerCell* CatalogView::CatalogDataSource::cellForRow(brls::RecyclerFra
                 
                 setImageFromHTTPS(cards[i].cover, game.cover, rowCell->imageToken, "romfs:/img/cover_blank.png", false, "", row, i);
                 
-                cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
-                    bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
+                // The lambdas keep the catalog snapshot alive and point into it
+                // instead of copying the whole Game into each one.
+                const Game* gamePtr = &game;
+                auto snapshot = parent_->catalogSnapshot_;
+                cardBox->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [gamePtr, snapshot](brls::View* view) {
+                    bool fav = catalog::FavoritesManager::instance().toggleFavorite(*gamePtr);
                     util::triggerHapticFeedback(3);
                     brls::Application::notify(fav ? "app/favorites/added"_i18n : "app/favorites/removed"_i18n);
                     return true;
                 });
 
-                cardBox->registerClickAction([game](brls::View* view) {
+                cardBox->registerClickAction([gamePtr, snapshot](brls::View* view) {
                     util::triggerHapticFeedback(2);
-                    brls::Application::pushActivity(new GameDetailView(game));
+                    brls::Application::pushActivity(new GameDetailView(*gamePtr));
                     return true;
                 });
             } catch (const std::exception& e) {

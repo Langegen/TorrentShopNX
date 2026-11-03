@@ -2,6 +2,8 @@
 
 #include <string>
 #include <cstdint>
+#include <mutex>
+#include <atomic>
 
 namespace config {
 
@@ -12,8 +14,14 @@ public:
     void load();
     void save();
 
-    const std::string& getTorrServerUrl() const;
+    std::string getTorrServerUrl() const;
     void setTorrServerUrl(const std::string& url);
+
+    // Login for a TorrServer started with --httpauth; empty = none. Stored
+    // as plain text in config.ini, like the rest of the settings.
+    std::string getTorrServerLogin() const;
+    std::string getTorrServerPassword() const;
+    void setTorrServerCredentials(const std::string& login, const std::string& password);
 
     static constexpr const char* DEFAULT_CATALOG_URL_RU = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_EN = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
@@ -26,11 +34,11 @@ public:
     static constexpr const char* DEFAULT_CATALOG_URL = DEFAULT_CATALOG_URL_RU;
     static constexpr const char* LEGACY_CATALOG_URL = "https://raw.githubusercontent.com/Langegen/switch-games/refs/heads/main/switch_games.json";
 
-    const std::string& getCatalogSourceUrl() const;
+    std::string getCatalogSourceUrl() const;
     std::string getEffectiveCatalogSourceUrl() const;
     void setCatalogSourceUrl(const std::string& url);
 
-    const std::string& getDataMode() const;
+    std::string getDataMode() const;
     void setDataMode(const std::string& mode);
 
     bool getKeepAwakeDuringDownloads() const;
@@ -49,7 +57,7 @@ public:
 
     static constexpr const char* DEFAULT_CATALOG_DIFF_URL = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/catalog_diff.json";
 
-    const std::string& getLastCatalogUpdateDate() const;
+    std::string getLastCatalogUpdateDate() const;
     void setLastCatalogUpdateDate(const std::string& date_yyyy_mm_dd);
     bool shouldUpdateCatalogToday() const;
     static std::string currentDateString();
@@ -62,7 +70,7 @@ public:
 
     // App version that last downloaded the full catalog. A different value
     // at startup means the app was updated, so the catalog is re-downloaded.
-    const std::string& getCatalogAppVersion() const;
+    std::string getCatalogAppVersion() const;
     void setCatalogAppVersion(const std::string& version);
 
     bool shouldUpdateCatalogDiff() const;
@@ -71,13 +79,13 @@ public:
     std::string getActiveCatalogLangKey() const;
     std::string getEffectiveCatalogDiffUrl() const;
 
-    const std::string& getInstallLocation() const;
+    std::string getInstallLocation() const;
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.20"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.21"; // Keep in sync with Makefile APP_VERSION
 
-    const std::string& getAppUpdateUrl() const;
+    std::string getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
     void setAppUpdateUrl(const std::string& url);
 
@@ -87,36 +95,36 @@ public:
     bool getCacheCoverThumbnails() const;
     void setCacheCoverThumbnails(bool enabled);
 
-    const std::string& getLastAppUpdateCheckDate() const;
+    std::string getLastAppUpdateCheckDate() const;
     void setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd);
     bool shouldCheckAppUpdateToday() const;
 
-    const std::string& getLastEmulatorManifestCheckDate() const;
+    std::string getLastEmulatorManifestCheckDate() const;
     void setLastEmulatorManifestCheckDate(const std::string& date_yyyy_mm_dd);
     bool shouldCheckEmulatorManifestToday() const;
 
-    const std::string& getLanguage() const;
+    std::string getLanguage() const;
     void setLanguage(const std::string& lang);
 
     // Retro Games settings
     // "auto" (default): Tico folders, Vita3K and Cemu folders; "custom": <custom path>/<console>/.
     // Older values (prompt, tico, retroarch, downloads) are read as "auto".
-    const std::string& getRetroRomsMode() const;
+    std::string getRetroRomsMode() const;
     void setRetroRomsMode(const std::string& mode);
     bool isRetroCustomFolder() const;
 
-    const std::string& getRetroCustomPath() const;
+    std::string getRetroCustomPath() const;
     void setRetroCustomPath(const std::string& path);
 
 
     // Appearance / Theme settings
-    const std::string& getTheme() const; // "light" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "graphite"
+    std::string getTheme() const; // "light" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "graphite"
     void setTheme(const std::string& theme);
 
-    const std::string& getBackgroundMode() const; // "auto" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "custom"
+    std::string getBackgroundMode() const; // "auto" (default), "emerald", "cyberpunk", "ruby", "amethyst", "amber", "custom"
     void setBackgroundMode(const std::string& mode);
 
-    const std::string& getCustomBackgroundPath() const;
+    std::string getCustomBackgroundPath() const;
     void setCustomBackgroundPath(const std::string& path);
 
     int getBackgroundBlur() const; // 0 (Off, default), 1 (Low), 2 (Medium), 3 (High)
@@ -143,6 +151,8 @@ private:
     ~ConfigManager() = default;
 
     std::string torrserver_url_;
+    std::string torrserver_login_;
+    std::string torrserver_password_;
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;
@@ -172,6 +182,14 @@ private:
     bool rumble_enabled_ = true;
     std::string config_path_;
     std::string legacy_config_path_;
+
+    // Settings are read and written from the UI thread and from worker
+    // threads (catalog updater, emulator manifest check). Every accessor takes
+    // this lock; getters return copies. Recursive: setters call save().
+    mutable std::recursive_mutex mutex_;
+    // Every Label reads the font scale on every frame: keep a lock-free copy.
+    std::atomic<int> font_scale_fast_{0};
+    std::mutex save_mutex_;  // one writer of config.ini at a time
 };
 
 } // namespace config

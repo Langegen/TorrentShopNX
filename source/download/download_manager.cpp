@@ -1028,6 +1028,13 @@ static void fileCopyWorker(datasource::IDataSource* source,
     bool any_mod = false;
     std::string mod_base_dir;
 
+    // Stream and stdio buffers shared by every file of the release. They are
+    // allocated once and left uninitialised: a release with ~1800 small files
+    // used to allocate and zero two 2 MB vectors per file.
+    static constexpr size_t kFileChunk = 2 * 1024 * 1024;
+    std::unique_ptr<unsigned char[]> file_buf(new unsigned char[kFileChunk]);
+    std::unique_ptr<unsigned char[]> stdio_buf(new unsigned char[kFileChunk]);
+
     for (int idx : target_indices) {
         if (cancel->load() || g_appExiting.load()) {
             all_ok = false;
@@ -1142,7 +1149,9 @@ static void fileCopyWorker(datasource::IDataSource* source,
             }
         }
         if (!f) {
-            if (retro_info) util::prepareBigFile(file_dest, file_size);
+            // Any file over 4 GiB needs the FAT32 concatenation attribute,
+            // not only retro ROMs (the call is a no-op for smaller files).
+            util::prepareBigFile(file_dest, file_size);
             f = std::fopen(file_dest.c_str(), "wb");
         }
         if (!f) {
@@ -1155,10 +1164,9 @@ static void fileCopyWorker(datasource::IDataSource* source,
             break;
         }
 
-        std::vector<unsigned char> fbuf(kChunk);
-        std::setvbuf(f, reinterpret_cast<char*>(fbuf.data()), _IOFBF, kChunk);
-
-        std::vector<unsigned char> buf(kChunk);
+        static_assert(kChunk == kFileChunk, "shared buffers sized for kChunk");
+        std::setvbuf(f, reinterpret_cast<char*>(stdio_buf.get()), _IOFBF, kChunk);
+        unsigned char* const buf_data = file_buf.get();
         bool file_ok = true;
 
         while (offset < file_size && !cancel->load() && !g_appExiting.load()) {
@@ -1171,7 +1179,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
             }
 
             size_t want = static_cast<size_t>(std::min<uint64_t>(kChunk, file_size - offset));
-            size_t got = source->read(offset, buf.data(), want);
+            size_t got = source->read(offset, buf_data, want);
             if (got == 0) {
                 if (cancel->load() || g_appExiting.load()) break;
                 if (pause && pause->load()) continue;
@@ -1182,7 +1190,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                 std::lock_guard<std::mutex> lk(st->msg_mutex);
                 if (!st->stage_label.empty()) st->stage_label.clear();
             }
-            if (std::fwrite(buf.data(), 1, got, f) != got) {
+            if (std::fwrite(buf_data, 1, got, f) != got) {
                 file_ok = false;
                 st->error = "disk write failed";
                 break;
@@ -1191,7 +1199,12 @@ static void fileCopyWorker(datasource::IDataSource* source,
             cumulative_written += got;
             st->written.store(cumulative_written);
         }
-        std::fclose(f);
+        // The last buffered block is written by fclose: on a full card that
+        // is where the write fails.
+        if (std::fclose(f) != 0 && file_ok) {
+            file_ok = false;
+            st->error = "disk write failed";
+        }
 
         if (file_ok && offset >= file_size) {
             source->notifyStreamingComplete(true);
@@ -1699,6 +1712,7 @@ static void portInstallWorker(datasource::IDataSource* source,
             }
         }
         if (!f) {
+            util::prepareBigFile(resolved_dest, file_size);
             f = std::fopen(resolved_dest.c_str(), "wb");
         }
         if (!f) {

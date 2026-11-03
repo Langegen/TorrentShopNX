@@ -66,9 +66,13 @@ DashboardTile::DashboardTile(int index, const std::string& icon_res, const std::
         return true;
     });
 
-    ThemeManager::instance().subscribe([this]() {
+    themeSub_ = ThemeManager::instance().subscribe([this]() {
         refreshTheme();
     });
+}
+
+DashboardTile::~DashboardTile() {
+    ThemeManager::instance().unsubscribe(themeSub_);
 }
 
 void DashboardTile::setBadge(const std::string& text) {

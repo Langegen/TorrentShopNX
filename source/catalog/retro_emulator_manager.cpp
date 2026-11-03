@@ -1,3 +1,5 @@
+#include <cstring>
+#include "../utils/atomic_file.h"
 #include "retro_emulator_manager.h"
 #include "../utils/app_paths.h"
 #include "../utils/file_ops.h"
@@ -42,6 +44,39 @@ RetroEmulatorManager& RetroEmulatorManager::instance() {
     static RetroEmulatorManager inst;
     return inst;
 }
+
+namespace {
+
+// Paths a package (built-in or from the downloaded manifest) may write to or
+// delete: only inside the emulator folders we manage, never a root itself.
+// The manifest arrives over HTTPS without certificate checks, so its paths
+// are not trusted blindly.
+bool isManagedEmulatorPath(const std::string& path) {
+    if (path.rfind("sdmc:/", 0) != 0) return false;
+    if (path.find("..") != std::string::npos || path.find('\\') != std::string::npos) return false;
+    static const char* const kRoots[] = {"sdmc:/switch/", "sdmc:/tico/", "sdmc:/retroarch/"};
+    for (const char* root : kRoots) {
+        const size_t n = std::strlen(root);
+        if (path.size() > n && path.compare(0, n, root) == 0) return true;
+    }
+    return false;
+}
+
+// Folders shared by many packages: they must never be removed as a whole.
+bool isSharedEmulatorDir(std::string dir) {
+    while (dir.size() > 6 && dir.back() == '/') dir.pop_back();
+    static const char* const kShared[] = {
+        "sdmc:", "sdmc:/switch", "sdmc:/tico", "sdmc:/retroarch",
+        "sdmc:/tico/modules", "sdmc:/tico/system", "sdmc:/tico/roms",
+        "sdmc:/retroarch/cores", "sdmc:/retroarch/system", "sdmc:/switch/TorrentShopNX",
+    };
+    for (const char* s : kShared) {
+        if (dir == s) return true;
+    }
+    return !isManagedEmulatorPath(dir);
+}
+
+} // namespace
 
 std::string RetroEmulatorManager::resolvePlatformPath(const std::string& path) {
 #ifdef __SWITCH__
@@ -909,11 +944,15 @@ void RetroEmulatorManager::saveInstalledVersions() {
     std::string path = resolvePlatformPath(TSNX_DATA_DIR "/installed_emulators.txt");
     tsnx_ensure_parent_dirs(path.c_str());
 
-    std::ofstream out(path, std::ios::trunc);
-    if (!out.is_open()) return;
-
+    std::string body;
     for (const auto& [k, v] : installed_versions_) {
-        out << k << "=" << v << "\n";
+        body += k + "=" + v + "\n";
+    }
+    // Written atomically: a crash mid-write used to forget every installed
+    // emulator.
+    std::string err;
+    if (!util::atomicWriteFile(path, body, &err)) {
+        util::logLine("RetroEmulatorManager: cannot save installed versions: " + err);
     }
 }
 
@@ -947,9 +986,21 @@ bool RetroEmulatorManager::uninstallEmulator(const std::string& emu_id, std::str
 
     // If there is an extract_dir, remove it only if package was an archive
     if (p->is_archive && !p->extract_dir.empty()) {
-        std::string dir = resolvePlatformPath(p->extract_dir);
-        if (std::filesystem::exists(dir, ec)) {
-            std::filesystem::remove_all(dir, ec);
+        std::string target = p->extract_dir;
+        if (isSharedEmulatorDir(target)) {
+            // Several packages extract here (every Tico module goes to
+            // sdmc:/tico/modules): remove only this package's own folder, the
+            // one that holds its install_path.
+            const size_t slash = p->install_path.rfind('/');
+            target = slash == std::string::npos ? std::string() : p->install_path.substr(0, slash);
+        }
+        if (!target.empty() && !isSharedEmulatorDir(target)) {
+            std::string dir = resolvePlatformPath(target);
+            if (std::filesystem::exists(dir, ec)) {
+                std::filesystem::remove_all(dir, ec);
+            }
+        } else {
+            util::logLine("emulators: uninstall " + emu_id + ": not removing shared folder " + p->extract_dir);
         }
     } else {
         // For standalone nro: check if parent folder is in switch/ and now empty
@@ -1102,10 +1153,12 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
                     it->download_url = item["download_url"].get<std::string>();
                 if (item.contains("filename") && !item["filename"].get<std::string>().empty())
                     it->filename = item["filename"].get<std::string>();
-                if (item.contains("install_path") && !item["install_path"].get<std::string>().empty())
+                if (item.contains("install_path") && isManagedEmulatorPath(item["install_path"].get<std::string>()))
                     it->install_path = item["install_path"].get<std::string>();
-                if (item.contains("extract_dir"))
-                    it->extract_dir = item["extract_dir"].get<std::string>();
+                if (item.contains("extract_dir")) {
+                    std::string dir = item["extract_dir"].get<std::string>();
+                    if (dir.empty() || isManagedEmulatorPath(dir)) it->extract_dir = dir;
+                }
                 if (item.contains("is_archive"))
                     it->is_archive = item["is_archive"].get<bool>();
                 if (item.contains("file_size") && item["file_size"].get<int64_t>() > 0)
@@ -1132,7 +1185,7 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
                         comp.download_url = cd.value("download_url", "");
                         comp.install_path = cd.value("install_path", "");
                         comp.file_size = cd.value("file_size", (int64_t)0);
-                        if (!comp.download_url.empty() && !comp.install_path.empty()) {
+                        if (!comp.download_url.empty() && isManagedEmulatorPath(comp.install_path)) {
                             comps.push_back(comp);
                         }
                     }
@@ -1176,14 +1229,17 @@ bool RetroEmulatorManager::parseManifestFromJson(const std::string& json_str) {
                         comp.download_url = cd.value("download_url", "");
                         comp.install_path = cd.value("install_path", "");
                         comp.file_size = cd.value("file_size", (int64_t)0);
-                        if (!comp.download_url.empty() && !comp.install_path.empty()) {
+                        if (!comp.download_url.empty() && isManagedEmulatorPath(comp.install_path)) {
                             p.companion_downloads.push_back(comp);
                         }
                     }
                 }
 
-                if (!p.download_url.empty()) {
+                if (!p.download_url.empty() && isManagedEmulatorPath(p.install_path) &&
+                    (p.extract_dir.empty() || isManagedEmulatorPath(p.extract_dir))) {
                     packages_.push_back(p);
+                } else if (!p.download_url.empty()) {
+                    util::logLine("RetroEmulatorManager: manifest package " + p.id + " skipped: unsafe install path");
                 }
             }
         }

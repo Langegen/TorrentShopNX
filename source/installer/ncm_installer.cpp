@@ -48,6 +48,7 @@ void perfWrite(u64 dt, size_t bytes) {
 
 namespace installer {
 
+#ifdef __SWITCH__
 static bool endsWithInsensitive(const std::string& value, const std::string& suffix) {
     if (value.size() < suffix.size()) return false;
     auto from = value.end() - static_cast<std::ptrdiff_t>(suffix.size());
@@ -58,6 +59,7 @@ static bool endsWithInsensitive(const std::string& value, const std::string& suf
     }
     return true;
 }
+#endif
 
 NcmInstaller::NcmInstaller() = default;
 
@@ -213,6 +215,7 @@ bool NcmInstaller::finalizePlaceHolder(const NcmContentId& id) {
         util::logLine("ncm: register failed, rc=" + std::to_string(rc));
         return false;
     }
+    registered_.push_back(id);
 
     // РЈР±РёСЂР°РµРј РёР· СЃРїРёСЃРєР° РїР»РµР№СЃС…РѕР»РґРµСЂРѕРІ
     for (auto it = placeholders_.begin(); it != placeholders_.end(); ++it) {
@@ -417,6 +420,18 @@ bool NcmInstaller::readCnmtFromContentMetaFs(const NcmContentId& id, std::vector
     }
 
     return true;
+}
+
+void NcmInstaller::rollbackRegistered() {
+    if (!initialized_ || registered_.empty()) {
+        registered_.clear();
+        return;
+    }
+    util::logLine("ncm: rollback " + std::to_string(registered_.size()) + " registered contents");
+    for (const auto& id : registered_) {
+        ncmContentStorageDelete(&content_storage_, &id);
+    }
+    registered_.clear();
 }
 
 void NcmInstaller::cleanup() {

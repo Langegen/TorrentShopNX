@@ -294,6 +294,45 @@ inline bool checkPlayersMatch(int maxP, PlayersFilter pf) {
     }
 }
 
+namespace filter_detail {
+
+// matchesGameFilter() runs once per game (~7000) on every filter pass: the
+// i18n lookups and the query lower-casing used to happen per game too.
+// Language changes need an app restart, so caching the texts is safe.
+inline const std::string& allGenresText() {
+    static const std::string s = "app/filter/all_genres"_i18n;
+    return s;
+}
+inline const std::string& allYearsText() {
+    static const std::string s = "app/filter/all_years"_i18n;
+    return s;
+}
+
+struct PreparedQuery {
+    std::string raw;
+    std::string lower;
+    std::string norm;   // lower-case without : - , . ' " ! ?
+    bool valid = false;
+};
+
+inline const PreparedQuery& preparedQuery(const std::string& q) {
+    thread_local PreparedQuery pq;
+    if (!pq.valid || pq.raw != q) {
+        pq.raw = q;
+        pq.lower = toLowerUtf8(q);
+        pq.norm.clear();
+        for (char c : pq.lower) {
+            if (c != ':' && c != '-' && c != ',' && c != '.' && c != '\'' && c != '\"' && c != '!' && c != '?') {
+                pq.norm.push_back(c);
+            }
+        }
+        pq.valid = true;
+    }
+    return pq;
+}
+
+} // namespace filter_detail
+
 // Check if game matches filter state
 inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bool isFavorite) {
     // 1. Favorite filter
@@ -305,13 +344,13 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
     if (!state.genres.empty()) {
         bool matchAny = false;
         for (const auto& gId : state.genres) {
-            if (gId.empty() || gId == "Все жанры" || gId == "app/filter/all_genres"_i18n || gameMatchesGenre(game, gId)) {
+            if (gId.empty() || gId == "Все жанры" || gId == filter_detail::allGenresText() || gameMatchesGenre(game, gId)) {
                 matchAny = true;
                 break;
             }
         }
         if (!matchAny) return false;
-    } else if (!state.genre.empty() && state.genre != "Все жанры" && state.genre != "app/filter/all_genres"_i18n) {
+    } else if (!state.genre.empty() && state.genre != "Все жанры" && state.genre != filter_detail::allGenresText()) {
         if (!gameMatchesGenre(game, state.genre)) {
             return false;
         }
@@ -340,7 +379,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
         int gameYear = parseYear(game.year);
         bool matchAny = false;
         for (const auto& yStr : state.years) {
-            if (yStr.empty() || yStr == "Все года" || yStr == "Все годы" || yStr == "app/filter/all_years"_i18n) {
+            if (yStr.empty() || yStr == "Все года" || yStr == "Все годы" || yStr == filter_detail::allYearsText()) {
                 matchAny = true;
                 break;
             }
@@ -351,7 +390,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
             }
         }
         if (!matchAny) return false;
-    } else if (!state.year.empty() && state.year != "Все годы" && state.year != "Все года" && state.year != "app/filter/all_years"_i18n) {
+    } else if (!state.year.empty() && state.year != "Все годы" && state.year != "Все года" && state.year != filter_detail::allYearsText()) {
         int targetYear = std::atoi(state.year.c_str());
         if (targetYear > 0 && parseYear(game.year) != targetYear) {
             return false;
@@ -378,7 +417,8 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
 
     // 6. Search query filter
     if (!state.searchQuery.empty()) {
-        std::string lowerQuery = toLowerUtf8(state.searchQuery);
+        const auto& query = filter_detail::preparedQuery(state.searchQuery);
+        const std::string& lowerQuery = query.lower;
         bool match = false;
 
         // Check Title ID (e.g. "01006F8002326000")
@@ -403,7 +443,7 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
                     }
                     return res;
                 };
-                std::string normQuery = stripPunct(lowerQuery);
+                const std::string& normQuery = query.norm;
                 std::string normTitle = stripPunct(lowerTitle);
                 if (!normQuery.empty() && normTitle.find(normQuery) != std::string::npos) {
                     match = true;
@@ -502,40 +542,40 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             return a.sort_key < b.sort_key;
         }
         case SortOption::SEEDS_DESC: {
-            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
-            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            const auto sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto sB = GameStatsManager::instance().getAnyStats(b.topic_id);
             int32_t valA = sA ? sA->seeds : -1;
             int32_t valB = sB ? sB->seeds : -1;
             if (valA != valB) return valA > valB;
             return a.sort_key < b.sort_key;
         }
         case SortOption::SEEDS_ASC: {
-            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
-            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            const auto sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto sB = GameStatsManager::instance().getAnyStats(b.topic_id);
             int32_t valA = (sA && sA->seeds > 0) ? sA->seeds : INT32_MAX;
             int32_t valB = (sB && sB->seeds > 0) ? sB->seeds : INT32_MAX;
             if (valA != valB) return valA < valB;
             return a.sort_key < b.sort_key;
         }
         case SortOption::DOWNLOADS_DESC: {
-            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
-            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            const auto sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto sB = GameStatsManager::instance().getAnyStats(b.topic_id);
             int64_t valA = sA ? sA->downloads : -1;
             int64_t valB = sB ? sB->downloads : -1;
             if (valA != valB) return valA > valB;
             return a.sort_key < b.sort_key;
         }
         case SortOption::DOWNLOADS_ASC: {
-            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
-            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            const auto sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto sB = GameStatsManager::instance().getAnyStats(b.topic_id);
             int64_t valA = (sA && sA->downloads > 0) ? sA->downloads : INT64_MAX;
             int64_t valB = (sB && sB->downloads > 0) ? sB->downloads : INT64_MAX;
             if (valA != valB) return valA < valB;
             return a.sort_key < b.sort_key;
         }
         case SortOption::DATE_DESC: {
-            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
-            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            const auto sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto sB = GameStatsManager::instance().getAnyStats(b.topic_id);
             int64_t valA = (sA && sA->latest_timestamp > 0) ? sA->latest_timestamp : -1;
             int64_t valB = (sB && sB->latest_timestamp > 0) ? sB->latest_timestamp : -1;
             if (valA != valB) return valA > valB;
@@ -545,8 +585,8 @@ inline bool compareGames(const Game& a, const Game& b, SortOption sort) {
             return a.sort_key < b.sort_key;
         }
         case SortOption::DATE_ASC: {
-            const auto* sA = GameStatsManager::instance().getAnyStats(a.topic_id);
-            const auto* sB = GameStatsManager::instance().getAnyStats(b.topic_id);
+            const auto sA = GameStatsManager::instance().getAnyStats(a.topic_id);
+            const auto sB = GameStatsManager::instance().getAnyStats(b.topic_id);
             int64_t valA = (sA && sA->latest_timestamp > 0) ? sA->latest_timestamp : INT64_MAX;
             int64_t valB = (sB && sB->latest_timestamp > 0) ? sB->latest_timestamp : INT64_MAX;
             if (valA != valB) return valA < valB;
@@ -568,6 +608,82 @@ inline bool compareGames(const Game* a, const Game* b, SortOption sort) {
     if (!a) return false;
     if (!b) return true;
     return compareGames(*a, *b, sort);
+}
+
+// Numeric sort keys for one game, matching compareGames(). Smaller sorts
+// first; ties fall back to sort_key ascending.
+struct GameSortKeys {
+    int64_t k1 = 0;
+    int64_t k2 = 0;
+};
+
+inline GameSortKeys makeGameSortKeys(const Game& g, SortOption sort) {
+    GameSortKeys k;
+    switch (sort) {
+        case SortOption::SIZE_ASC:  k.k1 = (int64_t)parseSizeToBytes(g.size); break;
+        case SortOption::SIZE_DESC: k.k1 = -(int64_t)parseSizeToBytes(g.size); break;
+        case SortOption::YEAR_DESC: k.k1 = -parseYear(g.year); break;
+        case SortOption::YEAR_ASC: {
+            int y = parseYear(g.year);
+            k.k1 = y == 0 ? 9999 : y;
+            break;
+        }
+        case SortOption::SEEDS_DESC:
+        case SortOption::SEEDS_ASC:
+        case SortOption::DOWNLOADS_DESC:
+        case SortOption::DOWNLOADS_ASC:
+        case SortOption::DATE_DESC:
+        case SortOption::DATE_ASC: {
+            const auto st = GameStatsManager::instance().getAnyStats(g.topic_id);
+            if (sort == SortOption::SEEDS_DESC) {
+                k.k1 = -(int64_t)(st ? st->seeds : -1);
+            } else if (sort == SortOption::SEEDS_ASC) {
+                k.k1 = (st && st->seeds > 0) ? st->seeds : INT32_MAX;
+            } else if (sort == SortOption::DOWNLOADS_DESC) {
+                k.k1 = -(st ? st->downloads : -1);
+            } else if (sort == SortOption::DOWNLOADS_ASC) {
+                k.k1 = (st && st->downloads > 0) ? st->downloads : INT64_MAX;
+            } else if (sort == SortOption::DATE_DESC) {
+                k.k1 = -((st && st->latest_timestamp > 0) ? st->latest_timestamp : -1);
+                k.k2 = -(int64_t)parseTopicId(g.topic_id);
+            } else {
+                k.k1 = (st && st->latest_timestamp > 0) ? st->latest_timestamp : INT64_MAX;
+                uint64_t id = parseTopicId(g.topic_id);
+                k.k2 = id == 0 ? INT64_MAX : (int64_t)id;
+            }
+            break;
+        }
+        default: break;
+    }
+    return k;
+}
+
+// Stable sort of any container of game handles. Sort keys (sizes, years,
+// stats) are computed once per game instead of twice per comparison, and the
+// stats lock is taken n times instead of n*log(n).
+template <typename T, typename GetGame>
+inline void sortGamesBy(std::vector<T>& items, SortOption sort, GetGame getGame) {
+    if (sort == SortOption::DEFAULT || items.size() < 2) return;
+    struct Entry { GameSortKeys k; const std::string* key; size_t idx; };
+    static const std::string kEmpty;
+    std::vector<Entry> entries;
+    entries.reserve(items.size());
+    for (size_t i = 0; i < items.size(); ++i) {
+        const Game* g = getGame(items[i]);
+        if (g) entries.push_back({makeGameSortKeys(*g, sort), &g->sort_key, i});
+        else   entries.push_back({{INT64_MAX, INT64_MAX}, &kEmpty, i});  // missing games last
+    }
+    const bool titleDesc = sort == SortOption::TITLE_DESC;
+    std::stable_sort(entries.begin(), entries.end(), [titleDesc](const Entry& a, const Entry& b) {
+        if (titleDesc) return *a.key > *b.key;
+        if (a.k.k1 != b.k.k1) return a.k.k1 < b.k.k1;
+        if (a.k.k2 != b.k.k2) return a.k.k2 < b.k.k2;
+        return *a.key < *b.key;
+    });
+    std::vector<T> sorted;
+    sorted.reserve(items.size());
+    for (const auto& e : entries) sorted.push_back(std::move(items[e.idx]));
+    items = std::move(sorted);
 }
 
 } // namespace catalog

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -18,6 +19,7 @@
 #include "net/http_client.h"
 #include "net/image_downloader.h"
 #include "config/config.h"
+#include "utils/atomic_file.h"
 #include "utils/log.h"
 #include "utils/app_paths.h"
 #include "utils/string_utils.h"
@@ -155,6 +157,16 @@ inline std::string computeSortKey(const std::string& title) {
     return util::toLowerUtf8(normalizeTitleForSortView(title));
 }
 
+// One game inside a release, from the torrent's file names. A release can hold
+// several games (Coffee Talk / Episode 2 / Tokyo), each with its own ID and
+// update; the single title_id of the release names only one of them.
+struct ReleaseTitle {
+    uint64_t app_id = 0;            // application ID (low 13 bits clear)
+    uint32_t update_version = 0;    // newest update in the release, N << 16
+    bool update_known = false;      // the files carry [vN]: 0 = base game only
+    std::string version;            // "1.2" from the file names, "" = unknown
+};
+
 struct Game {
     std::string title;
     std::string title_id;
@@ -182,7 +194,63 @@ struct Game {
     // Game version shipped in the release ("1.0.3"), "" = unknown. Filled by
     // the catalog builder from the topic ("Версия игры: ...") or file names.
     std::string version;
+    // Every game in the release (catalog field "titles"), empty in older
+    // catalogs. See catalog::releaseAppIds / catalog::titleVersion.
+    std::vector<ReleaseTitle> titles;
 };
+
+// Catalog field "titles": "ID:update:version;ID:update:version", e.g.
+// "010066200E1E6000:524288:;01004670193D6000:196608:1.2". The update is
+// empty when the files carry no [vN]. A string, not an array: the streaming
+// parser before 2.21 ends the whole game list at a nested array's end.
+inline std::vector<ReleaseTitle> parseReleaseTitles(const std::string& s) {
+    std::vector<ReleaseTitle> out;
+    size_t pos = 0;
+    while (pos < s.size()) {
+        size_t semi = s.find(';', pos);
+        if (semi == std::string::npos) semi = s.size();
+        std::string entry = s.substr(pos, semi - pos);
+        pos = semi + 1;
+        size_t c1 = entry.find(':');
+        std::string id = entry.substr(0, c1);
+        if (id.size() != 16) continue;
+        char* endp = nullptr;
+        unsigned long long v = std::strtoull(id.c_str(), &endp, 16);
+        if (!endp || *endp != '\0' || v == 0) continue;
+        ReleaseTitle t;
+        t.app_id = static_cast<uint64_t>(v) & ~0x1FFFULL;
+        if (c1 != std::string::npos) {
+            size_t c2 = entry.find(':', c1 + 1);
+            std::string upd = entry.substr(c1 + 1, c2 == std::string::npos ? std::string::npos : c2 - c1 - 1);
+            if (!upd.empty()) {
+                char* uend = nullptr;
+                unsigned long long u = std::strtoull(upd.c_str(), &uend, 10);
+                if (uend && *uend == '\0' && u <= 0xFFFFFFFFULL) {
+                    t.update_version = static_cast<uint32_t>(u);
+                    t.update_known = true;
+                }
+            }
+            if (c2 != std::string::npos) t.version = entry.substr(c2 + 1);
+        }
+        out.push_back(std::move(t));
+    }
+    return out;
+}
+
+inline std::string releaseTitlesToString(const std::vector<ReleaseTitle>& titles) {
+    std::string out;
+    for (const auto& t : titles) {
+        char hex[24];
+        std::snprintf(hex, sizeof(hex), "%016llX", static_cast<unsigned long long>(t.app_id));
+        if (!out.empty()) out += ';';
+        out += hex;
+        out += ':';
+        if (t.update_known) out += std::to_string(t.update_version);
+        out += ':';
+        out += t.version;
+    }
+    return out;
+}
 
 // Heuristic and flag checker for romsets / multi-game collections
 inline bool isRomsetGame(const Game& g) {
@@ -252,6 +320,7 @@ inline void from_json(const nlohmann::json& j, Game& g) {
         g.update_version = uv.empty() ? 0 : static_cast<uint32_t>(std::strtoul(uv.c_str(), nullptr, 10));
     }
     g.version = safeGetStr(j, "version");
+    g.titles = parseReleaseTitles(safeGetStr(j, "titles"));
 
     g.is_romset = false;
     if (j.contains("is_romset")) {
@@ -293,6 +362,7 @@ inline void to_json(nlohmann::json& j, const Game& g) {
         {"update_version", g.update_version},
         {"version", g.version}
     };
+    if (!g.titles.empty()) j["titles"] = releaseTitlesToString(g.titles);
 }
 
 
@@ -435,6 +505,9 @@ inline std::string extractLangBadge(const std::string& interface_lang) {
 // Fast file reading into a preallocated std::string buffer
 inline bool readFileFast(const std::string& path, std::string& out) {
     FILE* f = fopen(path.c_str(), "rb");
+    // A crash between the two renames of util::atomicWriteFile leaves only
+    // the .bak copy.
+    if (!f) f = fopen((path + ".bak").c_str(), "rb");
     if (!f) return false;
 
     if (fseek(f, 0, SEEK_END) != 0) {
@@ -450,10 +523,7 @@ inline bool readFileFast(const std::string& path, std::string& out) {
 
     out.resize(static_cast<size_t>(size));
     if (size > 0) {
-        // Use a 256 KB I/O buffer for fast block reads from Switch SD card
-        std::vector<char> ioBuf(256 * 1024);
-        setvbuf(f, ioBuf.data(), _IOFBF, ioBuf.size());
-
+        // One fread of the whole file: a stdio buffer would only add a copy.
         size_t readBytes = fread(&out[0], 1, static_cast<size_t>(size), f);
         if (readBytes != static_cast<size_t>(size)) {
             out.resize(readBytes);
@@ -613,6 +683,7 @@ private:
         else if (currentKey == "content_type") currentGame.content_type = std::move(val);
         else if (currentKey == "update_version") currentGame.update_version = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 10));
         else if (currentKey == "version") currentGame.version = std::move(val);
+        else if (currentKey == "titles") currentGame.titles = parseReleaseTitles(val);
     }
 };
 
@@ -645,6 +716,15 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
         util::logLine("GameData: SAX parsed from string, count=" + std::to_string(games.size()));
         return games;
     }
+    if (!ok) {
+        // Malformed or truncated JSON: whatever was parsed so far is a partial
+        // catalog that callers would save over the good one. The DOM parser
+        // below would fail on the same input (and needs ~10x the RAM).
+        util::logLine("GameData: JSON is malformed, discarding " + std::to_string(games.size()) + " partially parsed games");
+        games.clear();
+        return games;
+    }
+    games.clear();
 
     // Fallback to DOM parse if needed
     try {
@@ -676,9 +756,10 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         std::filesystem::create_directories(p.parent_path(), ec);
     }
 
-    FILE* f = fopen(binPath.c_str(), "wb");
+    const std::string tmpPath = binPath + ".part";
+    FILE* f = fopen(tmpPath.c_str(), "wb");
     if (!f) {
-        util::logLine("GameData: failed to open bin file for writing: " + binPath);
+        util::logLine("GameData: failed to open bin file for writing: " + tmpPath);
         return false;
     }
 
@@ -700,7 +781,7 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
 
     const char magic[8] = {'T', 'S', 'N', 'X', 'B', 'I', 'N', '2'};
     writeRaw(magic, 8);
-    uint32_t version = 6;
+    uint32_t version = 7;
     writeRaw(&version, sizeof(version));
     uint32_t count = static_cast<uint32_t>(games.size());
     writeRaw(&count, sizeof(count));
@@ -745,12 +826,28 @@ inline bool saveGamesToBinaryFile(const std::string& binPath, const std::vector<
         writeStr(g.sort_key.empty() ? computeSortKey(g.title) : g.sort_key);
         writeRaw(&g.update_version, sizeof(g.update_version));
         writeStr(g.version);
+        // v7: games of the release
+        uint16_t tCount = static_cast<uint16_t>(std::min<size_t>(g.titles.size(), 65535));
+        writeRaw(&tCount, sizeof(tCount));
+        for (size_t i = 0; i < tCount; ++i) {
+            const ReleaseTitle& t = g.titles[i];
+            writeRaw(&t.app_id, sizeof(t.app_id));
+            writeRaw(&t.update_version, sizeof(t.update_version));
+            uint8_t known = t.update_known ? 1 : 0;
+            writeRaw(&known, sizeof(known));
+            writeStr(t.version);
+        }
     }
 
-    fflush(f);
-    fclose(f);
+    if (fflush(f) != 0) writeError = true;
+    if (fclose(f) != 0) writeError = true;  // the final flush can fail on a full card
 
     bool ok = !writeError;
+    if (ok) {
+        ok = util::atomicReplaceFile(tmpPath, binPath);
+    } else {
+        std::remove(tmpPath.c_str());
+    }
     util::logLine("GameData: saved binary cache to " + binPath + " count=" + std::to_string(games.size()) +
                   " size=" + std::to_string(totalWritten) + " bytes ok=" + std::to_string(ok));
     return ok;
@@ -780,12 +877,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     uint32_t version = 0;
     std::memcpy(&version, ptr, sizeof(version));
     ptr += sizeof(version);
-    if (version < 1 || version > 6) {
+    if (version < 1 || version > 7) {
         util::logLine("GameData: bin cache unsupported version " + std::to_string(version));
         return false;
     }
     if (out_needs_upgrade) {
-        *out_needs_upgrade = (version < 6);
+        *out_needs_upgrade = (version < 7);
     }
 
     uint32_t count = 0;
@@ -804,6 +901,12 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     };
 
     games.clear();
+    // Every record has at least five 2-byte string lengths: a count larger
+    // than the file allows is corruption, not a reason to reserve gigabytes.
+    if (count > static_cast<size_t>(end - ptr) / 10) {
+        util::logLine("GameData: bin cache count too large " + std::to_string(count));
+        return false;
+    }
     games.reserve(count);
 
     for (uint32_t i = 0; i < count; ++i) {
@@ -861,6 +964,25 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
         }
         if (version >= 6) {
             if (!readStr(g.version)) return false;
+        }
+        if (version >= 7) {
+            if (ptr + sizeof(uint16_t) > end) return false;
+            uint16_t tCount = 0;
+            std::memcpy(&tCount, ptr, sizeof(tCount));
+            ptr += sizeof(tCount);
+            g.titles.reserve(tCount);
+            for (uint16_t t = 0; t < tCount; ++t) {
+                ReleaseTitle rt;
+                if (ptr + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint8_t) > end) return false;
+                std::memcpy(&rt.app_id, ptr, sizeof(uint64_t));
+                ptr += sizeof(uint64_t);
+                std::memcpy(&rt.update_version, ptr, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+                rt.update_known = (*ptr != 0);
+                ptr += sizeof(uint8_t);
+                if (!readStr(rt.version)) return false;
+                g.titles.push_back(std::move(rt));
+            }
         }
         if (g.sort_key.empty()) {
             g.sort_key = computeSortKey(g.title);
@@ -963,14 +1085,14 @@ inline std::vector<Game> loadGamesCached(const std::string& jsonPath, const std:
         if (loadGamesFromBinaryFile(binPath, games, &needsUpgrade) && !games.empty()) {
             if (!needsUpgrade) return games;
             if (!hasJson) {
-                util::logLine("GameData: upgrading binary cache to version 6");
+                util::logLine("GameData: upgrading binary cache to version 7");
                 saveGamesToBinaryFile(binPath, games);
                 return games;
             }
-            // Older caches lack fields (update_version, version) that only the JSON
-            // has: rebuild from it. Diffs applied since live only in the old
-            // .bin, so drop the diff ETag to have the next diff re-applied.
-            util::logLine("GameData: binary cache predates version 6, rebuilding from JSON");
+            // Older caches lack fields (update_version, version, titles) that
+            // only the JSON has: rebuild from it. Diffs applied since live only
+            // in the old .bin, so drop the diff ETag to have the next diff re-applied.
+            util::logLine("GameData: binary cache predates version 7, rebuilding from JSON");
             std::remove(getCatalogDiffEtagPath().c_str());
         }
         util::logLine("GameData: binary cache invalid or empty, falling back to JSON");
@@ -1024,14 +1146,18 @@ inline bool writeTextFile(const std::string& path, const std::string& body) {
         std::error_code ec;
         std::filesystem::create_directories(p.parent_path(), ec);
     }
-    std::ofstream out(path, std::ios::binary);
-    if (!out.is_open()) return false;
-    out.write(body.data(), body.size());
+    // Port recipes, ETags, collections and the catalog JSON go through here:
+    // write a temp file and rename it so a crash never leaves a truncated one.
+    std::string err;
+    if (!util::atomicWriteFile(path, body, &err)) {
+        util::logLine("GameData: writeTextFile failed: " + err);
+        return false;
+    }
     return true;
 }
 
 inline std::string readTextFile(const std::string& path) {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(util::existingOrBackup(path), std::ios::binary);
     if (!in.is_open()) return {};
     std::string s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     return s;
@@ -1137,11 +1263,12 @@ inline void migrateFile(const std::string& oldPath, const std::string& newPath) 
         bool o = stat(oldPath.c_str(), &sOld) == 0;
         bool n = stat(newPath.c_str(), &sNew) == 0;
         if (o && n && sOld.st_mtime > sNew.st_mtime) {
+            // The legacy copy is newer: replace the new one with it below.
             std::filesystem::remove(newPath, ec);
         } else {
             std::filesystem::remove(oldPath, ec);
+            return;
         }
-        return;
     }
     std::filesystem::rename(oldPath, newPath, ec);
     if (ec) {
@@ -1627,7 +1754,7 @@ inline bool isHomebrewPort(const Game& g) {
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download
-inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/cover_blank.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0) {
+inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/cover_blank.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0, bool fullSize = false) {
 #ifndef __SWITCH__
     std::string actualPlaceholder = placeholder;
     if (actualPlaceholder.rfind("romfs:/", 0) == 0) {
@@ -1650,7 +1777,8 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     }
     std::string fileName = safeName + ".png";
-    std::string cacheKey = "memory_cache:/" + fileName;
+    // Full-size and thumbnail versions of one URL must not share a texture.
+    std::string cacheKey = std::string(fullSize ? "memory_cache:/full_" : "memory_cache:/") + fileName;
 
     std::string effectiveFallback = fallbackUrl;
     if (effectiveFallback.empty()) {
@@ -1670,7 +1798,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     }
 
-    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, actualPlaceholder, bypassCache, effectiveFallback, row, col, priorityOverride);
+    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, actualPlaceholder, bypassCache, effectiveFallback, row, col, priorityOverride, fullSize);
 }
 
 #include <sstream>
@@ -1777,7 +1905,7 @@ inline bool compareVersions(const std::string& current, const std::string& avail
 
 extern std::vector<Game> g_games;
 
-inline std::string findCoverForDownload(const download::DownloadItem& item, const std::vector<Game>& fallbackSample = {}) {
+inline std::string findCoverForDownloadUncached(const download::DownloadItem& item, const std::vector<Game>& fallbackSample) {
     if (!item.cover_url.empty()) {
         return item.cover_url;
     }
@@ -1858,5 +1986,42 @@ inline std::string findCoverForDownload(const download::DownloadItem& item, cons
     }
 
     return "";
+}
+
+// The lookup above scans the whole catalog (~7000 games, up to three passes)
+// and the downloads screen and the dashboard ask on every progress tick, the
+// first one while holding the queue lock. Remember each answer, "not found"
+// included, until the catalog snapshot changes.
+inline std::string findCoverForDownload(const download::DownloadItem& item, const std::vector<Game>& fallbackSample = {}) {
+    if (!item.cover_url.empty()) {
+        return item.cover_url;
+    }
+    struct CoverCache {
+        std::mutex m;
+        const void* catalog = nullptr;
+        std::unordered_map<std::string, std::string> map;
+    };
+    static CoverCache cc;
+    auto catalog = getCatalogSnapshot();
+    const std::string key = item.topic_id + '\x1f' + item.title + '\x1f' + item.forced_stream_name +
+                            '\x1f' + std::to_string(fallbackSample.size());
+    {
+        std::lock_guard<std::mutex> lock(cc.m);
+        if (cc.catalog != catalog.get()) {
+            cc.map.clear();
+            cc.catalog = catalog.get();
+        }
+        auto it = cc.map.find(key);
+        if (it != cc.map.end()) return it->second;
+    }
+    std::string cover = findCoverForDownloadUncached(item, fallbackSample);
+    {
+        std::lock_guard<std::mutex> lock(cc.m);
+        if (cc.catalog == catalog.get()) {
+            if (cc.map.size() > 1024) cc.map.clear();
+            cc.map[key] = cover;
+        }
+    }
+    return cover;
 }
 

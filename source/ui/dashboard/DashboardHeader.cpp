@@ -107,9 +107,13 @@ DashboardHeader::DashboardHeader() {
 
     this->addView(rightBox_);
 
-    ThemeManager::instance().subscribe([this]() {
+    themeSub_ = ThemeManager::instance().subscribe([this]() {
         refreshTheme();
     });
+}
+
+DashboardHeader::~DashboardHeader() {
+    ThemeManager::instance().unsubscribe(themeSub_);
 }
 
 void DashboardHeader::refreshTheme() {

@@ -62,8 +62,5 @@ private:
 constexpr const char* kCollectionsBaseUrl =
     "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/";
 
-// Поиск раздачи в каталоге: сначала по title_id, затем по нормализованному названию.
-// Возвращает nullptr, если не найдено.
-const Game* matchCollectionEntry(const std::vector<Game>& games, const CollectionEntry& entry);
 
 } // namespace catalog

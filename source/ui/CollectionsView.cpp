@@ -74,6 +74,7 @@ CollectionsView::CollectionsView()
 
 CollectionsView::~CollectionsView() {
     *alive_flag_ = false;
+    ThemeManager::instance().unsubscribe(themeSub_);
 }
 
 void CollectionsView::onContentAvailable() {
@@ -88,25 +89,25 @@ void CollectionsView::onContentAvailable() {
     for (const auto& info : collections) {
         std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
         catalog::CollectionInfo cInfo = info;
-        auto it = collection_cards_.find(info.id);
-        CollectionCard* card = (it != collection_cards_.end()) ? it->second : nullptr;
-
-        brls::async([flag, card, cInfo]() {
+        brls::async([this, flag, cInfo]() {
             std::vector<catalog::CollectionEntry> entries;
             bool from_cache = true;
             bool ok = catalog::CollectionsManager::instance().loadCollection(cInfo, entries, from_cache);
             if (!ok || !flag->load()) return;
 
             size_t count = entries.size();
-            brls::sync([flag, card, count, cInfo]() {
-                if (flag->load() && card) {
-                    card->setCountText(brls::getStr("app/collections/games_count", std::to_string(count)));
+            brls::sync([this, flag, count, cInfo]() {
+                if (!flag->load()) return;
+                // Look the card up now: a theme change may have rebuilt the grid.
+                auto it = collection_cards_.find(cInfo.id);
+                if (it != collection_cards_.end() && it->second) {
+                    it->second->setCountText(brls::getStr("app/collections/games_count", std::to_string(count)));
                 }
             });
         });
     }
 
-    ThemeManager::instance().subscribe([this, flag = alive_flag_]() {
+    themeSub_ = ThemeManager::instance().subscribe([this, flag = alive_flag_]() {
         if (*flag) rebuildGrid();
     });
 }

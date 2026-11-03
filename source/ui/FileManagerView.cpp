@@ -18,6 +18,18 @@ namespace ui {
 
 namespace {
 
+// One copy/move job at a time (also across reopened file manager screens).
+std::atomic<bool> g_fileOpBusy{false};
+
+bool beginFileOp() {
+    bool expected = false;
+    if (!g_fileOpBusy.compare_exchange_strong(expected, true)) {
+        brls::Application::notify("app/file_manager/operation_busy"_i18n);
+        return false;
+    }
+    return true;
+}
+
 bool isTextFile(const std::string& path) {
     static const std::unordered_set<std::string> textExts = {
         ".txt", ".log", ".ini", ".cfg", ".conf", ".json", ".xml",
@@ -411,49 +423,89 @@ void FileManagerView::willAppear(bool resetState) {
 
 void FileManagerView::navigateTo(int panelIdx, const std::string& path, const std::string& focusChild) {
     if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
-    panels_[panelIdx].currentDir = normalizeDir(path);
-    panels_[panelIdx].selectedPaths.clear();
-    refresh(panelIdx, focusChild);
+    // currentDir and the selection change only when the new listing arrives:
+    // until then the old rows stay on screen and stay consistent with them.
+    loadPanel(panelIdx, path, focusChild);
     updateActivePanelVisuals();
 }
 
 void FileManagerView::navigateUp(int panelIdx) {
     if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
     auto& cur = panels_[panelIdx];
-    if (!cur.rootDir.empty() && cur.currentDir == cur.rootDir) {
+    // Going up twice quickly must climb two levels even if the first listing
+    // has not arrived yet.
+    const std::string base = cur.pendingDir.empty() ? cur.currentDir : cur.pendingDir;
+    if (!cur.rootDir.empty() && base == cur.rootDir) {
         return;
     }
-    std::string parentDir = getParentDir(cur.currentDir);
-    if (parentDir.empty() || parentDir == cur.currentDir) {
+    std::string parentDir = getParentDir(base);
+    if (parentDir.empty() || parentDir == base) {
         return;
     }
-    std::filesystem::path p(cur.currentDir);
+    std::filesystem::path p(base);
     std::string childName = p.filename().generic_string();
     navigateTo(panelIdx, parentDir, childName);
 }
 
 void FileManagerView::refresh(int panelIdx, const std::string& focusChild) {
     if (panelIdx < 0 || panelIdx > 1) panelIdx = activePanel_;
+    loadPanel(panelIdx, panels_[panelIdx].currentDir, focusChild);
+}
+
+// Lists a folder or an archive folder off the UI thread: a big folder on SD or
+// a large archive used to freeze the whole interface while it was read.
+void FileManagerView::loadPanel(int panelIdx, const std::string& dir, const std::string& focusChild) {
     auto& p = panels_[panelIdx];
-    p.currentDir = normalizeDir(p.currentDir);
+    const std::string target = normalizeDir(dir);
+    const uint64_t gen = ++p.loadGen;
+    p.pendingDir = target;
+
+    // "Loading" shows only for slow listings, so quick ones don't flicker.
+    brls::delay(150, [this, alive = alive_, panelIdx, gen, target]() {
+        if (!alive->load()) return;
+        auto& pp = panels_[panelIdx];
+        if (pp.loadGen != gen || !pp.currentPath) return;
+        pp.currentPath->setText(target + "  ·  " + "app/common/loading"_i18n);
+    });
+
+    brls::async([this, alive = alive_, panelIdx, gen, target, focusChild]() {
+        std::vector<util::FileItem> items;
+        std::string err;
+        std::string archPath, innerPath;
+        const bool isArchive = util::parseArchiveVirtualPath(target, archPath, innerPath);
+        bool ok = true;
+        if (isArchive) {
+            ok = util::listArchiveFolder(archPath, innerPath, items, err);
+        } else {
+            items = util::listFolder(target, err);
+        }
+        brls::sync([this, alive, panelIdx, gen, target, focusChild, isArchive, ok, err,
+                    items = std::move(items)]() mutable {
+            if (!alive->load()) return;
+            if (panels_[panelIdx].loadGen != gen) return;  // a newer request replaced this one
+            if (!ok) {
+                util::logLine("FileManagerView: listArchiveFolder failed: " + err);
+                brls::Application::notify(err.empty() ? "Failed to read archive" : err);
+            }
+            applyListing(panelIdx, target, std::move(items), isArchive, focusChild);
+        });
+    });
+}
+
+void FileManagerView::applyListing(int panelIdx, const std::string& dir, std::vector<util::FileItem> items,
+                                   bool isArchive, const std::string& focusChild) {
+    auto& p = panels_[panelIdx];
+    p.pendingDir.clear();
+    if (p.currentDir != dir) {
+        p.selectedPaths.clear();
+    }
+    p.currentDir = dir;
+    p.items = std::move(items);
 
     // Check if we have a parent directory
     std::string parentDir = getParentDir(p.currentDir);
     bool atRoot = (!p.rootDir.empty() && p.currentDir == p.rootDir);
-    p.hasParentDir = !atRoot && (!parentDir.empty() && parentDir != p.currentDir);
-
-    std::string err;
-    std::string archPath, innerPath;
-    if (util::parseArchiveVirtualPath(p.currentDir, archPath, innerPath)) {
-        p.hasParentDir = true;
-        p.items.clear();
-        if (!util::listArchiveFolder(archPath, innerPath, p.items, err)) {
-            util::logLine("FileManagerView: listArchiveFolder failed: " + err);
-            brls::Application::notify(err.empty() ? "Failed to read archive" : err);
-        }
-    } else {
-        p.items = util::listFolder(p.currentDir, err);
-    }
+    p.hasParentDir = isArchive || (!atRoot && (!parentDir.empty() && parentDir != p.currentDir));
 
     if (p.currentPath) {
         p.currentPath->setText(p.currentDir);
@@ -484,7 +536,8 @@ void FileManagerView::refresh(int panelIdx, const std::string& focusChild) {
     if (p.recycler) {
         p.recycler->reloadData();
         if (panelIdx == activePanel_) {
-            brls::sync([this, panelIdx, targetRow]() {
+            brls::sync([this, alive = alive_, panelIdx, targetRow]() {
+                if (!alive->load()) return;
                 auto* rec = panels_[panelIdx].recycler;
                 if (rec) {
                     rec->setDefaultCellFocus(brls::IndexPath(0, targetRow));
@@ -537,6 +590,8 @@ void FileManagerView::toggleSplitMode() {
         if (panels_[1].currentDir.empty()) {
             panels_[1].currentDir = panels_[0].currentDir;
             panels_[1].rootDir = panels_[0].rootDir;
+            panels_[1].items = panels_[0].items;
+            panels_[1].hasParentDir = panels_[0].hasParentDir;
         }
         if (rightPanelBox) rightPanelBox->setVisibility(brls::Visibility::VISIBLE);
         if (panelDivider) panelDivider->setVisibility(brls::Visibility::VISIBLE);
@@ -544,6 +599,8 @@ void FileManagerView::toggleSplitMode() {
     } else {
         if (activePanel_ == 1) {
             panels_[0].currentDir = panels_[1].currentDir;
+            panels_[0].items = panels_[1].items;
+            panels_[0].hasParentDir = panels_[1].hasParentDir;
             panels_[0].selectedPaths = panels_[1].selectedPaths;
             activePanel_ = 0;
             refresh(0);
@@ -1533,7 +1590,8 @@ void FileManagerView::pasteClipboard() {
     int actIdx = activePanel_;
     std::string targetDir = panels_[actIdx].currentDir;
 
-    brls::async([this, paths, isCut, actIdx, targetDir]() {
+    if (!beginFileOp()) return;
+    brls::async([this, alive = alive_, paths, isCut, actIdx, targetDir]() {
         bool allOk = true;
         std::string lastErr;
 
@@ -1567,12 +1625,14 @@ void FileManagerView::pasteClipboard() {
             util::clearClipboard();
         }
 
-        brls::sync([this, allOk, lastErr, actIdx]() {
+        g_fileOpBusy.store(false);
+        brls::sync([this, alive, allOk, lastErr, actIdx]() {
             if (allOk) {
                 brls::Application::notify("app/file_manager/paste_success"_i18n);
             } else {
                 brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
             }
+            if (!alive->load()) return;
             refresh(actIdx);
             if (isSplitMode_) refresh(1 - actIdx);
         });
@@ -1624,7 +1684,8 @@ void FileManagerView::copyToOppositePanel() {
     }
 
     int actIdx = activePanel_;
-    brls::async([this, targets, cleanOpp, actIdx, oppIdx]() {
+    if (!beginFileOp()) return;
+    brls::async([this, alive = alive_, targets, cleanOpp, actIdx, oppIdx]() {
         bool allOk = true;
         std::string lastErr;
         for (const auto& src : targets) {
@@ -1652,12 +1713,14 @@ void FileManagerView::copyToOppositePanel() {
                 lastErr = err;
             }
         }
-        brls::sync([this, allOk, lastErr, actIdx, oppIdx]() {
+        g_fileOpBusy.store(false);
+        brls::sync([this, alive, allOk, lastErr, actIdx, oppIdx]() {
             if (allOk) {
                 brls::Application::notify("app/file_manager/copied_success"_i18n);
             } else {
                 brls::Application::notify(lastErr.empty() ? "app/common/error"_i18n : lastErr);
             }
+            if (!alive->load()) return;
             refresh(actIdx);
             refresh(oppIdx);
         });
@@ -1717,7 +1780,8 @@ void FileManagerView::moveToOppositePanel() {
     }
 
     int actIdx = activePanel_;
-    brls::async([this, targets, cleanOpp, actIdx, oppIdx]() {
+    if (!beginFileOp()) return;
+    brls::async([this, alive = alive_, targets, cleanOpp, actIdx, oppIdx]() {
         bool allOk = true;
         std::string lastErr;
         for (const auto& src : targets) {
@@ -1733,7 +1797,13 @@ void FileManagerView::moveToOppositePanel() {
                 lastErr = err;
             }
         }
-        brls::sync([this, allOk, lastErr, actIdx, oppIdx]() {
+        g_fileOpBusy.store(false);
+        brls::sync([this, alive, allOk, lastErr, actIdx, oppIdx]() {
+            if (!alive->load()) {
+                brls::Application::notify(allOk ? "app/file_manager/move_success"_i18n
+                                                : (lastErr.empty() ? "app/common/error"_i18n : lastErr));
+                return;
+            }
             if (allOk) {
                 panels_[actIdx].selectedPaths.clear();
                 brls::Application::notify("app/file_manager/move_success"_i18n);

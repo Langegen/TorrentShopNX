@@ -277,19 +277,10 @@ void CollectionGamesView::rebuildDisplay() {
     }
 
     if (filterState_.sort != catalog::SortOption::DEFAULT) {
-        std::stable_sort(displayIdx_.begin(), displayIdx_.end(), [this](int a, int b) {
-            Game gameA = matchedGames_[a];
-            if (gameA.title.empty()) {
-                gameA.title = entries_[a].title;
-                gameA.title_id = entries_[a].title_id;
-            }
-            Game gameB = matchedGames_[b];
-            if (gameB.title.empty()) {
-                gameB.title = entries_[b].title;
-                gameB.title_id = entries_[b].title_id;
-            }
-            return catalog::compareGames(gameA, gameB, filterState_.sort);
-        });
+        // compareGames() only looks at sort_key, sizes, years and stats, so
+        // the per-compare Game copies with the entry title filled in were
+        // wasted work.
+        catalog::sortGamesBy(displayIdx_, filterState_.sort, [this](int i) { return &matchedGames_[i]; });
     }
 
     std::string countStr;
@@ -439,7 +430,7 @@ brls::RecyclerCell* CollectionGamesView::GamesDataSource::cellForRow(
                 brls::Box* statsBox = cards[i].statsBox;
                 if (statsBox) {
                     if (hasMatch) {
-                        const auto* statsData = catalog::GameStatsManager::instance().getAnyStats(parent_->matchedGames_[idx].topic_id);
+                        const auto statsData = catalog::GameStatsManager::instance().getAnyStats(parent_->matchedGames_[idx].topic_id);
                         if (statsData && (statsData->seeds > 0 || statsData->leeches > 0)) {
                             statsBox->setVisibility(brls::Visibility::VISIBLE);
                             if (cards[i].seeds) cards[i].seeds->setText(std::to_string(statsData->seeds));
@@ -533,9 +524,9 @@ void CollectionGamesView::showEmpty(bool failed) {
     emptyHolder->clearViews();
     auto* state = new EmptyState();
     if (failed) {
-        state->show(DashboardIcon::Kind::CloudError, "app/empty/load_failed_title"_i18n, "app/empty/load_failed_sub"_i18n);
+        state->setContent(DashboardIcon::Kind::CloudError, "app/empty/load_failed_title"_i18n, "app/empty/load_failed_sub"_i18n);
     } else {
-        state->show(DashboardIcon::Kind::GameCards, "app/empty/collection_title"_i18n, "app/empty/collection_sub"_i18n);
+        state->setContent(DashboardIcon::Kind::GameCards, "app/empty/collection_title"_i18n, "app/empty/collection_sub"_i18n);
     }
     emptyHolder->addView(state);
     emptyHolder->setVisibility(brls::Visibility::VISIBLE);

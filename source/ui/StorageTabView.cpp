@@ -1,4 +1,5 @@
 #include "StorageTabView.hpp"
+#include "../utils/file_ops.h"
 #include "DownloadUiManager.hpp"
 #include "ThemeManager.hpp"
 #include "../config/config.h"
@@ -11,16 +12,6 @@
 namespace ui {
 
 namespace {
-
-std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
-    return std::string(buf);
-}
 
 constexpr float kBarWidth = 340.0f;
 constexpr float kBarHeight = 16.0f;
@@ -85,7 +76,7 @@ StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
             uint64_t total = 0;
             for (uint64_t sz : lastSizes_) total += sz;
             brls::Dialog* dlg = new brls::Dialog(
-                brls::getStr("app/settings/storage_confirm_clear_all", formatBytes(total)));
+                brls::getStr("app/settings/storage_confirm_clear_all", util::formatFileSize(total)));
             dlg->addButton("app/common/yes"_i18n, [this]() {
                 runClearAll();
             });
@@ -203,7 +194,7 @@ void StorageTabView::addCacheCell(brls::Box* parent, size_t index) {
         if (busy_) return true;
         uint64_t size = (index < lastSizes_.size()) ? lastSizes_[index] : 0;
         brls::Dialog* dlg = new brls::Dialog(
-            brls::getStr("app/settings/storage_confirm_clear", rows_[index].title, formatBytes(size)));
+            brls::getStr("app/settings/storage_confirm_clear", rows_[index].title, util::formatFileSize(size)));
         dlg->addButton("app/common/yes"_i18n, [this, index]() {
             runClear(index);
         });
@@ -237,7 +228,7 @@ void StorageTabView::addPlaceholderCell(brls::Box* parent) {
         }
         brls::Dialog* dlg = new brls::Dialog(brls::getStr(
             "app/settings/storage_confirm_placeholders",
-            std::to_string(placeholderCount_), formatBytes(placeholderSize_)));
+            std::to_string(placeholderCount_), util::formatFileSize(placeholderSize_)));
         dlg->addButton("app/common/yes"_i18n, [this]() {
             runCleanupPlaceholders();
         });
@@ -267,8 +258,8 @@ void StorageTabView::updateBar(brls::Box* track, brls::Rectangle* fill, brls::La
     fill->setColor(c);
 
     info->setText(brls::getStr("app/settings/storage_free_of",
-                               formatBytes(static_cast<unsigned long long>(free_space)),
-                               formatBytes(static_cast<unsigned long long>(total_space))));
+                               util::formatFileSize(static_cast<unsigned long long>(free_space)),
+                               util::formatFileSize(static_cast<unsigned long long>(total_space))));
 }
 
 void StorageTabView::refreshAll() {
@@ -323,7 +314,7 @@ void StorageTabView::refreshAll() {
             for (size_t i = 0; i < rows_.size(); ++i) {
                 if (rows_[i].sizeLabel) {
                     uint64_t sz = (i < sizes.size()) ? sizes[i] : 0;
-                    rows_[i].sizeLabel->setText(sz > 0 ? formatBytes(sz) : "app/settings/storage_empty"_i18n);
+                    rows_[i].sizeLabel->setText(sz > 0 ? util::formatFileSize(sz) : "app/settings/storage_empty"_i18n);
                 }
             }
 
@@ -334,7 +325,7 @@ void StorageTabView::refreshAll() {
                 if (phCount > 0) {
                     placeholderDetail_->setText(brls::getStr(
                         "app/settings/storage_placeholders_detail",
-                        std::to_string(phCount), formatBytes(placeholderSize_)));
+                        std::to_string(phCount), util::formatFileSize(placeholderSize_)));
                 } else {
                     placeholderDetail_->setText("app/settings/storage_placeholder_none_short"_i18n);
                 }
@@ -343,7 +334,7 @@ void StorageTabView::refreshAll() {
             uint64_t total = 0;
             for (uint64_t sz : lastSizes_) total += sz;
             if (allSizeLabel_) {
-                allSizeLabel_->setText(total > 0 ? formatBytes(total) : "app/settings/storage_empty"_i18n);
+                allSizeLabel_->setText(total > 0 ? util::formatFileSize(total) : "app/settings/storage_empty"_i18n);
             }
 
             if (sdOk) updateBar(sdTrack_, sdFill_, sdInfo_, sdFree, sdTotal);
@@ -367,7 +358,7 @@ void StorageTabView::runClear(size_t index) {
             if (!*alive) return;
             busy_ = false;
             if (freed > 0) {
-                brls::Application::notify(brls::getStr("app/settings/storage_cleared", title, formatBytes(freed)));
+                brls::Application::notify(brls::getStr("app/settings/storage_cleared", title, util::formatFileSize(freed)));
             } else {
                 brls::Application::notify("app/settings/storage_cleared_none"_i18n);
             }
@@ -395,7 +386,7 @@ void StorageTabView::runClearAll() {
             if (!*alive) return;
             busy_ = false;
             if (freed > 0) {
-                brls::Application::notify(brls::getStr("app/settings/storage_cleared_all", formatBytes(freed)));
+                brls::Application::notify(brls::getStr("app/settings/storage_cleared_all", util::formatFileSize(freed)));
             } else {
                 brls::Application::notify("app/settings/storage_cleared_none"_i18n);
             }
@@ -422,7 +413,7 @@ void StorageTabView::runCleanupPlaceholders() {
             if (!okSd && !okNand) {
                 brls::Application::notify("app/settings/storage_placeholder_error"_i18n);
             } else if (freed > 0) {
-                brls::Application::notify(brls::getStr("app/settings/storage_placeholders_cleared", formatBytes(freed)));
+                brls::Application::notify(brls::getStr("app/settings/storage_placeholders_cleared", util::formatFileSize(freed)));
             } else {
                 brls::Application::notify("app/settings/storage_cleared_none"_i18n);
             }

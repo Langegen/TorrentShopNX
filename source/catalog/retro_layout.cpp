@@ -1,3 +1,4 @@
+#include "../utils/atomic_file.h"
 #include "retro_layout.h"
 
 #include "../config/config.h"
@@ -299,10 +300,7 @@ bool readFile(const fs::path& path, std::string& out) {
 bool writeFile(const fs::path& path, const std::string& data) {
     std::error_code ec;
     fs::create_directories(path.parent_path(), ec);
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out.is_open()) return false;
-    out.write(data.data(), static_cast<std::streamsize>(data.size()));
-    return static_cast<bool>(out);
+    return util::atomicWriteFile(path.string(), data);   // never leaves a truncated file
 }
 
 // ---------------------------------------------------------------- archives
@@ -449,7 +447,7 @@ void fixCueSheets(const fs::path& dir, const PathNaming& naming) {
 
 std::string msf(long lba) {
     if (lba < 0) lba = 0;
-    char buf[16];
+    char buf[32];   // minutes are not bounded: a huge LBA must not truncate
     std::snprintf(buf, sizeof(buf), "%02ld:%02ld:%02ld", lba / 75 / 60, (lba / 75) % 60, lba % 75);
     return buf;
 }

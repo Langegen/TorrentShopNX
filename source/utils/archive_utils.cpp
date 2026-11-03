@@ -21,6 +21,10 @@
 
 namespace util {
 
+// Read block for local archives: the SD card is much faster in 1 MB reads
+// than in 64 KB ones.
+static constexpr size_t kArchiveReadBlock = 1024 * 1024;
+
 // stdio buffer per extracted file (one per extracting thread).
 static constexpr size_t kExtractWriteBuffer = 4 * 1024 * 1024;
 
@@ -130,7 +134,7 @@ bool parseArchiveVirtualPath(
     return false;
 }
 
-static std::string sanitizeEntryPath(const std::string& raw) {
+std::string sanitizeArchiveEntryPath(const std::string& raw) {
     std::string clean = raw;
     for (char& c : clean) if (c == '\\') c = '/';
     while (!clean.empty() && (clean.front() == '/' || clean.front() == ' ')) {
@@ -181,7 +185,7 @@ bool listArchiveFolder(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    int r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     if (r != ARCHIVE_OK) {
         const char* err = archive_error_string(a);
         outError = err ? err : "Failed to open archive file";
@@ -202,7 +206,7 @@ bool listArchiveFolder(
             continue;
         }
 
-        std::string clean = sanitizeEntryPath(rawPath);
+        std::string clean = sanitizeArchiveEntryPath(rawPath);
         if (clean.empty()) {
             archive_read_data_skip(a);
             continue;
@@ -348,7 +352,7 @@ bool getArchiveTotals(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    int r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     if (r != ARCHIVE_OK) {
         archive_read_free(a);
         return false;
@@ -395,7 +399,7 @@ bool iterateArchiveEntries(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    int r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     if (r != ARCHIVE_OK) {
         archive_read_free(a);
         return false;
@@ -411,7 +415,7 @@ bool iterateArchiveEntries(
             continue;
         }
 
-        std::string clean = sanitizeEntryPath(rawPath);
+        std::string clean = sanitizeArchiveEntryPath(rawPath);
         if (clean.empty()) {
             archive_read_data_skip(a);
             continue;
@@ -615,7 +619,7 @@ static bool extractLibarchiveInternal(
         archive_read_set_close_callback(a, streamArchiveClose);
         r = archive_read_open1(a);
     } else {
-        r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+        r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     }
 
     if (r != ARCHIVE_OK) {
@@ -656,7 +660,7 @@ static bool extractLibarchiveInternal(
     struct archive_entry* entry = nullptr;
     bool success = true;
 
-    std::string normFilter = sanitizeEntryPath(singleEntryFilter);
+    std::string normFilter = sanitizeArchiveEntryPath(singleEntryFilter);
 
     while ((r = archive_read_next_header(a, &entry)) == ARCHIVE_OK || r == ARCHIVE_WARN) {
         if (r == ARCHIVE_WARN) {
@@ -690,7 +694,7 @@ static bool extractLibarchiveInternal(
             continue;
         }
 
-        std::string cleanName = sanitizeEntryPath(currentEntryName);
+        std::string cleanName = sanitizeArchiveEntryPath(currentEntryName);
         if (cleanName.empty()) {
             archive_read_data_skip(a);
             continue;
@@ -833,7 +837,12 @@ static bool extractLibarchiveInternal(
 
             {
                 const auto closeStart = std::chrono::steady_clock::now();
-                fclose(outFile);   // flushes the rest of the buffer
+                // fclose flushes the rest of the buffer: on a full card this
+                // is where the write fails, and the file must not count as done.
+                if (fclose(outFile) != 0 && success) {
+                    outError = "Disk write failed: " + fullPath;
+                    success = false;
+                }
                 writeUs += elapsedUs(closeStart);
             }
 
@@ -1233,22 +1242,30 @@ bool createZipArchive(
             archive_write_finish_entry(a);
             progress.entriesProcessed++;
         } else {
+            // Open the file before writing its header: a header that promises
+            // N bytes followed by no data made the whole zip unreadable.
+            FILE* fp = std::fopen(it.fullPath.c_str(), "rb");
+            if (!fp) {
+                archive_entry_free(entry);
+                outError = "Cannot open " + it.fullPath;
+                success = false;
+                break;
+            }
+
             archive_entry_set_filetype(entry, AE_IFREG);
             archive_entry_set_perm(entry, 0644);
             archive_entry_set_size(entry, static_cast<la_int64_t>(it.size));
             int hr = archive_write_header(a, entry);
             archive_entry_free(entry);
             if (hr < ARCHIVE_OK) {
+                std::fclose(fp);
                 const char* err = archive_error_string(a);
                 outError = err ? err : "Failed to write file entry header";
                 success = false;
                 break;
             }
 
-            FILE* fp = std::fopen(it.fullPath.c_str(), "rb");
-            if (!fp) {
-                util::logLine("archive_utils: warning: could not open file " + it.fullPath);
-            } else {
+            {
                 while (true) {
                     if (cancelToken && cancelToken->load()) {
                         outError = "Cancelled";
@@ -1298,7 +1315,13 @@ bool createZipArchive(
         }
     }
 
-    archive_write_close(a);
+    // close writes the zip's central directory: without it the archive is
+    // unreadable, so its result decides success too.
+    if (archive_write_close(a) != ARCHIVE_OK && success) {
+        const char* err = archive_error_string(a);
+        outError = err ? err : "Failed to finish archive";
+        success = false;
+    }
     archive_write_free(a);
 
     if (!success || (cancelToken && cancelToken->load())) {
@@ -1306,8 +1329,8 @@ bool createZipArchive(
         return false;
     }
 
+    // movePath keeps an existing archive until the new one is in place.
     std::string moveErr;
-    std::filesystem::remove(archivePath, ec);
     if (!util::movePath(tmpArchivePath, archivePath, moveErr)) {
         outError = "Failed to finalize archive: " + moveErr;
         std::filesystem::remove(tmpArchivePath, ec);

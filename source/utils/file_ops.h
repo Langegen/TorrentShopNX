@@ -74,7 +74,8 @@ ClipboardData& getClipboard();
 void clearClipboard();
 
 // Format helper
-std::string formatFileSize(uint64_t bytes);
+// "512 B", "1.50 MB"; `decimals` digits after the point above bytes.
+std::string formatFileSize(uint64_t bytes, int decimals = 2);
 
 // Returns true if path ends with .nsp, .nsz, .xci, or .xcz (case-insensitive)
 inline bool isGamePackage(const std::string& path) {

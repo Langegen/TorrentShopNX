@@ -126,6 +126,10 @@ private:
     // =========================================================================
 
     /// Thread A: скачивает из DataSource → пишет в RingBuffer
+    // Runs a thread body and turns an escaped exception (bad_alloc on a
+    // corrupt header, a std::length_error...) into an install error instead
+    // of terminating the app.
+    void runGuarded(void (HybridNspInstaller::*fn)(), const char* name);
     void collectorThreadFunc();
 
     /// Thread B: читает из RingBuffer → пишет через NCM

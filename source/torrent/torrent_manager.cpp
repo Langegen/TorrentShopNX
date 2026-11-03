@@ -204,6 +204,11 @@ bool TorrentManager::pingServer() {
     if (echo.status_code == 200) return true;
 
     auto root = http.httpGet(buildUrl("/"));
+    if (echo.status_code == 401 || root.status_code == 401) {
+        util::logLine(net::authHeaderFor(torrserver_url_).empty()
+                          ? "torrent: TorrServer asks for a login (401), none is set"
+                          : "torrent: TorrServer rejected the login (401)");
+    }
     return root.status_code == 200;
 }
 

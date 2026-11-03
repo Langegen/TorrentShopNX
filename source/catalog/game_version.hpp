@@ -112,15 +112,67 @@ enum class VersionCmp { Newer, Same, Older, Unknown };
 // Is the release (version string, update number) newer than the installed
 // game (NACP display version, installed update number)? See the rule above.
 // Works for two releases as well.
+// `releaseUpdateKnown`: the update number is known even when it is 0 (the
+// release's files say it carries the base game without an update).
 inline VersionCmp compareRelease(const std::string& releaseVersion, uint32_t releaseUpdate,
+                                 bool releaseUpdateKnown,
                                  const std::string& installedVersion, uint32_t installedUpdate) {
     int c = compareVersions(releaseVersion, installedVersion);
     if (c != 2) return c > 0 ? VersionCmp::Newer : (c == 0 ? VersionCmp::Same : VersionCmp::Older);
-    if (releaseUpdate != 0) {
+    if (releaseUpdate != 0 || releaseUpdateKnown) {
         if (releaseUpdate > installedUpdate) return VersionCmp::Newer;
         return releaseUpdate == installedUpdate ? VersionCmp::Same : VersionCmp::Older;
     }
     return VersionCmp::Unknown;
+}
+
+inline VersionCmp compareRelease(const std::string& releaseVersion, uint32_t releaseUpdate,
+                                 const std::string& installedVersion, uint32_t installedUpdate) {
+    return compareRelease(releaseVersion, releaseUpdate, false, installedVersion, installedUpdate);
+}
+
+// Version of one game inside a release (see catalog::titleVersion).
+struct TitleVersion {
+    std::string version;         // "1.0.3", "" = unknown
+    uint32_t update = 0;         // newest update in the release, N << 16
+    bool updateKnown = false;    // `update` is known even when 0
+    bool known() const { return isPlausibleVersion(version) || update != 0 || updateKnown; }
+};
+
+inline VersionCmp compareRelease(const TitleVersion& release,
+                                 const std::string& installedVersion, uint32_t installedUpdate) {
+    return compareRelease(release.version, release.update, release.updateKnown, installedVersion, installedUpdate);
+}
+
+// Version of game `appId` in release `g` (a Game: `titles`, `version`,
+// `update_version`). A release can hold several games, each with its own
+// version; the release-wide `version` / `update_version` describe only one
+// of them, so they are used only when the release holds a single game.
+//   - `titles` lists the game: its own update number and version string;
+//     the release-wide fields fill gaps only for a single-game release;
+//   - `titles` is empty (older catalog): the release-wide fields;
+//   - `titles` lists other games only: unknown.
+template <class GameT>
+TitleVersion titleVersionOf(const GameT& g, uint64_t appId) {
+    TitleVersion out;
+    if (g.titles.empty()) {
+        out.version = g.version;
+        out.update = g.update_version;
+        return out;
+    }
+    const bool single = g.titles.size() == 1;
+    for (const auto& t : g.titles) {
+        if (t.app_id != appId) continue;
+        out.version = t.version;
+        out.update = t.update_version;
+        out.updateKnown = t.update_known;
+        if (single) {
+            if (!isPlausibleVersion(out.version)) out.version = g.version;
+            if (!out.updateKnown && out.update == 0) out.update = g.update_version;
+        }
+        return out;
+    }
+    return out;
 }
 
 // "2026-09-01" -> "01.09.2026"; anything else is returned unchanged.

@@ -8,6 +8,7 @@ namespace ui {
 class DashboardHeader : public brls::Box {
 public:
     DashboardHeader();
+    ~DashboardHeader() override;
 
     void updateStats(int game_count, const std::string& catalog_updated_str,
                      const std::string& sd_str, const std::string& nand_str);
@@ -18,6 +19,7 @@ public:
 
 private:
     std::function<void()> onFileManagerClicked_;
+    int themeSub_ = 0;
     brls::Label* eqIcon_ = nullptr;
     brls::Label* titleLabel_ = nullptr;
     brls::Box* nxBadge_ = nullptr;

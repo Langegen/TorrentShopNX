@@ -98,6 +98,9 @@ typedef struct {
 // Set `sock` non-blocking and attach buffers. Takes ownership of sock.
 // Returns 0, or -1 on allocation failure (sock untouched).
 int peer_nb_init(peer_nb *p, int sock, int64_t piece_count);
+// Queue a 4-byte keep-alive through the tx queue (so uTP sessions get it
+// too, and it is never interleaved with a partly sent message).
+int peer_nb_queue_keepalive(peer_nb *p);
 // Same, but uses a µTP session instead of a TCP socket.
 int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count);
 void peer_nb_apply_speed_opts(peer_nb *p);
@@ -143,22 +146,6 @@ int peer_nb_queue_ext(peer_nb *p, uint8_t ext_id, const void *payload,
 // Only meaningful if the peer's handshake showed the extension bit.
 int peer_nb_queue_ext_handshake(peer_nb *p);
 
-// Connect over TCP + handshake + read bitfield. Returns 0 on success.
-int peer_connect(peer_conn *p, peer_addr addr, const uint8_t info_hash[20],
-                 const uint8_t peer_id[20], int64_t piece_count,
-                 char *err, size_t errlen);
-
-// Same, but connects over µTP (requires utp_bridge_init()). Returns 0 on success.
-int peer_connect_utp(peer_conn *p, peer_addr addr, const uint8_t info_hash[20],
-                     const uint8_t peer_id[20], int64_t piece_count,
-                     char *err, size_t errlen);
-
-// Take over an already-accepted incoming TCP socket `fd`: sets options, runs the
-// handshake as the receiving side, reads the bitfield. Returns 0 on success.
-int peer_accept_incoming(peer_conn *p, int fd, const uint8_t info_hash[20],
-                         const uint8_t peer_id[20], int64_t piece_count,
-                         char *err, size_t errlen);
-
 void peer_disconnect(peer_conn *p);
 
 bool peer_has_piece(const peer_conn *p, int64_t index);
@@ -166,14 +153,6 @@ bool peer_has_piece(const peer_conn *p, int64_t index);
 // Same test against a raw bitfield, so the blocking (peer_conn) and
 // non-blocking (peer_nb) paths can share the piece-selection code.
 bool bf_has_piece(const uint8_t *bf, size_t bf_len, int64_t index);
-
-// Send interested and wait for unchoke. Returns 0 once unchoked.
-int peer_wait_unchoke(peer_conn *p, char *err, size_t errlen);
-
-// Download one full piece into buf (must be >= piece_len bytes).
-// Returns 0 on success; verifies nothing (caller checks SHA-1).
-int peer_fetch_piece(peer_conn *p, int64_t index, int64_t piece_len,
-                     uint8_t *buf, char *err, size_t errlen);
 
 // Low-level message primitives, for callers that run their own session loop
 // (e.g. a bidirectional download+upload loop). peer_send writes one message;

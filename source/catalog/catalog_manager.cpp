@@ -1,3 +1,4 @@
+#include "../utils/atomic_file.h"
 #include "catalog_manager.h"
 
 #include <algorithm>
@@ -26,10 +27,7 @@ static std::string readFile(const std::string& path) {
 }
 
 static bool writeFile(const std::string& path, const std::string& body) {
-    std::ofstream out(path, std::ios::binary);
-    if (!out) return false;
-    out.write(body.data(), body.size());
-    return true;
+    return util::atomicWriteFile(path, body);   // never leaves a truncated file
 }
 
 static bool pathExists(const std::string& path) {

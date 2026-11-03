@@ -41,7 +41,7 @@ struct LetterSpacingScope
     ~LetterSpacingScope() { nvgTextLetterSpacing(vg, 0.0f); }
 };
 
-static std::unordered_map<const Label*, int> s_labelFontScale;
+
 
 static bool isPrivateUseIconText(const std::string& text)
 {
@@ -111,7 +111,7 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
     auto* label          = (Label*)YGNodeGetContext(node);
     std::string fullText = label->getFullText();
 
-    s_labelFontScale[label] = config::ConfigManager::instance().getFontScale();
+    label->measuredFontScale = config::ConfigManager::instance().getFontScale();
 
     YGSize size = {
         .width  = width,
@@ -405,6 +405,11 @@ std::string Label::STConverter(const std::string& text)
 
 void Label::setText(const std::string& text)
 {
+    if (this->hasSetText && text == this->lastSetInput)
+        return;  // unchanged: onLayout() already handles size changes
+    this->hasSetText   = true;
+    this->lastSetInput = text;
+
     std::string convertedText = text;
 #ifdef OPENCC
     static bool trans = Application::getLocale() == LOCALE_ZH_HANT || Application::getLocale() == LOCALE_ZH_TW;
@@ -621,14 +626,13 @@ enum NVGalign Label::getNVGHorizontalAlign()
 void Label::draw(NVGcontext* vg, float x, float y, float width, float height, Style style, FrameContext* ctx)
 {
     int curScale = config::ConfigManager::instance().getFontScale();
-    auto scaleIt = s_labelFontScale.find(this);
-    if (scaleIt == s_labelFontScale.end())
+    if (this->measuredFontScale < 0)
     {
-        s_labelFontScale[this] = curScale;
+        this->measuredFontScale = curScale;
     }
-    else if (scaleIt->second != curScale)
+    else if (this->measuredFontScale != curScale)
     {
-        scaleIt->second = curScale;
+        this->measuredFontScale = curScale;
         if (YGNodeHasMeasureFunc(this->ygNode))
             YGNodeMarkDirty(this->ygNode);
     }
@@ -788,7 +792,7 @@ void Label::resetScrollingAnimation()
 
 void Label::onLayout()
 {
-    s_labelFontScale[this] = config::ConfigManager::instance().getFontScale();
+    this->measuredFontScale = config::ConfigManager::instance().getFontScale();
 
     float width = this->getWidth();
 
@@ -900,7 +904,7 @@ void Label::setEllipsisWidth(float ellipsisWidth)
 
 Label::~Label()
 {
-    s_labelFontScale.erase(this);
+
     this->stopScrollingAnimation();
 }
 

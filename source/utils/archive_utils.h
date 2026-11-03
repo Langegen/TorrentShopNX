@@ -23,6 +23,11 @@ struct ArchiveProgress {
     std::string currentFileName;       // Name of the current entry being unpacked
 };
 
+// Makes an archive entry name safe to join under the extraction folder:
+// '\' becomes '/', leading '/' and spaces go, ".." turns into "__", and
+// characters FAT/exFAT reject become '_'. Shared by the libarchive and 7z paths.
+std::string sanitizeArchiveEntryPath(const std::string& raw);
+
 // Returns true if filename has an archive extension (.zip, .rar, .7z, .tar, .gz, .bz2, .xz)
 bool isArchiveFile(const std::string& path);
 

@@ -33,7 +33,7 @@ inline void updateJournal(const std::string& msg) {
 
     FILE* f = std::fopen(path, "ab");
     if (!f) return;
-    char ts[32] = "????-??-?? ??:??:??";
+    char ts[32] = "\?\?\?\?-\?\?-\?\? \?\?:\?\?:\?\?";  // escaped: "??-" is a trigraph
     std::time_t now = std::time(nullptr);
     if (std::tm* t = std::localtime(&now)) {
         std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", t);

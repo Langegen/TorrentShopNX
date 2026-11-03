@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_set>
 #include <memory>
+#include <atomic>
 
 namespace ui {
 
@@ -49,6 +50,10 @@ struct PanelState {
     std::unordered_set<std::string> selectedPaths;
     int currentFocusedRow = -1;
     bool hasParentDir = false;
+    // Bumped on every listing request; a background listing whose number is
+    // stale by the time it finishes is dropped (the user went elsewhere).
+    uint64_t loadGen = 0;
+    std::string pendingDir;  // folder being listed right now, empty when idle
 
     // UI elements bound or assigned
     brls::Box* container = nullptr;
@@ -70,7 +75,7 @@ public:
     CONTENT_FROM_XML_RES("file_manager_view.xml");
 
     FileManagerView(const std::string& initialPath = "", const std::string& focusChild = "", const std::string& rootDir = "");
-    ~FileManagerView() override = default;
+    ~FileManagerView() override { alive_->store(false); }
 
     void onContentAvailable() override;
     void willAppear(bool resetState = false) override;
@@ -143,12 +148,18 @@ public:
     BRLS_BIND(brls::Label,         splitToggleHint,    "splitToggleHint");
 
 private:
+    // Copy/move jobs run for minutes; their completion must not touch a view
+    // the user already closed.
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
     PanelState panels_[2];
     int activePanel_ = 0;
     bool isSplitMode_ = false;
     std::string initialFocusChild_;
 
     void initPanelBindings();
+    void loadPanel(int panelIdx, const std::string& dir, const std::string& focusChild);
+    void applyListing(int panelIdx, const std::string& dir, std::vector<util::FileItem> items,
+                      bool isArchive, const std::string& focusChild);
     void updateSelectionBar(int panelIdx);
     void updateSpaceInfo(int panelIdx);
     void updateActivePanelVisuals();

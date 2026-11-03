@@ -173,6 +173,16 @@ class Label : public View
 
     std::string truncatedText;
     std::string fullText;
+    // Last text passed to setText(): timers re-set the same strings every
+    // tick, and each call re-measured the text and invalidated the layout.
+    std::string lastSetInput;
+    bool hasSetText = false;
+
+  public:
+    // Font scale this label was last measured with (-1 = never).
+    int measuredFontScale = -1;
+
+  protected:
 
     int font;
     float fontSize;

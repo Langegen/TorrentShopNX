@@ -7,6 +7,8 @@
 #include <ctime>
 #include "../utils/log.h"
 #include "../utils/app_paths.h"
+#include "../utils/atomic_file.h"
+#include <sstream>
 
 #ifdef __SWITCH__
 #include <switch.h>
@@ -196,6 +198,27 @@ bool parseConfigBody(const std::string& body,
     return parsed_known_keys;
 }
 
+// Value of `key=...` in the config body; `out` is left alone when the key is
+// missing. Only the leading spaces of the value are dropped, so a password
+// may end with a space.
+void readRawKey(const std::string& body, const std::string& key, std::string& out) {
+    size_t pos = 0;
+    while (pos < body.size()) {
+        size_t end = body.find('\n', pos);
+        std::string line = (end == std::string::npos) ? body.substr(pos) : body.substr(pos, end - pos);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        size_t eq = line.find('=');
+        if (eq != std::string::npos && trim(line.substr(0, eq)) == key) {
+            size_t v = eq + 1;
+            while (v < line.size() && (line[v] == ' ' || line[v] == '\t')) ++v;
+            out = line.substr(v);
+            return;
+        }
+        if (end == std::string::npos) break;
+        pos = end + 1;
+    }
+}
+
 bool readWholeFile(const std::string& path, std::string& out) {
     std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in.is_open()) return false;
@@ -268,11 +291,13 @@ ConfigManager::ConfigManager() {
     show_bottom_dashboard_ = true;
     font_scale_ = 0;
     load();
+    font_scale_fast_.store(font_scale_, std::memory_order_relaxed);
 }
 
 void ConfigManager::load() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string body;
-    if (readWholeFile(config_path_, body)) {
+    if (readWholeFile(util::existingOrBackup(config_path_), body)) {
         parseConfigBody(body, torrserver_url_, catalog_source_url_, data_mode_,
                         keep_awake_during_downloads_, backlight_timeout_, cache_cover_thumbnails_, listen_port_,
                         last_catalog_update_date_, last_catalog_diff_time_, last_catalog_full_time_,
@@ -284,6 +309,8 @@ void ConfigManager::load() {
                         show_bottom_dashboard_, font_scale_,
                         sound_effects_enabled_, rumble_enabled_,
                         catalog_app_version_);
+        readRawKey(body, "torrserver_login", torrserver_login_);
+        readRawKey(body, "torrserver_password", torrserver_password_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -301,7 +328,9 @@ void ConfigManager::load() {
         if (background_blur_ < 0 || background_blur_ > 3) background_blur_ = 0;
         if (background_dim_ < 0 || background_dim_ > 4) background_dim_ = 2;
         if (font_scale_ < 0 || font_scale_ > 2) font_scale_ = 0;
-        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ + ", theme: " + theme_ + ", background_mode: " + background_mode_);
+        util::logLine("config: loaded config.ini, TorrServer URL: " + torrserver_url_ +
+                      (torrserver_login_.empty() ? "" : " (with login)") + ", theme: " + theme_ +
+                      ", background_mode: " + background_mode_);
         return;
     }
 
@@ -354,63 +383,93 @@ void ConfigManager::save() {
         // PC builds have no sdmc: drive; nothing to create, saving is best-effort.
     }
 
-    std::ofstream file(config_path_);
-    if (!file.is_open()) {
-        util::logLine("config: failed to open config for writing");
-        return;
+    std::ostringstream out;
+    std::string path;
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        path = config_path_;
+        out << "[general]\n";
+        out << "torrserver_url=" << torrserver_url_ << "\n";
+        out << "torrserver_login=" << torrserver_login_ << "\n";
+        out << "torrserver_password=" << torrserver_password_ << "\n";
+        out << "catalog_source_url=" << catalog_source_url_ << "\n";
+        out << "data_mode=" << data_mode_ << "\n";
+        out << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
+        out << "backlight_timeout=" << backlight_timeout_ << "\n";
+        out << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
+        out << "listen_port=" << listen_port_ << "\n";
+        out << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
+        out << "last_catalog_diff_time=" << last_catalog_diff_time_ << "\n";
+        out << "last_catalog_full_time=" << last_catalog_full_time_ << "\n";
+        out << "catalog_app_version=" << catalog_app_version_ << "\n";
+        out << "install_location=" << install_location_ << "\n";
+        out << "app_update_url=" << app_update_url_ << "\n";
+        out << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
+        out << "last_app_update_check_date=" << last_app_update_check_date_ << "\n";
+        out << "last_emulator_manifest_check_date=" << last_emulator_manifest_check_date_ << "\n";
+        out << "language=" << language_ << "\n";
+        out << "retro_roms_mode=" << retro_roms_mode_ << "\n";
+        out << "retro_custom_path=" << retro_custom_path_ << "\n";
+        out << "theme=" << theme_ << "\n";
+        out << "background_mode=" << background_mode_ << "\n";
+        out << "custom_background_path=" << custom_background_path_ << "\n";
+        out << "background_blur=" << background_blur_ << "\n";
+        out << "background_dim=" << background_dim_ << "\n";
+        out << "show_bottom_dashboard=" << (show_bottom_dashboard_ ? "true" : "false") << "\n";
+        out << "font_scale=" << font_scale_ << "\n";
+        out << "sound_effects=" << (sound_effects_enabled_ ? "true" : "false") << "\n";
+        out << "joycon_rumble=" << (rumble_enabled_ ? "true" : "false") << "\n";
     }
 
-    file << "[general]\n";
-    file << "torrserver_url=" << torrserver_url_ << "\n";
-    file << "catalog_source_url=" << catalog_source_url_ << "\n";
-    file << "data_mode=" << data_mode_ << "\n";
-    file << "keep_awake_during_downloads=" << (keep_awake_during_downloads_ ? "true" : "false") << "\n";
-    file << "backlight_timeout=" << backlight_timeout_ << "\n";
-    file << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
-    file << "listen_port=" << listen_port_ << "\n";
-    file << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
-    file << "last_catalog_diff_time=" << last_catalog_diff_time_ << "\n";
-    file << "last_catalog_full_time=" << last_catalog_full_time_ << "\n";
-    file << "catalog_app_version=" << catalog_app_version_ << "\n";
-    file << "install_location=" << install_location_ << "\n";
-    file << "app_update_url=" << app_update_url_ << "\n";
-    file << "auto_app_update=" << (auto_app_update_ ? "true" : "false") << "\n";
-    file << "last_app_update_check_date=" << last_app_update_check_date_ << "\n";
-    file << "last_emulator_manifest_check_date=" << last_emulator_manifest_check_date_ << "\n";
-    file << "language=" << language_ << "\n";
-    file << "retro_roms_mode=" << retro_roms_mode_ << "\n";
-    file << "retro_custom_path=" << retro_custom_path_ << "\n";
-    file << "theme=" << theme_ << "\n";
-    file << "background_mode=" << background_mode_ << "\n";
-    file << "custom_background_path=" << custom_background_path_ << "\n";
-    file << "background_blur=" << background_blur_ << "\n";
-    file << "background_dim=" << background_dim_ << "\n";
-    file << "show_bottom_dashboard=" << (show_bottom_dashboard_ ? "true" : "false") << "\n";
-    file << "font_scale=" << font_scale_ << "\n";
-    file << "sound_effects=" << (sound_effects_enabled_ ? "true" : "false") << "\n";
-    file << "joycon_rumble=" << (rumble_enabled_ ? "true" : "false") << "\n";
-    file.flush();
-    file.close();
+    // Write a temp file and rename it into place: a crash or power loss in the
+    // middle of a save used to leave an empty config.ini.
+    std::lock_guard<std::mutex> saveLock(save_mutex_);
+    std::string err;
+    if (!util::atomicWriteFile(path, out.str(), &err)) {
+        util::logLine("config: failed to save config.ini: " + err);
+        return;
+    }
 #ifdef __SWITCH__
     fsdevCommitDevice("sdmc");
 #endif
     util::logLine("config: saved config.ini");
 }
 
-const std::string& ConfigManager::getTorrServerUrl() const {
+std::string ConfigManager::getTorrServerUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return torrserver_url_;
 }
 
 void ConfigManager::setTorrServerUrl(const std::string& url) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     torrserver_url_ = url;
     save();
 }
 
-const std::string& ConfigManager::getCatalogSourceUrl() const {
+std::string ConfigManager::getTorrServerLogin() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return torrserver_login_;
+}
+
+std::string ConfigManager::getTorrServerPassword() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return torrserver_password_;
+}
+
+void ConfigManager::setTorrServerCredentials(const std::string& login, const std::string& password) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    torrserver_login_ = login;
+    torrserver_password_ = login.empty() ? std::string() : password;
+    save();
+}
+
+std::string ConfigManager::getCatalogSourceUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return catalog_source_url_;
 }
 
 std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string url = normalizeCatalogUrl(catalog_source_url_);
 
     bool isDefault = url.empty() ||
@@ -470,15 +529,18 @@ std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
 }
 
 void ConfigManager::setCatalogSourceUrl(const std::string& url) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     catalog_source_url_ = normalizeCatalogUrl(url);
     save();
 }
 
-const std::string& ConfigManager::getDataMode() const {
+std::string ConfigManager::getDataMode() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return data_mode_;
 }
 
 void ConfigManager::setDataMode(const std::string& mode) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string normalized = mode;
     std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -491,19 +553,23 @@ void ConfigManager::setDataMode(const std::string& mode) {
 }
 
 bool ConfigManager::getKeepAwakeDuringDownloads() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return keep_awake_during_downloads_;
 }
 
 void ConfigManager::setKeepAwakeDuringDownloads(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     keep_awake_during_downloads_ = enabled;
     save();
 }
 
 int ConfigManager::getBacklightTimeout() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return backlight_timeout_;
 }
 
 void ConfigManager::setBacklightTimeout(int seconds) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (seconds != 15 && seconds != 30 && seconds != 60 && seconds != 120) {
         backlight_timeout_ = 0;
     } else {
@@ -513,20 +579,24 @@ void ConfigManager::setBacklightTimeout(int seconds) {
 }
 
 int ConfigManager::getListenPort() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return listen_port_;
 }
 
 void ConfigManager::setListenPort(int port) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (port <= 0 || port >= 65536) return;
     listen_port_ = port;
     save();
 }
 
-const std::string& ConfigManager::getLastCatalogUpdateDate() const {
+std::string ConfigManager::getLastCatalogUpdateDate() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return last_catalog_update_date_;
 }
 
 void ConfigManager::setLastCatalogUpdateDate(const std::string& date_yyyy_mm_dd) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     last_catalog_update_date_ = date_yyyy_mm_dd;
     save();
 }
@@ -549,39 +619,47 @@ std::string ConfigManager::currentDateString() {
 }
 
 bool ConfigManager::shouldUpdateCatalogToday() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_catalog_update_date_ != today;
 }
 
 int64_t ConfigManager::getLastCatalogDiffTime() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return last_catalog_diff_time_;
 }
 
 void ConfigManager::setLastCatalogDiffTime(int64_t timestamp) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     last_catalog_diff_time_ = timestamp;
     save();
 }
 
 int64_t ConfigManager::getLastCatalogFullTime() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return last_catalog_full_time_;
 }
 
 void ConfigManager::setLastCatalogFullTime(int64_t timestamp) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     last_catalog_full_time_ = timestamp;
     save();
 }
 
-const std::string& ConfigManager::getCatalogAppVersion() const {
+std::string ConfigManager::getCatalogAppVersion() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return catalog_app_version_;
 }
 
 void ConfigManager::setCatalogAppVersion(const std::string& version) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     catalog_app_version_ = version;
     save();
 }
 
 bool ConfigManager::shouldUpdateCatalogDiff() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::time_t now = std::time(nullptr);
     if (now <= 0) return false;
     if (last_catalog_diff_time_ <= 0) return true;
@@ -589,6 +667,7 @@ bool ConfigManager::shouldUpdateCatalogDiff() const {
 }
 
 bool ConfigManager::shouldUpdateCatalogFull() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::time_t now = std::time(nullptr);
     if (now <= 0) return false;
     if (last_catalog_full_time_ <= 0) return true;
@@ -596,6 +675,7 @@ bool ConfigManager::shouldUpdateCatalogFull() const {
 }
 
 std::string ConfigManager::getActiveCatalogLangKey() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string effUrl = getEffectiveCatalogSourceUrl();
     if (effUrl.find("EN_catalog") != std::string::npos) return "en";
     if (effUrl.find("ES_catalog") != std::string::npos) return "es";
@@ -608,6 +688,7 @@ std::string ConfigManager::getActiveCatalogLangKey() const {
 }
 
 std::string ConfigManager::getEffectiveCatalogDiffUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string url = normalizeCatalogUrl(catalog_source_url_);
     bool isDefault = url.empty() ||
                      url == DEFAULT_CATALOG_URL_RU ||
@@ -635,20 +716,24 @@ std::string ConfigManager::getEffectiveCatalogDiffUrl() const {
     return DEFAULT_CATALOG_DIFF_URL;
 }
 
-const std::string& ConfigManager::getInstallLocation() const {
+std::string ConfigManager::getInstallLocation() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return install_location_;
 }
 
 void ConfigManager::setInstallLocation(const std::string& location) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     install_location_ = location;
     save();
 }
 
-const std::string& ConfigManager::getAppUpdateUrl() const {
+std::string ConfigManager::getAppUpdateUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return app_update_url_;
 }
 
 std::string ConfigManager::getEffectiveAppUpdateUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (app_update_url_.empty()) {
         return DEFAULT_APP_UPDATE_URL;
     }
@@ -656,63 +741,76 @@ std::string ConfigManager::getEffectiveAppUpdateUrl() const {
 }
 
 void ConfigManager::setAppUpdateUrl(const std::string& url) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     app_update_url_ = url;
     save();
 }
 
 bool ConfigManager::getAutoAppUpdate() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return auto_app_update_;
 }
 
 void ConfigManager::setAutoAppUpdate(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto_app_update_ = enabled;
     save();
 }
 
 bool ConfigManager::getCacheCoverThumbnails() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return cache_cover_thumbnails_;
 }
 
 void ConfigManager::setCacheCoverThumbnails(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     cache_cover_thumbnails_ = enabled;
     save();
 }
 
-const std::string& ConfigManager::getLastAppUpdateCheckDate() const {
+std::string ConfigManager::getLastAppUpdateCheckDate() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return last_app_update_check_date_;
 }
 
 void ConfigManager::setLastAppUpdateCheckDate(const std::string& date_yyyy_mm_dd) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     last_app_update_check_date_ = date_yyyy_mm_dd;
     save();
 }
 
 bool ConfigManager::shouldCheckAppUpdateToday() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_app_update_check_date_ != today;
 }
 
-const std::string& ConfigManager::getLastEmulatorManifestCheckDate() const {
+std::string ConfigManager::getLastEmulatorManifestCheckDate() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return last_emulator_manifest_check_date_;
 }
 
 void ConfigManager::setLastEmulatorManifestCheckDate(const std::string& date_yyyy_mm_dd) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     last_emulator_manifest_check_date_ = date_yyyy_mm_dd;
     save();
 }
 
 bool ConfigManager::shouldCheckEmulatorManifestToday() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const std::string today = currentDateString();
     if (today.empty()) return false;
     return last_emulator_manifest_check_date_ != today;
 }
 
-const std::string& ConfigManager::getLanguage() const {
+std::string ConfigManager::getLanguage() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return language_;
 }
 
 void ConfigManager::setLanguage(const std::string& lang) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!isValidLanguage(lang)) {
         language_ = "auto";
     } else {
@@ -721,11 +819,13 @@ void ConfigManager::setLanguage(const std::string& lang) {
     save();
 }
 
-const std::string& ConfigManager::getRetroRomsMode() const {
+std::string ConfigManager::getRetroRomsMode() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return retro_roms_mode_;
 }
 
 void ConfigManager::setRetroRomsMode(const std::string& mode) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (mode == "auto" || mode == "custom") {
         retro_roms_mode_ = mode;
         save();
@@ -733,54 +833,65 @@ void ConfigManager::setRetroRomsMode(const std::string& mode) {
 }
 
 bool ConfigManager::isRetroCustomFolder() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return retro_roms_mode_ == "custom";
 }
 
-const std::string& ConfigManager::getRetroCustomPath() const {
+std::string ConfigManager::getRetroCustomPath() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return retro_custom_path_;
 }
 
 void ConfigManager::setRetroCustomPath(const std::string& path) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     retro_custom_path_ = path;
     save();
 }
 
 
 
-const std::string& ConfigManager::getTheme() const {
+std::string ConfigManager::getTheme() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return theme_;
 }
 
 void ConfigManager::setTheme(const std::string& theme) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (!theme.empty()) {
         theme_ = theme;
         save();
     }
 }
 
-const std::string& ConfigManager::getBackgroundMode() const {
+std::string ConfigManager::getBackgroundMode() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return background_mode_;
 }
 
 void ConfigManager::setBackgroundMode(const std::string& mode) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     background_mode_ = mode;
     save();
 }
 
-const std::string& ConfigManager::getCustomBackgroundPath() const {
+std::string ConfigManager::getCustomBackgroundPath() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return custom_background_path_;
 }
 
 void ConfigManager::setCustomBackgroundPath(const std::string& path) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     custom_background_path_ = path;
     save();
 }
 
 int ConfigManager::getBackgroundBlur() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return background_blur_;
 }
 
 void ConfigManager::setBackgroundBlur(int level) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (level < 0) level = 0;
     if (level > 3) level = 3;
     background_blur_ = level;
@@ -788,10 +899,12 @@ void ConfigManager::setBackgroundBlur(int level) {
 }
 
 int ConfigManager::getBackgroundDim() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return background_dim_;
 }
 
 void ConfigManager::setBackgroundDim(int level) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (level < 0) level = 0;
     if (level > 4) level = 4;
     background_dim_ = level;
@@ -799,27 +912,31 @@ void ConfigManager::setBackgroundDim(int level) {
 }
 
 bool ConfigManager::getShowBottomDashboard() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return show_bottom_dashboard_;
 }
 
 void ConfigManager::setShowBottomDashboard(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     show_bottom_dashboard_ = enabled;
     save();
 }
 
 int ConfigManager::getFontScale() const {
-    return font_scale_;
+    return font_scale_fast_.load(std::memory_order_relaxed);
 }
 
 void ConfigManager::setFontScale(int level) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (level < 0) level = 0;
     if (level > 2) level = 2;
     font_scale_ = level;
+    font_scale_fast_.store(level, std::memory_order_relaxed);
     save();
 }
 
 float ConfigManager::getFontScaleMultiplier() const {
-    switch (font_scale_) {
+    switch (font_scale_fast_.load(std::memory_order_relaxed)) {
         case 1: return 1.15f;
         case 2: return 1.30f;
         default: return 1.0f;
@@ -827,10 +944,12 @@ float ConfigManager::getFontScaleMultiplier() const {
 }
 
 bool ConfigManager::getSoundEffectsEnabled() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return sound_effects_enabled_;
 }
 
 void ConfigManager::setSoundEffectsEnabled(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (sound_effects_enabled_ != enabled) {
         sound_effects_enabled_ = enabled;
         save();
@@ -838,10 +957,12 @@ void ConfigManager::setSoundEffectsEnabled(bool enabled) {
 }
 
 bool ConfigManager::getRumbleEnabled() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     return rumble_enabled_;
 }
 
 void ConfigManager::setRumbleEnabled(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (rumble_enabled_ != enabled) {
         rumble_enabled_ = enabled;
         save();

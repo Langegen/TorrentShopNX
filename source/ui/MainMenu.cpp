@@ -39,6 +39,37 @@
 
 using namespace brls::literals;
 
+// Main-menu shortcuts shared by the tiles, the summary panel and the root box:
+// file manager (START; =, keypad +, F1 and Tab on a keyboard), refresh (X) and
+// remote add (BACK, -). The activity itself (`full` = false) gets the file
+// manager without Tab, and refresh.
+template <typename Target>
+static void registerMenuShortcuts(Target* target, MainMenu* menu, bool full) {
+    auto openFm = [menu](brls::View*) {
+        menu->openFileManager();
+        return true;
+    };
+    auto remoteAdd = [](brls::View*) {
+        brls::Application::pushActivity(new ui::RemoteAddView());
+        return true;
+    };
+    if (full) {
+        target->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, remoteAdd);
+        target->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), remoteAdd);
+    }
+    target->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, openFm);
+    target->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), openFm);
+    target->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), openFm);
+    target->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), openFm);
+    if (full) {
+        target->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), openFm);
+    }
+    target->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [menu](brls::View*) {
+        menu->refreshDashboardState();
+        return true;
+    }, true);
+}
+
 extern std::vector<Game> g_games;
 extern std::recursive_mutex g_switch_service_mutex;
 
@@ -150,39 +181,7 @@ void MainMenu::setupLayout() {
             [this](int idx) { onTileClicked(idx); }
         );
 
-        tile->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
-            brls::Application::pushActivity(new ui::RemoteAddView());
-            return true;
-        });
-        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
-            brls::Application::pushActivity(new ui::RemoteAddView());
-            return true;
-        });
-
-        tile->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-            openFileManager();
-            return true;
-        });
-        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
-            openFileManager();
-            return true;
-        });
-        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
-            openFileManager();
-            return true;
-        });
-        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
-            openFileManager();
-            return true;
-        });
-        tile->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
-            openFileManager();
-            return true;
-        });
-        tile->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-            refreshDashboardState();
-            return true;
-        }, true);
+        registerMenuShortcuts(tile, this, true);
 
         if (i < 4) {
             tile->setMarginRight(16.0f);
@@ -214,72 +213,10 @@ void MainMenu::setupLayout() {
         }
         return nullptr;
     });
-    summaryView_->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    summaryView_->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
-        brls::Application::pushActivity(new ui::RemoteAddView());
-        return true;
-    });
-    summaryView_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
-        brls::Application::pushActivity(new ui::RemoteAddView());
-        return true;
-    });
-    summaryView_->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        refreshDashboardState();
-        return true;
-    }, true);
+    registerMenuShortcuts(summaryView_, this, true);
     rootBox_->addView(summaryView_);
 
-    rootBox_->registerAction("app/menu/remote_add"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
-        brls::Application::pushActivity(new ui::RemoteAddView());
-        return true;
-    });
-    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_MINUS), [this](brls::View* view) {
-        brls::Application::pushActivity(new ui::RemoteAddView());
-        return true;
-    });
-    rootBox_->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    rootBox_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_TAB), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    rootBox_->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        refreshDashboardState();
-        return true;
-    }, true);
+    registerMenuShortcuts(rootBox_, this, true);
 
     updateDashboardVisibility();
 }
@@ -718,28 +655,7 @@ void MainMenu::onContentAvailable() {
         brls::Application::giveFocus(tiles_[0]);
     }
 
-    this->registerAction("app/file_manager/title"_i18n, brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-
-    this->registerAction("app/actions/refresh"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        refreshDashboardState();
-        return true;
-    }, true);
-
-    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_EQUAL), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_KP_ADD), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
-    this->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_F1), [this](brls::View* view) {
-        openFileManager();
-        return true;
-    });
+    registerMenuShortcuts(this, this, false);
 
     // Trigger scheduled catalog update (48h full or 4h diff)
     catalog::CatalogUpdater::instance().checkAndRunScheduledUpdate();
@@ -817,20 +733,27 @@ void MainMenu::onContentAvailable() {
                 g_pathsToDelete.clear();
             }
 
-            // Delay stale cache sweep by 15s to allow smooth initial UI & thumbnail loading without SD contention
-            for (int s = 0; s < 30; ++s) {
-                if (g_cleanupCancelled.load()) break;
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-
-            if (!g_cleanupCancelled.load()) {
-                sweepStaleCaches();
-            }
         } catch (const std::exception& e) {
             util::logLine(std::string("MainMenu: exception in background cleanup: ") + e.what());
         } catch (...) {
             util::logLine("MainMenu: unknown exception in background cleanup");
         }
-        g_cleanupRunning = false;
+        // Sweep stale caches 15 s later, when the first screens and covers
+        // have loaded. The wait is a main-thread timer: sleeping here held one
+        // of the 2-3 pool threads that cover decoding needs.
+        brls::sync([]() {
+            brls::delay(15000, []() {
+                brls::async([]() {
+                    try {
+                        if (!g_cleanupCancelled.load()) {
+                            sweepStaleCaches();
+                        }
+                    } catch (...) {
+                        util::logLine("MainMenu: exception in stale cache sweep");
+                    }
+                    g_cleanupRunning = false;
+                });
+            });
+        });
     });
 }

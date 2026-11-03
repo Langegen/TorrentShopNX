@@ -352,11 +352,11 @@ void DownloadsView::setEmpty(bool empty) {
     if (!emptyHolder || !recycler) return;
     if (empty && !emptyState_) {
         emptyState_ = new EmptyState();
-        emptyState_->show(DashboardIcon::Kind::Download,
-                          "app/empty/downloads_title"_i18n, "app/empty/downloads_sub"_i18n,
-                          "app/empty/open_catalog"_i18n, []() {
-                              brls::Application::pushActivity(new CollectionsView());
-                          });
+        emptyState_->setContent(DashboardIcon::Kind::Download,
+                                "app/empty/downloads_title"_i18n, "app/empty/downloads_sub"_i18n,
+                                "app/empty/open_catalog"_i18n, []() {
+                                    brls::Application::pushActivity(new CollectionsView());
+                                });
         emptyHolder->addView(emptyState_);
     }
     const bool wasEmpty = emptyHolder->getVisibility() == brls::Visibility::VISIBLE;
@@ -1318,6 +1318,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             cell->componentsBox->clearViews();
             for (size_t k = 0; k < group.item_indices.size(); ++k) {
                 auto* rowBox = new brls::Box();
+                // Subscribed once, when the row is created. updateCell() runs
+                // on every progress tick and used to add a new subscription
+                // each time. The row is read from the cell, which is recycled.
+                rowBox->getFocusEvent()->subscribe([this, cell](bool focused) {
+                    if (focused) {
+                        this->focusedRow_ = cell->getIndexPath().row;
+                    }
+                });
                 rowBox->setAxis(brls::Axis::ROW);
                 rowBox->setAlignItems(brls::AlignItems::CENTER);
                 rowBox->setHeight(46.0f);
@@ -1764,12 +1772,6 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 return true;
             }, true /* hidden */, false, brls::SOUND_CLICK);
 
-            rowBox->getFocusEvent()->subscribe([this, row](bool focused) {
-                if (focused) {
-                    this->focusedRow_ = row;
-                }
-            });
-
             if (brls::Application::getCurrentFocus() == rowBox) {
                 brls::Application::getGlobalHintsUpdateEvent()->fire();
             }
@@ -1785,20 +1787,21 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             cell->headerBox->unregisterAction(cell->headerBox->getActions().front()->getIdentifier());
         }
 
-        cell->headerBox->getFocusEvent()->subscribe([this, row](bool focused) {
-            if (focused) {
-                this->focusedRow_ = row;
-            }
-        });
+        // The header's focus subscription is made once in cellForRow
+        // (focusSubscribed); subscribing here added one per progress tick.
 
         if (group.state == download::DownloadState::Completed) {
             cell->headerBox->registerAction("app/downloads/action_delete"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {
                 std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
                 const auto& q = ui::DownloadManager::instance().getImpl().queue();
+                // Collect ids first: every delete erases from the queue and
+                // shifts the indices of the remaining items.
+                std::vector<std::string> ids;
                 for (size_t qidx : group.item_indices) {
-                    if (qidx < q.size()) {
-                        ui::DownloadManager::instance().deleteDownload(q[qidx].topic_id);
-                    }
+                    if (qidx < q.size()) ids.push_back(q[qidx].topic_id);
+                }
+                for (const auto& id : ids) {
+                    ui::DownloadManager::instance().deleteDownload(id);
                 }
                 return true;
             });
