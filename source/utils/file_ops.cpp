@@ -577,7 +577,7 @@ void clearClipboard() {
     s_clipboard.paths.clear();
 }
 
-std::string formatFileSize(uint64_t bytes) {
+std::string formatFileSize(uint64_t bytes, int decimals) {
     double size = static_cast<double>(bytes);
     int unit = 0;
     const char* units[] = { "B", "KB", "MB", "GB", "TB" };
@@ -586,7 +586,7 @@ std::string formatFileSize(uint64_t bytes) {
     if (unit == 0) {
         std::snprintf(buf, sizeof(buf), "%llu %s", (unsigned long long)bytes, units[unit]);
     } else {
-        std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
+        std::snprintf(buf, sizeof(buf), "%.*f %s", decimals, size, units[unit]);
     }
     return std::string(buf);
 }

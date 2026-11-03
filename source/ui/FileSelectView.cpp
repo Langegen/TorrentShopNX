@@ -1,4 +1,5 @@
 #include "FileSelectView.hpp"
+#include "../utils/file_ops.h"
 #include "../utils/i18n_plural.h"
 #include "DownloadUiManager.hpp"
 #include "MainMenu.hpp"
@@ -32,16 +33,6 @@ namespace ui {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
-    return std::string(buf);
-}
 
 static bool isRomFile(const std::string& filename) {
     std::string lower = filename;
@@ -780,7 +771,7 @@ void FileSelectView::updateRetroSubtitle() {
     }
 
     std::string pathText = "app/fileselect/folder_prefix"_i18n + displayPath;
-    std::string selText = brls::getStr("app/fileselect/files_selected", std::to_string(selCount)) + " (" + formatBytes(selBytes) + ")";
+    std::string selText = brls::getStr("app/fileselect/files_selected", std::to_string(selCount)) + " (" + util::formatFileSize(selBytes) + ")";
     subtitle->setText(pathText + "  |  " + selText);
 }
 
@@ -939,7 +930,7 @@ void FileSelectView::rebuildRetroFolderList() {
         infoLbl->setWidth(160);
         infoLbl->setHeight(brls::View::AUTO);
         infoLbl->setFontSize(14);
-        infoLbl->setText(std::to_string(sInfo.fileIndices.size()) + " | " + formatBytes(sInfo.totalSize));
+        infoLbl->setText(std::to_string(sInfo.fileIndices.size()) + " | " + util::formatFileSize(sInfo.totalSize));
         infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(infoLbl);
 
@@ -1031,7 +1022,7 @@ void FileSelectView::rebuildRetroFolderList() {
         sizeLbl->setWidth(140);
         sizeLbl->setHeight(brls::View::AUTO);
         sizeLbl->setFontSize(14);
-        sizeLbl->setText(formatBytes(file.size));
+        sizeLbl->setText(util::formatFileSize(file.size));
         sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(sizeLbl);
 
@@ -1136,7 +1127,7 @@ void FileSelectView::renderOtherFilesTree(const OtherFileTreeNode& node, int dep
         infoLbl->setWidth(160);
         infoLbl->setHeight(brls::View::AUTO);
         infoLbl->setFontSize(14);
-        infoLbl->setText(std::to_string(sub.totalFiles) + " | " + formatBytes(sub.size));
+        infoLbl->setText(std::to_string(sub.totalFiles) + " | " + util::formatFileSize(sub.size));
         infoLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(infoLbl);
 
@@ -1232,7 +1223,7 @@ void FileSelectView::renderOtherFilesTree(const OtherFileTreeNode& node, int dep
         sizeLbl->setWidth(140);
         sizeLbl->setHeight(brls::View::AUTO);
         sizeLbl->setFontSize(14);
-        sizeLbl->setText(formatBytes(item.size));
+        sizeLbl->setText(util::formatFileSize(item.size));
         sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         row->addView(sizeLbl);
 
@@ -1340,7 +1331,7 @@ void FileSelectView::rebuildSwitchFileList() {
             sizeLbl->setWidth(140);
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
-            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setText(util::formatFileSize(file.size));
             sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
@@ -1481,7 +1472,7 @@ void FileSelectView::rebuildSwitchFileList() {
             sizeLbl->setWidth(140);
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
-            sizeLbl->setText(formatBytes(file.size));
+            sizeLbl->setText(util::formatFileSize(file.size));
             sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
             row->addView(sizeLbl);
 
@@ -1588,13 +1579,13 @@ void FileSelectView::updateTotalSize() {
     }
 
     if (totalSizeText) {
-        std::string sizeStr = formatBytes(totalCompressed);
+        std::string sizeStr = util::formatFileSize(totalCompressed);
         if (totalUnpacked > totalCompressed) {
             std::string prefix = brls::getStr("app/fileselect/unpacked_prefix");
             if (anyEstimated) {
-                sizeStr += " (" + prefix + ": ~" + formatBytes(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
+                sizeStr += " (" + prefix + ": ~" + util::formatFileSize(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
             } else {
-                sizeStr += " (" + prefix + ": " + formatBytes(totalUnpacked) + ")";
+                sizeStr += " (" + prefix + ": " + util::formatFileSize(totalUnpacked) + ")";
             }
         }
         totalSizeText->setText(sizeStr);
@@ -1614,14 +1605,14 @@ void FileSelectView::updateTotalSize() {
             if (!alive->load()) return;
             if (freeSpaceSdText) {
                 if (sdOk) {
-                    freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", formatBytes(sdFree)));
+                    freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", util::formatFileSize(sdFree)));
                 } else if (!folderMode) {
                     freeSpaceSdText->setText(brls::getStr("app/fileselect/free_sd", "app/fileselect/free_unknown"_i18n));
                 }
             }
             if (!folderMode && freeSpaceNandText) {
                 if (nandOk) {
-                    freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", formatBytes(nandFree)));
+                    freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", util::formatFileSize(nandFree)));
                 } else {
                     freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
                 }
@@ -1733,7 +1724,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         int64_t freeSpace = 0;
         util::getStorageFreeSpace(1, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
-            std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", formatBytes(totalNeededSize), formatBytes(freeSpace));
+            std::string msg = brls::getStr("app/fileselect/low_space_prompt", "SD", util::formatFileSize(totalNeededSize), util::formatFileSize(freeSpace));
             brls::Dialog* dialog = new brls::Dialog(msg);
             dialog->addButton("app/common/continue"_i18n, [this, selectedIndices, forcedIndex, forcedName]() {
                 this->promptAndExecuteDownloads(selectedIndices, forcedIndex, forcedName);
@@ -1784,7 +1775,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
     }
 
     if (!checkPassed) {
-        std::string msg = brls::getStr("app/fileselect/low_space_prompt", targetStorageName, formatBytes(totalNeededSize), formatBytes(freeSpace));
+        std::string msg = brls::getStr("app/fileselect/low_space_prompt", targetStorageName, util::formatFileSize(totalNeededSize), util::formatFileSize(freeSpace));
         
         brls::Dialog* dialog = new brls::Dialog(msg);
         // Dialog closes itself via Dialog::buttonClick; do NOT call close() here

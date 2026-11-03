@@ -672,16 +672,6 @@ static void saveScanCache(const std::unordered_map<uint64_t, ScanCacheEntry>& ca
 #endif
 
 
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.1f %s", size, units[unit]);
-    return std::string(buf);
-}
-
 LibraryRowCell::LibraryRowCell() {
     this->inflateFromXMLRes("xml/library_row_cell.xml");
 }
@@ -1255,8 +1245,8 @@ void LibraryView::updateSpaceHint() {
         brls::sync([this, cancelToken, sdOk, nandOk, sdFree, nandFree]() {
             if (cancelToken && *cancelToken) return;
             if (!spaceHint) return;
-            std::string sdStr = sdOk ? formatBytes(static_cast<unsigned long long>(sdFree)) : "app/library/space_unknown"_i18n;
-            std::string nandStr = nandOk ? formatBytes(static_cast<unsigned long long>(nandFree)) : "app/library/space_unknown"_i18n;
+            std::string sdStr = sdOk ? util::formatFileSize(static_cast<unsigned long long>(sdFree), 1) : "app/library/space_unknown"_i18n;
+            std::string nandStr = nandOk ? util::formatFileSize(static_cast<unsigned long long>(nandFree), 1) : "app/library/space_unknown"_i18n;
             spaceHint->setText(brls::getStr("app/library/space", sdStr, nandStr));
             spaceHint->setTextColor(ThemeManager::instance().getAccentColor());
         });
@@ -1914,7 +1904,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
     rootBox->addView(titleLabel);
 
     auto* subtitleLabel = new brls::Label();
-    std::string subText = "Общий размер: " + formatBytes(currentItem.totalSizeBytes);
+    std::string subText = "Общий размер: " + util::formatFileSize(currentItem.totalSizeBytes, 1);
     if (currentItem.dlcCount > 0) {
         subText += " • DLC: " + std::to_string(currentItem.dlcCount);
     }
@@ -2004,7 +1994,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
             auto* nameLabel = new brls::Label();
             std::string nameStr = comp.displayName;
             if (comp.sizeBytes > 0) {
-                nameStr += " • " + formatBytes(comp.sizeBytes);
+                nameStr += " • " + util::formatFileSize(comp.sizeBytes, 1);
             }
             nameLabel->setText(nameStr);
             nameLabel->setFontSize(14.0f);
@@ -2236,7 +2226,7 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
         if (item.isPort) {
             // Homebrew port: files on the SD card plus its shortcuts.
             std::string line = brls::getStr("app/ports/library_line", std::to_string(item.portFiles));
-            if (item.totalSizeBytes > 0) line += " • " + formatBytes(item.totalSizeBytes);
+            if (item.totalSizeBytes > 0) line += " • " + util::formatFileSize(item.totalSizeBytes, 1);
             cell->titleId->setText(line);
             if (cell->patchBadgeBox) cell->patchBadgeBox->setVisibility(brls::Visibility::GONE);
             if (cell->dlcBadgeBox) cell->dlcBadgeBox->setVisibility(brls::Visibility::GONE);
@@ -2299,7 +2289,7 @@ brls::RecyclerCell* LibraryView::LibraryDataSource::cellForRow(brls::RecyclerFra
 
         std::string tidLine = "ID: " + tidStrUpper;
         if (item.totalSizeBytes > 0) {
-            tidLine += " • " + formatBytes(item.totalSizeBytes);
+            tidLine += " • " + util::formatFileSize(item.totalSizeBytes, 1);
         }
         if (!item.sdkVersion.empty()) {
             tidLine += " • SDK " + item.sdkVersion;

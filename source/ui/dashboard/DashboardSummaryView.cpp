@@ -1,4 +1,5 @@
 #include "DashboardSummaryView.hpp"
+#include "../../utils/file_ops.h"
 #include "SpeedSparklineView.hpp"
 #include "DashboardIcon.hpp"
 #include "../ThemeManager.hpp"
@@ -45,16 +46,6 @@ static constexpr float kCoverH       = 140.0f;
 static inline NVGcolor themeAccent(unsigned char alpha = 255) {
     NVGcolor c = ThemeManager::instance().getTextAccentColor();
     return nvgRGBA(c.r * 255, c.g * 255, c.b * 255, alpha);
-}
-
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.1f %s", size, units[unit]);
-    return std::string(buf);
 }
 
 static bool isActiveState(download::DownloadState st) {
@@ -472,7 +463,7 @@ void DashboardSummaryView::updateActiveDownloadWidgets(const download::DownloadI
     unsigned long long written = item.install_written;
     unsigned long long total = item.install_total;
     if (total == 0 && item.hybrid_installer) total = item.hybrid_installer->totalBytes();
-    if (dl_szLbl_) dl_szLbl_->setText(ofStr(formatBytes(written), formatBytes(total)));
+    if (dl_szLbl_) dl_szLbl_->setText(ofStr(util::formatFileSize(written, 1), util::formatFileSize(total, 1)));
 
     if (dl_peersLbl_) {
         dl_peersLbl_->setText("app/dashboard/downloads_peers"_i18n + std::to_string(item.peers) +
@@ -592,8 +583,8 @@ void DashboardSummaryView::updateStorageWidgets() {
             fill->setWidthPercentage(2.0f);
             return;
         }
-        lbl->setText(ofStr(formatBytes(static_cast<unsigned long long>(freeB)),
-                           formatBytes(static_cast<unsigned long long>(totalB))));
+        lbl->setText(ofStr(util::formatFileSize(static_cast<unsigned long long>(freeB), 1),
+                           util::formatFileSize(static_cast<unsigned long long>(totalB), 1)));
         float used = 100.0f * static_cast<float>(totalB - freeB) / static_cast<float>(totalB);
         fill->setWidthPercentage(std::max(2.0f, std::min(100.0f, used)));
     };
@@ -990,7 +981,7 @@ void DashboardSummaryView::buildDownloadsSection() {
         addCaption(b2, "app/dashboard/downloads_last_title"_i18n);
         addIconValue(b2, Icon::Done, displayTitle(last->title), style::textPrimary(), kValueFontMid);
         std::string sub = "app/dashboard/downloads_last_done"_i18n;
-        if (last->download_total_bytes > 0) sub += "  ·  " + formatBytes(last->download_total_bytes);
+        if (last->download_total_bytes > 0) sub += "  ·  " + util::formatFileSize(last->download_total_bytes, 1);
         addSub(b2, sub, style::stateOk());
     } else {
         brls::Box* b2 = c2;
@@ -1041,7 +1032,7 @@ void DashboardSummaryView::buildToolsSection() {
     brls::Box* c2 = makeCard(kCardWidth, openTools);
     brls::Box* b2 = c2;
     addCaption(b2, "app/dashboard/tools_c2_title"_i18n);
-    addIconValue(b2, Icon::Database, formatBytes(cache_size_bytes_), style::textPrimary());
+    addIconValue(b2, Icon::Database, util::formatFileSize(cache_size_bytes_, 1), style::textPrimary());
     addSub(b2, "app/dashboard/tools_c2_sub"_i18n, style::textSecondary());
     cardsRow->addView(c2);
 
@@ -1050,7 +1041,7 @@ void DashboardSummaryView::buildToolsSection() {
         c3->setBorderColor(style::stateWarnBorder());
         brls::Box* b3 = c3;
         addCaption(b3, "app/dashboard/tools_c3_title"_i18n);
-        addIconValue(b3, Icon::Trash, formatBytes(leftover_size_bytes_), style::stateWarn());
+        addIconValue(b3, Icon::Trash, util::formatFileSize(leftover_size_bytes_, 1), style::stateWarn());
         addSub(b3, "app/dashboard/tools_c3_sub"_i18n, style::textSecondary());
     } else {
         brls::Box* b3 = c3;

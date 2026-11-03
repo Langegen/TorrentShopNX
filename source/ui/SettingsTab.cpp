@@ -1,4 +1,5 @@
 #include "SettingsTab.hpp"
+#include "../utils/file_ops.h"
 #include "../utils/i18n_plural.h"
 #include "ThemeManager.hpp"
 #include "BackgroundFilePicker.hpp"
@@ -29,16 +30,6 @@
 extern std::string g_nroPath;
 
 namespace ui {
-
-static std::string formatBytes(unsigned long long bytes) {
-    double size = static_cast<double>(bytes);
-    int unit = 0;
-    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
-    while (size >= 1024.0 && unit < 4) { size /= 1024.0; ++unit; }
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%.2f %s", size, units[unit]);
-    return std::string(buf);
-}
 
 struct AppDownloadProgress {
     std::atomic<uint64_t> downloaded{0};
@@ -150,9 +141,9 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
             double percent = (double)dl / (double)tot * 100.0;
             char pctBuf[32];
             std::snprintf(pctBuf, sizeof(pctBuf), "%.1f%%", percent);
-            progressInfo = std::string(pctBuf) + " (" + formatBytes(dl) + " / " + formatBytes(tot) + ")";
+            progressInfo = std::string(pctBuf) + " (" + util::formatFileSize(dl) + " / " + util::formatFileSize(tot) + ")";
         } else {
-            progressInfo = formatBytes(dl);
+            progressInfo = util::formatFileSize(dl);
         }
         statusLabel->setText(brls::getStr("app/settings/downloading_update", version, progressInfo));
     });
