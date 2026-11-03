@@ -50,6 +50,10 @@ struct PanelState {
     std::unordered_set<std::string> selectedPaths;
     int currentFocusedRow = -1;
     bool hasParentDir = false;
+    // Bumped on every listing request; a background listing whose number is
+    // stale by the time it finishes is dropped (the user went elsewhere).
+    uint64_t loadGen = 0;
+    std::string pendingDir;  // folder being listed right now, empty when idle
 
     // UI elements bound or assigned
     brls::Box* container = nullptr;
@@ -153,6 +157,9 @@ private:
     std::string initialFocusChild_;
 
     void initPanelBindings();
+    void loadPanel(int panelIdx, const std::string& dir, const std::string& focusChild);
+    void applyListing(int panelIdx, const std::string& dir, std::vector<util::FileItem> items,
+                      bool isArchive, const std::string& focusChild);
     void updateSelectionBar(int panelIdx);
     void updateSpaceInfo(int panelIdx);
     void updateActivePanelVisuals();
