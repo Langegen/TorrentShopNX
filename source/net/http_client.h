@@ -97,8 +97,6 @@ private:
                          const std::string& body,
                          const std::vector<std::string>& extra_headers);
 
-    bool parseUrl(const std::string& url, std::string& host, std::string& path, int& port);
-
     /// Построить Range-заголовок
     std::string buildRangeHeader(uint64_t offset, uint64_t length) const;
 
