@@ -101,19 +101,28 @@ brls::View* ScreenshotViewer::createContentView() {
     topBar->setAlignItems(brls::AlignItems::CENTER);
     topBar->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     topBar->setPadding(10.0f, 24.0f, 10.0f, 24.0f);
-    topBar->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
+    // No full-width strip: only the counter and the close button sit over
+    // the screenshot, each on its own small backing so they stay readable.
+
+    auto* counterPill = new brls::Box();
+    counterPill->setAxis(brls::Axis::ROW);
+    counterPill->setAlignItems(brls::AlignItems::CENTER);
+    counterPill->setPadding(6.0f, 14.0f, 6.0f, 14.0f);
+    counterPill->setCornerRadius(14.0f);
+    counterPill->setBackgroundColor(nvgRGBA(0, 0, 0, 120));
 
     counterLabel_ = new brls::Label();
     counterLabel_->setText(std::to_string(currentIndex_ + 1) + " / " + std::to_string(urls_.size()));
     counterLabel_->setFontSize(16.0f);
     counterLabel_->setTextColor(nvgRGB(240, 240, 240));
-    topBar->addView(counterLabel_);
+    counterPill->addView(counterLabel_);
+    topBar->addView(counterPill);
 
     auto* closeBtn = new brls::Box();
     closeBtn->setWidth(42.0f);
     closeBtn->setHeight(42.0f);
     closeBtn->setCornerRadius(21.0f);
-    closeBtn->setBackgroundColor(nvgRGBA(255, 255, 255, 30));
+    closeBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 150));
     closeBtn->setJustifyContent(brls::JustifyContent::CENTER);
     closeBtn->setAlignItems(brls::AlignItems::CENTER);
     closeBtn->setFocusable(false); // Touch-only, don't steal D-pad focus from root
