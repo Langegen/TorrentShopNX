@@ -26,6 +26,10 @@ struct ImageTask {
     int row = -1;
     int col = -1;
     int priorityOverride = 0;
+    // Detail views (game card cover, screenshots) are drawn larger than a
+    // catalog card: keep the picture at its own size instead of the 160x245
+    // thumbnail. Uses its own memory-cache key and disk-cache file.
+    bool fullSize = false;
     int retryCount = 0;
     // When the image was first requested, for the [perf] load-latency metric.
     std::chrono::steady_clock::time_point enqueuedAt{};
@@ -68,7 +72,8 @@ public:
                  const std::string& fallbackUrl = "",
                  int row = -1,
                  int col = -1,
-                 int priorityOverride = 0);
+                 int priorityOverride = 0,
+                 bool fullSize = false);
 
 private:
     ImageDownloader() = default;
@@ -93,7 +98,8 @@ private:
                          const std::string& fallbackUrl,
                          int row,
                          int col,
-                         int priorityOverride);
+                         int priorityOverride,
+                         bool fullSize);
 
     struct HostCooldownInfo {
         std::chrono::steady_clock::time_point until;

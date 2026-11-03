@@ -178,7 +178,7 @@ void GameDetailView::onContentAvailable() {
     alive_ = std::make_shared<bool>(true);
     // Fill text and images
     title->setText(cleanTitle(game_.title));
-    setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 2000000);
+    setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 2000000, true);
     
     // Characteristics: caption above value, two per row. Fields without a
     // value are left out instead of showing "Unknown".
@@ -449,7 +449,7 @@ void GameDetailView::onContentAvailable() {
                 return true;
             }, true, true, brls::SOUND_NONE);
 
-            setImageFromHTTPS(scrImg, scrUrl, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 1900000 - static_cast<int>(i) * 10);
+            setImageFromHTTPS(scrImg, scrUrl, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 1900000 - static_cast<int>(i) * 10, true);
             screenshotsBox->addView(scrImg);
             if (!firstScr) {
                 firstScr = scrImg;

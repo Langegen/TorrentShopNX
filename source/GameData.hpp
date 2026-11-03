@@ -1754,7 +1754,7 @@ inline bool isHomebrewPort(const Game& g) {
 }
 
 // Asynchronously download and cache images from URLs, showing placeholder during download
-inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/cover_blank.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0) {
+inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/cover_blank.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0, bool fullSize = false) {
 #ifndef __SWITCH__
     std::string actualPlaceholder = placeholder;
     if (actualPlaceholder.rfind("romfs:/", 0) == 0) {
@@ -1777,7 +1777,8 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     }
     std::string fileName = safeName + ".png";
-    std::string cacheKey = "memory_cache:/" + fileName;
+    // Full-size and thumbnail versions of one URL must not share a texture.
+    std::string cacheKey = std::string(fullSize ? "memory_cache:/full_" : "memory_cache:/") + fileName;
 
     std::string effectiveFallback = fallbackUrl;
     if (effectiveFallback.empty()) {
@@ -1797,7 +1798,7 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
         }
     }
 
-    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, actualPlaceholder, bypassCache, effectiveFallback, row, col, priorityOverride);
+    net::ImageDownloader::instance().enqueue(img, normUrl, cacheKey, token, actualPlaceholder, bypassCache, effectiveFallback, row, col, priorityOverride, fullSize);
 }
 
 #include <sstream>

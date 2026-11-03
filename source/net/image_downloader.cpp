@@ -35,7 +35,7 @@ static uint64_t msSince(std::chrono::steady_clock::time_point t0) {
 
 namespace {
 
-std::string getThumbnailCachePath(const std::string& url) {
+std::string getThumbnailCachePath(const std::string& url, bool fullSize) {
     uint64_t hash = 14695981039346656037ULL;
     for (unsigned char c : url) {
         hash ^= static_cast<uint64_t>(c);
@@ -44,7 +44,7 @@ std::string getThumbnailCachePath(const std::string& url) {
     char hex[17];
     std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(hash));
 
-    return std::string(TSNX_CACHE_THUMBNAILS) + "/" + std::string(hex) + ".jpg";
+    return std::string(TSNX_CACHE_THUMBNAILS) + "/" + std::string(hex) + (fullSize ? "_full.jpg" : ".jpg");
 }
 
 bool readWholeFileLocal(const std::string& path, std::string& out) {
@@ -315,7 +315,8 @@ void ImageDownloader::enqueue(brls::Image* img,
                                const std::string& fallbackUrl,
                                int row,
                                int col,
-                               int priorityOverride) {
+                               int priorityOverride,
+                               bool fullSize) {
     if (url.empty() || !img) {
         if (img) img->setImageFromFile(placeholder);
         return;
@@ -339,7 +340,7 @@ void ImageDownloader::enqueue(brls::Image* img,
         img->setImageFromFile(placeholder);
     }
 
-    enqueueInternal(img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride);
+    enqueueInternal(img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride, fullSize);
 }
 
 void ImageDownloader::enqueueInternal(brls::Image* img,
@@ -351,7 +352,8 @@ void ImageDownloader::enqueueInternal(brls::Image* img,
                                        const std::string& fallbackUrl,
                                        int row,
                                        int col,
-                                       int priorityOverride) {
+                                       int priorityOverride,
+                                       bool fullSize) {
     // Lazy init if workers were not explicitly started
     if (!running_.load()) {
         init(2);
@@ -370,6 +372,7 @@ void ImageDownloader::enqueueInternal(brls::Image* img,
             }
         }
         ImageTask newTask{img, url, cacheKey, token, placeholder, bypassCache, fallbackUrl, row, col, priorityOverride};
+        newTask.fullSize = fullSize;
         newTask.enqueuedAt = std::chrono::steady_clock::now();
         const int focusRow = currentFocusedRow_.load(std::memory_order_relaxed);
         const int focusCol = currentFocusedCol_.load(std::memory_order_relaxed);
@@ -488,7 +491,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
     if (task.token && !*task.token) return;
 
     bool cacheEnabled = config::ConfigManager::instance().getCacheCoverThumbnails() && !task.bypassCache;
-    std::string thumbPath = task.url.empty() ? "" : getThumbnailCachePath(task.url);
+    std::string thumbPath = task.url.empty() ? "" : getThumbnailCachePath(task.url, task.fullSize);
     if (cacheEnabled && !thumbPath.empty()) {
         std::string cachedBody;
         if (readWholeFileLocal(thumbPath, cachedBody) && !cachedBody.empty()) {
@@ -557,7 +560,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
         std::string fbHost = extractHost(task.fallbackUrl);
         if (!task.fallbackUrl.empty() && fbHost != host && !isHostInCooldown(fbHost)) {
             if (task.token && !*task.token) return;
-            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride, task.fullSize);
         } else if (!task.placeholder.empty()) {
             brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
                 if (g_appExiting.load()) return;
@@ -617,8 +620,11 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                     activeH = cropH;
                 }
 
-                const int maxW = 160;
-                const int maxH = 245;
+                // Catalog cards draw covers at about 160x245. Detail views keep
+                // the picture as is, capped only so a huge upload can't eat
+                // the GPU memory.
+                const int maxW = task.fullSize ? 1280 : 160;
+                const int maxH = task.fullSize ? 1280 : 245;
                 float scale = std::min(static_cast<float>(maxW) / static_cast<float>(activeW),
                                        static_cast<float>(maxH) / static_cast<float>(activeH));
                 int dstW = (scale < 1.0f) ? std::max(1, static_cast<int>(activeW * scale + 0.5f)) : activeW;
@@ -635,7 +641,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 }
 
                 std::vector<uint8_t> thumbJpeg;
-                stbi_write_jpg_to_func(stbiWriteToVector, &thumbJpeg, dstW, dstH, 3, pixelData, 80);
+                stbi_write_jpg_to_func(stbiWriteToVector, &thumbJpeg, dstW, dstH, 3, pixelData, task.fullSize ? 90 : 80);
                 stbi_image_free(decoded);
 
                 if (!thumbJpeg.empty()) {
@@ -745,7 +751,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 if (task.token && !*task.token) return;
                 util::logLine("ImageDownloader: switching to fallback host " + fbHost0 + " for " + task.url);
                 enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder,
-                                task.bypassCache, "", task.row, task.col, task.priorityOverride);
+                                task.bypassCache, "", task.row, task.col, task.priorityOverride, task.fullSize);
                 return;
             }
         }
@@ -772,7 +778,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                               !isHostInCooldown(fbHost);
         if (canTryFallback) {
             if (task.token && !*task.token) return;
-            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride);
+            enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride, task.fullSize);
         } else if (!task.placeholder.empty()) {
             brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
                 if (g_appExiting.load()) return;
