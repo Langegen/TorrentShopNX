@@ -931,8 +931,17 @@ void HybridNspInstaller::installerThreadFunc() {
             }
 
             if (!current_entry) {
-                ++processed;
-                ++stream_pos;
+                // Padding between entries (XCI partitions have large gaps):
+                // jump to the next entry or the end of the chunk at once. It
+                // used to advance one byte per loop, each with a full scan.
+                uint64_t next_start = UINT64_MAX;
+                for (const auto& e : entries) {
+                    if (e.offset > stream_pos && e.offset < next_start) next_start = e.offset;
+                }
+                uint64_t skip = static_cast<uint64_t>(read - processed);
+                if (next_start != UINT64_MAX && next_start - stream_pos < skip) skip = next_start - stream_pos;
+                processed  += static_cast<size_t>(skip);
+                stream_pos += skip;
                 continue;
             }
 
@@ -1158,8 +1167,10 @@ void HybridNspInstaller::installerThreadFunc() {
                                               chunk_buf.data() + processed + to_process);
                     }
 
-                    util::logLine("installer: [NcaWrite] start content=" + current_entry->name + 
-                                  " offset=" + std::to_string(offset_in_file) + " size=" + std::to_string(to_process));
+                    if (offset_in_file == 0) {   // once per NCA, not per chunk
+                        util::logLine("installer: [NcaWrite] start content=" + current_entry->name +
+                                      " size=" + std::to_string(current_entry->size));
+                    }
                     if (!ncm_.writePlaceHolder(current_entry->content_id,
                                                 offset_in_file,
                                                 chunk_buf.data() + processed,
@@ -1168,14 +1179,10 @@ void HybridNspInstaller::installerThreadFunc() {
                         ring_buffer_.setEof();
                         goto cleanup_sha;
                     }
-                    util::logLine("installer: [NcaWrite] success");
-
                     if (config_.verify_sha256 && hashing_active) {
-                        util::logLine("installer: [SHA256] update start");
                         sha256ContextUpdate(&sha_ctx,
                                             chunk_buf.data() + processed,
                                             to_process);
-                        util::logLine("installer: [SHA256] update success");
                     }
 
                     if (offset_in_file + to_process >= current_entry->size) {

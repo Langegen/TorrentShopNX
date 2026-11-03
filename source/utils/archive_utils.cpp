@@ -21,6 +21,10 @@
 
 namespace util {
 
+// Read block for local archives: the SD card is much faster in 1 MB reads
+// than in 64 KB ones.
+static constexpr size_t kArchiveReadBlock = 1024 * 1024;
+
 // stdio buffer per extracted file (one per extracting thread).
 static constexpr size_t kExtractWriteBuffer = 4 * 1024 * 1024;
 
@@ -181,7 +185,7 @@ bool listArchiveFolder(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    int r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     if (r != ARCHIVE_OK) {
         const char* err = archive_error_string(a);
         outError = err ? err : "Failed to open archive file";
@@ -348,7 +352,7 @@ bool getArchiveTotals(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    int r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     if (r != ARCHIVE_OK) {
         archive_read_free(a);
         return false;
@@ -395,7 +399,7 @@ bool iterateArchiveEntries(
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
 
-    int r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+    int r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     if (r != ARCHIVE_OK) {
         archive_read_free(a);
         return false;
@@ -615,7 +619,7 @@ static bool extractLibarchiveInternal(
         archive_read_set_close_callback(a, streamArchiveClose);
         r = archive_read_open1(a);
     } else {
-        r = archive_read_open_filename(a, archivePath.c_str(), 65536);
+        r = archive_read_open_filename(a, archivePath.c_str(), kArchiveReadBlock);
     }
 
     if (r != ARCHIVE_OK) {

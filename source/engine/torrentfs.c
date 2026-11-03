@@ -2704,24 +2704,24 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             // We only serve pieces that are verified AND resident in the RAM
             // window (status under t->lock, buffer under cache_lock: nesting
             // t->lock -> cache_lock is safe, no path takes them the other way).
-            uint8_t blk[BLOCK_LEN];
             mutexLock(&t->lock);
             bool ok = t->status[r_idx] == PIECE_DONE;
             mutexUnlock(&t->lock);
+            // The block goes straight from the RAM window into the message
+            // (it used to be copied into a separate 16 KB stack buffer first).
+            uint8_t msg[8 + BLOCK_LEN];
             uint8_t *src = NULL;
             if (ok) {
                 mutexLock(&t->cache_lock);
                 if (t->ram_piece) src = t->ram_piece[r_idx];
-                if (src) memcpy(blk, src + r_begin, r_len);
+                if (src) memcpy(msg + 8, src + r_begin, r_len);
                 mutexUnlock(&t->cache_lock);
             }
             if (!src) break;
             {
-                uint8_t msg[8 + BLOCK_LEN];
                 uint32_t v;
                 v = htonl(r_idx);   memcpy(msg, &v, 4);
                 v = htonl(r_begin); memcpy(msg + 4, &v, 4);
-                memcpy(msg + 8, blk, r_len);
                 if (peer_nb_queue(&s->nb, MSG_PIECE, msg, 8 + r_len) == 0) {
                     t->st_up_blocks++;
                     t->st_up_bytes += r_len;
@@ -2749,11 +2749,16 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                 memcpy(s->nb.bitfield, pl, plen);
                 s->have_in_file = count_have_in_file(t, s);
                 t->st_bf_ok++;
+                // One pass over the bytes: whole bytes must be 0xFF for a
+                // seed, only the last partial byte needs per-bit checks.
                 bool empty = true;
                 bool full = true;
-                for (size_t b = 0; b < plen; b++)
+                const size_t whole = (size_t)(t->meta.piece_count / 8);
+                for (size_t b = 0; b < plen; b++) {
                     if (pl[b]) empty = false;
-                for (int64_t p = 0; p < t->meta.piece_count && full; p++)
+                    if (b < whole && pl[b] != 0xFF) full = false;
+                }
+                for (int64_t p = (int64_t)whole * 8; p < t->meta.piece_count && full; p++)
                     if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, p))
                         full = false;
                 engine_log(ENGINE_LOG_DEBUG,
@@ -4358,7 +4363,8 @@ void torrentfs_close(torrentfs *tfs) {
     mutexUnlock(&tfs->inc_q.lock);
     for (int i = 0; i < CACHE_MAX_CHUNKS; i++)
         if (tfs->chunks[i] >= 0) { close(tfs->chunks[i]); tfs->chunks[i] = -1; }
-    cache_delete_all(tfs);  // per-playback scratch, not a library
+    if (!tfs->ram_mode)     // RAM mode never creates cache files
+        cache_delete_all(tfs);  // per-playback scratch, not a library
     for (int i = 0; i < AQ_MAX; i++) {
         free(tfs->aq[i].buf);
         free(tfs->aq[i].have);
