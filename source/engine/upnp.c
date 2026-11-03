@@ -41,7 +41,10 @@ typedef struct {
 static size_t curl_write_cb(void *ptr, size_t size, size_t nmemb, void *ud) {
     membuf *m = ud;
     size_t n = size * nmemb;
-    if (n > 512 * 1024) return 0;   // descriptions are a few KB at most
+    // Descriptions are a few KB at most. The cap covers the whole reply: any
+    // device on the LAN can answer SSDP, and a per-chunk cap let it make us
+    // grow this buffer without limit.
+    if (n > 512 * 1024 || m->len + n > 512 * 1024) return 0;
     char *p = realloc(m->data, m->len + n + 1);
     if (!p) return 0;
     m->data = p;

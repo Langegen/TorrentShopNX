@@ -820,7 +820,7 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
             mse_peer_decrypt(&p->mse, p->rx + old_len, (size_t)n);
         } else if (p->mse_want) {
             // Drive the MSE handshake over whatever has accumulated.
-            if (n > 0)
+            if (n >= 8)   // the dump shows 8 bytes: never read past what arrived
                 engine_log(ENGINE_LOG_DEBUG,
                            "[mse] rx %d bytes: %02x %02x %02x %02x %02x %02x %02x %02x",
                            (int)n, p->rx[old_len], p->rx[old_len + 1],

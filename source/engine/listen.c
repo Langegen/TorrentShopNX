@@ -28,44 +28,17 @@ static int            s_port = 0;      // last successfully bound port (0 = none
 static int            s_req_port = 0;  // port requested at torrent_listener_start
 static listen_route_fn s_find = NULL;
 
-// Read exactly 68 bytes of the peer's handshake, with a deadline. Returns 0 on
-// success, -1 on error/timeout. The peer's first byte must be 19 (the BT
-// preamble length) -- anything else is MSE/PE (unsupported on the responder
-// side for now) or garbage, and the connection is dropped.
-static int read_handshake(int fd, uint8_t hs[68]) {
-    size_t got = 0;
-    uint64_t deadline = armGetSystemTick() +
-                        (uint64_t)INCOMING_HS_TIMEOUT_SECS *
-                            armGetSystemTickFreq();
+// Incoming connections whose 68-byte handshake is still arriving. They are
+// read side by side in the accept loop: a single blocking read used to let one
+// silent connection hold up every other incoming peer for its whole timeout.
+#define MAX_PENDING_HS 16
 
-    while (got < 68) {
-        struct pollfd pfd;
-        pfd.fd = fd;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-        int rc = poll(&pfd, 1, 250);
-        if (rc < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (rc == 0) {
-            if (armGetSystemTick() > deadline) return -1;
-            continue;
-        }
-        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) return -1;
-
-        size_t want = 68 - got;
-        ssize_t n = recv(fd, hs + got, want, 0);
-        if (n <= 0) return -1;
-        if (got == 0 && hs[0] != 19) {
-            engine_log(ENGINE_LOG_DEBUG,
-                       "[listen] drop conn: first byte %d (MSE or garbage)", hs[0]);
-            return -1;
-        }
-        got += (size_t)n;
-    }
-    return 0;
-}
+typedef struct {
+    int fd;
+    size_t got;
+    uint64_t deadline;
+    uint8_t hs[68];
+} pending_hs;
 
 // Sleep n seconds in 1 s chunks: shutdown stays fast (s_stop checked each
 // second) and the engine watchdog keeps seeing this thread as alive.
@@ -146,19 +119,75 @@ static void listener_main(void *arg) {
         engine_log(ENGINE_LOG_INFO, "[listen] accept thread start fd=%d",
                    s_listen_fd);
 
-        while (!s_stop) {
+        pending_hs pend[MAX_PENDING_HS];
+        int npend = 0;
+        const uint64_t hs_ticks = (uint64_t)INCOMING_HS_TIMEOUT_SECS * armGetSystemTickFreq();
+        bool listen_failed = false;
+
+        while (!s_stop && !listen_failed) {
             tsnx_engine_wd_tick(2);
-            struct pollfd pfd;
-            pfd.fd = s_listen_fd;
-            pfd.events = POLLIN;
-            pfd.revents = 0;
-            int rc = poll(&pfd, 1, 250);
+            struct pollfd pfds[1 + MAX_PENDING_HS];
+            pfds[0].fd = s_listen_fd;
+            // With every slot busy, leave new connections in the backlog.
+            pfds[0].events = npend < MAX_PENDING_HS ? POLLIN : 0;
+            pfds[0].revents = 0;
+            for (int i = 0; i < npend; i++) {
+                pfds[1 + i].fd = pend[i].fd;
+                pfds[1 + i].events = POLLIN;
+                pfds[1 + i].revents = 0;
+            }
+            int rc = poll(pfds, (nfds_t)(1 + npend), 250);
             if (rc < 0) {
                 if (errno == EINTR) continue;
                 break;
             }
+            const uint64_t now = armGetSystemTick();
+
+            // Pending handshakes, backwards so a finished slot can be filled
+            // with the last one (already serviced in this pass).
+            for (int i = npend - 1; i >= 0; i--) {
+                pending_hs *ph = &pend[i];
+                short re = pfds[1 + i].revents;
+                bool drop = false, done = false;
+                if (re & (POLLERR | POLLHUP | POLLNVAL)) {
+                    drop = true;
+                } else if (re & POLLIN) {
+                    ssize_t n = recv(ph->fd, ph->hs + ph->got, 68 - ph->got, 0);
+                    if (n <= 0) {
+                        if (!(n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)))
+                            drop = true;
+                    } else if (ph->got == 0 && ph->hs[0] != 19) {
+                        engine_log(ENGINE_LOG_DEBUG,
+                                   "[listen] drop conn: first byte %d (MSE or garbage)", ph->hs[0]);
+                        drop = true;
+                    } else {
+                        ph->got += (size_t)n;
+                        done = ph->got == 68;
+                    }
+                }
+                if (!drop && !done && now > ph->deadline) {
+                    engine_log(ENGINE_LOG_DEBUG, "[listen] handshake read failed");
+                    drop = true;
+                }
+                if (done) {
+                    const uint8_t *info_hash = ph->hs + 28;
+                    if (!s_find || !s_find(info_hash, ph->fd, ph->hs)) {
+                        engine_log(ENGINE_LOG_DEBUG,
+                                   "[listen] no torrent for this info_hash");
+                        close(ph->fd);
+                    }
+                } else if (drop) {
+                    close(ph->fd);
+                }
+                if (done || drop) pend[i] = pend[--npend];
+            }
+
             if (rc == 0) continue;
-            if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) break;
+            if (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                listen_failed = true;
+                break;
+            }
+            if (!(pfds[0].revents & POLLIN)) continue;
 
             int fd = accept(s_listen_fd, NULL, NULL);
             if (fd < 0) {
@@ -172,21 +201,13 @@ static void listener_main(void *arg) {
             int fl = fcntl(fd, F_GETFL, 0);
             if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
 
-            uint8_t hs[68];
-            if (read_handshake(fd, hs) != 0) {
-                engine_log(ENGINE_LOG_DEBUG, "[listen] handshake read failed");
-                close(fd);
-                continue;
-            }
-
-            const uint8_t *info_hash = hs + 28;
-            if (!s_find || !s_find(info_hash, fd, hs)) {
-                engine_log(ENGINE_LOG_DEBUG,
-                           "[listen] no torrent for this info_hash");
-                close(fd);
-                continue;
-            }
+            pend[npend].fd = fd;
+            pend[npend].got = 0;
+            pend[npend].deadline = now + hs_ticks;
+            npend++;
         }
+
+        for (int i = 0; i < npend; i++) close(pend[i].fd);
 
         close(s_listen_fd);
         s_listen_fd = -1;
