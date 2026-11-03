@@ -13,8 +13,10 @@ class EmptyState : public brls::Box {
 public:
     EmptyState();
 
-    void show(DashboardIcon::Kind kind, const std::string& title, const std::string& sub,
-              const std::string& actionLabel = "", std::function<void()> action = nullptr);
+    // Fills the block; visibility stays with the caller. Not named show():
+    // that would hide brls::View::show (animated appearance).
+    void setContent(DashboardIcon::Kind kind, const std::string& title, const std::string& sub,
+                    const std::string& actionLabel = "", std::function<void()> action = nullptr);
 
     // What should get focus when the list it replaces disappears: the action
     // button, or the block itself when there is none, so the screen's B and

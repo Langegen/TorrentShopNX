@@ -421,8 +421,8 @@ bool RemoteDataSource::resolveFileSize() {
         }
 
         if (res == CURLE_OK) {
-            double cl = 0;
-            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+            curl_off_t cl = 0;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
             if (cl > 0) {
                 file_size_ = static_cast<uint64_t>(cl);
                 return true;

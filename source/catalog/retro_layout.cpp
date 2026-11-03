@@ -447,7 +447,7 @@ void fixCueSheets(const fs::path& dir, const PathNaming& naming) {
 
 std::string msf(long lba) {
     if (lba < 0) lba = 0;
-    char buf[16];
+    char buf[32];   // minutes are not bounded: a huge LBA must not truncate
     std::snprintf(buf, sizeof(buf), "%02ld:%02ld:%02ld", lba / 75 / 60, (lba / 75) % 60, lba % 75);
     return buf;
 }

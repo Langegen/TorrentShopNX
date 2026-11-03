@@ -290,9 +290,9 @@ void CatalogView::filterCatalog() {
         const bool empty = filteredGames_.empty();
         if (empty && !emptyState_) {
             emptyState_ = new EmptyState();
-            emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
-                              "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
-                              [this]() { resetFilters(); });
+            emptyState_->setContent(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                                    "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                                    [this]() { resetFilters(); });
             emptyHolder->addView(emptyState_);
         }
         emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);

@@ -43,6 +43,7 @@ static const char* logPath() {
     return override_path.c_str();
 }
 
+#ifdef __SWITCH__
 static bool pathExists(const std::string& path) {
     struct stat st;
     return stat(path.c_str(), &st) == 0;
@@ -73,6 +74,7 @@ static void ensureDirRecursive(const std::string& path) {
         pos = next + 1;
     }
 }
+#endif
 
 static void startAsyncWriter();
 

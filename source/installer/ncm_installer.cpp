@@ -48,6 +48,7 @@ void perfWrite(u64 dt, size_t bytes) {
 
 namespace installer {
 
+#ifdef __SWITCH__
 static bool endsWithInsensitive(const std::string& value, const std::string& suffix) {
     if (value.size() < suffix.size()) return false;
     auto from = value.end() - static_cast<std::ptrdiff_t>(suffix.size());
@@ -58,6 +59,7 @@ static bool endsWithInsensitive(const std::string& value, const std::string& suf
     }
     return true;
 }
+#endif
 
 NcmInstaller::NcmInstaller() = default;
 

@@ -1341,10 +1341,10 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     state_ = InstallState::RegisteringMeta;
     util::logLine("hybrid: phase 5 - registering CNMT metadata");
 
+#ifdef __SWITCH__
     CnmtData cnmt;
     bool cnmt_ready = false;
 
-#ifdef __SWITCH__
     // =========================================================================
     // 1) Основной путь: читаем CNMT NCA из установленного контента через
     //    FsFileSystemType_ContentMeta. Работает всегда: NCA уже финализирован
@@ -1410,15 +1410,10 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     }
 
     if (!cnmt_ready) {
-#ifdef __SWITCH__
         // Without the CNMT the title is never registered: the NCAs would sit
         // on storage and the game would not show up, so this is a failure.
         setError("CNMT parse failed, title not registered");
         return false;
-#else
-        util::logLine("hybrid: warning - CNMT parse failed, metadata registration skipped");
-        return true;
-#endif
     }
     cnmt_data_ = cnmt;
 

@@ -524,9 +524,9 @@ void CollectionGamesView::showEmpty(bool failed) {
     emptyHolder->clearViews();
     auto* state = new EmptyState();
     if (failed) {
-        state->show(DashboardIcon::Kind::CloudError, "app/empty/load_failed_title"_i18n, "app/empty/load_failed_sub"_i18n);
+        state->setContent(DashboardIcon::Kind::CloudError, "app/empty/load_failed_title"_i18n, "app/empty/load_failed_sub"_i18n);
     } else {
-        state->show(DashboardIcon::Kind::GameCards, "app/empty/collection_title"_i18n, "app/empty/collection_sub"_i18n);
+        state->setContent(DashboardIcon::Kind::GameCards, "app/empty/collection_title"_i18n, "app/empty/collection_sub"_i18n);
     }
     emptyHolder->addView(state);
     emptyHolder->setVisibility(brls::Visibility::VISIBLE);

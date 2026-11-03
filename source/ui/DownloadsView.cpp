@@ -352,11 +352,11 @@ void DownloadsView::setEmpty(bool empty) {
     if (!emptyHolder || !recycler) return;
     if (empty && !emptyState_) {
         emptyState_ = new EmptyState();
-        emptyState_->show(DashboardIcon::Kind::Download,
-                          "app/empty/downloads_title"_i18n, "app/empty/downloads_sub"_i18n,
-                          "app/empty/open_catalog"_i18n, []() {
-                              brls::Application::pushActivity(new CollectionsView());
-                          });
+        emptyState_->setContent(DashboardIcon::Kind::Download,
+                                "app/empty/downloads_title"_i18n, "app/empty/downloads_sub"_i18n,
+                                "app/empty/open_catalog"_i18n, []() {
+                                    brls::Application::pushActivity(new CollectionsView());
+                                });
         emptyHolder->addView(emptyState_);
     }
     const bool wasEmpty = emptyHolder->getVisibility() == brls::Visibility::VISIBLE;

@@ -116,13 +116,13 @@ void FavoritesView::filterFavorites() {
                 emptyHolder->addView(emptyState_);
             }
             if (allFavorites_.empty()) {
-                emptyState_->show(DashboardIcon::Kind::Star, "app/empty/favorites_title"_i18n,
-                                  brls::getStr("app/empty/favorites_sub",
-                                               brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_Y)));
+                emptyState_->setContent(DashboardIcon::Kind::Star, "app/empty/favorites_title"_i18n,
+                                        brls::getStr("app/empty/favorites_sub",
+                                                     brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_Y)));
             } else {
-                emptyState_->show(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
-                                  "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
-                                  [this]() { resetFilters(); });
+                emptyState_->setContent(DashboardIcon::Kind::Search, "app/empty/search_title"_i18n,
+                                        "app/empty/search_sub"_i18n, "app/empty/reset_filters"_i18n,
+                                        [this]() { resetFilters(); });
             }
         }
         emptyHolder->setVisibility(empty ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
