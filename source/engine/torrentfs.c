@@ -317,9 +317,38 @@ typedef struct {
     uint8_t *req_by;
     int nblocks;
     int have_cnt;
+    // Blocks with no data and no outstanding request. Every change of req[]
+    // goes through aq_req_inc / aq_req_dec / aq_req_set to keep it exact.
+    int unreq_cnt;
+    // Lower bound of when an outstanding request of this piece can first be
+    // "stalled" (older than the background steal timer). Until then, with
+    // unreq_cnt == 0, a background pass over the piece cannot pick anything.
+    u64 stall_check_at;
     int next_req;       // scan cursor for the next block to request
     u64 last_deliver;   // last time a block of this piece arrived (diagnostics)
 } aq_entry;
+
+// The only writers of aq_entry.req[]: they keep unreq_cnt exact. A count of
+// 255 is sticky (as before), so it is never decremented.
+static inline void aq_req_inc(aq_entry *a, int b) {
+    if (a->req[b] == 0 && !a->have[b]) a->unreq_cnt--;
+    if (a->req[b] < 255) a->req[b]++;
+}
+
+static inline void aq_req_dec(aq_entry *a, int b) {
+    if (a->req[b] > 0 && a->req[b] < 255) {
+        a->req[b]--;
+        if (a->req[b] == 0 && !a->have[b]) a->unreq_cnt++;
+    }
+}
+
+static inline void aq_req_set(aq_entry *a, int b, uint8_t v) {
+    if (!a->have[b]) {
+        if (a->req[b] == 0 && v != 0) a->unreq_cnt--;
+        else if (a->req[b] != 0 && v == 0) a->unreq_cnt++;
+    }
+    a->req[b] = v;
+}
 
 typedef struct {
     bool active;
@@ -987,6 +1016,8 @@ static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
         c->last_deliver = armGetSystemTick();
         c->nblocks  =
             (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
+        c->unreq_cnt = c->nblocks;
+        c->stall_check_at = 0;
         memset(c->have, 0, (size_t)t->blocks_per_piece);
         memset(c->req, 0, (size_t)t->blocks_per_piece);
         memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
@@ -1890,7 +1921,7 @@ static void sess_drop_requests(torrentfs *t, sess *s) {
         int eb = s->req_block[i];
         aq_entry *ea = aq_find(t, ep);
         if (ea && eb >= 0 && eb < ea->nblocks) {
-            if (ea->req[eb] > 0 && ea->req[eb] < 255) ea->req[eb]--;
+            aq_req_dec(ea, eb);
             rb_clr(ea, eb, sid);
         }
     }
@@ -2153,10 +2184,21 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     u64 hedge_timeout_ticks = (is_endgame || (is_critical && remaining_blocks <= tail_threshold))
                               ? (t->freq / 2) : ((u64)DUP_REQ_SECS * t->freq);
 
+    // Background piece with every missing block already on order: the pass
+    // below can only pick a block whose request is older than the steal
+    // timer (or, on a head piece, one held only by slow sessions). Until the
+    // oldest request can be that old, skip the walk over up to 1024 blocks:
+    // it ran for every active piece on every request of every session.
+    const u64 steal_ticks = (u64)2500 * (t->freq / 1000);
+    const bool background = (max_dup <= 1) && !(is_head && !s->slow);
+    if (background && a->unreq_cnt <= 0 && now < a->stall_check_at) return -1;
+    u64 oldest_req = now;   // requests made after this pass are newer still
+
     for (int k = 0; k < a->nblocks; k++) {
         int b = a->next_req;
         a->next_req = (b + 1) % a->nblocks;
         if (a->have[b]) continue;
+        if (a->req[b] && a->req_ts[b] < oldest_req) oldest_req = a->req_ts[b];
         if (rb_has(a, b, (int)(s - t->S))) continue;   // already on order here
         uint8_t r = a->req[b];
         if (r == 0) return b; // Fresh unrequested block: always grab
@@ -2170,11 +2212,11 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
             // For background pieces, steal/hedge if the existing request has
             // stalled > 2.5s and its holder is not simply working through
             // its queue.
-            if (now - a->req_ts[b] > (u64)2500 * (t->freq / 1000) &&
+            if (now - a->req_ts[b] > steal_ticks &&
                 !holder_on_schedule(t, a, b, now)) {
                 uint8_t actual_r = 0;
                 int healthy = active_healthy_reqs(t, a, b, now, &actual_r);
-                a->req[b] = actual_r;
+                aq_req_set(a, b, actual_r);
                 if (actual_r < 2 || healthy == 0)
                     return b;
             }
@@ -2194,11 +2236,14 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
         if (now - a->req_ts[b] > (u64)2000 * (t->freq / 1000)) {
             uint8_t actual_r = 0;
             int healthy = active_healthy_reqs(t, a, b, now, &actual_r);
-            a->req[b] = actual_r;
+            aq_req_set(a, b, actual_r);
             if (actual_r < max_dup || healthy < 2)
                 return b;
         }
     }
+    // A full pass found nothing: no request is older than oldest_req, so
+    // none can pass the steal timer before oldest_req + steal_ticks.
+    if (max_dup <= 1) a->stall_check_at = oldest_req + steal_ticks;
     return -1;
 }
 
@@ -2357,8 +2402,7 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
                 stale = true;
             } else if (s->req_time[i] > 0 && (now - s->req_time[i] > req_timeout_ticks)) {
                 // Individual block request timed out (> 4.0s): release lock on block
-                if (ea->req[eb] > 0 && ea->req[eb] < 255)
-                    ea->req[eb]--;
+                aq_req_dec(ea, eb);
                 rb_clr(ea, eb, sid);
                 send_cancel_one(t, s, ep, eb);
                 stale = true;
@@ -2395,7 +2439,7 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
         if (peer_nb_queue(&s->nb, MSG_REQUEST, pl, 12) != 0) break;
         aq_entry *a = aq_find(t, pi);
         if (a) {
-            if (a->req[b] < 255) a->req[b]++;
+            aq_req_inc(a, b);
             a->req_ts[b] = now;
             rb_set(a, b, sid);
         }
@@ -2863,7 +2907,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             aq_entry *a = aq_find(t, idx);
             if (!a || b >= a->nblocks || a->have[b]) {
                 if (a && b < a->nblocks) {
-                    if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+                    aq_req_dec(a, b);
                     t->st_dup_have += dlen;
                 } else {
                     t->st_dup_gone += dlen;
@@ -2881,8 +2925,9 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
             }
             // Release so the streaming reader's acquire load of have[] (RAM
             // mode partial reads) can never observe the flag before the data.
+            if (a->req[b] == 0) a->unreq_cnt--;   // it was counted as unrequested
             __atomic_store_n(&a->have[b], 1, __ATOMIC_RELEASE);
-            if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+            aq_req_dec(a, b);
             a->have_cnt++;
             // A non-strict reader streams partial pieces block by block.
             if ((int64_t)idx == t->read_blocked_piece && !t->strict_verify)
@@ -2911,7 +2956,7 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
                             send_cancel_one(t, other, (int)idx, b);
                             sent_cancel = true;
                         }
-                        if (a->req[b] > 0 && a->req[b] < 255) a->req[b]--;
+                        aq_req_dec(a, b);
                         other->req_piece[k] = other->req_piece[other->req_n - 1];
                         other->req_block[k] = other->req_block[other->req_n - 1];
                         other->req_time[k]  = other->req_time[other->req_n - 1];
@@ -4481,7 +4526,7 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
                 } else {
                     aq_entry *ea = aq_find(tfs, ep);
                     if (ea && eb >= 0 && eb < ea->nblocks) {
-                        if (ea->req[eb] > 0 && ea->req[eb] < 255) ea->req[eb]--;
+                        aq_req_dec(ea, eb);
                         rb_clr(ea, eb, i);
                     }
                 }
