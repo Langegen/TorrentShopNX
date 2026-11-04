@@ -144,6 +144,19 @@ inline VersionCmp compareRelease(const TitleVersion& release,
     return compareRelease(release.version, release.update, release.updateKnown, installedVersion, installedUpdate);
 }
 
+// A release that names only the update number (multi-game releases: the file
+// names carry [v196608], not "4.1.1") holds the same update as the console
+// when the numbers match, so its version is the installed one. Lets the game
+// manager show "4.1.1" instead of "update 3" for an up-to-date game.
+inline TitleVersion withInstalledVersion(TitleVersion release, const std::string& installedVersion,
+                                         uint32_t installedUpdate) {
+    if (!isPlausibleVersion(release.version) && (release.update != 0 || release.updateKnown) &&
+        release.update == installedUpdate && isPlausibleVersion(installedVersion)) {
+        release.version = installedVersion;
+    }
+    return release;
+}
+
 // Version of game `appId` in release `g` (a Game: `titles`, `version`,
 // `update_version`). A release can hold several games, each with its own
 // version; the release-wide `version` / `update_version` describe only one

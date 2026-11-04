@@ -93,6 +93,18 @@ int main() {
         check(compareRelease(vt, "1.0.1", 65536) == VersionCmp::Older, "title: base only in release, update installed -> older");
         check(!titleVersionOf(multi, 0x0100ABF008968000ULL).known(), "title: game not in the release -> unknown");
 
+        // Same update as installed: shown as the installed version, not "update 3"
+        TitleVersion same = withInstalledVersion(v2, "1.2", 196608);
+        check(same.version == "1.2" && compareRelease(same, "1.2", 196608) == VersionCmp::Same,
+              "installed: same update -> installed version string");
+        TitleVersion newer = withInstalledVersion(v2, "1.1", 131072);
+        check(newer.version.empty() && compareRelease(newer, "1.1", 131072) == VersionCmp::Newer,
+              "installed: newer update in release stays a number");
+        check(withInstalledVersion(vt, "1.0.0", 0).version == "1.0.0", "installed: base only on both sides");
+        check(withInstalledVersion(titleVersionOf(multi, 0x0100ABF008968000ULL), "1.0.0", 0).version.empty(),
+              "installed: unknown release is not filled in");
+        check(withInstalledVersion(v2, "", 196608).version.empty(), "installed: no installed version string");
+
         // Single game: release-wide version fills the gap
         Rel single{"1.0.0", 0, {{0x0100D9F01D474000ULL, 0, true, ""}}};
         TitleVersion vs = titleVersionOf(single, 0x0100D9F01D474000ULL);
