@@ -11,6 +11,9 @@ namespace util {
 void logInit();
 void logLine(const std::string& line);
 void logFlush();
+// Flushes, then copies log.txt as it is now to `dst` (for bug reports) without
+// racing the writer for the file.
+bool logCopyTo(const std::string& dst);
 void logClose();
 
 } // namespace util

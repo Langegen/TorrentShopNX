@@ -21,9 +21,9 @@
 #include <iterator>
 #include <vector>
 
-// Report server (tools/bug-report-worker). Empty hides "Send to the
-// developer"; set it after deploying the worker, e.g.
-// "https://tsnx-reports.<account>.workers.dev/v1/report".
+// Report server (tools/report-server). Empty hides "Send to the developer";
+// set it after deploying the server, e.g. "https://reports.example.com/v1/report"
+// (behind Caddy with an RSA certificate) or "http://<vps-ip>:8787/v1/report".
 #ifndef TSNX_REPORT_URL
 #define TSNX_REPORT_URL ""
 #endif
@@ -276,8 +276,6 @@ PrevSession previousSession() {
 BuildResult buildReport(const std::string& user_message) {
     BuildResult result;
     util::logLine("report: building, message_len=" + std::to_string(user_message.size()));
-    util::logFlush();
-    engine_log_flush();
 
     std::error_code ec;
     fs::remove_all(kStagingDir, ec);
@@ -286,15 +284,30 @@ BuildResult buildReport(const std::string& user_message) {
 
     const std::string staging = kStagingDir;
     std::vector<std::string> files;
+    // This launch's logs are copied by their own modules: the engine keeps
+    // engine.log open for the whole session and the console cannot open such
+    // a file a second time; log.txt is appended to in the background. The
+    // previous launch's logs are closed files.
     const std::string log = logPath();
     const std::string engine_log = TSNX_ENGINE_LOG_PATH;
-    const std::pair<std::string, const char*> logs[] = {
-        {log, "log.txt"},
+    const std::string log_dst = staging + "/log.txt";
+    if (util::logCopyTo(log_dst)) {
+        files.push_back(log_dst);
+    } else {
+        util::logLine("report: could not copy " + log);
+    }
+    const std::string engine_dst = staging + "/engine.log";
+    if (engine_log_copy_to(engine_dst.c_str()) == 0 ||
+        fs::copy_file(engine_log, engine_dst, fs::copy_options::overwrite_existing, ec)) {
+        files.push_back(engine_dst);   // the second branch: engine not started this launch
+    } else if (fs::exists(engine_log, ec)) {
+        util::logLine("report: could not copy " + engine_log);
+    }
+    const std::pair<std::string, const char*> prev_logs[] = {
         {prevPathOf(log), "log.prev.txt"},
-        {engine_log, "engine.log"},
         {prevPathOf(engine_log), "engine.prev.log"},
     };
-    for (const auto& [src, name] : logs) {
+    for (const auto& [src, name] : prev_logs) {
         if (!fs::exists(src, ec)) continue;
         const std::string dst = staging + "/" + name;
         if (fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec)) {

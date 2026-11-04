@@ -1,0 +1,23 @@
+[Unit]
+Description=TorrentShopNX bug report server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/tsnx-reports.env
+ExecStart=/usr/bin/python3 /opt/tsnx-reports/server.py
+Restart=on-failure
+RestartSec=5
+
+# Own throwaway user; reports live in /var/lib/tsnx-reports (STATE_DIRECTORY).
+DynamicUser=yes
+StateDirectory=tsnx-reports
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+
+[Install]
+WantedBy=multi-user.target

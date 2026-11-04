@@ -10,7 +10,7 @@
 //
 // Reports are kept in sdmc:/switch/TorrentShopNX/reports (the newest few).
 // Two ways to the developer:
-//   - uploadReport(): the report server (tools/bug-report-worker) posts the
+//   - uploadReport(): the report server (tools/report-server) posts the
 //     ZIP to the developer's Telegram chat, signed with the user's @username;
 //   - the user downloads the ZIP to a phone (QR code) and posts it to the
 //     bugs topic of the Telegram group from their own account.

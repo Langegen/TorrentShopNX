@@ -26,6 +26,10 @@ static const char* kLogPath = "sdmc:/switch/TorrentShopNX/log.txt";
 static const char* kLogPath = "log.txt";
 #endif
 static std::mutex g_log_mutex;
+// Held while log.txt is open: by every append and by logCopyTo(). On the
+// console a file that is open for writing cannot be opened a second time, so
+// a copy racing with an append would fail (or make the append fail).
+static std::mutex g_file_mutex;
 
 // For the first seconds after logInit() every line goes straight to the SD
 // card: if startup hangs or the process dies, the log still shows where.
@@ -143,6 +147,7 @@ AsyncLog& asyncLog() {
 
 void appendToFile(const std::string& data) {
     if (data.empty()) return;
+    std::lock_guard<std::mutex> lock(g_file_mutex);
     FILE* f = fopen(logPath(), "ab");
     if (!f) return;
     fwrite(data.data(), 1, data.size(), f);
@@ -231,6 +236,26 @@ void logFlush() {
     l.cv.notify_one();
     l.written_cv.wait_for(lk, std::chrono::milliseconds(1000),
                           [&l, gen]() { return l.written >= gen || !l.running; });
+}
+
+bool logCopyTo(const std::string& dst) {
+    logFlush();
+    std::lock_guard<std::mutex> lock(g_file_mutex);
+    FILE* in = fopen(logPath(), "rb");
+    if (!in) return false;
+    FILE* out = fopen(dst.c_str(), "wb");
+    bool ok = out != nullptr;
+    if (ok) {
+        char buf[32 * 1024];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+            if (fwrite(buf, 1, n, out) != n) { ok = false; break; }
+        }
+        if (ferror(in)) ok = false;
+        if (fclose(out) != 0) ok = false;
+    }
+    fclose(in);
+    return ok;
 }
 
 void logClose() {

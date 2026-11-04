@@ -26,6 +26,12 @@ void engine_log_close(void);
 // exit paths that skip engine_log_close() (e.g. _exit on the console).
 void engine_log_flush(void);
 
+// Copy the log as written so far to dst_path (for bug reports). The file
+// stays open for the whole session and the console cannot open it a second
+// time, so it is briefly closed for the copy and reopened. Returns 0 on
+// success, -1 if the log is not open (engine not started) or the copy failed.
+int engine_log_copy_to(const char *dst_path);
+
 // Set minimum level that actually gets written (default ENGINE_LOG_INFO).
 void engine_log_set_level(int level);
 
