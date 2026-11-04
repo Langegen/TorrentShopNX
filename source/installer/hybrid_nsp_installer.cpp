@@ -1012,7 +1012,7 @@ void HybridNspInstaller::installerThreadFunc() {
                             return returned;
                         };
 
-                        NczDecompressor decompressor(fetch_cb);
+                        NczDecompressor decompressor(fetch_cb, ncz_total_compressed);
                         if (!decompressor.init()) {
                             setError("NCZ: Failed to init decompressor for " + current_entry->name);
                             ring_buffer_.setEof();

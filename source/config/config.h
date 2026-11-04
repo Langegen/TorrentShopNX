@@ -23,6 +23,10 @@ public:
     std::string getTorrServerPassword() const;
     void setTorrServerCredentials(const std::string& login, const std::string& password);
 
+    // The user's Telegram @username for bug reports; empty = not given.
+    std::string getReportContact() const;
+    void setReportContact(const std::string& contact);
+
     static constexpr const char* DEFAULT_CATALOG_URL_RU = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_EN = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_ES = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/ES_catalog.json";
@@ -153,6 +157,7 @@ private:
     std::string torrserver_url_;
     std::string torrserver_login_;
     std::string torrserver_password_;
+    std::string report_contact_;
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;

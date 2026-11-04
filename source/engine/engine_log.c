@@ -29,7 +29,13 @@
 
 static Mutex g_log_mtx;
 static CondVar g_log_cv;
+// Guards every use of g_log_f's stream (fwrite/fflush/fclose). It is separate
+// from g_log_mtx so that engine_log_copy_to() can close the file for a copy
+// without blocking the threads that queue lines (the netloop among them).
+// Lock order: g_log_mtx before g_file_mtx.
+static Mutex g_file_mtx;
 static FILE *g_log_f = NULL;
+static char g_log_path[256];
 static int g_log_level = ENGINE_LOG_INFO;
 static int g_log_init = 0;
 static int g_log_first_open = 1;
@@ -93,17 +99,19 @@ static void log_writer_main(void *arg) {
         g_dropped = 0;
         int stop = g_writer_stop;
         g_writer_busy = n > 0 || dropped > 0;
-        FILE *f = g_log_f;
         mutexUnlock(&g_log_mtx);
 
         if (dropped > 0)
             n += (size_t)snprintf(g_batch + n, 64, "[log] dropped %u lines (ring full)\n", dropped);
-        if (n > 0 && f) fwrite(g_batch, 1, n, f);
         u64 now = armGetSystemTick();
+        mutexLock(&g_file_mtx);
+        FILE *f = g_log_f;
+        if (n > 0 && f) fwrite(g_batch, 1, n, f);
         if (f && now - last_flush >= flush_ticks) {
             fflush(f);
             last_flush = now;
         }
+        mutexUnlock(&g_file_mtx);
         g_writer_busy = 0;
 
         if (stop) {
@@ -111,7 +119,9 @@ static void log_writer_main(void *arg) {
             int empty = g_ring_len == 0 && g_dropped == 0;
             mutexUnlock(&g_log_mtx);
             if (empty) {
-                if (f) fflush(f);
+                mutexLock(&g_file_mtx);
+                if (g_log_f) fflush(g_log_f);
+                mutexUnlock(&g_file_mtx);
                 break;
             }
         }
@@ -121,8 +131,11 @@ static void log_writer_main(void *arg) {
 void engine_log_init(const char *path) {
     if (g_log_init) return;
     mutexInit(&g_log_mtx);
+    mutexInit(&g_file_mtx);
     condvarInit(&g_log_cv);
+    g_log_path[0] = '\0';
     if (path) {
+        snprintf(g_log_path, sizeof(g_log_path), "%s", path);
         // Make sure the containing directory exists before opening the file.
         char dir[256];
         snprintf(dir, sizeof(dir), "%s", path);
@@ -185,9 +198,42 @@ void engine_log_flush(void) {
             svcSleepThread(2000000ULL);
         }
     }
-    mutexLock(&g_log_mtx);
+    mutexLock(&g_file_mtx);
     if (g_log_f) fflush(g_log_f);
-    mutexUnlock(&g_log_mtx);
+    mutexUnlock(&g_file_mtx);
+}
+
+int engine_log_copy_to(const char *dst_path) {
+    if (!g_log_init || !g_log_path[0] || !dst_path) return -1;
+    engine_log_flush();
+
+    mutexLock(&g_file_mtx);
+    if (!g_log_f || g_log_f == stderr) {
+        mutexUnlock(&g_file_mtx);
+        return -1;
+    }
+    // Horizon refuses to open a file that is open for writing, so the log is
+    // closed for the copy and reopened for appending. Lines logged meanwhile
+    // wait in the ring; g_log_f only changes under g_file_mtx.
+    fclose(g_log_f);
+    int rc = -1;
+    FILE *in = fopen(g_log_path, "rb");
+    FILE *out = in ? fopen(dst_path, "wb") : NULL;
+    if (in && out) {
+        static char buf[32 * 1024];   // only one copy at a time (g_file_mtx)
+        size_t n;
+        rc = 0;
+        while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+            if (fwrite(buf, 1, n, out) != n) { rc = -1; break; }
+        }
+        if (ferror(in)) rc = -1;
+    }
+    if (out && fclose(out) != 0) rc = -1;
+    if (in) fclose(in);
+    g_log_f = fopen(g_log_path, "a");
+    if (!g_log_f) g_log_f = stderr;
+    mutexUnlock(&g_file_mtx);
+    return rc;
 }
 
 void engine_log_close(void) {
@@ -202,9 +248,11 @@ void engine_log_close(void) {
         g_writer_running = 0;
     }
     mutexLock(&g_log_mtx);
+    mutexLock(&g_file_mtx);
     g_log_init = 0;
     if (g_log_f && g_log_f != stderr) fclose(g_log_f);
     g_log_f = NULL;
+    mutexUnlock(&g_file_mtx);
     mutexUnlock(&g_log_mtx);
 }
 
@@ -252,8 +300,10 @@ void engine_log(int level, const char *fmt, ...) {
     }
     if (!g_writer_running) {
         // No writer thread: the old synchronous path.
+        mutexLock(&g_file_mtx);
         fwrite(line, 1, (size_t)len, g_log_f);
         if (level <= ENGINE_LOG_WARN) fflush(g_log_f);
+        mutexUnlock(&g_file_mtx);
     } else if (g_ring_len + (size_t)len > LOG_RING_SIZE) {
         g_dropped++;
     } else {

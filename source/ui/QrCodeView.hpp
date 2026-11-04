@@ -1,6 +1,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <functional>
 #include <string>
 
 namespace ui {
@@ -23,8 +24,12 @@ private:
 class QrDialog : public brls::Box {
 public:
     QrDialog(const std::string& title, const std::string& url, const std::string& hint = "");
+    ~QrDialog() override;
 
-    static void open(const std::string& title, const std::string& url, const std::string& hint = "");
+    // `on_closed` runs once the dialog is gone (closed by the user or freed
+    // with its activity), e.g. to stop a server the QR code points to.
+    static void open(const std::string& title, const std::string& url, const std::string& hint = "",
+                     std::function<void()> on_closed = nullptr);
 
     void dismissDialog();
 
@@ -32,6 +37,7 @@ public:
 
 private:
     brls::Button* btnOk_ = nullptr;
+    std::function<void()> onClosed_;
 };
 
 } // namespace ui

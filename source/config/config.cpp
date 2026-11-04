@@ -311,6 +311,7 @@ void ConfigManager::load() {
                         catalog_app_version_);
         readRawKey(body, "torrserver_login", torrserver_login_);
         readRawKey(body, "torrserver_password", torrserver_password_);
+        readRawKey(body, "report_contact", report_contact_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -419,6 +420,7 @@ void ConfigManager::save() {
         out << "font_scale=" << font_scale_ << "\n";
         out << "sound_effects=" << (sound_effects_enabled_ ? "true" : "false") << "\n";
         out << "joycon_rumble=" << (rumble_enabled_ ? "true" : "false") << "\n";
+        out << "report_contact=" << report_contact_ << "\n";
     }
 
     // Write a temp file and rename it into place: a crash or power loss in the
@@ -461,6 +463,19 @@ void ConfigManager::setTorrServerCredentials(const std::string& login, const std
     torrserver_login_ = login;
     torrserver_password_ = login.empty() ? std::string() : password;
     save();
+}
+
+std::string ConfigManager::getReportContact() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return report_contact_;
+}
+
+void ConfigManager::setReportContact(const std::string& contact) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (report_contact_ != contact) {
+        report_contact_ = contact;
+        save();
+    }
 }
 
 std::string ConfigManager::getCatalogSourceUrl() const {

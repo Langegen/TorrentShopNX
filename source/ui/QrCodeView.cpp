@@ -211,8 +211,18 @@ void QrDialog::dismissDialog() {
     brls::Application::popActivity(brls::TransitionAnimation::FADE);
 }
 
-void QrDialog::open(const std::string& title, const std::string& url, const std::string& hint) {
+QrDialog::~QrDialog() {
+    if (onClosed_) {
+        auto cb = std::move(onClosed_);
+        onClosed_ = nullptr;
+        cb();
+    }
+}
+
+void QrDialog::open(const std::string& title, const std::string& url, const std::string& hint,
+                    std::function<void()> on_closed) {
     QrDialog* dialog = new QrDialog(title, url, hint);
+    dialog->onClosed_ = std::move(on_closed);
     brls::Activity* act = new brls::Activity(dialog);
     brls::Application::pushActivity(act, brls::TransitionAnimation::FADE);
     if (dialog->getOkButton()) {

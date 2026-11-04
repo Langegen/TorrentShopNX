@@ -305,7 +305,9 @@ static void applyCatalogVersion(LibraryItem& item) {
     if (!item.matchedByTitleId || item.releases.empty()) return;
     // The version of this game in the release: a multi-game release has one
     // per game (Coffee Talk 1.47, Episode 2 1.2).
-    const catalog::TitleVersion best = catalog::titleVersion(item.releases.front(), item.titleId & ~0x1FFFULL);
+    const catalog::TitleVersion best =
+        catalog::withInstalledVersion(catalog::titleVersion(item.releases.front(), item.titleId & ~0x1FFFULL),
+                                      item.installedDisplayVersion, item.installedPatchVersion);
     std::string latest = catalog::versionLabel(best);
     if (!latest.empty()) item.latestVersion = latest;
     switch (catalog::compareRelease(best, item.installedDisplayVersion, item.installedPatchVersion)) {

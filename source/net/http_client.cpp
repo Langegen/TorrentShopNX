@@ -254,7 +254,20 @@ HttpResponse HttpClient::request(const std::string& method, const std::string& u
         struct curl_slist* headers = nullptr;
         headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         if (method == "POST") {
-            headers = curl_slist_append(headers, "Content-Type: application/json");
+            // JSON unless the caller sends its own Content-Type (curl would
+            // otherwise put both headers on the wire).
+            const bool custom_type = std::any_of(extra_headers.begin(), extra_headers.end(),
+                [](const std::string& h) {
+                    static const char kName[] = "content-type:";
+                    if (h.size() < sizeof(kName) - 1) return false;
+                    for (size_t i = 0; i < sizeof(kName) - 1; ++i) {
+                        if (std::tolower(static_cast<unsigned char>(h[i])) != kName[i]) return false;
+                    }
+                    return true;
+                });
+            if (!custom_type) {
+                headers = curl_slist_append(headers, "Content-Type: application/json");
+            }
         }
         for (const auto& h : extra_headers) {
             headers = curl_slist_append(headers, h.c_str());

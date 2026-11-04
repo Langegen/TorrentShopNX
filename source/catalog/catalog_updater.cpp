@@ -281,6 +281,11 @@ bool CatalogUpdater::applyDiffToGames(std::vector<Game>& currentGames,
         if (g.topic_id.empty()) continue;
 
         auto it = topicIndex.find(g.topic_id);
+        if (isUnsupportedRelease(g)) {
+            // A release re-uploaded as Switch 2 leaves the catalog.
+            if (it != topicIndex.end()) deletedSet.insert(g.topic_id);
+            continue;
+        }
         if (it != topicIndex.end()) {
             currentGames[it->second] = std::move(g);
             outUpdated++;

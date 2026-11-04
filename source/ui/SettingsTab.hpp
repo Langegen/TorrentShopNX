@@ -26,6 +26,7 @@ private:
     brls::View* buildDownloadsTab();
     brls::View* buildRetroTab();
     brls::View* buildStorageTab();
+    brls::View* buildReportTab();
     brls::View* buildAboutTab();
 };
 
