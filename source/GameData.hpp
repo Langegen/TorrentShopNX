@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <thread>
 #include <chrono>
@@ -275,6 +276,43 @@ inline bool isRomsetGame(const Game& g) {
         return true;
     }
     return false;
+}
+
+// True when `text` holds `word` as a whole ASCII word ("nup" in "NUP, repack"
+// but not in "Nupi").
+inline bool containsAsciiWord(const std::string& text, const char* word) {
+    const size_t n = std::strlen(word);
+    auto isWordChar = [](unsigned char c) { return std::isalnum(c) != 0; };
+    for (size_t pos = text.find(word); pos != std::string::npos; pos = text.find(word, pos + 1)) {
+        bool startOk = pos == 0 || !isWordChar(static_cast<unsigned char>(text[pos - 1]));
+        bool endOk = pos + n >= text.size() || !isWordChar(static_cast<unsigned char>(text[pos + n]));
+        if (startOk && endOk) return true;
+    }
+    return false;
+}
+
+// Nintendo Switch 2 releases (NUP image format, "[Nintendo Switch 2]" in the
+// title) cannot be installed on a Switch: they never enter the catalog.
+inline bool isUnsupportedRelease(const Game& g) {
+    std::string title = util::toLowerUtf8(g.title);
+    if (title.find("[nintendo switch 2]") != std::string::npos) return true;
+    if (containsAsciiWord(util::toLowerUtf8(g.image_format), "nup")) return true;
+    // Format tags in the title: "[NUP]", "[NUP][RUS]".
+    for (size_t open = title.find('['); open != std::string::npos; open = title.find('[', open + 1)) {
+        size_t close = title.find(']', open + 1);
+        if (close == std::string::npos) break;
+        if (containsAsciiWord(title.substr(open + 1, close - open - 1), "nup")) return true;
+    }
+    return false;
+}
+
+inline void dropUnsupportedReleases(std::vector<Game>& games) {
+    size_t before = games.size();
+    games.erase(std::remove_if(games.begin(), games.end(), isUnsupportedRelease), games.end());
+    if (games.size() != before) {
+        util::logLine("GameData: skipped " + std::to_string(before - games.size()) +
+                      " Switch 2 (NUP) releases");
+    }
 }
 
 inline std::string safeGetStr(const nlohmann::json& j, const std::string& key) {
@@ -714,6 +752,7 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
     bool ok = nlohmann::json::sax_parse(jsonContent, &consumer);
     if (ok && !games.empty()) {
         util::logLine("GameData: SAX parsed from string, count=" + std::to_string(games.size()));
+        dropUnsupportedReleases(games);
         return games;
     }
     if (!ok) {
@@ -744,6 +783,7 @@ inline std::vector<Game> parseGamesFromJsonString(const std::string& jsonContent
     } catch (...) {
         util::logLine("GameData: JSON parsing unknown exception");
     }
+    dropUnsupportedReleases(games);
     return games;
 }
 
@@ -992,6 +1032,8 @@ inline bool loadGamesFromBinaryFile(const std::string& binPath, std::vector<Game
     }
 
     util::logLine("GameData: loaded " + std::to_string(games.size()) + " games from binary cache " + binPath);
+    // Caches saved before the filter existed may still hold them.
+    dropUnsupportedReleases(games);
     return true;
 }
 
