@@ -45,8 +45,10 @@ class NczDecompressor {
 public:
     using FetchCallback = std::function<size_t(void* buf, size_t size)>;
 
-    // Инициализация декомпрессора, в которую передается функция чтения сжатых данных
-    NczDecompressor(FetchCallback fetch_cb);
+    // Инициализация декомпрессора, в которую передается функция чтения сжатых данных.
+    // compressed_size — размер .ncz целиком (0, если неизвестен); по нему
+    // проверяется число секций в заголовке.
+    explicit NczDecompressor(FetchCallback fetch_cb, uint64_t compressed_size = 0);
     ~NczDecompressor();
 
     bool init();
@@ -61,7 +63,8 @@ private:
     uint64_t decompressed_size_ = 0;
 #ifdef __SWITCH__
     FetchCallback fetch_cb_;
-    
+    uint64_t compressed_size_ = 0;
+
     struct NczSection {
         uint64_t offset;
         uint64_t size;

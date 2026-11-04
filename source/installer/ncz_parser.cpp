@@ -81,8 +81,8 @@ bool decryptNcaHeader(const uint8_t header_bytes[0x4000], const uint8_t header_k
     }
 }
 
-NczDecompressor::NczDecompressor(FetchCallback fetch_cb)
-    : fetch_cb_(fetch_cb) {
+NczDecompressor::NczDecompressor(FetchCallback fetch_cb, uint64_t compressed_size)
+    : fetch_cb_(fetch_cb), compressed_size_(compressed_size) {
 }
 
 NczDecompressor::~NczDecompressor() {
@@ -147,10 +147,20 @@ bool NczDecompressor::init() {
         return false;
     }
 
-    // Real NCZ files have a handful of sections; a corrupt header must not
-    // make us reserve gigabytes (bad_alloc would terminate the installer).
-    if (section_count == 0 || section_count > 64) {
-        util::logLine("ncz: invalid section count " + std::to_string(section_count));
+    // Base-game NCZ files have a handful of sections, but update NCAs (BKTR)
+    // get one section per AesCtrEx subsection, which can be hundreds. A
+    // corrupt header must still not make us reserve gigabytes (bad_alloc
+    // would terminate the installer): cap the count, and when the .ncz size
+    // is known, the section table must fit inside the file.
+    constexpr uint64_t kMaxSections = 1u << 16;  // 4 MB of section entries
+    constexpr uint64_t kTableStart = sizeof(nca_header_) + 8 + sizeof(section_count);
+    bool section_count_ok = section_count > 0 && section_count <= kMaxSections;
+    if (section_count_ok && compressed_size_ > 0) {
+        section_count_ok = kTableStart + section_count * sizeof(NczSection) <= compressed_size_;
+    }
+    if (!section_count_ok) {
+        util::logLine("ncz: invalid section count " + std::to_string(section_count)
+                      + " ncz_size=" + std::to_string(compressed_size_));
         return false;
     }
 
@@ -501,7 +511,7 @@ size_t NczDecompressor::read(void* buffer, size_t size) {
 namespace installer {
 bool deriveNcaHeaderKey(uint8_t out_key[0x20]) { return false; }
 bool decryptNcaHeader(const uint8_t header_bytes[0x4000], const uint8_t header_key[0x20], NcaHeader& out_header) { return false; }
-NczDecompressor::NczDecompressor(FetchCallback fetch_cb) {}
+NczDecompressor::NczDecompressor(FetchCallback fetch_cb, uint64_t compressed_size) {}
 NczDecompressor::~NczDecompressor() {}
 bool NczDecompressor::init() { return true; }
 size_t NczDecompressor::read(void* buffer, size_t size) { return 0; }
