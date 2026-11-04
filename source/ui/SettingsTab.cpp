@@ -7,6 +7,8 @@
 #include "StorageTabView.hpp"
 #include "QrCodeView.hpp"
 #include "RetroUpdateDialog.hpp"
+#include "BugReportFlow.hpp"
+#include "../utils/bug_report.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/catalog_updater.h"
 #include "../GameData.hpp"
@@ -339,6 +341,7 @@ void SettingsTab::onContentAvailable() {
     tabFrame->addTab("app/settings/cat_downloads"_i18n, [this]() { return buildDownloadsTab(); });
     tabFrame->addTab("app/settings/cat_retro"_i18n, [this]() { return buildRetroTab(); });
     tabFrame->addTab("app/settings/cat_storage"_i18n, [this]() { return buildStorageTab(); });
+    tabFrame->addTab("app/settings/cat_report"_i18n, [this]() { return buildReportTab(); });
     tabFrame->addTab("app/settings/cat_about"_i18n, [this]() { return buildAboutTab(); });
 }
 
@@ -1127,6 +1130,127 @@ brls::View* SettingsTab::buildStorageTab() {
     scroll->setWidth(brls::View::AUTO);
     scroll->setHeight(brls::View::AUTO);
     scroll->setContentView(new StorageTabView());
+    return scroll;
+}
+
+brls::View* SettingsTab::buildReportTab() {
+    brls::Box* box = nullptr;
+    brls::ScrollingFrame* scroll = makeTabBox(&box);
+
+    auto* intro = new brls::Label();
+    intro->setText("app/report/intro"_i18n);
+    intro->setFontSize(16.0f);
+    intro->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    intro->setMarginBottom(4.0f);
+    box->addView(intro);
+
+    // ── Описание проблемы ───────────────────────────────────────────
+    addSettingsSectionHeader(box, "app/report/sec_description"_i18n);
+
+    auto* messageCell = new brls::DetailCell();
+    messageCell->setText("app/report/message_title"_i18n);
+    auto showMessage = [messageCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
+        std::string text = bugreport::message();
+        if (text.empty()) {
+            text = "app/report/message_empty"_i18n;
+        } else if (text.size() > 40) {
+            size_t cut = 37;   // do not split a UTF-8 character
+            while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
+            text = text.substr(0, cut) + "...";
+        }
+        messageCell->setDetailText(text);
+    };
+    showMessage();
+    messageCell->registerClickAction([showMessage](brls::View*) {
+        brls::Application::getImeManager()->openForText(
+            [showMessage](std::string text) {
+                bugreport::setMessage(text);
+                showMessage();
+            },
+            "app/report/message_ime_title"_i18n,
+            "app/report/message_ime_hint"_i18n,
+            500,
+            bugreport::message(),
+            0);
+        return true;
+    });
+    box->addView(messageCell);
+
+    // Telegram @username: tells the developer who sent the report. Saved in
+    // config.ini so it is asked only once.
+    auto* contactCell = new brls::DetailCell();
+    contactCell->setText("app/report/contact_title"_i18n);
+    auto showContact = [contactCell, alive = aliveToken_]() {
+        if (!alive || !*alive) return;
+        std::string contact = config::ConfigManager::instance().getReportContact();
+        contactCell->setDetailText(contact.empty() ? "app/report/contact_empty"_i18n : contact);
+    };
+    showContact();
+    contactCell->registerClickAction([showContact](brls::View*) {
+        brls::Application::getImeManager()->openForText(
+            [showContact](std::string text) {
+                auto& cfg = config::ConfigManager::instance();
+                if (text.empty()) {
+                    cfg.setReportContact("");
+                } else {
+                    std::string contact = report::normalizeTelegramContact(text);
+                    if (contact.empty()) {
+                        brls::Application::notify("app/report/contact_invalid"_i18n);
+                        return;
+                    }
+                    cfg.setReportContact(contact);
+                }
+                showContact();
+            },
+            "app/report/contact_ime_title"_i18n,
+            "app/report/contact_ime_hint"_i18n,
+            40,
+            config::ConfigManager::instance().getReportContact(),
+            0);
+        return true;
+    });
+    box->addView(contactCell);
+
+    // ── Отправка ────────────────────────────────────────────────────
+    addSettingsSectionHeader(box, "app/report/sec_send"_i18n);
+
+    if (report::canUpload()) {
+        auto* sendCell = new brls::DetailCell();
+        sendCell->setText("app/report/send_title"_i18n);
+        sendCell->setDetailText("app/report/send_detail"_i18n);
+        sendCell->registerClickAction([](brls::View*) {
+            bugreport::startSend();
+            return true;
+        });
+        box->addView(sendCell);
+    }
+
+    auto* shareCell = new brls::DetailCell();
+    shareCell->setText("app/report/share_title"_i18n);
+    shareCell->setDetailText("app/report/share_detail"_i18n);
+    shareCell->registerClickAction([](brls::View*) {
+        bugreport::startShare();
+        return true;
+    });
+    box->addView(shareCell);
+
+    auto* saveCell = new brls::DetailCell();
+    saveCell->setText("app/report/save_title"_i18n);
+    saveCell->setDetailText("app/report/save_detail"_i18n);
+    saveCell->registerClickAction([](brls::View*) {
+        bugreport::startSave();
+        return true;
+    });
+    box->addView(saveCell);
+
+    auto* footer = new brls::Label();
+    footer->setText(report::canUpload() ? "app/report/footer"_i18n : "app/report/footer_manual"_i18n);
+    footer->setFontSize(14.0f);
+    footer->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    footer->setMarginTop(16.0f);
+    box->addView(footer);
+
     return scroll;
 }
 
