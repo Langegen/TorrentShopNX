@@ -53,6 +53,11 @@ public:
     int getBacklightTimeout() const;
     void setBacklightTimeout(int seconds);
 
+    // Slow downloads go to the end of the queue when another release waits and
+    // the time left exceeds this many hours. 0 = off; 1, 2, 3 or 6.
+    int getSlowSkipHours() const;
+    void setSlowSkipHours(int hours);
+
     // Listen port for incoming BitTorrent connections. Forward this port on
     // the router (TCP) to the console so firewalled seeders can dial in --
     // without it, only outbound-reachable peers are usable. Default 6882.
@@ -162,6 +167,7 @@ private:
     std::string data_mode_;
     bool keep_awake_during_downloads_;
     int backlight_timeout_;
+    int slow_skip_hours_ = 3;
     bool cache_cover_thumbnails_;
     int listen_port_;
     std::string last_catalog_update_date_;

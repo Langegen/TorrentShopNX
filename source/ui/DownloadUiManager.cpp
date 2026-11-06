@@ -231,6 +231,39 @@ bool DownloadManager::retryDownload(const std::string& topic_id) {
     return false;
 }
 
+bool DownloadManager::skipDownload(const std::string& topic_id) {
+    std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
+    const auto& queue = impl_.queue();
+    for (size_t i = 0; i < queue.size(); ++i) {
+        if (queue[i].topic_id == topic_id) {
+            bool ok = impl_.skipDownload(i);
+            if (ok) {
+                util::logLine("download_ui: skipped topic_id=" + topic_id);
+                saveDownloads();
+                triggerCallback();
+            }
+            return ok;
+        }
+    }
+    return false;
+}
+
+bool DownloadManager::downloadNext(const std::string& topic_id) {
+    std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
+    const auto& queue = impl_.queue();
+    for (size_t i = 0; i < queue.size(); ++i) {
+        if (queue[i].topic_id == topic_id) {
+            bool ok = impl_.downloadNext(i);
+            if (ok) {
+                saveDownloads();
+                triggerCallback();
+            }
+            return ok;
+        }
+    }
+    return false;
+}
+
 bool DownloadManager::deleteDownload(const std::string& topic_id) {
     std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
     const auto& queue = impl_.queue();

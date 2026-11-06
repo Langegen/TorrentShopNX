@@ -81,6 +81,8 @@ struct DownloadGroup {
     bool has_port_install = false;
     std::string retro_console_id;
     std::string retro_result_key;
+    int64_t queue_seq = 0;        // smallest queue position of its waiting items
+    bool slow_skipped = false;    // moved to the end of the queue as too slow
 };
 
 class DownloadsView : public brls::Activity {

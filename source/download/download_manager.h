@@ -98,6 +98,20 @@ struct DownloadItem {
     std::string forced_stream_name;
     int torrent_id = -1;
     DownloadState state = DownloadState::Queued;
+
+    // Queue order: the waiting item with the smallest value starts first.
+    // Skipping a release or moving it up changes only this, never the item's
+    // index in the queue (the UI and the progress thread keep indices).
+    int64_t queue_seq = 0;
+    // The release was moved to the end of the queue because it was too slow.
+    // A release is moved this way only once.
+    bool slow_skipped = false;
+    // The engine torrent was paused when the release was skipped; it is
+    // resumed when the release starts again.
+    bool torrent_parked = false;
+    // Speed window of the slow-release check.
+    std::chrono::steady_clock::time_point slow_window_at{};
+    unsigned long long slow_window_bytes = 0;
     float progress = 0.0f;
     float install_progress = 0.0f;
     float download_speed_kbps = 0.0f;
@@ -235,6 +249,17 @@ public:
     bool deleteFromQueue(size_t index);
     bool pauseDownload(size_t index);
     bool resumeDownload(size_t index);
+
+    // Stops the release of this item (all its files) and moves it to the end
+    // of the queue; the next release starts. The stream install starts over
+    // when the release's turn comes again.
+    bool skipDownload(size_t index);
+    // Moves the waiting release of this item to the front of the queue.
+    bool downloadNext(size_t index);
+    // The release can be skipped (port installs and finishing installs cannot).
+    bool canSkip(size_t index) const;
+    // Another release waits in the queue (there is something to switch to).
+    bool hasOtherQueuedRelease(size_t index) const;
     bool getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files);
     bool setFileWanted(size_t index, int file_index, bool wanted);
     bool probeTorrentFiles(const std::string& magnet,
@@ -280,8 +305,19 @@ private:
     void handlePortAutoInstall(size_t index, const std::vector<torrent::TorrentInfo>& list,
                                std::chrono::steady_clock::time_point now);
 
+    // Moves the release of `index` behind every waiting item. Active items of
+    // the release are stopped. `slow`: done by the slow-release check.
+    bool requeueRelease(size_t index, bool slow);
+    // Clears what a run left on the item so it can start again from the queue.
+    void resetItemForQueue(DownloadItem& item);
+    // Moves the active item's release to the end of the queue when the time
+    // left is too long and another release waits.
+    void checkSlowDownload(size_t index, std::chrono::steady_clock::time_point now);
+
     mutable std::recursive_mutex queue_mutex_;
     std::vector<DownloadItem> queue_;
+    int64_t next_queue_seq_ = 0;    // last value given to the back of the queue
+    int64_t front_queue_seq_ = 0;   // last value given to the front of the queue
     std::unique_ptr<torrent::TorrentManager> torrent_;
     datasource::DataSourceManager ds_manager_;
     std::vector<torrent::TorrentInfo> last_torrent_list_;

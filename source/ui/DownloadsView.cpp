@@ -798,6 +798,71 @@ static std::string getStatusString(download::DownloadState state) {
     }
 }
 
+// "Queued", or "Postponed: slow" for a release moved to the end of the queue.
+static std::string queuedStatusString(bool slow_skipped) {
+    return slow_skipped ? "app/downloads/state_slow_skipped"_i18n : "app/downloads/state_queued"_i18n;
+}
+
+// X on an unfinished release: resume a paused one, move a waiting one to the
+// front, pause an active one. When other releases wait, pausing asks whether
+// to pause (the queue waits) or skip (the next release starts).
+static void registerQueueAction(brls::View* target, const DownloadGroup& group) {
+    std::vector<std::string> ids;
+    {
+        std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
+        const auto& q = ui::DownloadManager::instance().getImpl().queue();
+        for (size_t qidx : group.item_indices) {
+            if (qidx < q.size()) ids.push_back(q[qidx].topic_id);
+        }
+    }
+
+    if (group.state == download::DownloadState::Paused) {
+        target->registerAction("app/downloads/action_resume"_i18n, brls::ControllerButton::BUTTON_X, [ids](brls::View*) {
+            for (const auto& id : ids) ui::DownloadManager::instance().resumeDownload(id);
+            return true;
+        });
+        return;
+    }
+
+    if (group.state == download::DownloadState::Queued) {
+        target->registerAction("app/downloads/action_download_next"_i18n, brls::ControllerButton::BUTTON_X, [ids](brls::View*) {
+            if (!ids.empty()) ui::DownloadManager::instance().downloadNext(ids.front());
+            return true;
+        });
+        return;
+    }
+
+    target->registerAction("app/downloads/action_pause"_i18n, brls::ControllerButton::BUTTON_X, [ids](brls::View*) {
+        bool offer_skip = false;
+        {
+            auto& impl = ui::DownloadManager::instance().getImpl();
+            std::lock_guard<std::recursive_mutex> lock(impl.queueMutex());
+            const auto& q = impl.queue();
+            for (size_t i = 0; i < q.size() && !offer_skip; ++i) {
+                if (std::find(ids.begin(), ids.end(), q[i].topic_id) == ids.end()) continue;
+                offer_skip = impl.canSkip(i) && impl.hasOtherQueuedRelease(i);
+                break;
+            }
+        }
+        auto pauseAll = [ids]() {
+            for (const auto& id : ids) ui::DownloadManager::instance().pauseDownload(id);
+        };
+        if (!offer_skip) {
+            pauseAll();
+            return true;
+        }
+        auto* dialog = new brls::Dialog("app/downloads/pause_or_skip"_i18n);
+        dialog->setCancelable(true);
+        dialog->addButton("app/downloads/action_pause"_i18n, pauseAll);
+        dialog->addButton("app/downloads/action_skip"_i18n, [ids]() {
+            if (!ids.empty()) ui::DownloadManager::instance().skipDownload(ids.front());
+        });
+        dialog->addButton("app/common/cancel"_i18n, []() {});
+        dialog->open();
+        return true;
+    });
+}
+
 static int getGroupSortPriority(download::DownloadState state) {
     switch (state) {
         case download::DownloadState::Downloading:
@@ -923,6 +988,8 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
         g.start_time = std::chrono::steady_clock::time_point{};
         g.finish_time = std::chrono::steady_clock::time_point{};
         g.elapsed_seconds = 0;
+        g.queue_seq = INT64_MAX;
+        g.slow_skipped = false;
         int64_t group_total_elapsed = 0;
 
         bool has_active = false;
@@ -952,6 +1019,10 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
 
             if (itm.is_port_auto_install) {
                 g.has_port_install = true;
+            }
+            if (itm.state == download::DownloadState::Queued) {
+                g.queue_seq = std::min(g.queue_seq, itm.queue_seq);
+                if (itm.slow_skipped) g.slow_skipped = true;
             }
 
             // Download bytes
@@ -1068,8 +1139,15 @@ void DownloadsView::buildGroups(const std::vector<download::DownloadItem>& queue
 
     // Sort groups by status priority:
     // 1. Active (Downloading/Installing) -> 2. Paused -> 3. Queued -> 4. Completed -> 5. Cancelled/Failed
+    // Waiting releases in the order they will start.
     std::stable_sort(groups_.begin(), groups_.end(), [](const DownloadGroup& a, const DownloadGroup& b) {
-        return getGroupSortPriority(a.state) < getGroupSortPriority(b.state);
+        const int pa = getGroupSortPriority(a.state);
+        const int pb = getGroupSortPriority(b.state);
+        if (pa != pb) return pa < pb;
+        if (a.state == download::DownloadState::Queued && b.state == download::DownloadState::Queued) {
+            return a.queue_seq < b.queue_seq;
+        }
+        return false;
     });
 }
 
@@ -1171,6 +1249,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
 
     // Status description
     std::string statusStr = getStatusString(group.state);
+    if (group.state == download::DownloadState::Queued) {
+        statusStr = queuedStatusString(group.slow_skipped);
+    }
     if (group.state == download::DownloadState::Failed && !group.failed_name.empty()) {
         statusStr = brls::getStr("app/downloads/state_failed") + " (" + group.failed_name + ")";
     }
@@ -1622,7 +1703,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                         summaryTxt->setTextColor(isLight ? nvgRGB(46, 125, 50) : nvgRGB(129, 199, 132));
                     } else if (itm.state == download::DownloadState::Queued) {
                         unsigned long long displaySize = (itm_dl_t > 0) ? itm_dl_t : itm_inst_t;
-                        summaryTxt->setText("app/downloads/state_queued"_i18n + (displaySize > 0 ? (" · " + formatBytes(displaySize)) : ""));
+                        summaryTxt->setText(queuedStatusString(itm.slow_skipped) + (displaySize > 0 ? (" · " + formatBytes(displaySize)) : ""));
                         summaryTxt->setTextColor(secondaryText);
                     } else if (itm.state == download::DownloadState::Paused) {
                         summaryTxt->setText("app/downloads/state_paused"_i18n + (itm_dl_t > 0 ? (" · " + formatProgressBytes(itm_dl_w, itm_dl_t)) : ""));
@@ -1693,7 +1774,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
             // 2. Right Status Col
             auto* compStatusLabel = dynamic_cast<brls::Label*>(statusCol->getChildren()[0]);
             if (compStatusLabel) {
-                std::string stStr = getStatusString(itm.state);
+                std::string stStr = itm.state == download::DownloadState::Queued
+                    ? queuedStatusString(itm.slow_skipped) : getStatusString(itm.state);
                 compStatusLabel->setText(stStr);
                 compStatusLabel->setTextColor(getDownloadStateColor(itm.state, isLight));
             }
@@ -1749,23 +1831,12 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 });
             }
 
-            // Pause / Resume entire torrent
-            bool isPaused = (group.state == download::DownloadState::Paused);
-            rowBox->registerAction(isPaused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n,
-                                   brls::ControllerButton::BUTTON_X, [group, isPaused](brls::View* view) {
-                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-                const auto& q = ui::DownloadManager::instance().getImpl().queue();
-                for (size_t qidx : group.item_indices) {
-                    if (qidx < q.size()) {
-                        if (isPaused) {
-                            ui::DownloadManager::instance().resumeDownload(q[qidx].topic_id);
-                        } else {
-                            ui::DownloadManager::instance().pauseDownload(q[qidx].topic_id);
-                        }
-                    }
-                }
-                return true;
-            });
+            // Pause / resume / skip / move up the entire release
+            if (group.state != download::DownloadState::Completed &&
+                group.state != download::DownloadState::Failed &&
+                group.state != download::DownloadState::Cancelled) {
+                registerQueueAction(rowBox, group);
+            }
 
             rowBox->registerAction("", brls::ControllerButton::BUTTON_LB, [itm](brls::View* view) {
                 showPeerInspector(itm);
@@ -1854,22 +1925,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 }, false, false, brls::SOUND_CLICK);
             }
         } else {
-            bool isPaused = (group.state == download::DownloadState::Paused);
-            cell->headerBox->registerAction(isPaused ? "app/downloads/action_resume"_i18n : "app/downloads/action_pause"_i18n,
-                                 brls::ControllerButton::BUTTON_X, [group, isPaused](brls::View* view) {
-                std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());
-                const auto& q = ui::DownloadManager::instance().getImpl().queue();
-                for (size_t qidx : group.item_indices) {
-                    if (qidx < q.size()) {
-                        if (isPaused) {
-                            ui::DownloadManager::instance().resumeDownload(q[qidx].topic_id);
-                        } else {
-                            ui::DownloadManager::instance().pauseDownload(q[qidx].topic_id);
-                        }
-                    }
-                }
-                return true;
-            });
+            registerQueueAction(cell->headerBox, group);
 
             // On header: CANCEL ENTIRE TORRENT
             cell->headerBox->registerAction("app/downloads/action_cancel"_i18n, brls::ControllerButton::BUTTON_Y, [group](brls::View* view) {

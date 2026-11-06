@@ -39,6 +39,10 @@ public:
     bool resumeDownload(const std::string& topic_id);
     bool cancelDownload(const std::string& topic_id);
     bool retryDownload(const std::string& topic_id);
+    // Stops the release and moves it to the end of the queue; the next one starts.
+    bool skipDownload(const std::string& topic_id);
+    // Moves a waiting release to the front of the queue.
+    bool downloadNext(const std::string& topic_id);
     bool deleteDownload(const std::string& topic_id); // Deletes from list if completed/failed/cancelled
 
     // Checks active transfers count
