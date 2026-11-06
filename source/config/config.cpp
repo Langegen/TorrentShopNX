@@ -408,6 +408,7 @@ void ConfigManager::save() {
         out << "backlight_timeout=" << backlight_timeout_ << "\n";
         out << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
         out << "listen_port=" << listen_port_ << "\n";
+        out << "slow_skip_hours=" << slow_skip_hours_ << "\n";
         out << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
         out << "last_catalog_diff_time=" << last_catalog_diff_time_ << "\n";
         out << "last_catalog_full_time=" << last_catalog_full_time_ << "\n";
