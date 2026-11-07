@@ -54,6 +54,10 @@ bool copyPathRecursive(
     std::string& outError
 );
 
+// Copies one file, overwriting the destination. Use it instead of
+// std::filesystem::copy_file: on the console that one fails with ENOSYS.
+bool copyFile(const std::string& src, const std::string& dst, std::string& outError);
+
 // Moves or renames file or directory
 bool movePath(const std::string& src, const std::string& dst, std::string& outError);
 

@@ -246,6 +246,12 @@ def housekeeping_loop():
 class Handler(BaseHTTPRequestHandler):
     server_version = "tsnx-reports"
     sys_version = ""
+    # HTTP/1.1 so "Expect: 100-continue" (curl sends it with the ZIP) is
+    # answered: the checks run before the body is sent, and curl does not
+    # wait a second for a 100 that never comes. One request per connection.
+    protocol_version = "HTTP/1.1"
+    # Socket timeout: a stalled client does not hold a thread forever.
+    timeout = 120
 
     def log_message(self, fmt, *args):  # no per-request access log (IPs)
         pass
@@ -255,8 +261,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
+        self.close_connection = True
 
     def client_ip(self):
         if TRUST_PROXY:
@@ -271,28 +279,49 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(body)
+            self.close_connection = True
         else:
             self.reply(404, {"ok": False, "error": "not_found"})
 
-    def do_POST(self):
+    def precheck(self):
+        """Checks that need only the headers. (status, error) or None.
+        Runs once per request: the rate limiter counts every call."""
+        self._prechecked = True
         if self.path != "/v1/report":
-            return self.reply(404, {"ok": False, "error": "not_found"})
+            return 404, "not_found"
         if not BOT_TOKEN or not CHAT_ID:
-            return self.reply(500, {"ok": False, "error": "server_not_configured"})
+            return 500, "server_not_configured"
         # Only the app sends this header; it keeps random scanners out.
         if not self.headers.get("X-TSNX-Version"):
-            return self.reply(400, {"ok": False, "error": "bad_request"})
-        if not per_ip.allow(self.client_ip()) or not global_limit.allow("all"):
-            return self.reply(429, {"ok": False, "error": "rate_limited"})
-
+            return 400, "bad_request"
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
-            return self.reply(411, {"ok": False, "error": "length_required"})
+            return 411, "length_required"
         if length <= 0 or length > MAX_REPORT_BYTES:
-            return self.reply(413, {"ok": False, "error": "too_large"})
+            return 413, "too_large"
+        if not per_ip.allow(self.client_ip()) or not global_limit.allow("all"):
+            return 429, "rate_limited"
+        return None
+
+    def handle_expect_100(self):
+        # Refuse before the client uploads the body.
+        if self.command == "POST":
+            failed = self.precheck()
+            if failed:
+                self.reply(failed[0], {"ok": False, "error": failed[1]})
+                return False
+        return super().handle_expect_100()
+
+    def do_POST(self):
+        if not getattr(self, "_prechecked", False):
+            failed = self.precheck()
+            if failed:
+                return self.reply(failed[0], {"ok": False, "error": failed[1]})
+        length = int(self.headers["Content-Length"])
         data = self.rfile.read(length)
         if len(data) != length:
             return self.reply(400, {"ok": False, "error": "bad_request"})
