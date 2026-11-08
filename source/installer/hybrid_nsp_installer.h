@@ -218,9 +218,9 @@ private:
     // Данные NSP-заголовка (хранятся для тикетов/CNMT)
     std::vector<uint8_t> header_data_;
 
-    // Данные тикета и сертификата (буферизованные)
-    std::vector<uint8_t> ticket_data_;
-    std::vector<uint8_t> cert_data_;
+    // Тикеты и сертификаты пакета, каждый файл отдельно (буферизованные)
+    std::vector<std::vector<uint8_t>> ticket_data_;
+    std::vector<std::vector<uint8_t>> cert_data_;
 
     // Текущий NCA, в который идёт запись
     size_t   current_nca_index_  = 0;

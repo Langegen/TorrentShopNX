@@ -198,6 +198,10 @@ bool parseConfigBody(const std::string& body,
     return parsed_known_keys;
 }
 
+int normalizeSlowSkipHours(int hours) {
+    return (hours == 0 || hours == 1 || hours == 2 || hours == 3 || hours == 6) ? hours : 3;
+}
+
 // Value of `key=...` in the config body; `out` is left alone when the key is
 // missing. Only the leading spaces of the value are dropped, so a password
 // may end with a space.
@@ -312,6 +316,11 @@ void ConfigManager::load() {
         readRawKey(body, "torrserver_login", torrserver_login_);
         readRawKey(body, "torrserver_password", torrserver_password_);
         readRawKey(body, "report_contact", report_contact_);
+        {
+            std::string raw;
+            readRawKey(body, "slow_skip_hours", raw);
+            if (!raw.empty()) slow_skip_hours_ = normalizeSlowSkipHours(std::atoi(raw.c_str()));
+        }
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
@@ -399,6 +408,7 @@ void ConfigManager::save() {
         out << "backlight_timeout=" << backlight_timeout_ << "\n";
         out << "cache_cover_thumbnails=" << (cache_cover_thumbnails_ ? "true" : "false") << "\n";
         out << "listen_port=" << listen_port_ << "\n";
+        out << "slow_skip_hours=" << slow_skip_hours_ << "\n";
         out << "last_catalog_update_date=" << last_catalog_update_date_ << "\n";
         out << "last_catalog_diff_time=" << last_catalog_diff_time_ << "\n";
         out << "last_catalog_full_time=" << last_catalog_full_time_ << "\n";
@@ -581,6 +591,17 @@ void ConfigManager::setKeepAwakeDuringDownloads(bool enabled) {
 int ConfigManager::getBacklightTimeout() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     return backlight_timeout_;
+}
+
+int ConfigManager::getSlowSkipHours() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return slow_skip_hours_;
+}
+
+void ConfigManager::setSlowSkipHours(int hours) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    slow_skip_hours_ = normalizeSlowSkipHours(hours);
+    save();
 }
 
 void ConfigManager::setBacklightTimeout(int seconds) {

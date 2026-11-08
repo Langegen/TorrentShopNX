@@ -111,6 +111,7 @@ bool CnmtParser::parse(const void* data, size_t size, CnmtData& out) {
         std::memcpy(ce.content_id, entry + 0x20, 16);
         ce.size = readU48(entry + 0x30);
         ce.type = static_cast<CnmtContentType>(entry[0x36]);
+        ce.id_offset = entry[0x37];
 
         out.contents.push_back(ce);
     }

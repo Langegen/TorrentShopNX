@@ -904,6 +904,36 @@ brls::View* SettingsTab::buildDownloadsTab() {
     });
     box->addView(backlightTimeoutCell);
 
+    // Медленная раздача уходит в конец очереди, если ждут другие
+    const std::vector<int> slowSkipHours = {0, 1, 2, 3, 6};
+    std::vector<std::string> slowSkipOptions = {
+        "app/settings/slow_skip_off"_i18n,
+        brls::getStr("app/settings/slow_skip_hours", "1"),
+        brls::getStr("app/settings/slow_skip_hours", "2"),
+        brls::getStr("app/settings/slow_skip_hours", "3"),
+        brls::getStr("app/settings/slow_skip_hours", "6")
+    };
+    int initialSlowSkipIdx = 3;
+    for (size_t k = 0; k < slowSkipHours.size(); ++k) {
+        if (slowSkipHours[k] == cfg.getSlowSkipHours()) initialSlowSkipIdx = static_cast<int>(k);
+    }
+    auto* slowSkipCell = new brls::SelectorCell();
+    slowSkipCell->init("app/settings/slow_skip"_i18n, slowSkipOptions, initialSlowSkipIdx, [](int selected) {}, [&cfg, slowSkipHours](int selected) {
+        if (selected < 0 || static_cast<size_t>(selected) >= slowSkipHours.size()) return;
+        cfg.setSlowSkipHours(slowSkipHours[selected]);
+    });
+    box->addView(slowSkipCell);
+
+    auto* slowSkipHint = new brls::Label();
+    slowSkipHint->setText("app/settings/slow_skip_hint"_i18n);
+    slowSkipHint->setFontSize(14.0f);
+    slowSkipHint->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    slowSkipHint->setMarginTop(6.0f);
+    slowSkipHint->setMarginBottom(14.0f);
+    slowSkipHint->setMarginLeft(16.0f);
+    slowSkipHint->setMarginRight(16.0f);
+    box->addView(slowSkipHint);
+
     // Режим работы (движок / TorrServer)
     std::vector<std::string> modes = {
         "app/settings/mode_torrserver"_i18n,

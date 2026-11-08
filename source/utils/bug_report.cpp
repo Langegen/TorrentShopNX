@@ -2,6 +2,7 @@
 
 #include "app_paths.h"
 #include "archive_utils.h"
+#include "file_ops.h"
 #include "log.h"
 #include "switch_utils.h"
 #include "../config/config.h"
@@ -25,7 +26,7 @@
 // set it after deploying the server, e.g. "https://reports.example.com/v1/report"
 // (behind Caddy with an RSA certificate) or "http://<vps-ip>:8787/v1/report".
 #ifndef TSNX_REPORT_URL
-#define TSNX_REPORT_URL ""
+#define TSNX_REPORT_URL "http://177.3.213.173:8787/v1/report"
 #endif
 
 namespace report {
@@ -297,11 +298,12 @@ BuildResult buildReport(const std::string& user_message) {
         util::logLine("report: could not copy " + log);
     }
     const std::string engine_dst = staging + "/engine.log";
+    std::string copy_err;
     if (engine_log_copy_to(engine_dst.c_str()) == 0 ||
-        fs::copy_file(engine_log, engine_dst, fs::copy_options::overwrite_existing, ec)) {
+        (fs::exists(engine_log, ec) && util::copyFile(engine_log, engine_dst, copy_err))) {
         files.push_back(engine_dst);   // the second branch: engine not started this launch
     } else if (fs::exists(engine_log, ec)) {
-        util::logLine("report: could not copy " + engine_log);
+        util::logLine("report: could not copy " + engine_log + ": " + copy_err);
     }
     const std::pair<std::string, const char*> prev_logs[] = {
         {prevPathOf(log), "log.prev.txt"},
@@ -310,10 +312,11 @@ BuildResult buildReport(const std::string& user_message) {
     for (const auto& [src, name] : prev_logs) {
         if (!fs::exists(src, ec)) continue;
         const std::string dst = staging + "/" + name;
-        if (fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec)) {
+        copy_err.clear();
+        if (util::copyFile(src, dst, copy_err)) {
             files.push_back(dst);
         } else {
-            util::logLine("report: could not copy " + src + ": " + ec.message());
+            util::logLine("report: could not copy " + src + ": " + copy_err);
         }
     }
     if (writeSanitizedConfig(staging + "/config.ini")) files.push_back(staging + "/config.ini");

@@ -34,6 +34,7 @@ struct CnmtContentEntry {
     uint8_t  content_id[16] = {}; ///< ID контента (совпадает с именем NCA)
     uint64_t size = 0;            ///< Размер в байтах (6 байт в CNMT)
     CnmtContentType type = CnmtContentType::Program;
+    uint8_t  id_offset = 0;       ///< Номер программы в многопрограммных играх (сборники)
 };
 
 /// Результат парсинга CNMT

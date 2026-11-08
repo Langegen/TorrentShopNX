@@ -240,15 +240,19 @@ bool HybridNspInstaller::start(datasource::IDataSource* source, const InstallCon
     util::logLine("hybrid: start install, buffer=" + std::to_string(ring_buffer_.capacity() / (1024*1024)) + "MB");
 
     // Фаза 1: Парсинг заголовка
-    if (!parseNspHeaderPhase()) return false;
+    // Фаза 1: парсинг заголовка, фаза 2: плейсхолдеры, фаза 3: стриминг
+    const bool ok = parseNspHeaderPhase() &&
+                    createPlaceHoldersPhase() &&
+                    startStreamingPhase();
 
-    // Фаза 2: Создание плейсхолдеров
-    if (!createPlaceHoldersPhase()) return false;
-
-    // Фаза 3: Запуск двухпоточного стриминга
-    if (!startStreamingPhase()) return false;
-
-    return true;
+    // The installer thread releases the stream when it ends. A failure before
+    // it started (e.g. the header never arrived) left the shared engine
+    // stream open, and every later install failed to open its stream until
+    // the app was restarted.
+    if (!ok && !threads_started_ && source_) {
+        source_->notifyStreamingComplete(false);
+    }
+    return ok;
 }
 
 // =============================================================================
@@ -388,6 +392,10 @@ bool HybridNspInstaller::parseNspHeaderPhase() {
     util::logLine("hybrid: NSP contains " + std::to_string(nsp_header_.fileCount()) + " files"
                    + ", total size=" + std::to_string(total_bytes_.load() / (1024*1024)) + "MB"
                    + ", ticket=" + std::string(nsp_header_.hasTicket() ? "yes" : "no"));
+    for (const auto& e : nsp_header_.entries()) {
+        util::logLine("hybrid: nsp file " + e.name + " size=" + std::to_string(e.size) +
+                      " type=" + std::to_string(static_cast<int>(e.type)));
+    }
 
     source_->notifyInstallInfoParsed(nsp_header_.dataRegionOffset(),
                                      effectiveStreamingChunkSize(source_, config_.chunk_size));
@@ -1237,16 +1245,21 @@ void HybridNspInstaller::installerThreadFunc() {
                     break;
                 }
 
+                // A package may carry several tickets (multi-program titles
+                // such as collections): each file is kept on its own, gluing
+                // them together imported only the first one.
                 case NspEntryType::Ticket:
-                    ticket_data_.insert(ticket_data_.end(),
-                                         chunk_buf.data() + processed,
-                                         chunk_buf.data() + processed + to_process);
+                    if (offset_in_file == 0 || ticket_data_.empty()) ticket_data_.emplace_back();
+                    ticket_data_.back().insert(ticket_data_.back().end(),
+                                               chunk_buf.data() + processed,
+                                               chunk_buf.data() + processed + to_process);
                     break;
 
                 case NspEntryType::Cert:
-                    cert_data_.insert(cert_data_.end(),
-                                       chunk_buf.data() + processed,
-                                       chunk_buf.data() + processed + to_process);
+                    if (offset_in_file == 0 || cert_data_.empty()) cert_data_.emplace_back();
+                    cert_data_.back().insert(cert_data_.back().end(),
+                                             chunk_buf.data() + processed,
+                                             chunk_buf.data() + processed + to_process);
                     break;
 
                 case NspEntryType::Other:
@@ -1317,17 +1330,23 @@ bool HybridNspInstaller::installTicketsPhase() {
     state_ = InstallState::InstallingTickets;
     util::logLine("hybrid: phase 4 - installing tickets");
 
+    util::logLine("hybrid: tickets=" + std::to_string(ticket_data_.size()) +
+                  " certs=" + std::to_string(cert_data_.size()));
 #ifdef __SWITCH__
-    bool ok;
-    if (!cert_data_.empty()) {
-        ok = ticket_.installTicket(ticket_data_.data(), ticket_data_.size(),
-                                    cert_data_.data(), cert_data_.size());
-    } else {
-        ok = ticket_.installTicketOnly(ticket_data_.data(), ticket_data_.size());
-    }
-
-    if (!ok) {
-        util::logLine("hybrid: warning - ticket install failed (title may require fixes)");
+    for (size_t i = 0; i < ticket_data_.size(); ++i) {
+        const auto& tik = ticket_data_[i];
+        if (tik.empty()) continue;
+        // Packages ship a cert per ticket (usually the same chain); a
+        // missing one falls back to the first.
+        const std::vector<uint8_t>* cert = nullptr;
+        if (i < cert_data_.size() && !cert_data_[i].empty()) cert = &cert_data_[i];
+        else if (!cert_data_.empty() && !cert_data_.front().empty()) cert = &cert_data_.front();
+        const bool ok = cert ? ticket_.installTicket(tik.data(), tik.size(), cert->data(), cert->size())
+                             : ticket_.installTicketOnly(tik.data(), tik.size());
+        if (!ok) {
+            util::logLine("hybrid: warning - ticket " + std::to_string(i) +
+                          " install failed (title may require fixes)");
+        }
     }
 #endif
 
@@ -1441,6 +1460,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     }
 
     // 2. Контент из CNMT (Awoo отбрасывает delta fragments > 5)
+    bool multi_program = false;
     for (const auto& ce : cnmt.contents) {
         if (static_cast<uint8_t>(ce.type) > 5) {
             continue;
@@ -1449,9 +1469,15 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         std::memcpy(ci.content_id.c, ce.content_id, 16);
         ncmU64ToContentInfoSize(ce.size, &ci);
         ci.content_type = static_cast<NcmContentType>(static_cast<uint8_t>(ce.type));
-        ci.id_offset = 0;
+        // Multi-program titles (collections) tell their programs apart by
+        // this index: writing 0 for all of them registers every program,
+        // control and manual as program 0, and the title crashes on launch.
+        ci.id_offset = ce.id_offset;
+        if (ce.id_offset != 0) multi_program = true;
         content_infos.push_back(ci);
     }
+
+    if (multi_program) util::logLine("hybrid: multi-program title, contents keep their program index");
 
     uint16_t ext_hdr_size = cnmt.extended_header_size;
     if (cnmt.raw_data.size() < (0x20u + ext_hdr_size)) {

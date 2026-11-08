@@ -275,6 +275,10 @@ static bool copySingleFile(const std::string& src, const std::string& dst, std::
     return ok;
 }
 
+bool copyFile(const std::string& src, const std::string& dst, std::string& outError) {
+    return copySingleFile(src, dst, outError);
+}
+
 bool copyPathRecursive(
     const std::string& src,
     const std::string& dst,

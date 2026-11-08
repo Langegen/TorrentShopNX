@@ -2408,6 +2408,7 @@ size_t DownloadManager::addToQueue(const std::string& title,
     item.is_homebrew = is_homebrew;
     item.retro_console_id = retro_console_id;
     item.state = DownloadState::Queued;
+    item.queue_seq = ++next_queue_seq_;
     if (isLocalBackend()) {
         std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
         if (!local_hash.empty()) {
@@ -2436,6 +2437,7 @@ size_t DownloadManager::addPortInstall(const std::string& title,
         item.selected_files = plan->getFilesForVariant(variant_index, with_optional);
     }
     item.state = DownloadState::Queued;
+    item.queue_seq = ++next_queue_seq_;
     item.install_stage_label = "app/ports/stage_queued"_i18n;
     if (isLocalBackend()) {
         std::string local_hash = extractBtihHash(normalizeTorrentLink(magnet));
@@ -3427,6 +3429,13 @@ bool DownloadManager::startDownload(size_t index) {
         // Adopt the probe's kept torrent (if any) so the file-select cleanup
         // does not remove it from under the download.
         datasource::CustomEngineClient::instance().markInUse(local_hash);
+        if (item.torrent_parked) {
+            // Paused when the release was skipped.
+            tsnx_engine_resume_torrent(nullptr, local_hash.c_str());
+            for (auto& other : queue_) {
+                if (equalsIgnoreCase(other.torrent_hash, local_hash)) other.torrent_parked = false;
+            }
+        }
         util::logLine("download: local client queued hash=" + local_hash);
     } else {
         id = getTorrent()->addMagnet(link);
@@ -3493,7 +3502,14 @@ bool DownloadManager::startDownload(size_t index) {
 
 void DownloadManager::startNextDownload() {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    std::vector<size_t> waiting;
     for (size_t i = 0; i < queue_.size(); ++i) {
+        if (queue_[i].state == DownloadState::Queued) waiting.push_back(i);
+    }
+    std::stable_sort(waiting.begin(), waiting.end(), [this](size_t a, size_t b) {
+        return queue_[a].queue_seq < queue_[b].queue_seq;
+    });
+    for (size_t i : waiting) {
         if (queue_[i].state != DownloadState::Queued) continue;
         if (startDownload(i)) return;
     }
@@ -3581,6 +3597,11 @@ void DownloadManager::trackProgressLocked(bool list_refreshed) {
             item.state == DownloadState::Completed ||
             item.state == DownloadState::Failed) {
             continue;
+        }
+
+        if (isTransferActive(item.state)) {
+            checkSlowDownload(i, now);
+            if (item.state == DownloadState::Queued) continue;   // moved to the end of the queue
         }
 
         if (item.hybrid_installer && downloading_active) {
@@ -4462,6 +4483,18 @@ bool DownloadManager::retryDownload(size_t index) {
         return false;
     }
 
+    resetItemForQueue(item);
+    item.slow_skipped = false;
+
+    util::logLine("download: retry triggered for index=" + std::to_string(index) + " (" + item.title + ")");
+
+    if (!hasActiveTransfers()) {
+        startDownload(index);
+    }
+    return true;
+}
+
+void DownloadManager::resetItemForQueue(DownloadItem& item) {
     if (item.cancel_flag) {
         item.cancel_flag->store(false);
     }
@@ -4501,6 +4534,8 @@ bool DownloadManager::retryDownload(size_t index) {
     item.progress = 0.0f;
     item.install_progress = 0.0f;
     item.download_speed_kbps = 0.0f;
+    item.speed_sample_at = std::chrono::steady_clock::time_point{};
+    item.bytes_downloaded = 0;
     item.install_written = 0;
     item.install_total = 0;
     item.start_time = std::chrono::steady_clock::now();
@@ -4509,14 +4544,9 @@ bool DownloadManager::retryDownload(size_t index) {
     item.auto_hybrid_started = false;
     item.stream_consumer_started = false;
     item.preload_started = false;
+    item.slow_window_at = std::chrono::steady_clock::time_point{};
+    item.slow_window_bytes = 0;
     item.state = DownloadState::Queued;
-
-    util::logLine("download: retry triggered for index=" + std::to_string(index) + " (" + item.title + ")");
-
-    if (!hasActiveTransfers()) {
-        startDownload(index);
-    }
-    return true;
 }
 
 void DownloadManager::retirePortWorker(DownloadItem& item) {
@@ -4649,6 +4679,198 @@ bool DownloadManager::resumeDownload(size_t index) {
         return true;
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// Queue order: skip a release, move it up, move slow releases to the end
+// ---------------------------------------------------------------------------
+
+static std::string itemTorrentHash(const DownloadItem& item) {
+    if (!item.torrent_hash.empty()) return item.torrent_hash;
+    if (item.magnet.empty()) return "";
+    return extractBtihHash(normalizeTorrentLink(item.magnet));
+}
+
+// Items the Downloads screen shows as one release: the same group, or (with
+// no group) the same torrent.
+static bool sameRelease(const DownloadItem& a, const DownloadItem& b) {
+    if (!a.group_id.empty() && !b.group_id.empty()) return a.group_id == b.group_id;
+    const std::string ha = itemTorrentHash(a);
+    const std::string hb = itemTorrentHash(b);
+    if (!ha.empty() && !hb.empty()) return equalsIgnoreCase(ha, hb);
+    return !a.magnet.empty() && a.magnet == b.magnet;
+}
+
+static bool isUnfinished(DownloadState state) {
+    return state == DownloadState::Queued || state == DownloadState::Paused || isTransferActive(state);
+}
+
+// How long the speed of the active release is measured before it is judged.
+static constexpr auto kSlowCheckWindow = std::chrono::minutes(5);
+
+bool DownloadManager::canSkip(size_t index) const {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    const auto& self = queue_[index];
+    if (!isUnfinished(self.state)) return false;
+    for (const auto& other : queue_) {
+        if (!sameRelease(self, other) || !isUnfinished(other.state)) continue;
+        // Port installs write files in stages; the old install mode copies
+        // a finished download. Neither is stopped halfway.
+        if (other.is_port_auto_install || other.state == DownloadState::Installing) return false;
+    }
+    return true;
+}
+
+bool DownloadManager::hasOtherQueuedRelease(size_t index) const {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    const auto& self = queue_[index];
+    for (const auto& other : queue_) {
+        if (other.state == DownloadState::Queued && !other.slow_skipped && !sameRelease(self, other)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool DownloadManager::requeueRelease(size_t index, bool slow) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size() || !canSkip(index)) return false;
+
+    std::vector<size_t> members;
+    for (size_t j = 0; j < queue_.size(); ++j) {
+        if (isUnfinished(queue_[j].state) && sameRelease(queue_[index], queue_[j])) members.push_back(j);
+    }
+    if (members.empty()) return false;
+
+    // Stop what runs. Every member is still Queued/Paused/active here, so the
+    // cancel keeps the torrent when another member needs it.
+    for (size_t j : members) {
+        auto& item = queue_[j];
+        if (item.state == DownloadState::Queued) continue;
+        cancelDownload(j);
+        resetItemForQueue(item);
+    }
+
+    // Behind every waiting item, in the release's own order.
+    std::stable_sort(members.begin(), members.end(), [this](size_t a, size_t b) {
+        return queue_[a].queue_seq < queue_[b].queue_seq;
+    });
+    std::vector<std::string> hashes;
+    for (size_t j : members) {
+        auto& item = queue_[j];
+        item.queue_seq = ++next_queue_seq_;
+        if (slow) item.slow_skipped = true;
+        item.slow_window_at = std::chrono::steady_clock::time_point{};
+        item.slow_window_bytes = 0;
+        const std::string hash = itemTorrentHash(item);
+        if (!hash.empty() && std::find(hashes.begin(), hashes.end(), hash) == hashes.end()) {
+            hashes.push_back(hash);
+        }
+    }
+
+    // A torrent kept for the release's other files would keep taking peers
+    // and bandwidth from the next release: pause it until the release starts.
+    if (isLocalBackend()) {
+        for (const auto& hash : hashes) {
+            if (!tsnx_engine_pause_torrent(nullptr, hash.c_str())) continue;
+            for (size_t j : members) {
+                if (equalsIgnoreCase(itemTorrentHash(queue_[j]), hash)) queue_[j].torrent_parked = true;
+            }
+        }
+    }
+
+    util::logLine(std::string("download: release moved to the end of the queue (") +
+                  (slow ? "slow" : "skipped by user") + "): " + queue_[index].title);
+    return true;
+}
+
+bool DownloadManager::skipDownload(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (!requeueRelease(index, false)) return false;
+    // A paused release still holds the engine stream: the queue waits for it.
+    bool busy = false;
+    for (const auto& item : queue_) {
+        if (isTransferActive(item.state) || item.state == DownloadState::Paused) {
+            busy = true;
+            break;
+        }
+    }
+    if (!busy) startNextDownload();
+    return true;
+}
+
+bool DownloadManager::downloadNext(size_t index) {
+    std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
+    if (index >= queue_.size()) return false;
+    std::vector<size_t> members;
+    for (size_t j = 0; j < queue_.size(); ++j) {
+        if (queue_[j].state == DownloadState::Queued && sameRelease(queue_[index], queue_[j])) {
+            members.push_back(j);
+        }
+    }
+    if (members.empty()) return false;
+    std::stable_sort(members.begin(), members.end(), [this](size_t a, size_t b) {
+        return queue_[a].queue_seq < queue_[b].queue_seq;
+    });
+    // From the last one back, so the release keeps its own order.
+    for (auto it = members.rbegin(); it != members.rend(); ++it) {
+        queue_[*it].queue_seq = --front_queue_seq_;
+    }
+    util::logLine("download: release moved to the front of the queue: " + queue_[index].title);
+    return true;
+}
+
+void DownloadManager::checkSlowDownload(size_t index, std::chrono::steady_clock::time_point now) {
+    auto& item = queue_[index];
+    const bool measurable = item.state == DownloadState::Downloading ||
+                            item.state == DownloadState::StreamPreparing ||
+                            item.state == DownloadState::StreamInstalling;
+    const int hours = config::ConfigManager::instance().getSlowSkipHours();
+    if (!measurable || hours <= 0 || item.slow_skipped || item.is_port_auto_install ||
+        !hasOtherQueuedRelease(index)) {
+        // Measure from the moment there is something to switch to.
+        item.slow_window_at = std::chrono::steady_clock::time_point{};
+        return;
+    }
+
+    const unsigned long long bytes = item.bytes_downloaded;
+    if (item.slow_window_at.time_since_epoch().count() == 0 || bytes < item.slow_window_bytes) {
+        item.slow_window_at = now;
+        item.slow_window_bytes = bytes;
+        return;
+    }
+    const auto elapsed = now - item.slow_window_at;
+    if (elapsed < kSlowCheckWindow) return;
+
+    const double secs = std::chrono::duration<double>(elapsed).count();
+    const unsigned long long gained = bytes - item.slow_window_bytes;
+    const unsigned long long total = item.download_total_bytes;
+    item.slow_window_at = now;
+    item.slow_window_bytes = bytes;
+
+    // Half of it is already here: finishing costs less than starting over.
+    if (total > 0 && bytes * 2 >= total) return;
+
+    bool slow = false;
+    double eta_hours = -1.0;
+    if (total == 0 || bytes >= total) {
+        slow = (gained == 0);   // no data at all (no metadata, no peers)
+    } else if (gained == 0) {
+        slow = true;
+    } else {
+        const double bytes_per_sec = static_cast<double>(gained) / secs;
+        eta_hours = static_cast<double>(total - bytes) / bytes_per_sec / 3600.0;
+        slow = eta_hours > static_cast<double>(hours);
+    }
+    if (!slow) return;
+
+    util::logLine("download: slow release (" + std::to_string(gained / 1024) + " KB in " +
+                  std::to_string(static_cast<int>(secs)) + " s, about " +
+                  (eta_hours < 0 ? std::string("?") : std::to_string(static_cast<int>(eta_hours))) +
+                  " h left, limit " + std::to_string(hours) + " h): " + item.title);
+    requeueRelease(index, true);
 }
 
 bool DownloadManager::getTorrentFiles(size_t index, std::vector<torrent::TorrentFileInfo>& out_files) {
