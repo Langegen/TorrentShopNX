@@ -520,6 +520,7 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
                 // fall through
             } else if (n == 0) {
                 if (p->mse_want && !p->mse_active) p->mse_failed = true;
+                errno = 0;  // callers log errno: 0 = orderly close (FIN)
                 return -1;  // peer closed
             } else if (errno == EINTR) {
                 continue;
