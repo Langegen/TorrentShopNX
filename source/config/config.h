@@ -92,7 +92,7 @@ public:
     void setInstallLocation(const std::string& location);
 
     static constexpr const char* DEFAULT_APP_UPDATE_URL = "https://api.github.com/repos/Langegen/TorrentShopNX/releases/latest";
-    static constexpr const char* APP_VERSION = "2.21"; // Keep in sync with Makefile APP_VERSION
+    static constexpr const char* APP_VERSION = "2.22"; // Keep in sync with Makefile APP_VERSION
 
     std::string getAppUpdateUrl() const;
     std::string getEffectiveAppUpdateUrl() const;
