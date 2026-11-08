@@ -5,6 +5,7 @@
 #include "../net/http_client.h"
 #include "../utils/app_paths.h"
 #include "../utils/archive_utils.h"
+#include "../utils/file_ops.h"
 #include "../utils/log.h"
 
 #include <algorithm>
@@ -281,9 +282,8 @@ bool moveFile(const fs::path& from, const fs::path& to) {
     ec.clear();
     fs::rename(from, to, ec);
     if (!ec) return true;
-    ec.clear();
-    fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
-    if (ec) return false;
+    std::string copy_err;
+    if (!util::copyFile(from.string(), to.string(), copy_err)) return false;
     fs::remove(from, ec);
     return true;
 }

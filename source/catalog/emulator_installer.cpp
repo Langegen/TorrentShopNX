@@ -58,11 +58,11 @@ bool downloadFile(const std::string& url, const std::string& dest, int64_t expec
     ec.clear();
     fs::rename(tmp, dest, ec);
     if (ec) {
-        ec.clear();
-        fs::copy_file(tmp, dest, fs::copy_options::overwrite_existing, ec);
+        std::string copy_err;
+        const bool copied = util::copyFile(tmp, dest, copy_err);
         std::error_code ec2;
         fs::remove(tmp, ec2);
-        if (ec) return false;
+        if (!copied) return false;
     }
     return true;
 }
@@ -147,8 +147,8 @@ bool installEmulatorPackage(const EmulatorPackage& pkg,
                         tsnx_ensure_parent_dirs(target.c_str());
                         fs::remove(target, ec);
                         ec.clear();
-                        fs::copy_file(prevTarget, target, fs::copy_options::overwrite_existing, ec);
-                        if (!ec) {
+                        std::string copy_err;
+                        if (util::copyFile(prevTarget, target, copy_err)) {
                             copied = true;
                             break;
                         }
@@ -260,11 +260,11 @@ bool installEmulatorPackage(const EmulatorPackage& pkg,
         ec.clear();
         fs::rename(tmpFile, target, ec);
         if (ec) {
-            ec.clear();
-            fs::copy_file(tmpFile, target, fs::copy_options::overwrite_existing, ec);
+            std::string copy_err;
+            const bool copied = util::copyFile(tmpFile, target, copy_err);
             std::error_code ec2;
             fs::remove(tmpFile, ec2);
-            if (ec) {
+            if (!copied) {
                 out_error = "cannot write " + target;
                 return false;
             }
