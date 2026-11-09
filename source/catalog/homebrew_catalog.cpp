@@ -1,90 +1,29 @@
 #include "homebrew_catalog.hpp"
 
 #include "../utils/atomic_file.h"
+#include "homebrew_fs.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <dirent.h>
-#include <sys/stat.h>
-#if defined(_WIN32)
-#include <direct.h>
-#endif
 
 namespace homebrew {
 
 namespace {
 
-std::string lower(std::string s) {
-    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
+using fsx::ensureDir;
+using fsx::fileExists;
+using fsx::join;
+using fsx::lower;
+using fsx::readFile;
 
 std::string trimmed(std::string s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
     size_t b = 0;
     while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
     return s.substr(b);
-}
-
-bool fileExists(const std::string& path) {
-    struct stat st;
-    return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
-}
-
-bool readFile(const std::string& path, std::string& out) {
-    out.clear();
-    FILE* f = std::fopen(path.c_str(), "rb");
-    if (!f) return false;
-    char buf[64 * 1024];
-    size_t n;
-    while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) out.append(buf, n);
-    const bool ok = !std::ferror(f);
-    std::fclose(f);
-    return ok;
-}
-
-int makeDir(const std::string& p) {
-#if defined(_WIN32)
-    return _mkdir(p.c_str());
-#else
-    return mkdir(p.c_str(), 0777);
-#endif
-}
-
-// mkdir -p that also works with "sdmc:/" paths.
-void ensureDir(const std::string& path) {
-    std::string cur;
-    size_t pos = 0;
-    const size_t colon = path.find(":/");
-    if (colon != std::string::npos) {
-        cur = path.substr(0, colon + 2);
-        pos = colon + 2;
-    } else if (!path.empty() && path[0] == '/') {
-        cur = "/";
-        pos = 1;
-    }
-    while (pos <= path.size()) {
-        size_t next = path.find('/', pos);
-        if (next == std::string::npos) next = path.size();
-        const std::string part = path.substr(pos, next - pos);
-        if (!part.empty() && part != ".") {
-            if (!cur.empty() && cur.back() != '/') cur += '/';
-            cur += part;
-            struct stat st;
-            if (stat(cur.c_str(), &st) != 0) makeDir(cur);
-        } else if (part == "." && cur.empty()) {
-            cur = ".";
-        }
-        pos = next + 1;
-    }
-}
-
-std::string join(const std::string& dir, const std::string& name) {
-    if (dir.empty()) return name;
-    return dir.back() == '/' ? dir + name : dir + "/" + name;
 }
 
 bool validRepo(const std::string& body) {
