@@ -142,7 +142,11 @@ void engine_log_init(const char *path) {
         char *slash = strrchr(dir, '/');
         if (slash) {
             *slash = '\0';
+#if defined(_WIN32)
+            mkdir(dir);
+#else
             mkdir(dir, 0777);
+#endif
         }
         // Rotate previous session's log on the very first open of the process so a
         // post-crash restart does not wipe out the crash session's engine.log.

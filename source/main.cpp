@@ -6,7 +6,11 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <io.h>
+#if defined(__MINGW32__)
+#include <unistd.h>  // MinGW has usleep()
+#else
 #define usleep(us) Sleep((us) / 1000)
+#endif
 #else
 #include <unistd.h>
 #endif

@@ -341,7 +341,9 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
     // SIGPIPE before returning the error and the default action kills the
     // process; the bsd service on Switch does not deliver it, but any PC build
     // of the engine would be taken down by the first reset peer.
+#ifdef SIGPIPE  // Windows has none: send() there returns an error instead
     signal(SIGPIPE, SIG_IGN);
+#endif
 
     mutexInit(&g_reg);
     condvarInit(&g_reg_cv);
