@@ -40,7 +40,7 @@ static bool ensureDirRecursiveImpl(const std::string& path) {
             if (!cur.empty() && cur.back() != '/') cur += "/";
             cur += part;
             if (!pathExists(cur)) {
-                mkdir(cur.c_str(), 0777);
+                TSNX_MKDIR(cur.c_str());
             }
         }
         if (next == std::string::npos) break;

@@ -10,7 +10,11 @@ if (NOT BRLS_RESOURCES_DIR)
     set(BRLS_RESOURCES_DIR ".")
 endif ()
 
-include_directories("C:/devkitPro/portlibs/switch/include")
+# Switch portlibs headers for C++ (the toolchain passes them to C only).
+# Not on desktop: its GLFW/glfw3.h would shadow the bundled GLFW fork.
+if (PLATFORM_SWITCH)
+    include_directories("C:/devkitPro/portlibs/switch/include")
+endif ()
 
 # fmt
 if (USE_SYSTEM_FMT)
