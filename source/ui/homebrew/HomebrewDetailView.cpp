@@ -4,6 +4,7 @@
 #include "../ThemeManager.hpp"
 #include "../style/UiTokens.hpp"
 #include "../../catalog/homebrew_view_model.hpp"
+#include "../../catalog/sysmodules.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -121,6 +122,11 @@ void HomebrewDetailView::onContentAvailable() {
         onRemove();
         return true;
     });
+    sysmoduleButton->registerClickAction([this](brls::View*) {
+        toggleModules();
+        return true;
+    });
+    sysmoduleButton->setCustomNavigationRoute(brls::FocusDirection::RIGHT, scroll);
 
     // The text column scrolls with up / down once it has focus.
     scroll->setFocusable(true);
@@ -232,6 +238,82 @@ void HomebrewDetailView::refreshState() {
     primaryButton->setText(primary);
     secondaryButton->setText("app/homebrew/btn_remove"_i18n);
     secondaryButton->setVisibility(canRemove ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+    // Start / stop the package's system modules (installed ones, no reboot needed).
+    const std::vector<std::string> mods = in.present ? controllableModules() : std::vector<std::string>{};
+    if (!mods.empty() && !busy_) {
+        bool running = false;
+        for (const auto& t : mods) running = running || hb::sysmoduleRunning(t);
+        sysmoduleButton->setText(running ? "app/homebrew/sysmodule_stop"_i18n : "app/homebrew/sysmodule_start"_i18n);
+        sysmoduleButton->setVisibility(brls::Visibility::VISIBLE);
+    } else {
+        sysmoduleButton->setVisibility(brls::Visibility::GONE);
+    }
+}
+
+std::vector<std::string> HomebrewDetailView::controllableModules(const std::vector<std::string>& names) const {
+    std::vector<std::string> out;
+    if (!hb::canControlSysmodules()) return out;
+    std::vector<std::string> tids;
+    auto& cat = homebrew::Catalog::instance();
+    for (const auto& name : names.empty() ? std::vector<std::string>{pkg_.name} : names) {
+        const homebrew::Installed in = cat.installed(name);
+        std::vector<homebrew::ManifestEntry> files = in.manifest;
+        homebrew::Package p;
+        if (files.empty() && cat.find(name, p)) files = p.files;
+        for (const auto& t : homebrew::sysmoduleTids(files)) tids.push_back(t);
+    }
+    if (tids.empty()) return out;
+    for (const auto& m : homebrew::scanSysmodules(hb::sdRoot(), nullptr))
+        if (!m.requires_reboot && std::find(tids.begin(), tids.end(), m.tid) != tids.end()) out.push_back(m.tid);
+    return out;
+}
+
+void HomebrewDetailView::toggleModules() {
+    const auto mods = controllableModules();
+    if (mods.empty()) return;
+    bool running = false;
+    for (const auto& t : mods) running = running || hb::sysmoduleRunning(t);
+    bool ok = true;
+    for (const auto& t : mods) {
+        std::string err;
+        ok = (running ? hb::stopSysmodule(t, err) : hb::startSysmodule(t, err)) && ok;
+    }
+    brls::Application::notify(ok ? brls::getStr(running ? "app/homebrew/sysmodule_stopped_fmt"
+                                                        : "app/homebrew/sysmodule_started_fmt", pkg_.title)
+                                 : brls::getStr("app/homebrew/sysmodule_failed_fmt", pkg_.title));
+    // Next frame: this runs inside the button's own action.
+    auto alive = alive_;
+    brls::sync([this, alive]() {
+        if (alive->load()) refreshState();
+    });
+}
+
+void HomebrewDetailView::offerStartModules(const std::vector<std::string>& names, const std::string& titles) {
+    std::vector<std::string> mods;
+    for (const auto& t : controllableModules(names))
+        if (!hb::sysmoduleRunning(t)) mods.push_back(t);
+    if (mods.empty()) {
+        if (controllableModules(names).empty())
+            brls::Application::notify(brls::getStr("app/homebrew/sysmodule_reboot", titles));
+        return;
+    }
+    auto* dialog = new brls::Dialog(brls::getStr("app/homebrew/sysmodule_start_now", titles));
+    auto alive = alive_;
+    dialog->addButton("app/homebrew/sysmodule_start"_i18n, [this, alive, mods, titles]() {
+        if (!alive->load()) return;
+        bool ok = true;
+        for (const auto& t : mods) {
+            std::string err;
+            ok = hb::startSysmodule(t, err) && ok;
+        }
+        brls::Application::notify(brls::getStr(ok ? "app/homebrew/sysmodule_started_fmt" : "app/homebrew/sysmodule_failed_fmt",
+                                               titles));
+        refreshState();
+    });
+    dialog->addButton("app/homebrew/later"_i18n, []() {});
+    dialog->setCancelable(true);
+    dialog->open();
 }
 
 void HomebrewDetailView::onPrimary() {
@@ -274,7 +356,8 @@ void HomebrewDetailView::runInstall(std::vector<homebrew::Package> chain) {
     const bool wasInstalled = homebrew::Catalog::instance().installed(pkg_.name).present;
     brls::async([this, alive, cancel, chain, mainTitle, wasInstalled]() {
         homebrew::InstallResult last;
-        bool sysmodule = false;
+        std::vector<std::string> modNames;  // installed packages that carry system modules
+        std::string modTitles;
         for (size_t i = 0; i < chain.size(); ++i) {
             const homebrew::Package& p = chain[i];
             const std::string prefix = chain.size() > 1 ? brls::getStr("app/homebrew/installing_n", p.title,
@@ -294,18 +377,26 @@ void HomebrewDetailView::runInstall(std::vector<homebrew::Package> chain) {
                 },
                 cancel);
             if (!last.ok) break;
-            if (p.kinds & homebrew::KindSysmodule) sysmodule = true;
+            if (p.kinds & homebrew::KindSysmodule) {
+                modNames.push_back(p.name);
+                modTitles += (modTitles.empty() ? "" : ", ") + p.title;
+            }
         }
         homebrew::Catalog::instance().rescanInstalled();
-        brls::sync([this, alive, last, mainTitle, wasInstalled, sysmodule]() {
+        const bool sysmodule = !modNames.empty();
+        brls::sync([this, alive, last, mainTitle, wasInstalled, sysmodule, modNames, modTitles]() {
             hb::packagesChanged();
             if (last.ok) {
                 brls::Application::notify(brls::getStr(wasInstalled ? "app/homebrew/done_update" : "app/homebrew/done_install", mainTitle));
-                if (sysmodule) brls::Application::notify(brls::getStr("app/homebrew/sysmodule_reboot", mainTitle));
             } else {
                 brls::Application::notify(homebrewErrorText(last.error));
             }
-            if (alive->load()) finish();
+            if (alive->load()) {
+                finish();
+                if (last.ok && sysmodule) offerStartModules(modNames, modTitles);
+            } else if (last.ok && sysmodule) {
+                brls::Application::notify(brls::getStr("app/homebrew/sysmodule_reboot", modTitles));
+            }
         });
     });
 }

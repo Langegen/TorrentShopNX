@@ -1,0 +1,25 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="32"
+    paddingBottom="12"
+    paddingLeft="32">
+
+    <brls:Box width="auto" height="56px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="8">
+        <brls:Label id="titleLabel" fontSize="28" />
+        <brls:Label id="statsHint" fontSize="15" textColor="@theme/brls/header/subtitle" />
+    </brls:Box>
+
+    <brls:Label id="noteLabel" fontSize="15" marginBottom="10" textColor="@theme/brls/header/subtitle" />
+
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
+
+    <brls:ScrollingFrame id="scroll" width="auto" height="auto" grow="1.0">
+        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingRight="20" paddingBottom="20" />
+    </brls:ScrollingFrame>
+
+</brls:Box>
+</brls:AppletFrame>

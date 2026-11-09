@@ -16,6 +16,7 @@
         <brls:Label id="statusLabel" width="256px" marginTop="14" fontSize="15" horizontalAlign="center" />
         <brls:Button id="primaryButton" width="256px" height="52px" marginTop="12" style="primary" />
         <brls:Button id="secondaryButton" width="256px" height="46px" marginTop="10" style="bordered" visibility="gone" />
+        <brls:Button id="sysmoduleButton" width="256px" height="46px" marginTop="10" style="bordered" visibility="gone" />
         <brls:Box id="progressBox" width="256px" height="auto" axis="column" marginTop="16" visibility="gone">
             <brls:Label id="progressLabel" width="256px" fontSize="14" singleLine="true" textColor="@theme/brls/header/subtitle" />
             <brls:Box id="progressTrack" width="256px" height="8px" cornerRadius="4" marginTop="6">

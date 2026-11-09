@@ -2,6 +2,7 @@
 
 #include "HomebrewDetailView.hpp"
 #include "HomebrewGlue.hpp"
+#include "SysmodulesView.hpp"
 #include "../EmptyState.hpp"
 #include "../ThemeManager.hpp"
 #include "../style/HeaderHints.hpp"
@@ -291,11 +292,13 @@ void HomebrewView::onContentAvailable() {
         rebuild(false);
         return true;
     });
+    // Hidden from the footer: it fits five hints, and "+" (update all) needs the room.
+    // The catalog refreshes on its own every 6 hours.
     registerAction("app/homebrew/hint_refresh"_i18n, brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
         brls::Application::notify("app/homebrew/refreshing"_i18n);
         loadCatalog(true);
         return true;
-    });
+    }, true);
 
     loadCatalog(false);
 }
@@ -351,6 +354,7 @@ void HomebrewView::rebuild(bool keepFocus) {
     counts_ = homebrew::countByCategory(*packages_, *installed_);
     updateChips();
     updateHeader();
+    updateStartAction();
 
     if (items_.empty()) {
         showEmpty();
@@ -445,10 +449,82 @@ void HomebrewView::updateHeader() {
     const int updates = cat.updatesAvailable();
     if (updates > 0) stats += "  ·  " + brls::getStr("app/homebrew/stats_updates", std::to_string(updates));
     if (!query_.empty()) stats += "  ·  «" + query_ + "»";
+    if (!updateAllStatus_.empty()) stats = updateAllStatus_;
     statsHint->setText(style::headerMeta(
         stats, {style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT,
                                   "app/homebrew/hint_category"_i18n),
                 brls::getStr(sortKey(sort_))}));
+}
+
+void HomebrewView::updateStartAction() {
+    if (category_ == homebrew::Category::Sysmodules) {
+        registerAction("app/homebrew/sysmodules_manage"_i18n, brls::ControllerButton::BUTTON_START, [](brls::View*) {
+            brls::Application::pushActivity(new SysmodulesView());
+            return true;
+        });
+    } else {
+        const int updates = homebrew::Catalog::instance().updatesAvailable();
+        if (updates > 0 && !updatingAll_) {
+            registerAction(brls::getStr("app/homebrew/update_all", std::to_string(updates)),
+                           brls::ControllerButton::BUTTON_START, [this](brls::View*) {
+                               updateAll();
+                               return true;
+                           });
+        } else {
+            registerAction("", brls::ControllerButton::BUTTON_START, [](brls::View*) { return true; }, true);
+        }
+    }
+    brls::Application::getGlobalHintsUpdateEvent()->fire();
+}
+
+void HomebrewView::updateAll() {
+    if (updatingAll_) return;
+    // Everything the registry knows with a newer version in the store.
+    std::vector<homebrew::Package> todo;
+    const auto& cat = homebrew::Catalog::instance();
+    for (const auto& p : *packages_) {
+        const homebrew::Installed in = cat.installed(p.name);
+        if (in.present && !in.untracked && homebrew::statusFor(p, in) == homebrew::Status::UpdateAvailable)
+            todo.push_back(p);
+    }
+    if (todo.empty()) return;
+
+    auto* dialog = new brls::Dialog(brls::getStr("app/homebrew/update_all_confirm", std::to_string(todo.size())));
+    auto alive = alive_;
+    dialog->addButton("app/homebrew/btn_update"_i18n, [this, alive, todo]() {
+        if (!alive->load()) return;
+        updatingAll_ = true;
+        updateStartAction();
+        brls::async([this, alive, todo]() {
+            int ok = 0;
+            for (size_t i = 0; i < todo.size(); ++i) {
+                const auto& p = todo[i];
+                const std::string status = brls::getStr("app/homebrew/update_all_progress", std::to_string(i + 1),
+                                                         std::to_string(todo.size()), p.title);
+                brls::sync([this, alive, status]() {
+                    if (!alive->load()) return;
+                    updateAllStatus_ = status;
+                    updateHeader();
+                });
+                const auto r = homebrew::Installer::instance().install(
+                    p, homebrew::Catalog::instance().installed(p.name), nullptr, nullptr);
+                if (r.ok) ++ok;
+            }
+            homebrew::Catalog::instance().rescanInstalled();
+            const int total = static_cast<int>(todo.size());
+            brls::sync([this, alive, ok, total]() {
+                hb::packagesChanged();
+                brls::Application::notify(brls::getStr("app/homebrew/update_all_done", std::to_string(ok),
+                                                       std::to_string(total)));
+                if (!alive->load()) return;
+                updatingAll_ = false;
+                updateAllStatus_.clear();
+                rebuild(true);
+            });
+        });
+    });
+    dialog->setCancelable(true);
+    dialog->open();
 }
 
 void HomebrewView::setCategory(homebrew::Category c) {

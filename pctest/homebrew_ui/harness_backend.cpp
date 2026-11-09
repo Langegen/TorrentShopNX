@@ -11,6 +11,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <thread>
 
@@ -192,5 +193,20 @@ std::string today() {
 }
 
 void packagesChanged() {}
+
+std::string sdRoot() { return "hb_ui_sd/"; }
+
+// Pretend pm services: modules "run" once started, until stopped.
+static std::set<std::string> g_running;
+bool canControlSysmodules() { return true; }
+bool sysmoduleRunning(const std::string& tid) { return g_running.count(tid) > 0; }
+bool startSysmodule(const std::string& tid, std::string&) {
+    g_running.insert(tid);
+    return true;
+}
+bool stopSysmodule(const std::string& tid, std::string&) {
+    g_running.erase(tid);
+    return true;
+}
 
 }  // namespace ui::hb

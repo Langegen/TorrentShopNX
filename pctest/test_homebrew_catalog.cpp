@@ -6,6 +6,7 @@
 
 #include "../source/catalog/homebrew_catalog.hpp"
 #include "../source/catalog/homebrew_view_model.hpp"
+#include "../source/catalog/sysmodules.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -359,6 +360,68 @@ int main(int argc, char** argv) {
         CHECK(!isKnownLicense(""));
         CHECK_EQ(displayDate("2026-11-09"), std::string("09.11.2026"));
         CHECK_EQ(displayDate(""), std::string(""));
+    }
+
+    // 12. System modules on the card: names, owners, autostart flag.
+    {
+        Env env(tmp);
+        Catalog c = env.make();
+        env.answer(kFtUrl, 200, ft, "a");
+        env.answer(kIdxUrl, 200, own, "b");
+        CHECK(c.refresh().ok);
+        const std::string sd = env.cfg.sd_root;
+        writeFile(sd + "atmosphere/contents/00FF0000636C6BFF/exefs.nsp", "nsp");
+        writeFile(sd + "atmosphere/contents/00FF0000636C6BFF/flags/boot2.flag", "");
+        writeFile(sd + "atmosphere/contents/00FF0000636C6BFF/toolbox.json", "{\"name\":\"sys-clk\",\"tid\":\"00FF0000636C6BFF\",\"requires_reboot\":false}");
+        writeFile(sd + "atmosphere/contents/0100000000000F12/exefs.nsp", "nsp");  // Fizeau from the index, no toolbox.json
+        writeFile(sd + "atmosphere/contents/4200000000000abc/exefs.nsp", "nsp");  // unknown, lower-case folder
+        writeFile(sd + "atmosphere/contents/4200000000000abc/toolbox.json", "{\"requires_reboot\":true}");
+        writeFile(sd + "atmosphere/contents/0100A0D004FB0000/romfs/data.arc", "mod");  // a game mod, not a module
+        writeFile(sd + "atmosphere/contents/not-a-tid/exefs.nsp", "x");
+
+        auto mods = scanSysmodules(sd, c.snapshot().get());
+        CHECK_EQ(mods.size(), size_t(3));
+        if (mods.size() == 3) {
+            CHECK_EQ(mods[0].tid, std::string("4200000000000ABC"));
+            CHECK_EQ(mods[0].name, std::string("4200000000000ABC"));
+            CHECK(mods[0].requires_reboot && !mods[0].autostart && mods[0].package.empty());
+            CHECK_EQ(mods[1].name, std::string("Fizeau"));
+            CHECK_EQ(mods[1].package, std::string("Fizeau"));
+            CHECK(!mods[1].autostart);
+            CHECK_EQ(mods[2].name, std::string("sys-clk"));
+            CHECK(mods[2].autostart && !mods[2].requires_reboot);
+        }
+        std::string err;
+        CHECK(setSysmoduleAutostart(sd, "0100000000000f12", true, err));
+        CHECK(fs::exists(sd + "atmosphere/contents/0100000000000F12/flags/boot2.flag"));
+        CHECK(setSysmoduleAutostart(sd, "00FF0000636C6BFF", false, err));
+        CHECK(!fs::exists(sd + "atmosphere/contents/00FF0000636C6BFF/flags"));
+        CHECK(setSysmoduleAutostart(sd, "00FF0000636C6BFF", false, err));  // already off: fine
+        CHECK(!setSysmoduleAutostart(sd, "0100A0D004FB0000", true, err));  // a game mod
+        CHECK(!setSysmoduleAutostart(sd, "../../bootloader", true, err));
+        mods = scanSysmodules(sd, nullptr);
+        // Without the store list Fizeau is named by its title id, which sorts first.
+        CHECK(mods.size() == 3 && mods[0].name == "0100000000000F12" && mods[0].autostart);
+
+        // A fortheusers package lists its files only in the registry after install.
+        writeFile(sd + "atmosphere/contents/010000000000BD00/exefs.nsp", "nsp");
+        InstalledMap reg;
+        Installed mc;
+        mc.present = true;
+        CHECK(parseManifest("U: atmosphere/contents/010000000000BD00/exefs.nsp\n", mc.manifest, err));
+        reg["missioncontrol"] = mc;
+        mods = scanSysmodules(sd, c.snapshot().get(), &reg);
+        bool named = false;
+        for (const auto& mod : mods)
+            if (mod.tid == "010000000000BD00") named = mod.name == "MissionControl" && mod.package == "MissionControl";
+        CHECK(named);
+
+        std::vector<ManifestEntry> m;
+        CHECK(parseManifest(readFile(dir + "/manifests/sys-clk.install"), m, err));
+        const auto tids = sysmoduleTids(m);
+        CHECK(tids.size() == 1 && tids[0] == "00FF0000636C6BFF");
+        CHECK_EQ(parseTitleId("00FF0000636C6BFF"), 0x00FF0000636C6BFFull);
+        CHECK_EQ(parseTitleId("xyz"), 0ull);
     }
 
     fs::remove_all(tmp);

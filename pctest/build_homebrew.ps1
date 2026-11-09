@@ -11,7 +11,8 @@ $flags = @("-O1", "-g", "-Wall", "-Wextra", "-std=c++17", "-Isource", "-I_extern
 & $GPP @flags -o pctest\test_homebrew.exe pctest\test_homebrew.cpp source\catalog\homebrew_package.cpp
 if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED: test_homebrew"; exit 1 }
 & $GPP @flags -o pctest\test_homebrew_catalog.exe pctest\test_homebrew_catalog.cpp `
-    source\catalog\homebrew_catalog.cpp source\catalog\homebrew_package.cpp source\catalog\homebrew_view_model.cpp
+    source\catalog\homebrew_catalog.cpp source\catalog\homebrew_package.cpp source\catalog\homebrew_view_model.cpp `
+    source\catalog\sysmodules.cpp
 if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED: test_homebrew_catalog"; exit 1 }
 & $GPP @flags -o pctest\test_homebrew_installer.exe pctest\test_homebrew_installer.cpp `
     source\catalog\homebrew_installer.cpp source\catalog\homebrew_catalog.cpp source\catalog\homebrew_package.cpp `

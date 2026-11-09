@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "../../catalog/homebrew_installer.hpp"
 #include "../../catalog/homebrew_view_model.hpp"
 
 namespace ui {
@@ -63,6 +64,9 @@ private:
     void setCategory(homebrew::Category c);
     void showEmpty();
     void loadCatalog(bool force);
+    // "+": update everything (or, on the sysmodules tab, open the modules screen).
+    void updateStartAction();
+    void updateAll();
 
     BRLS_BIND(brls::Label, titleLabel, "titleLabel");
     BRLS_BIND(brls::Label, otherTabLabel, "otherTabLabel");
@@ -86,6 +90,8 @@ private:
     uint64_t seenGeneration_ = 0;
     bool loading_ = false;
     bool loadFailed_ = false;
+    bool updatingAll_ = false;
+    std::string updateAllStatus_;  // "Updating 2 of 5: sys-clk" in the header
 
     std::shared_ptr<std::atomic<bool>> alive_;
 };

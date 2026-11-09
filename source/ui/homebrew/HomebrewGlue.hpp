@@ -31,6 +31,15 @@ std::string today();
 // After an install or removal: refresh counters elsewhere in the app.
 void packagesChanged();
 
+// SD card root the store installs to ("sdmc:/" on the console).
+std::string sdRoot();
+
+// Running system modules (pm services). False / no-op where not available.
+bool canControlSysmodules();
+bool sysmoduleRunning(const std::string& tid);
+bool startSysmodule(const std::string& tid, std::string& err);
+bool stopSysmodule(const std::string& tid, std::string& err);
+
 // Readable text color on a filled background: dark on light accents (the
 // graphite theme's accent is near white), white on the rest.
 inline NVGcolor textOn(NVGcolor bg) {

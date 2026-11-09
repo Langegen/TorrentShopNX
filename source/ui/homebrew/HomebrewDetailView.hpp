@@ -30,11 +30,18 @@ private:
     void runInstall(std::vector<homebrew::Package> chain);
     void showProgress(const homebrew::InstallProgress& p, const std::string& prefix);
     void finish();
+    // Modules of these packages (this one by default) that can be started /
+    // stopped without a reboot.
+    std::vector<std::string> controllableModules(const std::vector<std::string>& names = {}) const;
+    // After an install: start the modules of everything just installed?
+    void offerStartModules(const std::vector<std::string>& names, const std::string& titles);
+    void toggleModules();
 
     BRLS_BIND(brls::Image, icon, "icon");
     BRLS_BIND(brls::Label, statusLabel, "statusLabel");
     BRLS_BIND(brls::Button, primaryButton, "primaryButton");
     BRLS_BIND(brls::Button, secondaryButton, "secondaryButton");
+    BRLS_BIND(brls::Button, sysmoduleButton, "sysmoduleButton");
     BRLS_BIND(brls::Box, progressBox, "progressBox");
     BRLS_BIND(brls::Label, progressLabel, "progressLabel");
     BRLS_BIND(brls::Box, progressTrack, "progressTrack");

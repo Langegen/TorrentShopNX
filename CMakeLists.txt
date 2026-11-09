@@ -116,6 +116,8 @@ set(HB_UI_SOURCES
     pctest/homebrew_ui/harness_backend.cpp
     source/ui/homebrew/HomebrewView.cpp
     source/ui/homebrew/HomebrewDetailView.cpp
+    source/ui/homebrew/SysmodulesView.cpp
+    source/catalog/sysmodules.cpp
     source/ui/EmptyState.cpp
     source/ui/dashboard/DashboardIcon.cpp
     source/ui/ThemeManager.cpp
