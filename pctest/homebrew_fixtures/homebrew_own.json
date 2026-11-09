@@ -1,0 +1,109 @@
+{
+  "format": 1,
+  "generated": "2026-11-09T06:00:00Z",
+  "hidden": ["Hekate", "Daybreak", "libretro/retroarch"],
+  "overlay_dependencies": ["nx-ovlloader", "Ultrahand"],
+  "fortheusers": {
+    "Checkpoint": { "kinds": ["app"], "description_i18n": { "ru": "Резервные копии сохранений" } },
+    "sys-clk": { "kinds": ["app", "overlay", "sysmodule"] },
+    "Status-Monitor-Overlay": { "kinds": ["overlay"] },
+    "MissionControl": { "kinds": ["sysmodule"] },
+    "Goldleaf": { "kinds": ["app"] }
+  },
+  "packages": [
+    {
+      "name": "sys-clk", "repo": "retronx-team/sys-clk", "version": "2.1.0", "updated": "2026-11-01",
+      "changelog": "2.1.0: new firmware support",
+      "download_url": "https://github.com/retronx-team/sys-clk/releases/download/2.1.0/sys-clk-2.1.0.zip",
+      "download_type": "zip", "zip_root": "SdOut", "sha256": "AABBCC", "filesize": 400000, "extracted": 900000,
+      "files": [
+        "U: switch/sys-clk-manager.nro",
+        "U: atmosphere/contents/00FF0000636C6BFF/exefs.nsp",
+        "U: atmosphere/contents/00FF0000636C6BFF/flags/boot2.flag",
+        "G: config/sys-clk/config.ini",
+        "U: switch/.overlays/sys-clk-overlay.ovl"
+      ]
+    },
+    {
+      "name": "Goldleaf", "repo": "XorTroll/Goldleaf", "version": "1.1.0",
+      "download_url": "https://github.com/XorTroll/Goldleaf/releases/download/1.1.0/Goldleaf.nro",
+      "download_type": "file", "files": ["U: switch/Goldleaf/Goldleaf.nro"],
+      "description_i18n": { "ru": "Установщик и файловый менеджер" }
+    },
+    {
+      "name": "JKSV-github", "repo": "J-D-K/JKSV", "version": "11/03/2026",
+      "download_url": "https://github.com/J-D-K/JKSV/releases/download/03.11.2026/JKSV.nro",
+      "download_type": "file", "files": ["U: switch/JKSV/JKSV.nro"]
+    },
+    {
+      "name": "checkpoint-copy", "version": "5.3.0",
+      "download_url": "https://example.org/Checkpoint.nro",
+      "download_type": "file", "files": ["U: switch/Checkpoint/Checkpoint.nro"]
+    },
+    {
+      "name": "Fizeau", "title": "Fizeau", "author": "averne", "repo": "averne/Fizeau", "version": "2.7.0",
+      "category": "advanced", "updated": "2026-10-20",
+      "download_url": "https://github.com/averne/Fizeau/releases/download/v2.7.0/Fizeau-2.7.0.zip",
+      "download_type": "zip",
+      "files": [
+        "U: switch/Fizeau/Fizeau.nro",
+        "U: switch/.overlays/Fizeau.ovl",
+        "U: atmosphere/contents/0100000000000F12/exefs.nsp",
+        "U: atmosphere/contents/0100000000000F12/flags/boot2.flag"
+      ]
+    },
+    {
+      "name": "nx-ovlloader", "repo": "ppkantorski/nx-ovlloader", "version": "2.0.0",
+      "download_url": "https://github.com/ppkantorski/nx-ovlloader/releases/download/v2.0.0/nx-ovlloader.zip",
+      "files": [
+        "U: atmosphere/contents/420000000007E51A/exefs.nsp",
+        "U: atmosphere/contents/420000000007E51A/flags/boot2.flag"
+      ]
+    },
+    {
+      "name": "Ultrahand", "title": "Ultrahand Overlay", "repo": "ppkantorski/Ultrahand-Overlay", "version": "2.1.0",
+      "download_url": "https://github.com/ppkantorski/Ultrahand-Overlay/releases/download/v2.1.0/ovlmenu.zip",
+      "files": ["U: switch/.overlays/ovlmenu.ovl", "G: config/ultrahand/config.ini"]
+    },
+    {
+      "name": "NewTool", "title": "New Tool", "repo": "someone/newtool", "version": "0.3",
+      "auto": true, "first_seen": "2026-11-01",
+      "download_url": "https://github.com/someone/newtool/releases/download/v0.3/NewTool.nro",
+      "download_type": "file", "files": ["U: switch/NewTool/NewTool.nro"]
+    },
+    {
+      "name": "OldAuto", "repo": "someone/oldauto", "version": "1.0",
+      "auto": true, "first_seen": "2026-09-01",
+      "download_url": "https://github.com/someone/oldauto/releases/download/v1.0/OldAuto.ovl",
+      "download_type": "file", "files": ["U: switch/.overlays/OldAuto.ovl"]
+    },
+    {
+      "name": "Daybreak", "version": "1.12.1", "download_url": "https://example.org/daybreak.nro",
+      "download_type": "file", "files": ["U: switch/daybreak.nro"]
+    },
+    {
+      "name": "BadPayload", "version": "1.0", "download_url": "https://example.org/bad.zip",
+      "files": ["U: switch/bad/bad.nro", "U: bootloader/payloads/bad.bin"]
+    },
+    {
+      "name": "Traversal", "version": "1.0", "download_url": "https://example.org/t.zip",
+      "files": ["U: switch/../atmosphere/package3"]
+    },
+    {
+      "name": "BadZipRoot", "version": "1.0", "download_url": "https://example.org/z.zip", "zip_root": "../",
+      "files": ["U: switch/z/z.nro"]
+    },
+    {
+      "name": "TwoFilesAsFile", "version": "1.0", "download_url": "https://example.org/x.nro",
+      "download_type": "file", "files": ["U: switch/x/x.nro", "U: switch/x/y.nro"]
+    },
+    {
+      "name": "NoVersion", "download_url": "https://example.org/n.nro",
+      "download_type": "file", "files": ["U: switch/n/n.nro"]
+    },
+    {
+      "name": "NewTool", "version": "9.9", "download_url": "https://example.org/dup.nro",
+      "download_type": "file", "files": ["U: switch/dup/dup.nro"]
+    }
+  ]
+}
