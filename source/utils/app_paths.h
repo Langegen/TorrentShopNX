@@ -40,17 +40,20 @@
 #define TSNX_CACHE_ICONS         TSNX_CACHE_DIR "/icons"
 #define TSNX_CACHE_STREAM        TSNX_CACHE_DIR "/stream_install"
 #define TSNX_CACHE_TMP           TSNX_CACHE_DIR "/tmp"
+#define TSNX_CACHE_HOMEBREW      TSNX_CACHE_DIR "/homebrew"
 
 #define TSNX_DATA_DIR            TSNX_BASE_DIR "/data"
 #define TSNX_DOWNLOADS_DIR       TSNX_BASE_DIR "/downloads"
 
 #ifdef __SWITCH__
+#define TSNX_SD_ROOT             "sdmc:/"
 #define TSNX_ROMS_BASE_DIR       "sdmc:/roms"
 #define TSNX_TICO_BASE_DIR       "sdmc:/tico"
 #define TSNX_TICO_NRO_PATH       "sdmc:/switch/tico/tico.nro"
 #define TSNX_VITA3K_DIR          "sdmc:/switch/vita3k"
 #define TSNX_CEMU_DIR            "sdmc:/switch/cemu"
 #else
+#define TSNX_SD_ROOT             "./"
 #define TSNX_ROMS_BASE_DIR       "./roms"
 #define TSNX_TICO_BASE_DIR       "./tico"
 #define TSNX_TICO_NRO_PATH       "./switch/tico/tico.nro"

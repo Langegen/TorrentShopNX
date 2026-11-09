@@ -8,6 +8,7 @@
 #include "utils/app_paths.h"
 #include "net/http_client.h"
 #include "installer/PortInstallPlanner.hpp"
+#include "homebrew_catalog.hpp"
 #include "ui/CatalogProgressNotification.hpp"
 #include "ui/CatalogView.hpp"
 #include "ui/FavoritesManager.hpp"
@@ -79,11 +80,36 @@ static void updatePortRecipesInBackground() {
     util::logLine("catalog_updater: port_recipes.json updated, " + std::to_string(recipes.size()) + " recipes");
 }
 
+// Homebrew store data: read the cache, then download changes at most every
+// 6 hours. Runs on every start, apart from the game catalog schedule.
+static void refreshHomebrewInBackground() {
+    brls::async([] {
+        try {
+            auto& hb = homebrew::Catalog::instance();
+            if (!hb.loaded()) hb.loadCached();
+            if (g_appExiting.load()) return;
+            const homebrew::RefreshResult r = hb.refresh(false);
+            if (r.attempted) {
+                const auto pkgs = hb.snapshot();
+                util::logLine("homebrew: refresh " + std::string(r.ok ? "ok" : "failed") + " (repo.json " +
+                              std::to_string(r.fortheusers_status) + ", homebrew.json " +
+                              std::to_string(r.index_status) + "), " + std::to_string(pkgs->size()) +
+                              " packages, updates " + std::to_string(hb.updatesAvailable()) +
+                              (r.error.empty() ? "" : ", " + r.error));
+            }
+        } catch (const std::exception& e) {
+            util::logLine(std::string("homebrew: refresh exception: ") + e.what());
+        }
+    });
+}
+
 bool CatalogUpdater::isUpdateRunning() const {
     return g_catalogUpdateRunning.load();
 }
 
 void CatalogUpdater::checkAndRunScheduledUpdate() {
+    refreshHomebrewInBackground();
+
     auto initialCatalog = getCatalogSnapshot();
     bool was_empty = !initialCatalog || initialCatalog->empty();
     auto& cfg = config::ConfigManager::instance();

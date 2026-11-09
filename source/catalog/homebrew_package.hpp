@@ -19,7 +19,6 @@
 namespace homebrew {
 
 constexpr const char* kFortheusersCdn = "https://switch.cdn.fortheusers.org";
-constexpr const char* kRegistryDir = "sdmc:/switch/appstore/.get/packages";
 
 // ---------------------------------------------------------------------------
 // Manifest (manifest.install): one "<op>: <path from SD root>" per line.
@@ -174,7 +173,8 @@ bool isNew(const Package& pkg, const std::string& today, int days = 14);
 // ---------------------------------------------------------------------------
 // Installed state (libget registry).
 struct Installed {
-    bool present = false;          // manifest.install exists
+    bool present = false;          // manifest.install exists, or untracked
+    bool untracked = false;        // no registry entry, but its .nro is on the card (installed by hand)
     std::string version;           // from info.json, "" if missing
     std::vector<ManifestEntry> manifest;
 };

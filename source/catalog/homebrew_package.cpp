@@ -389,7 +389,7 @@ std::string normalizeDate(const std::string& date) {
     char tail = 0;
     if (std::sscanf(s.c_str(), "%d/%d/%d%c", &dd, &mm, &yy, &tail) == 3 && yy > 1900 && mm >= 1 &&
         mm <= 12 && dd >= 1 && dd <= 31) {
-        char buf[16];
+        char buf[40];  // room for any int, so -Wformat-truncation stays quiet
         std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", yy, mm, dd);
         return buf;
     }
@@ -664,6 +664,7 @@ bool isNew(const Package& pkg, const std::string& today, int days) {
 
 Status statusFor(const Package& pkg, const Installed& inst) {
     if (!inst.present) return Status::NotInstalled;
+    if (inst.untracked) return Status::Installed;  // version unknown; the card offers a reinstall
     if (inst.version.empty()) return Status::UpdateAvailable;  // libget: manifest without info
     return compareVersions(pkg.version, inst.version) > 0 ? Status::UpdateAvailable : Status::Installed;
 }
