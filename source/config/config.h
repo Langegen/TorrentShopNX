@@ -26,6 +26,9 @@ public:
     // The user's Telegram @username for bug reports; empty = not given.
     std::string getReportContact() const;
     void setReportContact(const std::string& contact);
+    // Last tab of the "Homebrew and retro" section: "homebrew" (default) or "retro".
+    std::string getHomebrewSection() const;
+    void setHomebrewSection(const std::string& tab);
 
     static constexpr const char* DEFAULT_CATALOG_URL_RU = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/RU_catalog.json";
     static constexpr const char* DEFAULT_CATALOG_URL_EN = "https://raw.githubusercontent.com/Langegen/switch-game-collection/refs/heads/main/EN_catalog.json";
@@ -163,6 +166,7 @@ private:
     std::string torrserver_login_;
     std::string torrserver_password_;
     std::string report_contact_;
+    std::string homebrew_section_;
     std::string catalog_source_url_;
     std::string data_mode_;
     bool keep_awake_during_downloads_;

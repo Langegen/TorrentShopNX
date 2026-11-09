@@ -498,6 +498,8 @@ static void smokeRealIndex(const std::string& repo_path, const std::string& inde
     if (const Package* p = find(all, "nx-ovlloader")) {
         CHECK(p->source == Source::Github);
         CHECK(p->depends.empty());
+        CHECK_EQ(p->author, std::string("ppkantorski"));  // the fork that is downloaded, not WerWolv
+        CHECK_EQ(p->repo, std::string("ppkantorski/nx-ovlloader"));
     }
 }
 

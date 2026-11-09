@@ -1,0 +1,35 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="column"
+    paddingTop="20"
+    paddingRight="32"
+    paddingBottom="12"
+    paddingLeft="32">
+
+    <!-- Topbar: section tabs (Homebrew | Retro) and stats -->
+    <brls:Box width="auto" height="56px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="2">
+        <brls:Box id="tabsBox" axis="row" alignItems="center">
+            <brls:Label id="titleLabel" fontSize="28" />
+            <brls:Label id="otherTabLabel" fontSize="18" marginLeft="24" textColor="@theme/brls/header/subtitle" />
+        </brls:Box>
+        <brls:Label id="statsHint" fontSize="15" textColor="@theme/brls/header/subtitle" />
+    </brls:Box>
+
+    <!-- Category chips, filled in code -->
+    <brls:Box id="chipsBox" width="auto" height="36px" axis="row" alignItems="center" marginBottom="4" />
+
+    <brls:Box id="emptyHolder" width="auto" height="auto" grow="1.0" axis="column" visibility="gone" />
+
+    <brls:RecyclerFrame
+        id="recycler"
+        width="auto"
+        height="auto"
+        paddingTop="8"
+        paddingBottom="20"
+        paddingRight="24"
+        grow="1.0" />
+
+</brls:Box>
+</brls:AppletFrame>

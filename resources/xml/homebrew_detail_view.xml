@@ -1,0 +1,43 @@
+<brls:AppletFrame headerHidden="true" footerHidden="false">
+<brls:Box
+    width="auto"
+    height="auto"
+    axis="row"
+    paddingTop="28"
+    paddingRight="40"
+    paddingBottom="12"
+    paddingLeft="40">
+
+    <!-- Left: icon, state, actions, progress -->
+    <brls:Box width="272px" height="auto" axis="column" alignItems="center" marginRight="36">
+        <brls:Box width="256px" height="256px" cornerRadius="16" backgroundColor="@theme/brls/sidebar/separator">
+            <brls:Image id="icon" width="256px" height="256px" cornerRadius="16" scalingType="fill" />
+        </brls:Box>
+        <brls:Label id="statusLabel" width="256px" marginTop="14" fontSize="15" horizontalAlign="center" />
+        <brls:Button id="primaryButton" width="256px" height="52px" marginTop="12" style="primary" />
+        <brls:Button id="secondaryButton" width="256px" height="46px" marginTop="10" style="bordered" visibility="gone" />
+        <brls:Box id="progressBox" width="256px" height="auto" axis="column" marginTop="16" visibility="gone">
+            <brls:Label id="progressLabel" width="256px" fontSize="14" singleLine="true" textColor="@theme/brls/header/subtitle" />
+            <brls:Box id="progressTrack" width="256px" height="8px" cornerRadius="4" marginTop="6">
+                <brls:Box id="progressFill" width="0px" height="8px" cornerRadius="4" />
+            </brls:Box>
+        </brls:Box>
+    </brls:Box>
+
+    <!-- Right: text, scrolls with up / down -->
+    <brls:ScrollingFrame id="scroll" width="auto" height="auto" grow="1.0">
+        <brls:Box id="contentBox" width="auto" height="auto" axis="column" paddingRight="20" paddingBottom="30">
+            <brls:Label id="titleLabel" fontSize="28" maxLines="2" />
+            <brls:Label id="authorLabel" fontSize="16" marginTop="4" textColor="@theme/brls/header/subtitle" />
+            <brls:Box id="chipsBox" width="auto" height="auto" axis="row" marginTop="12" />
+            <brls:Box id="factsBox" width="auto" height="auto" axis="column" marginTop="16" paddingTop="12" paddingRight="18" paddingBottom="6" paddingLeft="18" cornerRadius="12" />
+            <brls:Label id="descLabel" fontSize="17" marginTop="18" />
+            <brls:Label id="detailsLabel" fontSize="15" marginTop="12" textColor="@theme/brls/header/subtitle" />
+            <brls:Label id="changelogTitle" fontSize="20" marginTop="22" />
+            <brls:Label id="changelogLabel" fontSize="15" marginTop="8" textColor="@theme/brls/header/subtitle" />
+            <brls:Image id="screenshot" width="576px" height="324px" marginTop="22" cornerRadius="8" scalingType="fit" visibility="gone" />
+        </brls:Box>
+    </brls:ScrollingFrame>
+
+</brls:Box>
+</brls:AppletFrame>

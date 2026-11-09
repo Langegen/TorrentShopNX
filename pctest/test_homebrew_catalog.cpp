@@ -5,7 +5,9 @@
 // Build and run from the repo root:  powershell -File pctest\build_homebrew.ps1
 
 #include "../source/catalog/homebrew_catalog.hpp"
+#include "../source/catalog/homebrew_view_model.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <deque>
 #include <filesystem>
@@ -267,6 +269,96 @@ int main(int argc, char** argv) {
         CHECK_EQ(c.updatesAvailable(), 0);
         c.rescanInstalled();  // no registry folder
         CHECK(c.installedSnapshot()->empty());
+    }
+
+    // 11. What the store screen shows: tabs, search, sort, texts.
+    {
+        Env env(tmp);
+        writeFile(env.cfg.registry_dir + "/sys-clk/manifest.install", "U: switch/sys-clk-manager.nro\n");
+        writeFile(env.cfg.registry_dir + "/sys-clk/info.json", "{\"version\":\"2.0.1-fix\"}");
+        writeFile(env.cfg.registry_dir + "/Checkpoint/manifest.install", "U: switch/Checkpoint/Checkpoint.nro\n");
+        writeFile(env.cfg.registry_dir + "/Checkpoint/info.json", "{\"version\":\"5.3.0\"}");
+        Catalog c = env.make();
+        env.answer(kFtUrl, 200, ft, "a");
+        env.answer(kIdxUrl, 200, own, "b");
+        CHECK(c.refresh().ok);
+        const auto pkgs = c.snapshot();
+        const auto inst = c.installedSnapshot();
+        auto names = [](const std::vector<ViewItem>& v) {
+            std::string s;
+            for (const auto& i : v) s += (s.empty() ? "" : ",") + i.pkg->name;
+            return s;
+        };
+
+        const auto counts = countByCategory(*pkgs, *inst);
+        CHECK_EQ(counts[size_t(Category::All)], 11);
+        CHECK_EQ(counts[size_t(Category::Apps)], 6);
+        CHECK_EQ(counts[size_t(Category::Overlays)], 5);
+        CHECK_EQ(counts[size_t(Category::Sysmodules)], 4);
+        CHECK_EQ(counts[size_t(Category::Games)], 0);
+        CHECK_EQ(counts[size_t(Category::Installed)], 2);
+
+        std::vector<ViewItem> v = buildView(*pkgs, *inst, Category::Installed, SortMode::Name, "", "2026-11-09");
+        CHECK_EQ(names(v), std::string("sys-clk,Checkpoint"));  // the update goes first
+        CHECK(v.size() == 2 && v[0].status == Status::UpdateAvailable && v[1].status == Status::Installed);
+
+        v = buildView(*pkgs, *inst, Category::All, SortMode::Name, "  MONITOR ", "2026-11-09");
+        CHECK_EQ(names(v), std::string("Status-Monitor-Overlay"));
+        v = buildView(*pkgs, *inst, Category::All, SortMode::Name, "сохранений", "2026-11-09");
+        CHECK_EQ(names(v), std::string("Checkpoint"));  // found by the Russian description
+        v = buildView(*pkgs, *inst, Category::Overlays, SortMode::Name, "zzz-nothing", "2026-11-09");
+        CHECK(v.empty());
+
+        v = buildView(*pkgs, *inst, Category::All, SortMode::Name, "", "2026-11-09");
+        CHECK_EQ(v.size(), size_t(11));
+        bool sorted = true;
+        for (size_t i = 1; i < v.size(); ++i) {
+            std::string a = v[i - 1].pkg->title, b = v[i].pkg->title;
+            std::transform(a.begin(), a.end(), a.begin(), ::tolower);
+            std::transform(b.begin(), b.end(), b.begin(), ::tolower);
+            if (a > b) sorted = false;
+        }
+        CHECK(sorted);
+        bool new_flag = false;
+        for (const auto& i : v)
+            if (i.pkg->name == "NewTool") new_flag = i.is_new;
+        CHECK(new_flag);
+
+        v = buildView(*pkgs, *inst, Category::All, SortMode::Popular, "", "2026-11-09");
+        bool popular = true;
+        for (size_t i = 1; i < v.size(); ++i)
+            if (v[i - 1].pkg->downloads < v[i].pkg->downloads) popular = false;
+        CHECK(popular);
+        CHECK(v.front().pkg->downloads > 0);
+        v = buildView(*pkgs, *inst, Category::All, SortMode::Updated, "", "2026-11-09");
+        bool fresh = true;
+        for (size_t i = 1; i < v.size(); ++i)
+            if (v[i - 1].pkg->updated < v[i].pkg->updated) fresh = false;
+        CHECK(fresh);
+
+        Package p;
+        CHECK(c.find("Checkpoint", p));
+        CHECK_EQ(displayDescription(p, "ru"), std::string("Резервные копии сохранений"));
+        CHECK_EQ(displayDescription(p, "en-US"), p.description);
+        CHECK(c.find("Goldleaf", p));
+        CHECK_EQ(displayDescription(p, "ru"), std::string("Установщик и файловый менеджер"));
+
+        const std::array<std::string, 4> units{"B", "KB", "MB", "GB"};
+        CHECK_EQ(formatSize(0, units), std::string(""));
+        CHECK_EQ(formatSize(512, units), std::string("512 B"));
+        CHECK_EQ(formatSize(1536, units), std::string("1.5 KB"));
+        CHECK_EQ(formatSize(209 * 1024, units), std::string("209 KB"));
+        CHECK_EQ(formatSize(int64_t(5) * 1024 * 1024 * 1024, units), std::string("5.0 GB"));
+        CHECK_EQ(plainText("## **List of Changes**\r\n1. Default `heap` sizes.\n\n\n\n  - **HOS 23** now uses [6 MB](https://x.y/z)\n* item\n"),
+                 std::string("List of Changes\n1. Default heap sizes.\n\n  • HOS 23 now uses 6 MB\n• item"));
+        CHECK_EQ(plainText("plain"), std::string("plain"));
+        CHECK_EQ(plainText("snake_case and a*b and [no link"), std::string("snake_case and a*b and [no link"));
+        CHECK(isKnownLicense("GPLv3"));
+        CHECK(!isKnownLicense("n/a"));
+        CHECK(!isKnownLicense("NOASSERTION"));
+        CHECK(!isKnownLicense(""));
+        CHECK_EQ(displayDate("2026-11-09"), std::string("09.11.2026"));
+        CHECK_EQ(displayDate(""), std::string(""));
     }
 
     fs::remove_all(tmp);

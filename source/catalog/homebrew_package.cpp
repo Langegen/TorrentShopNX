@@ -603,6 +603,13 @@ std::vector<Package> mergeSources(const std::vector<Package>& fortheusers,
         for (const auto& d : o.description_i18n) p.description_i18n[d.first] = d.second;
         if (p.icon_url.empty()) p.icon_url = o.icon_url;
         if (compareVersions(o.version, p.version) > 0 && versionParts(o.version).size() > 0) {
+            // Same name, another project (a fork: nx-ovlloader by ppkantorski
+            // instead of WerWolv): the author and page follow the download.
+            if (!o.repo.empty() && o.repo != p.repo) {
+                p.repo = o.repo;
+                if (!o.url.empty()) p.url = o.url;
+                if (!o.author.empty()) p.author = o.author;
+            }
             p.version = o.version;
             if (!o.updated.empty()) p.updated = o.updated;
             if (!o.changelog.empty()) p.changelog = o.changelog;

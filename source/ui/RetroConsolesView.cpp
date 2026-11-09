@@ -12,6 +12,9 @@
 #include <algorithm>
 #include <filesystem>
 #include "../utils/i18n_plural.h"
+#include "homebrew/HomebrewGlue.hpp"
+#include "homebrew/HomebrewView.hpp"
+#include "style/HeaderHints.hpp"
 
 namespace ui {
 
@@ -72,7 +75,28 @@ void RetroConsolesView::onContentAvailable() {
 
     if (titleLabel) {
         titleLabel->setText(brls::getStr("app/retro/consoles_title"));
+        // "Homebrew and retro" section: the other tab next to the title, LB/RB switch.
+        if (auto* tabs = dynamic_cast<brls::Box*>(titleLabel->getParent())) {
+            auto* other = new brls::Label();
+            other->setFontSize(18.0f);
+            other->setMarginLeft(24.0f);
+            other->setTextColor(brls::Application::getTheme().getColor("brls/header/subtitle"));
+            other->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/homebrew/title"_i18n));
+            other->addGestureRecognizer(new brls::TapGestureRecognizer(other, [] {
+                config::ConfigManager::instance().setHomebrewSection("homebrew");
+                hb::replaceTopActivity(new HomebrewView());
+            }));
+            tabs->addView(other);
+        }
     }
+    config::ConfigManager::instance().setHomebrewSection("retro");
+    auto toHomebrew = [](brls::View*) {
+        config::ConfigManager::instance().setHomebrewSection("homebrew");
+        hb::replaceTopActivity(new HomebrewView());
+        return true;
+    };
+    this->registerAction("", brls::ControllerButton::BUTTON_LB, toHomebrew, true);
+    this->registerAction("", brls::ControllerButton::BUTTON_RB, toHomebrew, true);
     if (statsHint) {
         updateHeader();
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {

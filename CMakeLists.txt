@@ -75,6 +75,10 @@ target_compile_definitions(TorrentShopNX PRIVATE
     POSIX=1
     YG_ENABLE_EVENTS=1
 )
+if (WIN32)
+    # cpp-httplib needs Windows 10 APIs (CreateFile2); MinGW defaults to an older target.
+    target_compile_definitions(TorrentShopNX PRIVATE _WIN32_WINNT=0x0A00)
+endif ()
 
 # Dependencies
 target_link_directories(TorrentShopNX PRIVATE
@@ -103,6 +107,37 @@ target_link_libraries(TorrentShopNX PRIVATE
     pthread
     stdc++
     -Wl,--end-group
+)
+
+# PC window with only the homebrew store screens (no torrent engine, no
+# libarchive): cmake --build build_pc --target homebrew_ui. See pctest/homebrew_ui/main.cpp.
+set(HB_UI_SOURCES
+    pctest/homebrew_ui/main.cpp
+    pctest/homebrew_ui/harness_backend.cpp
+    source/ui/homebrew/HomebrewView.cpp
+    source/ui/homebrew/HomebrewDetailView.cpp
+    source/ui/EmptyState.cpp
+    source/ui/dashboard/DashboardIcon.cpp
+    source/ui/ThemeManager.cpp
+    source/ui/label.cpp
+    source/utils/arabic_shaper.cpp
+    source/config/config.cpp
+    source/utils/log.cpp
+    source/catalog/homebrew_package.cpp
+    source/catalog/homebrew_catalog.cpp
+    source/catalog/homebrew_installer.cpp
+    source/catalog/homebrew_view_model.cpp
+    source/utils/hash_utils.cpp
+    source/utils/zip_reader.cpp
+)
+add_executable(homebrew_ui EXCLUDE_FROM_ALL ${HB_UI_SOURCES})
+target_include_directories(homebrew_ui PRIVATE $<TARGET_PROPERTY:TorrentShopNX,INCLUDE_DIRECTORIES>)
+target_compile_definitions(homebrew_ui PRIVATE $<TARGET_PROPERTY:TorrentShopNX,COMPILE_DEFINITIONS>)
+target_link_libraries(homebrew_ui PRIVATE -Wl,--start-group borealis z pthread stdc++ winmm -Wl,--end-group)
+add_custom_command(TARGET homebrew_ui POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+        "$<TARGET_FILE_DIR:homebrew_ui>/resources"
 )
 
 # Copy resources to the build directory so Borealis finds XML, images, fonts, i18n
