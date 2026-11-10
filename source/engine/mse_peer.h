@@ -63,6 +63,7 @@ typedef struct {
     mse_rc4 send_rc4;       // keyA: our outbound stream
     mse_rc4 recv_rc4;       // keyB: our inbound stream
     uint8_t vc[8];          // first 8 bytes of the recv keystream (encrypted VC)
+    size_t vc_scanned;      // padB bytes already scanned past (VC resync)
 
     uint8_t selbuf[6];      // crypto_select(4) + padD_len(2), decrypted
     size_t sel_have;

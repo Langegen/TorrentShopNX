@@ -295,6 +295,22 @@ static bool engine_route_incoming(const uint8_t info_hash[20], int fd,
     return ok;
 }
 
+// Same for an accepted uTP session. Called from a netloop thread (the one
+// that serviced the shared UDP socket), for a torrent other than its own.
+static bool engine_route_incoming_utp(const uint8_t info_hash[20], void *utp,
+                                      const uint8_t hs68[68],
+                                      uint32_t ip_net, uint16_t port_host) {
+    char hex[41];
+    bin_to_hex(info_hash, hex, 40);
+    bool ok = false;
+    REG_LOCK();
+    tsnx_torrent *t = g_engine ? find_locked(g_engine, hex) : NULL;
+    if (t && t->fs)
+        ok = torrentfs_incoming_push_utp(t->fs, utp, hs68, ip_net, port_host);
+    REG_UNLOCK();
+    return ok;
+}
+
 //-----------------------------------------------------------------------------
 // Watchdog (PC builds only): samples every engine thread's heartbeat and
 // writes the ages to watchdog.log, so a hung process can be diagnosed without
@@ -364,19 +380,25 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
     torrent_announce_mutex_init();
     dht_bg_init_early();
     torrentfs_set_ram_stream(1);
-    utp_nb_init();
     g_engine = eng;
 
     // Incoming connections: bind the port and advertise it (trackers/DHT).
     // UPnP then tries to make the port reachable from the internet; its
     // success overrides the advertised port with the mapped external one.
+    int bound_port = listen_port;
     if (torrent_listener_start(listen_port, engine_route_incoming) == 0) {
-        torrent_set_announce_port(torrent_listener_port());
-        upnp_start(torrent_listener_port());
+        bound_port = torrent_listener_port();
+        torrent_set_announce_port(bound_port);
     } else {
+        bound_port = 0;
         engine_log(ENGINE_LOG_WARN,
                    "[engine] listener failed: incoming connections disabled");
     }
+    // uTP on the same port number (UDP): peers dial the announced port with
+    // either transport, and one router mapping covers both.
+    utp_nb_init(bound_port > 0 ? bound_port : listen_port);
+    torrentfs_set_utp_router(engine_route_incoming_utp);
+    if (bound_port > 0) upnp_start(bound_port);
 #ifndef __SWITCH__
     g_wd_stop = false;
     if (threadCreate(&g_wd_thread, watchdog_main, NULL, NULL, 0x20000, 0x2C,
@@ -421,6 +443,7 @@ void tsnx_engine_stop(tsnx_engine *eng) {
 #endif
     upnp_stop();               // no more mapping announcements
     dht_stop();  // persistent DHT: save the routing table for the next start
+    torrentfs_set_utp_router(NULL);
     utp_nb_exit();
     if (busy) {
         engine_log(ENGINE_LOG_WARN, "[engine] stop: an add is still running, engine state leaked");
@@ -1084,6 +1107,36 @@ bool tsnx_engine_add_peers(tsnx_engine *eng, const char *hash,
     }
     REG_UNLOCK();
     return ok;
+}
+
+bool tsnx_engine_get_nat_stats(tsnx_engine *eng, const char *hash, tsnx_nat_stats *out) {
+    eng = active_engine(eng);
+    if (!eng || !hash || !out) return false;
+    memset(out, 0, sizeof(*out));
+    out->port_mapping = upnp_mapping_kind();
+    out->listen_port = torrent_listener_port();
+    out->utp_port = utp_nb_port();
+    REG_LOCK();
+    tsnx_torrent *t = find_locked(eng, hash);
+    bool ok = t && t->fs;
+    if (ok) {
+        int v[7];
+        torrentfs_nat_counts(t->fs, v);
+        out->live_utp = v[0];
+        out->incoming_tcp = v[1];
+        out->incoming_utp = v[2];
+        out->hp_tries = v[3];
+        out->hp_ok = v[4];
+        out->hp_inbound = v[5];
+        out->hp_relayed = v[6];
+    }
+    REG_UNLOCK();
+    return ok;
+}
+
+void tsnx_engine_set_nat_traversal(tsnx_engine *eng, int on) {
+    (void)eng;
+    torrentfs_set_nat_traversal(on);
 }
 
 bool tsnx_engine_get_diag(tsnx_engine *eng, const char *hash, tsnx_engine_diag *out) {

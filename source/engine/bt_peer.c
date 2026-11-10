@@ -387,15 +387,16 @@ int peer_nb_set_rcvbuf(peer_nb *p, int bytes) {
     return 0;
 }
 
-void peer_nb_apply_speed_opts(peer_nb *p) {
-    if (!p || p->sock < 0) return;
+int peer_nb_apply_speed_opts(peer_nb *p) {
+    if (!p || p->sock < 0) return 0;
+    int rbuf_kb;
 #ifdef __SWITCH__
     /* On Horizon (libnx) every socket buffer comes out of ONE process-wide pool
        (~13 MB, see socketPoolBytes in main.cpp). A modest 128 KB window for
-       everyone; the netloop raises it for peers that prove fast
+       everyone; the netloop raises it in steps for peers that prove fast
        (peer_nb_set_rcvbuf from torrentfs upkeep), so slow peers do not pin
        memory the fast ones and HTTP need. */
-    peer_nb_set_rcvbuf(p, 128 * 1024);
+    rbuf_kb = peer_nb_set_rcvbuf(p, 128 * 1024) / 1024;
 #else
     int rbuf = 512 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_RCVBUF, &rbuf, sizeof(rbuf)) != 0) {
@@ -408,12 +409,14 @@ void peer_nb_apply_speed_opts(peer_nb *p) {
             }
         }
     }
+    rbuf_kb = rbuf / 1024;
 #endif
     int sbuf = 16 * 1024;
     if (setsockopt(p->sock, SOL_SOCKET, SO_SNDBUF, &sbuf, sizeof(sbuf)) != 0) {
         sbuf = 8 * 1024;
         setsockopt(p->sock, SOL_SOCKET, SO_SNDBUF, &sbuf, sizeof(sbuf));
     }
+    return rbuf_kb;
 }
 
 // Slide any fully-consumed prefix out of the rx buffer. Doing this lazily (only
@@ -714,7 +717,8 @@ int peer_nb_send_handshake(peer_nb *p, const uint8_t info_hash[20],
         ia[0] = 19;
         memcpy(ia + 1, "BitTorrent protocol", 19);
         memset(ia + 20, 0, 8);
-        ia[25] = 0x10;   // BEP 10 extension bit (we speak ut_pex)
+        ia[25] = 0x10;   // BEP 10 extension bit (ut_pex, ut_holepunch)
+        ia[27] = 0x01;   // BEP 5: we run a DHT node (peers answer with PORT)
         memcpy(ia + 28, info_hash, 20);
         memcpy(ia + 48, peer_id, 20);
 
@@ -727,7 +731,8 @@ int peer_nb_send_handshake(peer_nb *p, const uint8_t info_hash[20],
     hs[0] = 19;
     memcpy(hs + 1, "BitTorrent protocol", 19);
     memset(hs + 20, 0, 8);
-    hs[25] = 0x10;   // BEP 10 extension bit (we speak ut_pex)
+    hs[25] = 0x10;   // BEP 10 extension bit (ut_pex, ut_holepunch)
+    hs[27] = 0x01;   // BEP 5: we run a DHT node (peers answer with PORT)
     memcpy(hs + 28, info_hash, 20);
     memcpy(hs + 48, peer_id, 20);
     return nb_tx_append(p, hs, HANDSHAKE_LEN);
@@ -744,6 +749,7 @@ int peer_nb_recv_handshake(peer_nb *p, const uint8_t info_hash[20]) {
     p->rx_off += HANDSHAKE_LEN;
     p->handshaked = true;
     p->ext_ok = (hs[25] & 0x10) != 0;
+    p->dht_ok = (hs[27] & 0x01) != 0;
     nb_compact(p);
     return 1;
 }
@@ -760,8 +766,95 @@ int peer_nb_queue_ext(peer_nb *p, uint8_t ext_id, const void *payload,
     return 0;
 }
 
-int peer_nb_queue_ext_handshake(peer_nb *p) {
-    // d1:md6:ut_pexi1eee -- advertise "m": { "ut_pex": 1 }
-    static const char ehs[] = "d1:md6:ut_pexi1eee";
-    return peer_nb_queue_ext(p, 0, ehs, sizeof(ehs) - 1);
+// How many of the peer's requests we are willing to queue (we serve from the
+// RAM window and stop queueing past UP_TX_WATERMARK anyway).
+#define EXT_OUR_REQQ 250
+#define EXT_CLIENT_NAME "TorrentShopNX"
+
+size_t peer_build_ext_handshake(char *out, size_t cap, int listen_port,
+                                uint32_t peer_ip_net, bool holepunch) {
+    // Bencoded dictionary keys must be in sorted order: m, p, reqq, v, yourip
+    // (and inside m: ut_holepunch, ut_pex).
+    char buf[192];
+    int n = 0;
+    n += snprintf(buf + n, sizeof(buf) - (size_t)n, "d1:md");
+    if (holepunch)
+        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "12:ut_holepunchi%de", EXT_ID_HOLEPUNCH);
+    n += snprintf(buf + n, sizeof(buf) - (size_t)n, "6:ut_pexi%dee", EXT_ID_PEX);
+    if (listen_port > 0 && listen_port < 65536)
+        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "1:pi%de", listen_port);
+    n += snprintf(buf + n, sizeof(buf) - (size_t)n, "4:reqqi%de1:v%d:%s",
+                  EXT_OUR_REQQ, (int)(sizeof(EXT_CLIENT_NAME) - 1), EXT_CLIENT_NAME);
+    if (peer_ip_net != 0) {
+        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "6:yourip4:");
+        memcpy(buf + n, &peer_ip_net, 4);   // raw bytes, already network order
+        n += 4;
+    }
+    buf[n++] = 'e';
+    if ((size_t)n > cap) return 0;
+    memcpy(out, buf, (size_t)n);
+    return (size_t)n;
+}
+
+int peer_nb_queue_ext_handshake(peer_nb *p, int listen_port,
+                                uint32_t peer_ip_net, bool holepunch) {
+    char ehs[192];
+    size_t n = peer_build_ext_handshake(ehs, sizeof(ehs), listen_port, peer_ip_net, holepunch);
+    if (n == 0) return -1;
+    return peer_nb_queue_ext(p, 0, ehs, (uint32_t)n);
+}
+
+bool peer_parse_ext_handshake(const uint8_t *pl, uint32_t plen, peer_ext_info *out) {
+    memset(out, 0, sizeof(*out));
+    be_node *d = be_parse((const char *)pl, plen);
+    if (!d) return false;
+    if (d->type != BE_DICT) { be_free(d); return false; }
+    be_node *m = be_dict_get(d, "m");
+    if (m && m->type == BE_DICT) {
+        be_node *u = be_dict_get(m, "ut_pex");
+        if (u && u->type == BE_INT && u->i > 0 && u->i < 256) out->pex_id = (uint8_t)u->i;
+        u = be_dict_get(m, "ut_holepunch");
+        if (u && u->type == BE_INT && u->i > 0 && u->i < 256) out->hp_id = (uint8_t)u->i;
+    }
+    be_node *v = be_dict_get(d, "reqq");
+    if (v && v->type == BE_INT && v->i > 0 && v->i <= 100000) out->reqq = (int)v->i;
+    v = be_dict_get(d, "p");
+    if (v && v->type == BE_INT && v->i > 1 && v->i < 65536) out->port = (int)v->i;
+    v = be_dict_get(d, "upload_only");
+    if (v && v->type == BE_INT && v->i != 0) out->upload_only = true;
+    v = be_dict_get(d, "yourip");
+    if (v && v->type == BE_STR && v->str.len == 4) memcpy(&out->yourip, v->str.ptr, 4);
+    be_free(d);
+    return true;
+}
+
+// <type:1><addr_type:1><addr:4><port:2>[<err:4>], all big-endian.
+bool peer_parse_holepunch(const uint8_t *pl, uint32_t plen, peer_hp_msg *out) {
+    memset(out, 0, sizeof(*out));
+    if (!pl || plen < 8) return false;
+    if (pl[0] > HP_ERROR) return false;
+    if (pl[1] != 0) return false;                 // 1 = IPv6: not supported
+    if (pl[0] == HP_ERROR && plen < 12) return false;
+    out->type = pl[0];
+    memcpy(&out->ip, pl + 2, 4);                  // stays in network order
+    out->port = (uint16_t)((pl[6] << 8) | pl[7]);
+    if (out->ip == 0 || out->port <= 1) return false;
+    if (pl[0] == HP_ERROR)
+        out->err = ((uint32_t)pl[8] << 24) | ((uint32_t)pl[9] << 16) |
+                   ((uint32_t)pl[10] << 8) | pl[11];
+    return true;
+}
+
+size_t peer_build_holepunch(uint8_t *out, const peer_hp_msg *m) {
+    out[0] = m->type;
+    out[1] = 0;                                   // IPv4
+    memcpy(out + 2, &m->ip, 4);
+    out[6] = (uint8_t)(m->port >> 8);
+    out[7] = (uint8_t)(m->port & 0xff);
+    if (m->type != HP_ERROR) return 8;
+    out[8]  = (uint8_t)(m->err >> 24);
+    out[9]  = (uint8_t)(m->err >> 16);
+    out[10] = (uint8_t)(m->err >> 8);
+    out[11] = (uint8_t)m->err;
+    return 12;
 }

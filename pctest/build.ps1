@@ -36,6 +36,7 @@ $COMMON_SOURCES = @(
     "source\engine\mse_peer.c",
     "source\engine\listen.c",
     "source\engine\upnp.c",
+    "source\engine\natpmp.c",
     "pctest\utpstub.c"
 )
 
@@ -199,6 +200,18 @@ function Build-MechanismsTest {
         }
         $cobj += $o
     }
+    # Wire formats (extended handshake, ut_holepunch, MSE) + NAT-PMP mock
+    # gateway, the 3-process incoming-uTP / hole-punch test, and the live MSE
+    # test against python-libtorrent (pctest\run_mse_live.ps1).
+    foreach ($t in @("test_ext_msgs", "test_holepunch", "test_mse_live")) {
+        $o_t = Join-Path $OBJDIR "$t.o"
+        & $GPP @CXXFLAGS -std=c++17 -c "pctest\$t.cpp" -o $o_t
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & $GPP @CXXFLAGS -std=c++17 $cobj $o_t $CPP_OBJ -o "pctest\$t" @LIBS
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Write-Host "OK -> pctest\$t"
+    }
+
     $o_mech = Join-Path $OBJDIR "test_mechanisms.o"
     & $GPP @CXXFLAGS -std=c++17 -c pctest\test_mechanisms.cpp -o $o_mech
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

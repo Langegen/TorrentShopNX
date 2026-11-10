@@ -17,4 +17,12 @@ int upnp_start(int internal_port);
 // Marks the probe as cancelled (the thread exits once its current step ends).
 void upnp_stop(void);
 
+// How the listen port got mapped on the router: "upnp", "natpmp", "none"
+// (nothing answered or the mapping was refused) or "probing" (still trying).
+// With "none" peers behind NAT cannot dial in unless the port is forwarded by
+// hand. The discovery also falls back to a unicast M-SEARCH to the gateway
+// and, when no IGD answers, to NAT-PMP (RFC 6886); both TCP and UDP (uTP) are
+// mapped.
+const char *upnp_mapping_kind(void);
+
 #endif

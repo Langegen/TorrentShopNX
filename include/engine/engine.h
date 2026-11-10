@@ -248,6 +248,25 @@ typedef struct {
 
 bool tsnx_engine_get_diag(tsnx_engine *eng, const char *hash, tsnx_engine_diag *out);
 
+// Reachability: how peers got to us and how we got to the ones behind NAT.
+typedef struct {
+    const char *port_mapping;   // "upnp", "natpmp", "none" or "probing" (engine-wide)
+    int listen_port;            // TCP listen port (= the uTP UDP port when that bind worked)
+    int utp_port;               // UDP port of the uTP socket
+    int live_utp;               // live sessions over uTP
+    int incoming_tcp;           // incoming sessions attached, since the torrent opened
+    int incoming_utp;
+    int hp_tries;               // ut_holepunch rendezvous we sent
+    int hp_ok;                  // hole-punched sessions that came up
+    int hp_inbound;             // CONNECTs we answered as the target
+    int hp_relayed;             // rendezvous we relayed for others
+} tsnx_nat_stats;
+
+bool tsnx_engine_get_nat_stats(tsnx_engine *eng, const char *hash, tsnx_nat_stats *out);
+
+// NAT traversal through ut_holepunch relays (BEP 55), engine-wide; on by default.
+void tsnx_engine_set_nat_traversal(tsnx_engine *eng, int on);
+
 #ifdef __cplusplus
 }
 #endif

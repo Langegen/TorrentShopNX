@@ -197,6 +197,28 @@ void torrentfs_set_file_wanted(torrentfs *tfs, int file_index, bool wanted);
 // Peer turnover timing, process-wide (defaults 30 s / 60 s). Tests shorten it.
 void torrentfs_set_rotation_timing(int turnover_secs, int trial_secs);
 
+// Every torrent shares one uTP UDP socket, so the netloop that services it
+// can meet an incoming uTP connection meant for ANOTHER open torrent. The
+// engine installs this router: it finds the torrent with `info_hash` and
+// queues the session there (torrentfs_incoming_push_utp). Returns false when
+// no such torrent is open or its queue is full -- the caller closes the
+// session. Process-wide; NULL = connections for other torrents are dropped.
+typedef bool (*torrentfs_utp_route_fn)(const uint8_t info_hash[20], void *utp,
+                                       const uint8_t hs68[68],
+                                       uint32_t ip_net, uint16_t port_host);
+void torrentfs_set_utp_router(torrentfs_utp_route_fn fn);
+
+// Reachability counters, racy reads of netloop counters: live uTP sessions,
+// incoming TCP / uTP sessions attached, ut_holepunch rendezvous sent,
+// hole-punched sessions up, CONNECTs answered as the target, rendezvous
+// relayed. `out` must have room for 7 ints.
+void torrentfs_nat_counts(const torrentfs *tfs, int out[7]);
+
+// NAT traversal (ut_holepunch through uTP relays, BEP 55), process-wide.
+// Off: the extension is not advertised and no rendezvous is sent or answered.
+void torrentfs_set_nat_traversal(int on);
+int  torrentfs_nat_traversal(void);
+
 // Fill-rate governor (an Options toggle, on by default): when the backlog is
 // deep, pause claiming while the measured download rate exceeds a
 // backlog-tied target (unlimited under 10 s of backlog, tapering to 1.5 MB/s

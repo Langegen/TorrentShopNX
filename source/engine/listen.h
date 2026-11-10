@@ -44,12 +44,21 @@ int  torrent_listener_port(void);
 // session slot exists by then the socket is dropped.
 void torrentfs_incoming_push(torrentfs *t, int fd, const uint8_t hs68[68]);
 
+// Same for an accepted µTP session (a utp_nb_sess*, its 68 handshake bytes
+// already consumed) from ip:port. Returns false if the queue is full: the
+// caller keeps ownership and closes the session.
+bool torrentfs_incoming_push_utp(torrentfs *t, void *utp, const uint8_t hs68[68],
+                                 uint32_t ip_net, uint16_t port_host);
+
 // The per-torrentfs pending-incoming queue (defined here so torrentfs.c can
 // embed it by value; the listener only ever touches it through the push API).
 #define TSNX_INCOMING_QUEUE_MAX 8
 
 typedef struct {
-    int  fd;
+    int  fd;         // TCP socket, or -1 for a µTP session
+    void *utp;       // µTP session (utp_nb_sess*), or NULL for TCP
+    uint32_t ip;     // µTP: remote address (TCP uses getpeername)
+    uint16_t port;
     uint8_t hs[68];
 } tsnx_inc_conn;
 

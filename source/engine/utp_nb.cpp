@@ -11,11 +11,33 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
+#include <mutex>
+
+#include "engine_log.h"
 #include "utp.h"
+#include "utp_utils.h"
 
 #define SESS_MAX 128
-#define RBUF_SIZE (1024 * 1024)
-#define WBUF_SIZE (256 * 1024)
+// Per-session buffers. The receive ring is also the uTP receive window
+// (UTP_SetSockopt SO_RCVBUF below): libutp advertises RBUF_SIZE minus what is
+// still unread, so the peer can never send more than the ring holds. It used
+// to be a 1 MB ring under libutp's default 3.5 MB window: a netloop stalled
+// for a second behind a fast uTP peer overflowed the ring, the excess was
+// dropped silently and the byte stream was corrupt from there on. 512 KB
+// allows ~5 MB/s at 100 ms RTT (a uTP flow cannot beat window / RTT) and
+// keeps a session at 576 KB of heap instead of 1.25 MB; the netloop drains
+// the ring every few ms.
+#define RBUF_SIZE (512 * 1024)
+#define WBUF_SIZE (64 * 1024)
+// Incoming connections: at most this many waiting for their BitTorrent
+// handshake, each for at most ACCEPT_WAIT_MS, and none while the session
+// table already holds LIVE_MAX_FOR_ACCEPT sessions (memory: 320 KB each).
+#define ACCEPT_PENDING_MAX 8
+#define ACCEPT_WAIT_MS 10000
+#define LIVE_MAX_FOR_ACCEPT 40
+// SO_RCVBUF of the shared UDP socket: every uTP session's packets queue here
+// between two netloop passes.
+#define UDP_RCVBUF (256 * 1024)
 
 enum { ST_CONNECTING = 0, ST_CONNECTED = 1, ST_EOF = 2, ST_ERROR = 3 };
 
@@ -26,12 +48,26 @@ struct utp_nb_sess {
     bool closing;
     int refs;
 
+    bool incoming;        // the peer connected to us
+    bool claimed;         // incoming: handed out by utp_nb_accept
+    uint32_t born_ms;     // incoming: when it was accepted
+    uint32_t ip;          // remote address, network byte order
+    uint16_t port;        // remote port, host byte order
+
     uint8_t *rbuf; size_t rhead, rcount;
     uint8_t *wbuf; size_t whead, wcount;
 };
 
+// libutp keeps process-wide state (socket table, clock) and is not reentrant,
+// and every torrent's netloop services this module: one lock around all of
+// it. Recursive, because libutp calls back into us from inside its own calls.
+static std::recursive_mutex g_mu;
+#define UTP_LOCK() std::lock_guard<std::recursive_mutex> utp_lock_guard(g_mu)
+
 static int    g_udp = -1;
+static int    g_port = 0;
 static int    g_inited = 0;
+static int    g_accept = 1;
 static utp_nb_sess g_sess[SESS_MAX];
 
 static size_t rb_free(utp_nb_sess *c) { return RBUF_SIZE - c->rcount; }
@@ -100,11 +136,26 @@ static utp_nb_sess *sess_from_userdata(void *u) {
     return c;
 }
 
+static bool alloc_bufs(utp_nb_sess *c) {
+    c->rbuf = (uint8_t *)malloc(RBUF_SIZE);
+    c->wbuf = (uint8_t *)malloc(WBUF_SIZE);
+    if (c->rbuf && c->wbuf) return true;
+    free(c->rbuf); free(c->wbuf);
+    c->rbuf = NULL; c->wbuf = NULL;
+    return false;
+}
+
 static void cb_on_read(void *u, const byte *bytes, size_t count) {
     utp_nb_sess *c = sess_from_userdata(u);
     if (!c || !c->in_use || c->closing) return;
-    size_t n = count < rb_free(c) ? count : rb_free(c);
-    rb_push(c, bytes, n);
+    if (count > rb_free(c)) {
+        // Cannot happen while the advertised window is the ring (see
+        // RBUF_SIZE). If it ever does, fail the session: dropping bytes from
+        // the middle of the stream would hand the caller corrupt data.
+        c->state = ST_ERROR;
+        return;
+    }
+    rb_push(c, bytes, count);
 }
 
 static void cb_on_write(void *u, byte *bytes, size_t count) {
@@ -122,7 +173,7 @@ static void cb_on_state(void *u, int state) {
     utp_nb_sess *c = sess_from_userdata(u);
     if (!c) return;
     if (state == UTP_STATE_CONNECT || state == UTP_STATE_WRITABLE) {
-        c->state = ST_CONNECTED;
+        if (c->state == ST_CONNECTING) c->state = ST_CONNECTED;
         // Anything queued before the connect completed (our handshake) must
         // be handed to libutp now -- UTP_Write is a no-op on a connecting
         // socket, so the peer would otherwise wait on us forever.
@@ -153,43 +204,98 @@ static UTPFunctionTable g_functable = {
 static void cb_send_to(void *u, const byte *p, size_t len,
                        const struct sockaddr *to, socklen_t tolen) {
     (void)u;
-    if (g_udp >= 0) sendto(g_udp, p, len, 0, to, tolen);
+    if (g_udp >= 0) sendto(g_udp, (const char *)p, len, 0, to, tolen);
 }
 
+// A peer opened a uTP connection to us (libutp already answered its SYN).
+// Keep it as a pending session until its BitTorrent handshake arrives; the
+// netloop picks it up through utp_nb_accept().
 static void cb_on_incoming(void *u, UTPSocket *s) {
     (void)u;
-    // We do not accept inbound µTP in the streaming path yet.
-    UTP_Close(s);
+    int pending = 0, live = 0;
+    for (int i = 0; i < SESS_MAX; i++) {
+        if (!g_sess[i].in_use) continue;
+        live++;
+        if (g_sess[i].incoming && !g_sess[i].claimed) pending++;
+    }
+    utp_nb_sess *c = (g_accept && pending < ACCEPT_PENDING_MAX && live < LIVE_MAX_FOR_ACCEPT)
+                         ? find_free_sess() : NULL;
+    if (!c || !alloc_bufs(c)) {
+        UTP_Close(s);
+        return;
+    }
+    struct sockaddr_in sa;
+    socklen_t sl = sizeof(sa);
+    memset(&sa, 0, sizeof(sa));
+    UTP_GetPeerName(s, (struct sockaddr *)&sa, &sl);
+    c->sock = s;
+    c->state = ST_CONNECTED;
+    c->in_use = true;
+    c->closing = false;
+    c->refs = 2;
+    c->incoming = true;
+    c->claimed = false;
+    c->born_ms = UTP_GetMilliseconds();
+    c->ip = sa.sin_addr.s_addr;
+    c->port = ntohs(sa.sin_port);
+    UTP_SetCallbacks(s, &g_functable, c);
+    UTP_SetSockopt(s, SO_RCVBUF, RBUF_SIZE);
 }
 
-int utp_nb_init(void) {
+// Caller holds the lock.
+static void close_locked(utp_nb_sess *c) {
+    if (!c || !c->in_use) return;
+    c->in_use = false;
+    c->closing = true;
+    if (c->sock) UTP_Close(c->sock);
+    decref(c);
+}
+
+int utp_nb_init(int port) {
+    UTP_LOCK();
     if (g_inited) return 0;
 
     g_udp = socket(AF_INET, SOCK_DGRAM, 0);
     if (g_udp < 0) {
-        fprintf(stderr, "[utp_nb] socket() failed errno=%d\n", errno);
+        engine_log(ENGINE_LOG_WARN, "[utp] socket() failed errno=%d", errno);
         return -1;
     }
 
-    struct sockaddr_in me = {0};
+    // The announced port, so that peers who learn our address from a tracker,
+    // the DHT or PEX can open uTP connections to it (and a router mapping for
+    // that one port covers TCP and uTP). An ephemeral port is the fallback.
+    struct sockaddr_in me;
+    memset(&me, 0, sizeof(me));
     me.sin_family = AF_INET;
     me.sin_addr.s_addr = INADDR_ANY;
-    me.sin_port = 0;
+    me.sin_port = htons((uint16_t)(port > 0 && port < 65536 ? port : 0));
     if (bind(g_udp, (struct sockaddr *)&me, sizeof(me)) < 0) {
-        close(g_udp);
-        g_udp = -1;
-        return -1;
+        me.sin_port = 0;
+        if (bind(g_udp, (struct sockaddr *)&me, sizeof(me)) < 0) {
+            close(g_udp);
+            g_udp = -1;
+            return -1;
+        }
     }
+    socklen_t ml = sizeof(me);
+    g_port = (getsockname(g_udp, (struct sockaddr *)&me, &ml) == 0) ? ntohs(me.sin_port) : 0;
+
+    int rb = UDP_RCVBUF;
+    while (rb >= 32 * 1024 &&
+           setsockopt(g_udp, SOL_SOCKET, SO_RCVBUF, (const char *)&rb, sizeof(rb)) != 0)
+        rb /= 2;
 
     int fl = fcntl(g_udp, F_GETFL, 0);
     if (fl >= 0) fcntl(g_udp, F_SETFL, fl | O_NONBLOCK);
 
     memset(g_sess, 0, sizeof(g_sess));
     g_inited = 1;
+    engine_log(ENGINE_LOG_INFO, "[utp] udp port %d (wanted %d)", g_port, port);
     return 0;
 }
 
 void utp_nb_exit(void) {
+    UTP_LOCK();
     if (!g_inited) return;
     for (int i = 0; i < SESS_MAX; i++) {
         // A session already closed by utp_nb_close() keeps its sock until
@@ -205,63 +311,64 @@ void utp_nb_exit(void) {
     }
     if (g_udp >= 0) close(g_udp);
     g_udp = -1;
+    g_port = 0;
     g_inited = 0;
 }
 
 int utp_nb_fd(void) { return g_inited ? g_udp : -1; }
 
+int utp_nb_port(void) { return g_inited ? g_port : 0; }
+
+void utp_nb_set_accept(int on) {
+    UTP_LOCK();
+    g_accept = on ? 1 : 0;
+}
+
 void utp_nb_service(void) {
+    UTP_LOCK();
     if (!g_inited || g_udp < 0) return;
 
     uint8_t buf[4096];
     for (;;) {
         struct sockaddr_in from;
         socklen_t fromlen = sizeof(from);
-        ssize_t n = recvfrom(g_udp, buf, sizeof(buf), 0,
+        ssize_t n = recvfrom(g_udp, (char *)buf, sizeof(buf), 0,
                              (struct sockaddr *)&from, &fromlen);
         if (n < 0) {
             if (errno == EINTR) continue;
             break;
         }
         if (n == 0) break;
-        static int utp_dbg = -1;   // getenv once, not per datagram
-        if (utp_dbg < 0) utp_dbg = getenv("UTP_DBG") != NULL;
-        if (utp_dbg) {
-            fprintf(stderr, "[utp_nb] rx %u bytes from %u.%u.%u.%u:%u\n", (unsigned)n,
-                    (unsigned)(from.sin_addr.s_addr & 0xff), (unsigned)((from.sin_addr.s_addr >> 8) & 0xff),
-                    (unsigned)((from.sin_addr.s_addr >> 16) & 0xff), (unsigned)((from.sin_addr.s_addr >> 24) & 0xff),
-                    (unsigned)ntohs(from.sin_port));
-        }
         UTP_IsIncomingUTP(cb_on_incoming, cb_send_to, NULL,
                           buf, (size_t)n, (struct sockaddr *)&from, fromlen);
     }
     UTP_CheckTimeouts();
+
+    // Incoming connections nobody claimed: failed, or silent for too long.
+    const uint32_t now = UTP_GetMilliseconds();
+    for (int i = 0; i < SESS_MAX; i++) {
+        utp_nb_sess *c = &g_sess[i];
+        if (!c->in_use || !c->incoming || c->claimed) continue;
+        if (c->state != ST_CONNECTED || (uint32_t)(now - c->born_ms) > ACCEPT_WAIT_MS)
+            close_locked(c);
+    }
 }
 
 utp_nb_sess *utp_nb_connect(uint32_t ip_net, uint16_t port_host) {
-    if (!g_inited) { fprintf(stderr, "[utp_nb] connect: not inited\n"); return NULL; }
+    UTP_LOCK();
+    if (!g_inited) return NULL;
     utp_nb_sess *c = find_free_sess();
     if (!c) {
-        int inuse = 0, zombies = 0;
-        for (int i = 0; i < SESS_MAX; i++) {
-            if (g_sess[i].in_use) inuse++;
-            else if (g_sess[i].refs > 0) zombies++;
-        }
-        fprintf(stderr, "[utp_nb] connect: no free sess (in_use=%d zombies=%d)\n",
-                inuse, zombies);
+        engine_log(ENGINE_LOG_DEBUG, "[utp] connect: session table full");
+        return NULL;
+    }
+    if (!alloc_bufs(c)) {
+        engine_log(ENGINE_LOG_WARN, "[utp] connect: out of memory");
         return NULL;
     }
 
-    c->rbuf = (uint8_t *)malloc(RBUF_SIZE);
-    c->wbuf = (uint8_t *)malloc(WBUF_SIZE);
-    if (!c->rbuf || !c->wbuf) {
-        fprintf(stderr, "[utp_nb] connect: malloc failed\n");
-        free(c->rbuf); free(c->wbuf);
-        c->rbuf = NULL; c->wbuf = NULL;
-        return NULL;
-    }
-
-    struct sockaddr_in sa = {0};
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
     sa.sin_addr.s_addr = ip_net;
     sa.sin_port = htons(port_host);
@@ -269,44 +376,61 @@ utp_nb_sess *utp_nb_connect(uint32_t ip_net, uint16_t port_host) {
     UTPSocket *sock = UTP_Create(cb_send_to, NULL,
                                  (struct sockaddr *)&sa, sizeof(sa));
     if (!sock) {
-        fprintf(stderr, "[utp_nb] connect: UTP_Create failed\n");
         free(c->rbuf); free(c->wbuf);
         c->rbuf = NULL; c->wbuf = NULL;
         return NULL;
     }
 
     UTP_SetCallbacks(sock, &g_functable, c);
+    UTP_SetSockopt(sock, SO_RCVBUF, RBUF_SIZE);
     c->sock = sock;
     c->state = ST_CONNECTING;
     c->in_use = true;
     c->closing = false;
     c->refs = 2;
+    c->incoming = false;
+    c->claimed = false;
+    c->ip = ip_net;
+    c->port = port_host;
 
     UTP_Connect(sock);
     return c;
 }
 
-void utp_nb_close(utp_nb_sess *c) {
-    if (!c || !c->in_use) return;
-    c->in_use = false;
-    c->closing = true;
-    if (c->sock) {
-        UTP_Close(c->sock);
+utp_nb_sess *utp_nb_accept(uint8_t hs68[68], uint32_t *ip_net, uint16_t *port_host) {
+    UTP_LOCK();
+    if (!g_inited) return NULL;
+    for (int i = 0; i < SESS_MAX; i++) {
+        utp_nb_sess *c = &g_sess[i];
+        if (!c->in_use || !c->incoming || c->claimed) continue;
+        if (c->state != ST_CONNECTED || c->rcount < 68) continue;
+        rb_pop(c, hs68, 68);
+        c->claimed = true;
+        if (ip_net) *ip_net = c->ip;
+        if (port_host) *port_host = c->port;
+        return c;
     }
-    decref(c);
+    return NULL;
+}
+
+void utp_nb_close(utp_nb_sess *c) {
+    UTP_LOCK();
+    close_locked(c);
 }
 
 int utp_nb_read(utp_nb_sess *c, void *buf, int len) {
+    UTP_LOCK();
     if (!c || !c->in_use) return -1;
-    if (c->state == ST_ERROR) {
-        fprintf(stderr, "[utp_nb] read: ST_ERROR\n");
-        return -1;
-    }
+    if (c->state == ST_ERROR) return -1;
     if (c->rcount == 0) {
-        if (c->state == ST_EOF) { fprintf(stderr, "[utp_nb] read: ST_EOF\n"); return -1; }
+        if (c->state == ST_EOF) return -1;
         return 0;
     }
-    return (int)rb_pop(c, (uint8_t *)buf, (size_t)len);
+    int n = (int)rb_pop(c, (uint8_t *)buf, (size_t)len);
+    // The window just grew: let libutp tell the peer (it only learns of it
+    // from our next ACK otherwise -- after a full ring, 15 s later).
+    if (n > 0 && c->sock && c->state == ST_CONNECTED) UTP_RBDrained(c->sock);
+    return n;
 }
 
 // Queues as much of buf as the write buffer holds and returns the count
@@ -314,6 +438,7 @@ int utp_nb_read(utp_nb_sess *c, void *buf, int len) {
 // write when it did not fit, and the caller treated that as a dead session:
 // every uTP peer we uploaded to got closed.
 int utp_nb_write(utp_nb_sess *c, const void *buf, int len) {
+    UTP_LOCK();
     if (!c || !c->in_use) return -1;
     if (c->state == ST_ERROR || c->state == ST_EOF) return -1;
     if (len <= 0) return 0;
@@ -322,11 +447,12 @@ int utp_nb_write(utp_nb_sess *c, const void *buf, int len) {
     if (n > room) n = room;
     if (n == 0) return 0;
     wb_push(c, (const uint8_t *)buf, n);
-    if (c->sock && c->state == ST_CONNECTED) UTP_Write(c->sock, n);
+    if (c->sock && c->state == ST_CONNECTED) UTP_Write(c->sock, c->wcount);
     return (int)n;
 }
 
 int utp_nb_state(const utp_nb_sess *c) {
+    UTP_LOCK();
     if (!c || !c->in_use) return -1;
     if (c->state == ST_ERROR || c->state == ST_EOF) return -1;
     return c->state == ST_CONNECTED ? 1 : 0;

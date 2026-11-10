@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#if defined(_WIN32)
+#include <direct.h>   // _mkdir
+#endif
 
 #include <switch.h>
 
@@ -143,7 +146,9 @@ void engine_log_init(const char *path) {
         if (slash) {
             *slash = '\0';
 #if defined(_WIN32)
-            mkdir(dir);
+            // _mkdir, not mkdir: pctest's compat switch.h wraps mkdir as a
+            // two-argument macro, the CMake PC build does not.
+            _mkdir(dir);
 #else
             mkdir(dir, 0777);
 #endif

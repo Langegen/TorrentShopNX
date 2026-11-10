@@ -122,7 +122,9 @@ extern "C" {
             cfg.tcp_rx_buf_size = 0x8000;        // 32 KB initial
             cfg.tcp_tx_buf_max_size = 0x10000;   // 64 KB max (we also upload pieces)
             cfg.tcp_rx_buf_max_size = 0x180000;  // 1.5 MB max
-            cfg.udp_rx_buf_size = 0x8000;        // 32 KB
+            // 128 KB: the one uTP socket carries every uTP peer's packets
+            // between two netloop passes (it was 32 KB, ~22 full datagrams).
+            cfg.udp_rx_buf_size = 0x20000;       // 128 KB
             cfg.udp_tx_buf_size = 0x4000;        // 16 KB
         }
         g_socket_init_result = socketInitialize(&cfg);

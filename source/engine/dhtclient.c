@@ -247,6 +247,58 @@ static bool s_dht_dead = false;
 // normal 15 s one, and the first hungry search fires immediately.
 static volatile int s_bg_hungry = 0;
 
+// DHT nodes other threads learned about (a peer's BEP 5 PORT message). Only
+// the DHT thread may call into jech/dht, so they queue here (under s_bg_mtx)
+// and the background loop pings a few per iteration.
+#define DHT_PENDING_MAX 32
+static struct { uint32_t ip; uint16_t port; } s_pending[DHT_PENDING_MAX];
+static int s_pending_n = 0;
+// The UDP port the background DHT socket is bound to (0 = not running).
+static volatile int s_bg_port = 0;
+
+void dht_bg_add_node(uint32_t ip_net, uint16_t port_host) {
+    if (!s_bg_init || s_bg_stop || ip_net == 0 || port_host <= 1) return;
+    mutexLock(&s_bg_mtx);
+    if (s_pending_n < DHT_PENDING_MAX) {
+        s_pending[s_pending_n].ip = ip_net;
+        s_pending[s_pending_n].port = port_host;
+        s_pending_n++;
+    }
+    mutexUnlock(&s_bg_mtx);
+}
+
+int dht_bg_port(void) {
+    return s_bg_stop ? 0 : s_bg_port;
+}
+
+static void bg_note_port(int sock) {
+    struct sockaddr_in sa;
+    socklen_t sl = sizeof(sa);
+    s_bg_port = (getsockname(sock, (struct sockaddr *)&sa, &sl) == 0) ? ntohs(sa.sin_port) : 0;
+}
+
+// DHT thread: ping up to 4 queued nodes.
+static void bg_ping_pending(void) {
+    struct { uint32_t ip; uint16_t port; } take[4];
+    int n = 0;
+    mutexLock(&s_bg_mtx);
+    while (n < 4 && s_pending_n > 0) {
+        s_pending_n--;
+        take[n].ip = s_pending[s_pending_n].ip;
+        take[n].port = s_pending[s_pending_n].port;
+        n++;
+    }
+    mutexUnlock(&s_bg_mtx);
+    for (int i = 0; i < n; i++) {
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = take[i].ip;
+        addr.sin_port = htons(take[i].port);
+        dht_ping_node((struct sockaddr *)&addr, sizeof(addr));
+    }
+}
+
 void dht_bg_set_hungry(int v) {
     v = v ? 1 : 0;
     if (v == s_bg_hungry) return;
@@ -348,6 +400,7 @@ static int bg_restart(void) {
         return -1;
     }
     s_bg_sock = ns;
+    bg_note_port(ns);
     if (old >= 0) close(old);
 
 #ifndef __SWITCH__
@@ -467,6 +520,7 @@ static void dht_bg_main(void *arg) {
         return;
     }
     memcpy(s_bg_node_id, node_id, 20);
+    bg_note_port(s_bg_sock);
 
 #ifndef __SWITCH__
     // jech's dht_init marks the socket non-blocking; this loop relies on a
@@ -520,6 +574,7 @@ static void dht_bg_main(void *arg) {
         } else {
             dht_periodic(NULL, 0, NULL, 0, &tosleep, bg_on_event, NULL);
         }
+        if (s_pending_n > 0) bg_ping_pending();   // nodes reported by peers (PORT)
 
         // Counting nodes walks the whole routing table: once a second is
         // plenty for the bootstrap decisions below (it ran per packet).
