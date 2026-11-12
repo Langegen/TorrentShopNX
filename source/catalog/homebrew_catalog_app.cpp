@@ -14,9 +14,7 @@
 
 namespace homebrew {
 
-namespace {
-
-FetchResult httpFetch(const std::string& url, const std::string& etag) {
+FetchResult appHttpFetch(const std::string& url, const std::string& etag) {
     // Download into a temp file (downloadToFileEx reports 304 and the ETag),
     // then hand the body to the catalog, which validates and saves it.
     static std::atomic<unsigned> counter{0};
@@ -47,8 +45,6 @@ FetchResult httpFetch(const std::string& url, const std::string& etag) {
     return out;
 }
 
-}  // namespace
-
 Catalog& Catalog::instance() {
     static Catalog catalog(
         CatalogConfig{
@@ -58,7 +54,7 @@ Catalog& Catalog::instance() {
             std::string(kFortheusersCdn) + "/repo.json",
             std::string(catalog::kCollectionsBaseUrl) + "homebrew.json",
         },
-        httpFetch, [] { return static_cast<long long>(std::time(nullptr)); });
+        appHttpFetch, [] { return static_cast<long long>(std::time(nullptr)); });
     return catalog;
 }
 

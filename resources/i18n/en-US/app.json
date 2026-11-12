@@ -203,6 +203,10 @@
         "comp_patch_plain": "Update"
     },
     "detail": {
+        "modcd_has_mods_btn": "Mods in ModCD",
+        "modcd_installed_btn": "Mods in ModCD (Installed)",
+        "modkit_warn_btn": "ModKitNX Required",
+        "modkit_installed_btn": "ModKitNX Installed",
         "description_header": "Description",
         "screenshots_header": "Screenshots",
         "download_btn": "Download",
@@ -1466,5 +1470,31 @@
         "update_all_confirm": "Update {} apps?",
         "update_all_done": "Updated {} of {}",
         "update_all_progress": "Updating {} of {}: {}"
+    },
+    "modcd": {
+        "dialog_title": "Mods in ModCD",
+        "not_installed_prompt": "Graphics mods are available for this game in ModCD ({0} mods).\n\nModCD app is not installed on the console.\nInstall ModCD now?",
+        "installed_info": "Graphics mods are available for this game in ModCD ({0} mods).",
+        "versions_supported": "Supported game updates",
+        "launch_hint": "ModCD is already installed. To manage mods, launch ModCD via Homebrew Menu (hold R while launching any game).",
+        "install_now": "Install ModCD"
+    },
+    "modkit": {
+        "dialog_title": "SDK Version Incompatibility",
+        "not_installed_prompt": "Game SDK version ({0}) is newer than console firmware ({1}).\nThe game may fail to launch without a fix.\n\nInstall ModKitNX to resolve?",
+        "installed_info": "Game SDK version ({0}) is newer than console firmware ({1}).\n\nModKitNX is already installed on the console. Configure a compatible SDK in ModKitNX (launch via hbmenu holding R).",
+        "install_now": "Install ModKitNX",
+        "continue_without": "Continue without installing"
+    },
+    "companion": {
+        "installing_title": "Installing: ",
+        "preparing": "Preparing download...",
+        "downloading": "Downloading: {0}%",
+        "moving": "Copying to SD card...",
+        "success_title": "Installation Complete",
+        "success_msg": "{0} was successfully installed on the SD card!\n\nTo launch it, open Homebrew Menu by holding R while launching any game (for Title Mode full memory access).",
+        "install_error": "Error installing application",
+        "cancelled": "Installation cancelled",
+        "cancelling": "Cancelling installation..."
     }
 }

@@ -1,4 +1,5 @@
 #include "DownloadsView.hpp"
+#include "CompanionInstallDialog.hpp"
 #include "EmptyState.hpp"
 #include "CollectionsView.hpp"
 #include "DownloadUiManager.hpp"
@@ -1358,6 +1359,11 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         }
         if (hasSdkMismatch) {
             cell->sdkWarningBox->setVisibility(brls::Visibility::VISIBLE);
+            cell->sdkWarningBox->setFocusable(true);
+            cell->sdkWarningBox->registerClickAction([gSdk, cSdk](brls::View*) {
+                ui::showModKitOfferDialog(gSdk, cSdk);
+                return true;
+            });
             cell->sdkWarningBox->setBackgroundColor(isLight ? nvgRGBA(255, 235, 238, 240) : nvgRGBA(244, 67, 54, 40));
             cell->sdkWarningBox->setCornerRadius(6.0f);
             cell->sdkWarningBox->setPadding(4.0f, 8.0f, 4.0f, 8.0f);

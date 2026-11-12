@@ -168,6 +168,7 @@ struct InstalledGameInfo {
     bool installed = false;      // base game or its update is present
     uint32_t patchVersion = 0;   // installed update (N << 16), 0 = none
     std::string displayVersion;  // version from the game's NACP ("1.0.3"), "" if unknown
+    std::string sdkVersion;      // SDK version from library scan or NCA header ("18.1.0"), "" if unknown
 };
 
 // Looks up one game by its application id (title id & ~0x1FFF).

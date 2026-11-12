@@ -1,7 +1,10 @@
 #include "switch_utils.h"
+#include "app_paths.h"
 #include "log.h"
 #include "../config/config.h"
 #include "nacp_text.h"
+#include <borealis/extern/nlohmann/json.hpp>
+#include <fstream>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -689,6 +692,21 @@ InstalledGameInfo queryInstalledGame(uint64_t appId) {
             info.displayVersion = sanitizeUtf8(ctrl->nacp.display_version, sizeof(ctrl->nacp.display_version));
         }
         nsExit();
+    }
+    if (info.installed) {
+        try {
+            std::ifstream f(std::string(TSNX_CACHE_DIR) + "/library_scan.json");
+            if (f.is_open()) {
+                nlohmann::json j = nlohmann::json::parse(f, nullptr, false);
+                if (!j.is_discarded() && j.is_object() && j.contains("titles") && j["titles"].is_object()) {
+                    char hex[17];
+                    snprintf(hex, sizeof(hex), "%016llX", static_cast<unsigned long long>(appId));
+                    if (j["titles"].contains(hex) && j["titles"][hex].is_object()) {
+                        info.sdkVersion = j["titles"][hex].value("sdk", "");
+                    }
+                }
+            }
+        } catch (...) {}
     }
 #else
     const char* env = std::getenv("TSNX_FAKE_INSTALLED");

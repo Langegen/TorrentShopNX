@@ -208,6 +208,18 @@ bool Catalog::find(const std::string& name, Package& out) const {
     return false;
 }
 
+bool Catalog::findByRepo(const std::string& repo, Package& out) const {
+    const std::string key = lower(repo);
+    if (key.empty()) return false;
+    for (const Package& p : *snapshot()) {
+        if (lower(p.repo) == key) {
+            out = p;
+            return true;
+        }
+    }
+    return false;
+}
+
 Installed Catalog::installed(const std::string& name) const {
     const auto map = installedSnapshot();
     auto it = map->find(lower(name));

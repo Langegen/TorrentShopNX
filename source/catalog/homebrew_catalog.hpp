@@ -35,6 +35,9 @@ struct FetchResult {
 using Fetcher = std::function<FetchResult(const std::string& url, const std::string& etag)>;
 using Clock = std::function<long long()>;  // seconds since epoch
 
+// The app's Fetcher (HttpClient), defined in homebrew_catalog_app.cpp.
+FetchResult appHttpFetch(const std::string& url, const std::string& etag);
+
 struct CatalogConfig {
     std::string cache_dir;     // repo.json, homebrew.json, their .etag, last_check
     std::string registry_dir;  // .../switch/appstore/.get/packages
@@ -77,6 +80,8 @@ public:
     std::shared_ptr<const PackageList> snapshot() const;
     std::shared_ptr<const InstalledMap> installedSnapshot() const;
     bool find(const std::string& name, Package& out) const;
+    // By GitHub repository, "owner/repo" in any case.
+    bool findByRepo(const std::string& repo, Package& out) const;
     Installed installed(const std::string& name) const;
     Status status(const Package& pkg) const;
     int updatesAvailable() const;  // registered packages with a newer version in the store

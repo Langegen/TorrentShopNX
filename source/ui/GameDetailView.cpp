@@ -1,4 +1,5 @@
 #include "GameDetailView.hpp"
+#include "CompanionInstallDialog.hpp"
 #include "style/UiTokens.hpp"
 #include "../utils/string_utils.h"
 #include "ThemeManager.hpp"
@@ -14,6 +15,7 @@
 #include "../catalog/installed_retro_games.h"
 #include "../catalog/release_finder.h"
 #include "../catalog/game_version.hpp"
+#include "../catalog/modcd_index.hpp"
 #include "../config/config.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../utils/file_ops.h"
@@ -104,11 +106,15 @@ public:
     ScrollAndFocusController(brls::ScrollingFrame* targetScroll,
                              brls::Button* btnDownload,
                              brls::Button* btnFavorite,
-                             brls::Button* btnQr)
+                             brls::Button* btnQr,
+                             brls::Button* btnModCd = nullptr,
+                             brls::Button* btnModKit = nullptr)
         : targetScroll_(targetScroll),
           btnDownload_(btnDownload),
           btnFavorite_(btnFavorite),
-          btnQr_(btnQr) {
+          btnQr_(btnQr),
+          btnModCd_(btnModCd),
+          btnModKit_(btnModKit) {
         setHeight(0);
         setWidth(0);
     }
@@ -122,7 +128,9 @@ public:
         // Focus is in right column if it is NOT on the left action buttons
         bool inRightColumn = (currentFocus != btnDownload_ &&
                               currentFocus != btnFavorite_ &&
-                              currentFocus != btnQr_);
+                              currentFocus != btnQr_ &&
+                              currentFocus != btnModCd_ &&
+                              currentFocus != btnModKit_);
                               
         if (inRightColumn) {
             auto& state = brls::Application::getControllerState();
@@ -162,6 +170,8 @@ private:
     brls::Button* btnDownload_;
     brls::Button* btnFavorite_;
     brls::Button* btnQr_;
+    brls::Button* btnModCd_;
+    brls::Button* btnModKit_;
 };
 
 GameDetailView::GameDetailView(const Game& game, const std::string& retro_console_id)
@@ -539,24 +549,11 @@ void GameDetailView::onContentAvailable() {
     // Update initial button state
     updateFavoriteButton();
 
-    ScrollAndFocusController* scrollController = new ScrollAndFocusController(scroll, btnDownload, btnFavorite, btnQr);
+    ScrollAndFocusController* scrollController = new ScrollAndFocusController(scroll, btnDownload, btnFavorite, btnQr, btnModCd, btnModKit);
     contentBox->addView(scrollController);
 
-    // Custom navigation routes for seamless gamepad control
-    btnDownload->setCustomNavigationRoute(brls::FocusDirection::DOWN, btnFavorite);
-    btnFavorite->setCustomNavigationRoute(brls::FocusDirection::UP, btnDownload);
-    btnFavorite->setCustomNavigationRoute(brls::FocusDirection::RIGHT, btnQr);
-    btnQr->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnFavorite);
-    btnQr->setCustomNavigationRoute(brls::FocusDirection::UP, btnDownload);
-
-    brls::View* rightTarget = firstScr ? firstScr : static_cast<brls::View*>(scroll);
-    btnDownload->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
-    btnQr->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
-
-    if (firstScr) {
-        firstScr->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
-    }
-    scroll->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+    resolvedAppId_ = catalog::releaseAppId(game_);
+    updateModButtons(resolvedAppId_);
 
     // Explicitly set the last focused view on the activity content box to guarantee btnDownload gets default focus
     brls::Box* contentBoxView = dynamic_cast<brls::Box*>(getContentView());
@@ -585,6 +582,7 @@ void GameDetailView::willAppear(bool resetState) {
     brls::Activity::willAppear(resetState);
     scroll->resetScrollToTop();
     updateRetroDownloadButton();
+    updateModButtons();
     checkInstalled();   // again on return: the game may have been installed meanwhile
     brls::Application::giveFocus(btnDownload);
 }
@@ -617,11 +615,22 @@ void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info, ui
         badgesBox->removeView(installedBadge_);
         installedBadge_ = nullptr;
     }
+
+    resolvedAppId_ = appId;
     if (!info.installed) {
+        installedGameSdk_ = util::SdkVersion{};
+        updateModButtons(appId);
         btnDownload->setText("app/detail/download_btn"_i18n);
         btnDownload->setStyle(&brls::BUTTONSTYLE_PRIMARY);
         return;
     }
+
+    if (!info.sdkVersion.empty()) {
+        installedGameSdk_ = util::SdkVersion::parseString(info.sdkVersion);
+    } else {
+        installedGameSdk_ = util::SdkVersion{};
+    }
+    updateModButtons(appId);
 
     const std::string installedVer = catalog::trimVersion(info.displayVersion);
 
@@ -687,6 +696,108 @@ void GameDetailView::confirmRetroRemoval() {
     });
     confirm->addButton("app/common/cancel"_i18n, []() {});
     confirm->open();
+}
+
+void GameDetailView::updateNavigationRoutes() {
+    brls::View* rightTarget = static_cast<brls::View*>(scroll);
+
+    btnDownload->setCustomNavigationRoute(brls::FocusDirection::DOWN, btnFavorite);
+    btnFavorite->setCustomNavigationRoute(brls::FocusDirection::UP, btnDownload);
+    btnFavorite->setCustomNavigationRoute(brls::FocusDirection::RIGHT, btnQr);
+    btnQr->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnFavorite);
+    btnQr->setCustomNavigationRoute(brls::FocusDirection::UP, btnDownload);
+    btnDownload->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+    btnQr->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+
+    brls::View* nextDown = nullptr;
+    if (btnModCd && btnModCd->getVisibility() == brls::Visibility::VISIBLE) {
+        nextDown = btnModCd;
+    } else if (btnModKit && btnModKit->getVisibility() == brls::Visibility::VISIBLE) {
+        nextDown = btnModKit;
+    }
+
+    if (nextDown) {
+        btnFavorite->setCustomNavigationRoute(brls::FocusDirection::DOWN, nextDown);
+        btnQr->setCustomNavigationRoute(brls::FocusDirection::DOWN, nextDown);
+    } else {
+        btnFavorite->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        btnQr->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+    }
+
+    if (btnModCd && btnModCd->getVisibility() == brls::Visibility::VISIBLE) {
+        btnModCd->setCustomNavigationRoute(brls::FocusDirection::UP, btnFavorite);
+        btnModCd->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+        if (btnModKit && btnModKit->getVisibility() == brls::Visibility::VISIBLE) {
+            btnModCd->setCustomNavigationRoute(brls::FocusDirection::DOWN, btnModKit);
+            btnModKit->setCustomNavigationRoute(brls::FocusDirection::UP, btnModCd);
+            btnModKit->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+            btnModKit->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+        } else {
+            btnModCd->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        }
+    } else if (btnModKit && btnModKit->getVisibility() == brls::Visibility::VISIBLE) {
+        btnModKit->setCustomNavigationRoute(brls::FocusDirection::UP, btnFavorite);
+        btnModKit->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        btnModKit->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+    }
+}
+
+void GameDetailView::updateModButtons(uint64_t appId) {
+    if (appId == 0) appId = resolvedAppId_;
+    if (appId == 0) {
+        std::vector<uint64_t> appIds = catalog::releaseAppIds(game_);
+        if (!appIds.empty()) appId = appIds.front();
+        else appId = catalog::releaseAppId(game_);
+    }
+    resolvedAppId_ = appId;
+
+    if (!isSwitchRelease_ || appId == 0) {
+        if (btnModCd) btnModCd->setVisibility(brls::Visibility::GONE);
+        if (btnModKit) btnModKit->setVisibility(brls::Visibility::GONE);
+        updateNavigationRoutes();
+        return;
+    }
+
+    // 1. ModCD Check
+    modcd::TitleMods mods;
+    bool hasMods = modcd::Index::instance().find(appId, mods);
+    if (hasMods && mods.mods > 0) {
+        if (btnModCd) {
+            btnModCd->setVisibility(brls::Visibility::VISIBLE);
+            bool installed = modcd::isModCdInstalled();
+            btnModCd->setText(installed ? "app/detail/modcd_installed_btn"_i18n
+                                        : "app/detail/modcd_has_mods_btn"_i18n);
+            btnModCd->registerClickAction([this, appId, mods](brls::View*) {
+                showModCdOfferDialog(appId, mods, [this]() {
+                    updateModButtons();
+                });
+                return true;
+            });
+        }
+    } else {
+        if (btnModCd) btnModCd->setVisibility(brls::Visibility::GONE);
+    }
+
+    // 2. ModKitNX Check (SDK mismatch for installed game)
+    util::SdkVersion console_sdk = util::getConsoleSdkVersion();
+    if (installedGameSdk_.valid && console_sdk.valid && installedGameSdk_ > console_sdk) {
+        if (btnModKit) {
+            btnModKit->setVisibility(brls::Visibility::VISIBLE);
+            bool installed = modcd::isModKitInstalled();
+            btnModKit->setText(installed ? "app/detail/modkit_installed_btn"_i18n
+                                         : "app/detail/modkit_warn_btn"_i18n);
+            btnModKit->registerClickAction([this, console_sdk](brls::View*) {
+                showModKitOfferDialog(installedGameSdk_, console_sdk, [this]() {
+                    updateModButtons();
+                });
+                return true;
+            });
+        }
+    } else {
+        if (btnModKit) btnModKit->setVisibility(brls::Visibility::GONE);
+    }
+
+    updateNavigationRoutes();
 }
 
 void GameDetailView::willDisappear(bool resetState) {

@@ -203,6 +203,10 @@
         "comp_patch_plain": "Патч"
     },
     "detail": {
+        "modcd_has_mods_btn": "Моды в ModCD",
+        "modcd_installed_btn": "Моды в ModCD (установлено)",
+        "modkit_warn_btn": "Требуется ModKitNX",
+        "modkit_installed_btn": "ModKitNX установлен",
         "description_header": "Описание",
         "screenshots_header": "Скриншоты",
         "download_btn": "Скачать",
@@ -1466,5 +1470,31 @@
         "update_all_confirm": "Обновить программы: {}?",
         "update_all_done": "Обновлено {} из {}",
         "update_all_progress": "Обновление {} из {}: {}"
+    },
+    "modcd": {
+        "dialog_title": "Моды в ModCD",
+        "not_installed_prompt": "Для этой игры есть графические моды в ModCD (доступно: {}).\n\nПриложение ModCD не установлено на консоли.\nУстановить ModCD сейчас?",
+        "installed_info": "Для этой игры есть графические моды в ModCD (доступно: {}).",
+        "versions_supported": "Поддерживаемые обновления игры",
+        "launch_hint": "ModCD уже установлен. Для управления модами запустите ModCD через Homebrew Menu (удерживайте кнопку R при запуске любой игры).",
+        "install_now": "Установить ModCD"
+    },
+    "modkit": {
+        "dialog_title": "Несоответствие версии SDK",
+        "not_installed_prompt": "Версия SDK игры ({}) новее прошивки консоли ({}).\nИгра может не запуститься без исправления.\n\nУстановить ModKitNX для исправления?",
+        "installed_info": "Версия SDK игры ({}) новее прошивки консоли ({}).\n\nModKitNX уже установлен на консоли. Для запуска игры настройте совместимый SDK в ModKitNX (запуск через hbmenu с зажатой кнопкой R).",
+        "install_now": "Установить ModKitNX",
+        "continue_without": "Продолжить без установки"
+    },
+    "companion": {
+        "installing_title": "Установка: ",
+        "preparing": "Подготовка к загрузке...",
+        "downloading": "Загрузка: {}%",
+        "moving": "Копирование на SD-карту...",
+        "success_title": "Установка завершена",
+        "success_msg": "Приложение {} успешно установлено на SD-карту!\n\nДля запуска откройте Homebrew Menu, удерживая кнопку R во время запуска любой игры (для выделения полного объёма оперативной памяти в Title-режиме).",
+        "install_error": "Ошибка при установке приложения",
+        "cancelled": "Установка отменена",
+        "cancelling": "Отмена установки..."
     }
 }

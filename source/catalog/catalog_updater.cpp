@@ -9,6 +9,7 @@
 #include "net/http_client.h"
 #include "installer/PortInstallPlanner.hpp"
 #include "homebrew_catalog.hpp"
+#include "modcd_index.hpp"
 #include "ui/CatalogProgressNotification.hpp"
 #include "ui/CatalogView.hpp"
 #include "ui/FavoritesManager.hpp"
@@ -99,6 +100,17 @@ static void refreshHomebrewInBackground() {
             }
         } catch (const std::exception& e) {
             util::logLine(std::string("homebrew: refresh exception: ") + e.what());
+        }
+
+        try {
+            auto& modIndex = modcd::Index::instance();
+            if (!modIndex.loaded()) modIndex.loadCached();
+            if (g_appExiting.load()) return;
+            const bool ok = modIndex.refresh(false);
+            util::logLine("modcd: refresh " + std::string(ok ? "ok" : "failed") + ", " +
+                          std::to_string(modIndex.size()) + " titles with mods");
+        } catch (const std::exception& e) {
+            util::logLine(std::string("modcd: refresh exception: ") + e.what());
         }
     });
 }
