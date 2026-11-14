@@ -17,6 +17,10 @@
 #include "utp.h"
 #include "utp_utils.h"
 
+#ifndef MSG_DONTWAIT
+#define MSG_DONTWAIT 0
+#endif
+
 #define SESS_MAX 128
 // Per-session buffers. The receive ring is also the uTP receive window
 // (UTP_SetSockopt SO_RCVBUF below): libutp advertises RBUF_SIZE minus what is
@@ -204,7 +208,7 @@ static UTPFunctionTable g_functable = {
 static void cb_send_to(void *u, const byte *p, size_t len,
                        const struct sockaddr *to, socklen_t tolen) {
     (void)u;
-    if (g_udp >= 0) sendto(g_udp, (const char *)p, len, 0, to, tolen);
+    if (g_udp >= 0) sendto(g_udp, (const char *)p, len, MSG_DONTWAIT, to, tolen);
 }
 
 // A peer opened a uTP connection to us (libutp already answered its SYN).
@@ -332,7 +336,7 @@ void utp_nb_service(void) {
     for (;;) {
         struct sockaddr_in from;
         socklen_t fromlen = sizeof(from);
-        ssize_t n = recvfrom(g_udp, (char *)buf, sizeof(buf), 0,
+        ssize_t n = recvfrom(g_udp, (char *)buf, sizeof(buf), MSG_DONTWAIT,
                              (struct sockaddr *)&from, &fromlen);
         if (n < 0) {
             if (errno == EINTR) continue;
@@ -456,4 +460,9 @@ int utp_nb_state(const utp_nb_sess *c) {
     if (!c || !c->in_use) return -1;
     if (c->state == ST_ERROR || c->state == ST_EOF) return -1;
     return c->state == ST_CONNECTED ? 1 : 0;
+}
+
+size_t utp_nb_bytes_available(const utp_nb_sess *c) {
+    UTP_LOCK();
+    return (c && c->in_use) ? c->rcount : 0;
 }

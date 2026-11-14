@@ -930,6 +930,20 @@ void tsnx_engine_resume_reader(tsnx_engine *eng, const char *hash) {
     REG_UNLOCK();
 }
 
+bool tsnx_engine_reset_peers(tsnx_engine *eng, const char *hash) {
+    eng = active_engine(eng);
+    if (!eng || !hash) return false;
+    REG_LOCK();
+    tsnx_torrent *t = find_locked(eng, hash);
+    if (t && t->fs) {
+        torrentfs_reset_sessions(t->fs);
+    }
+    REG_UNLOCK();
+    if (!t) return false;
+    engine_log(ENGINE_LOG_WARN, "[engine] reset peers requested for %s", hash);
+    return true;
+}
+
 void tsnx_engine_set_min_keep_offset(tsnx_engine *eng, const char *hash,
                                      int64_t offset) {
     eng = active_engine(eng);

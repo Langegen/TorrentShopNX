@@ -64,6 +64,9 @@ int utp_nb_write(utp_nb_sess *s, const void *buf, int len);
 // 1 = connected, 0 = still connecting, -1 = error/closed.
 int utp_nb_state(const utp_nb_sess *s);
 
+// Return number of bytes currently buffered and readable in the session's receive ring.
+size_t utp_nb_bytes_available(const utp_nb_sess *s);
+
 #ifdef __cplusplus
 }
 #endif

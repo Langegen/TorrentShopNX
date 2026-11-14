@@ -22,6 +22,10 @@
 #include "utp_nb.h"
 #include "engine_log.h"
 
+#ifndef MSG_DONTWAIT
+#define MSG_DONTWAIT 0
+#endif
+
 #define HANDSHAKE_LEN 68
 #define META_PIECE_LEN 16384
 #define MAX_META_SIZE (8 * 1024 * 1024)
@@ -518,7 +522,7 @@ ssize_t peer_nb_pump_rx(peer_nb *p) {
             }
             if (n == 0) return total;
         } else {
-            n = recv(p->sock, p->rx + p->rx_len, PEER_RX_CAP - p->rx_len, 0);
+            n = recv(p->sock, p->rx + p->rx_len, PEER_RX_CAP - p->rx_len, MSG_DONTWAIT);
             if (n > 0) {
                 // fall through
             } else if (n == 0) {
@@ -690,7 +694,7 @@ int peer_nb_flush(peer_nb *p) {
         // for the rare deep pipeline flush.
         size_t chunk = p->tx_len - p->tx_head;
         if (chunk > 32 * 1024) chunk = 32 * 1024;
-        ssize_t n = send(p->sock, p->tx + p->tx_head, chunk, 0);
+        ssize_t n = send(p->sock, p->tx + p->tx_head, chunk, MSG_DONTWAIT);
         if (n > 0) {
             p->tx_head += (size_t)n;
             continue;

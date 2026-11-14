@@ -331,7 +331,7 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 #define OPTIMISTIC_SECS     30
 
 #ifdef __SWITCH__
-#define POLL_CHUNK_MAX   100
+#define POLL_CHUNK_MAX   72
 #else
 #define POLL_CHUNK_MAX   56
 #endif
@@ -682,6 +682,7 @@ struct torrentfs {
     volatile bool announce_now;
     u64 last_starve_announce;
     volatile int paused;       // pause: stop dialing + claiming (sessions stay)
+    volatile bool reset_sessions; // reset all peer sessions on stall/demand
 
     // Transport alternation: 0 = try TCP next, 1 = try ВµTP next.
     int dial_toggle;
@@ -2173,12 +2174,6 @@ static void send_cancel_one(torrentfs *t, sess *s, int ep, int eb) {
     v = htonl(block_len_of(torrent_piece_len(&t->meta, ep), eb));
     memcpy(pl + 8, &v, 4);
     peer_nb_queue(&s->nb, MSG_CANCEL, pl, 12);
-    // Flush immediately to drop duplicate transfers on the wire right away.
-    // A failed flush is NOT handled here: callers are in the middle of walking
-    // this session's request ring, and closing it under them corrupts req_n.
-    // The netloop's regular POLLOUT flush hits the same error and closes it.
-    if (peer_nb_tx_pending(&s->nb))
-        (void)peer_nb_flush(&s->nb);
 }
 
 // Drop a session's outstanding requests without cancelling them on the wire:
@@ -2357,7 +2352,7 @@ static int nominal_depth(torrentfs *t, sess *s) {
 // sessions in the block's holder bitmap can hold one.
 static int active_healthy_reqs(torrentfs *t, aq_entry *a, int b, u64 now,
                                uint8_t *out_total) {
-    int64_t piece_idx = a->idx;
+    (void)now;
     int total = 0;
     int healthy = 0;
     const uint8_t *row = rb_row(a, b);
@@ -2365,15 +2360,9 @@ static int active_healthy_reqs(torrentfs *t, aq_entry *a, int b, u64 now,
         if (!(row[i >> 3] & (1u << (i & 7)))) continue;
         const sess *os = &t->S[i];
         if (!os->active || os->connecting || !os->nb.handshaked) continue;
-        for (int k = 0; k < os->req_n; k++) {
-            if (os->req_piece[k] == (int)piece_idx && os->req_block[k] == b) {
-                total++;
-                if (os->timeout_strikes == 0 &&
-                    (os->req_time[k] == 0 || now - os->req_time[k] <= (u64)2500 * (t->freq / 1000))) {
-                    healthy++;
-                }
-                break;
-            }
+        total++;
+        if (os->timeout_strikes == 0 && !os->nb.choked && !os->snubbed) {
+            healthy++;
         }
     }
     if (out_total) *out_total = (uint8_t)(total > 255 ? 255 : total);
@@ -2473,8 +2462,7 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
     // oldest request can be that old, skip the walk over up to 1024 blocks:
     // it ran for every active piece on every request of every session.
     const u64 steal_ticks = (u64)2500 * (t->freq / 1000);
-    const bool background = (max_dup <= 1) && !(is_head && !s->slow);
-    if (background && a->unreq_cnt <= 0 && now < a->stall_check_at) return -1;
+    if (a->unreq_cnt <= 0 && a->stall_check_at > 0 && now < a->stall_check_at && !(is_head && !s->slow)) return -1;
     u64 oldest_req = now;   // requests made after this pass are newer still
 
     for (int k = 0; k < a->nblocks; k++) {
@@ -2536,8 +2524,9 @@ static int next_block_in(torrentfs *t, const sess *s, aq_entry *a, u64 now, int 
         }
     }
     // A full pass found nothing: no request is older than oldest_req, so
-    // none can pass the steal timer before oldest_req + steal_ticks.
-    if (max_dup <= 1) a->stall_check_at = oldest_req + steal_ticks;
+    // none can pass the hedge/steal timer before oldest_req + min_wait.
+    u64 min_wait = (max_dup <= 1) ? steal_ticks : hedge_timeout_ticks;
+    a->stall_check_at = oldest_req + min_wait;
     return -1;
 }
 
@@ -2678,40 +2667,34 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
     t->pf_scans++;
     const int sid = (int)(s - t->S);
     if (prune) {
-    // Prune any stale requests for pieces that already finished or blocks already held,
-    // or requests that timed out (> 4.0s)
-    int kept = 0;
-    u64 req_timeout_ticks = (u64)4000 * (t->freq / 1000);
-    for (int i = 0; i < s->req_n; i++) {
-        int ep = s->req_piece[i];
-        int eb = s->req_block[i];
-        bool stale = (ep < 0 || ep >= t->meta.piece_count ||
-                      t->status[ep] == PIECE_DONE || t->status[ep] == PIECE_WRITING);
-        if (!stale) {
-            aq_entry *ea = aq_find(t, ep);
-            if (!ea || eb < 0 || eb >= ea->nblocks) {
-                stale = true;
-            } else if (ea->have[eb]) {
-                rb_clr(ea, eb, sid);
-                stale = true;
-            } else if (s->req_time[i] > 0 && (now - s->req_time[i] > req_timeout_ticks)) {
-                // Individual block request timed out (> 4.0s): release lock on block
-                aq_req_dec(ea, eb);
-                rb_clr(ea, eb, sid);
-                send_cancel_one(t, s, ep, eb);
-                stale = true;
+        // Prune any stale requests for pieces that already finished or blocks already held.
+        // BitTorrent spec: do NOT cancel in-flight requests on a timer; duplicate hedging
+        // and session-level stall handling manage slow peers without cancel storms.
+        int kept = 0;
+        for (int i = 0; i < s->req_n; i++) {
+            int ep = s->req_piece[i];
+            int eb = s->req_block[i];
+            bool stale = (ep < 0 || ep >= t->meta.piece_count ||
+                          t->status[ep] == PIECE_DONE || t->status[ep] == PIECE_WRITING);
+            if (!stale) {
+                aq_entry *ea = aq_find(t, ep);
+                if (!ea || eb < 0 || eb >= ea->nblocks) {
+                    stale = true;
+                } else if (ea->have[eb]) {
+                    rb_clr(ea, eb, sid);
+                    stale = true;
+                }
+            }
+            if (!stale) {
+                if (kept != i) {
+                    s->req_piece[kept] = ep;
+                    s->req_block[kept] = eb;
+                    s->req_time[kept]  = s->req_time[i];
+                }
+                kept++;
             }
         }
-        if (!stale) {
-            if (kept != i) {
-                s->req_piece[kept] = ep;
-                s->req_block[kept] = eb;
-                s->req_time[kept]  = s->req_time[i];
-            }
-            kept++;
-        }
-    }
-    s->req_n = kept;
+        s->req_n = kept;
     }
 
     int depth = nominal_depth(t, s);
@@ -2720,7 +2703,8 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
     if (was_empty)
         engine_log(ENGINE_LOG_DEBUG, "[sess %d] scan depth=%d",
                     (int)(s - t->S), depth);
-    while (s->req_n < depth && s->req_n < REQ_RING) {
+    int claimed = 0;
+    while (s->req_n < depth && s->req_n < REQ_RING && claimed < 32) {
         int64_t pi;
         int b;
         if (!scan_next_block(t, s, now, &pi, &b)) break;
@@ -2741,6 +2725,7 @@ static void request_scan_ex(torrentfs *t, sess *s, u64 now, bool prune) {
         s->req_block[s->req_n] = b;
         s->req_time[s->req_n]  = now;
         s->req_n++;
+        claimed++;
         // Anchor the stall clock at the first request of a burst: the stall
         // gate (STALL_SECS without a delivered block) must not fire on a
         // freshly connected session whose first block is still on the wire
@@ -2781,7 +2766,7 @@ static void request_scan_rx(torrentfs *t, sess *s, u64 now) {
     if (s->useful == s->scan_useful) return;
     if (s->req_n == 0) {
         s->scan_useful = s->useful;
-        request_scan_ex(t, s, now, true);
+        request_scan_ex(t, s, now, false);
         return;
     }
     int depth = nominal_depth(t, s);
@@ -4532,6 +4517,25 @@ static void netloop_main(void *arg) {
         u64 it0 = armGetSystemTick();   // [perf] iteration start
         tsnx_engine_wd_tick(4);
         hb_beat(t, HB_NET);
+        u64 now = armGetSystemTick();
+        if (t->reset_sessions) {
+            t->reset_sessions = false;
+            engine_log(ENGINE_LOG_WARN,
+                       "[torrentfs] recovering from stall (%d live sessions): refreshing requests",
+                       t->st_live);
+            for (int i = 0; i < MAX_SESS; i++) {
+                sess *s = &t->S[i];
+                if (!s->active) continue;
+                sess_drop_requests(t, s);
+                if (s->timeout_strikes > 0 || (!peer_is_seed(t, s) && s->rx_total == 0)) {
+                    sess_close(t, s, true);
+                } else {
+                    peer_nb_queue(&s->nb, MSG_INTERESTED, NULL, 0);
+                }
+            }
+            t->announce_now = true;
+            t->last_progress_tick = now;
+        }
         int sel = __atomic_load_n(&t->pending_select_file, __ATOMIC_ACQUIRE);
         if (sel >= 0) {
             int claimed = __atomic_exchange_n(&t->pending_select_file, -1, __ATOMIC_ACQ_REL);
@@ -4542,7 +4546,7 @@ static void netloop_main(void *arg) {
                 last_upkeep = 0; // force immediate request_scan for the newly selected file
             }
         }
-        u64 now = armGetSystemTick();
+        now = armGetSystemTick();
 
         // Upkeep every ~125 ms: dial, reap, keep-alives, rate EWMA, calm.
         if (now - last_upkeep > t->freq / 8) {
@@ -5037,12 +5041,14 @@ static void netloop_main(void *arg) {
             // priority gradient and takes the next available block, so the
             // reader's piece always gets the swarm's in-flight capacity
             // first. Nothing new while paused.
+            u64 scan_t0 = armGetSystemTick();
             for (int i = 0; i < MAX_SESS && !t->paused; i++) {
                 sess *s = &t->S[i];
                 if (!s->active || s->connecting || !s->nb.handshaked) continue;
                 if (s->nb.choked) continue;
                 request_scan(t, s, now);
                 if (peer_nb_tx_pending(&s->nb)) peer_nb_flush(&s->nb);
+                if (armGetSystemTick() - scan_t0 > (u64)25 * (t->freq / 1000)) break;
             }
 
             publish_snapshot(t);
@@ -5177,7 +5183,10 @@ static void netloop_main(void *arg) {
                     continue;
                 }
             }
-            sess_service(t, s, i, now);
+            if (utp_serviced || (s->nb.rx_len > s->nb.rx_off) || peer_nb_tx_pending(&s->nb) ||
+                (utp_nb_bytes_available((utp_nb_sess *)s->nb.utp) > 0)) {
+                sess_service(t, s, i, now);
+            }
         }
 
         // [perf] CPU time of this iteration, the poll() wait left out.
@@ -5784,6 +5793,9 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
                            "[read] stall timeout waiting for piece %lld block %d (stall=%llus, live=%d)",
                            (long long)first, b0, (unsigned long long)stall_secs, tfs->st_live);
                 tfs->read_blocked_piece = -1;
+                // STALL RECOVERY: Reset dead peer sessions so the engine drops stale sockets and re-dials fresh peers
+                tfs->reset_sessions = true;
+                tfs->announce_now = true;
                 return 0;
             }
         }
@@ -5833,6 +5845,13 @@ void torrentfs_cancel_reader(torrentfs *tfs) {
 void torrentfs_resume_reader(torrentfs *tfs) {
     if (!tfs) return;
     tfs->cancel_reader = false;
+}
+
+void torrentfs_reset_sessions(torrentfs *tfs) {
+    if (!tfs) return;
+    tfs->reset_sessions = true;
+    condvarWakeAll(&tfs->piece_cv);
+    condvarWakeAll(&tfs->wq_cv);
 }
 
 void torrentfs_set_strict_verify(torrentfs *tfs, int on) {

@@ -68,6 +68,9 @@ void torrentfs_cancel_reader(torrentfs *tfs);
 // Resume reader thread after cancellation so subsequent reads succeed.
 void torrentfs_resume_reader(torrentfs *tfs);
 
+// Drop all current peer sessions and dial fresh ones from the pool/DHT/trackers.
+void torrentfs_reset_sessions(torrentfs *tfs);
+
 // Strict piece verification mode (1 = wait for full SHA-1 verified pieces).
 void torrentfs_set_strict_verify(torrentfs *tfs, int on);
 

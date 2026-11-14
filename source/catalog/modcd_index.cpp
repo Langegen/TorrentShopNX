@@ -99,7 +99,15 @@ Index::Index(std::string cache_dir, std::string url, homebrew::Fetcher fetch, ho
 bool Index::loadCached() {
     std::string text, err;
     auto map = std::make_shared<TitleMap>();
-    if (!readFile(join(cache_dir_, kFile), text) || !parseIndex(text, *map, err)) return false;
+    const std::string path = join(cache_dir_, kFile);
+    bool ok = readFile(path, text) && parseIndex(text, *map, err);
+    if (!ok) {
+#ifdef BRLS_RESOURCES
+        const std::string bundled = std::string(BRLS_RESOURCES) + kFile;
+        ok = readFile(bundled, text) && parseIndex(text, *map, err);
+#endif
+    }
+    if (!ok) return false;
     {
         std::lock_guard<std::mutex> lk(mutex_);
         titles_ = std::move(map);
@@ -138,6 +146,9 @@ bool Index::refresh(bool force) {
 }
 
 bool Index::find(uint64_t title_id, TitleMods& out) const {
+    if (!loaded_.load()) {
+        const_cast<Index*>(this)->loadCached();
+    }
     std::shared_ptr<const TitleMap> map;
     {
         std::lock_guard<std::mutex> lk(mutex_);
