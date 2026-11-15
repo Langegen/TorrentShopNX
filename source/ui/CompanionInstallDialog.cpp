@@ -97,7 +97,7 @@ void showCompanionInstallDialog(const std::string& repo,
     auto closedFlag = std::make_shared<std::atomic<bool>>(false);
 
     std::string cancelText = brls::getStr("app/common/cancel");
-    if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Отмена";
+    if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
     dialog->addButton(cancelText, [cancelFlag, statusLabel]() {
         cancelFlag->store(true);

@@ -240,7 +240,11 @@
         "update_to_btn": "{0} に更新",
         "check_updates_btn": "アップデートを確認",
         "screenshot_loading": "読み込み中…",
-        "screenshot_load_failed": "スクリーンショットを読み込めませんでした"
+        "screenshot_load_failed": "スクリーンショットを読み込めませんでした",
+        "modcd_has_mods_btn": "ModCD 内の Mod",
+        "modcd_installed_btn": "ModCD 内の Mod (インストール済み)",
+        "modkit_warn_btn": "ModKitNX が必要",
+        "modkit_installed_btn": "ModKitNX インストール済み"
     },
     "fileselect": {
         "title": "トレント内ファイル",
@@ -1466,5 +1470,31 @@
         "update_all_confirm": "{} 本のアプリをアップデートしますか?",
         "update_all_done": "{} / {} 本をアップデートしました",
         "update_all_progress": "アップデート中 {} / {}: {}"
+    },
+    "modcd": {
+        "dialog_title": "ModCD 内の Mod",
+        "not_installed_prompt": "このゲームには ModCD でグラフィック Mod が利用可能です ({0} 件)。\n\n本体に ModCD アプリがインストールされていません。\n今すぐ ModCD をインストールしますか？",
+        "installed_info": "このゲームには ModCD でグラフィック Mod が利用可能です ({0} 件)。",
+        "versions_supported": "サポートされているゲームのアップデート",
+        "launch_hint": "ModCD はすでにインストールされています。Mod を管理するには、任意のゲームの起動中に R ボタンを長押しして Homebrew Menu から ModCD を起動してください。",
+        "install_now": "ModCD をインストール"
+    },
+    "modkit": {
+        "dialog_title": "SDK バージョンの不一致",
+        "not_installed_prompt": "ゲームの SDK バージョン ({0}) が本体のファームウェア ({1}) より新しいです。\n修正しないとゲームが起動しない可能性があります。\n\n修正のために ModKitNX をインストールしますか？",
+        "installed_info": "ゲームの SDK バージョン ({0}) が本体のファームウェア ({1}) より新しいです。\n\nModKitNX はすでに本体にインストールされています。ModKitNX で互換性のある SDK を設定してください (R ボタンを押しながら hbmenu を起動)。",
+        "install_now": "ModKitNX をインストール",
+        "continue_without": "インストールせずに続行"
+    },
+    "companion": {
+        "installing_title": "インストール中: ",
+        "preparing": "ダウンロードを準備中...",
+        "downloading": "ダウンロード中: {0}%",
+        "moving": "SD カードにコピー中...",
+        "success_title": "インストール完了",
+        "success_msg": "{0} が SD カードに正常にインストールされました！\n\n起動するには、任意のゲームの起動中に R を長押しして Homebrew Menu を開いてください (Title モードで全メモリを使用するため)。",
+        "install_error": "アプリケーションのインストール中にエラーが発生しました",
+        "cancelled": "インストールがキャンセルされました",
+        "cancelling": "インストールをキャンセル中..."
     }
 }

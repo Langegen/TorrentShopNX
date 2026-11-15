@@ -240,7 +240,11 @@
         "update_to_btn": "تحديث إلى {0}",
         "check_updates_btn": "التحقق من التحديثات",
         "screenshot_loading": "جارٍ التحميل…",
-        "screenshot_load_failed": "تعذر تحميل لقطة الشاشة"
+        "screenshot_load_failed": "تعذر تحميل لقطة الشاشة",
+        "modcd_has_mods_btn": "تعديلات في ModCD",
+        "modcd_installed_btn": "تعديلات في ModCD (مثبت)",
+        "modkit_warn_btn": "يتطلب ModKitNX",
+        "modkit_installed_btn": "ModKitNX مثبت"
     },
     "fileselect": {
         "title": "اختيار الملفات",
@@ -1466,5 +1470,31 @@
         "update_all_confirm": "تحديث {} تطبيقات؟",
         "update_all_done": "تم تحديث {} من {}",
         "update_all_progress": "جارٍ تحديث {} من {}: {}"
+    },
+    "modcd": {
+        "dialog_title": "تعديلات في ModCD",
+        "not_installed_prompt": "تتوفر تعديلات رسومية لهذه اللعبة في ModCD ({0} تعديل).\n\nتطبيق ModCD غير مثبت على الجهاز.\nهل تريد تثبيت ModCD الآن؟",
+        "installed_info": "تتوفر تعديلات رسومية لهذه اللعبة في ModCD ({0} تعديل).",
+        "versions_supported": "تحديثات اللعبة المدعومة",
+        "launch_hint": "ModCD مثبت بالفعل. لإدارة التعديلات، قم بتشغيل ModCD عبر Homebrew Menu (اضغط مع الاستمرار على زر R أثناء تشغيل أي لعبة).",
+        "install_now": "تثبيت ModCD"
+    },
+    "modkit": {
+        "dialog_title": "عدم توافق إصدار SDK",
+        "not_installed_prompt": "إصدار SDK الخاص باللعبة ({0}) أحدث من البرنامج الثابت للجهاز ({1}).\nقد تفشل اللعبة في التشغيل بدون إصلاح.\n\nهل تريد تثبيت ModKitNX للإصلاح؟",
+        "installed_info": "إصدار SDK الخاص باللعبة ({0}) أحدث من البرنامج الثابت للجهاز ({1}).\n\nModKitNX مثبت بالفعل على الجهاز. قم بتهيئة SDK متوافق في ModKitNX (التشغيل عبر hbmenu مع الضغط على R).",
+        "install_now": "تثبيت ModKitNX",
+        "continue_without": "المتابعة دون تثبيت"
+    },
+    "companion": {
+        "installing_title": "جارٍ التثبيت: ",
+        "preparing": "جارٍ تحضير التنزيل...",
+        "downloading": "جارٍ التنزيل: {0}%",
+        "moving": "جارٍ النسخ إلى بطاقة SD...",
+        "success_title": "اكتمل التثبيت",
+        "success_msg": "تم تثبيت {0} بنجاح على بطاقة SD!\n\nلتشغيله، افتح Homebrew Menu بالضغط مع الاستمرار على R أثناء تشغيل أي لعبة (للوصول إلى كامل الذاكرة في وضع Title).",
+        "install_error": "خطأ أثناء تثبيت التطبيق",
+        "cancelled": "تم إلغاء التثبيت",
+        "cancelling": "جارٍ إلغاء التثبيت..."
     }
 }

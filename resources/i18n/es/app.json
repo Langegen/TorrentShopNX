@@ -240,7 +240,11 @@
         "update_to_btn": "Actualizar a {0}",
         "check_updates_btn": "Buscar actualizaciones",
         "screenshot_loading": "Cargando…",
-        "screenshot_load_failed": "No se pudo cargar la captura"
+        "screenshot_load_failed": "No se pudo cargar la captura",
+        "modcd_has_mods_btn": "Mods en ModCD",
+        "modcd_installed_btn": "Mods en ModCD (Instalado)",
+        "modkit_warn_btn": "ModKitNX requerido",
+        "modkit_installed_btn": "ModKitNX instalado"
     },
     "fileselect": {
         "title": "Archivos torrent",
@@ -1466,5 +1470,31 @@
         "update_all_confirm": "¿Actualizar {} apps?",
         "update_all_done": "Actualizadas {} de {}",
         "update_all_progress": "Actualizando {} de {}: {}"
+    },
+    "modcd": {
+        "dialog_title": "Mods en ModCD",
+        "not_installed_prompt": "Hay mods gráficos disponibles para este juego en ModCD ({0} mods).\n\nLa aplicación ModCD no está instalada en la consola.\n¿Instalar ModCD ahora?",
+        "installed_info": "Hay mods gráficos disponibles para este juego en ModCD ({0} mods).",
+        "versions_supported": "Actualizaciones de juego compatibles",
+        "launch_hint": "ModCD ya está instalado. Para gestionar los mods, inicia ModCD mediante el Homebrew Menu (mantén presionado R al iniciar cualquier juego).",
+        "install_now": "Instalar ModCD"
+    },
+    "modkit": {
+        "dialog_title": "Incompatibilidad de versión de SDK",
+        "not_installed_prompt": "La versión de SDK del juego ({0}) es más reciente que el firmware de la consola ({1}).\nEs posible que el juego no se inicie sin una corrección.\n\n¿Instalar ModKitNX para solucionar esto?",
+        "installed_info": "La versión de SDK del juego ({0}) es más reciente que el firmware de la consola ({1}).\n\nModKitNX ya está instalado en la consola. Configura un SDK compatible en ModKitNX (inicia mediante hbmenu manteniendo presionado R).",
+        "install_now": "Instalar ModKitNX",
+        "continue_without": "Continuar sin instalar"
+    },
+    "companion": {
+        "installing_title": "Instalando: ",
+        "preparing": "Preparando descarga...",
+        "downloading": "Descargando: {0}%",
+        "moving": "Copiando a la tarjeta SD...",
+        "success_title": "Instalación completada",
+        "success_msg": "¡{0} se instaló correctamente en la tarjeta SD!\n\nPara iniciarlo, abre el Homebrew Menu manteniendo presionado R al iniciar cualquier juego (para obtener acceso completo a la memoria en modo Title).",
+        "install_error": "Error al instalar la aplicación",
+        "cancelled": "Instalación cancelada",
+        "cancelling": "Cancelando instalación..."
     }
 }

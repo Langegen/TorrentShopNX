@@ -240,7 +240,11 @@
         "update_to_btn": "更新到 {0}",
         "check_updates_btn": "检查更新",
         "screenshot_loading": "加载中…",
-        "screenshot_load_failed": "无法加载截图"
+        "screenshot_load_failed": "无法加载截图",
+        "modcd_has_mods_btn": "ModCD 中的模组",
+        "modcd_installed_btn": "ModCD 中的模组 (已安装)",
+        "modkit_warn_btn": "需要 ModKitNX",
+        "modkit_installed_btn": "ModKitNX 已安装"
     },
     "fileselect": {
         "title": "种子包含文件",
@@ -1466,5 +1470,31 @@
         "update_all_confirm": "更新 {} 个应用?",
         "update_all_done": "已更新 {}/{}",
         "update_all_progress": "正在更新 {}/{}: {}"
+    },
+    "modcd": {
+        "dialog_title": "ModCD 中的模组",
+        "not_installed_prompt": "此游戏在 ModCD 中有可用的图形模组 (共 {0} 个模组)。\n\n主机上未安装 ModCD 应用程序。\n是否立即安装 ModCD？",
+        "installed_info": "此游戏在 ModCD 中有可用的图形模组 (共 {0} 个模组)。",
+        "versions_supported": "支持的游戏更新版本",
+        "launch_hint": "ModCD 已安装。要管理模组，请在启动任意游戏时按住 R 键进入 Homebrew Menu 并启动 ModCD。",
+        "install_now": "安装 ModCD"
+    },
+    "modkit": {
+        "dialog_title": "SDK 版本不兼容",
+        "not_installed_prompt": "游戏的 SDK 版本 ({0}) 高于主机固件版本 ({1})。\n未修复前游戏可能无法正常启动。\n\n是否安装 ModKitNX 进行修复？",
+        "installed_info": "游戏的 SDK 版本 ({0}) 高于主机固件版本 ({1})。\n\n主机上已安装 ModKitNX。请在 ModKitNX 中配置兼容的 SDK (按住 R 键进入 hbmenu 启动)。",
+        "install_now": "安装 ModKitNX",
+        "continue_without": "不安装直接继续"
+    },
+    "companion": {
+        "installing_title": "正在安装: ",
+        "preparing": "正在准备下载...",
+        "downloading": "正在下载: {0}%",
+        "moving": "正在复制到 SD 卡...",
+        "success_title": "安装完成",
+        "success_msg": "{0} 已成功安装到 SD 卡！\n\n要启动它，请在启动任意游戏时按住 R 键打开 Homebrew Menu (以在 Title 模式下获取全部内存)。",
+        "install_error": "安装应用程序时出错",
+        "cancelled": "安装已取消",
+        "cancelling": "正在取消安装..."
     }
 }
