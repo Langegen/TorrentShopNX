@@ -1,4 +1,5 @@
 #include "RetroConsolesView.hpp"
+#include "SectionTabBar.hpp"
 #include "RetroCatalogView.hpp"
 #include "RetroUpdateDialog.hpp"
 #include "RetroEmulatorsView.hpp"
@@ -73,30 +74,20 @@ void RetroConsolesView::onContentAvailable() {
         scroll->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
     }
 
-    if (titleLabel) {
-        titleLabel->setText(brls::getStr("app/retro/consoles_title"));
-        // "Homebrew and retro" section: the other tab next to the title, LB/RB switch.
-        if (auto* tabs = dynamic_cast<brls::Box*>(titleLabel->getParent())) {
-            auto* other = new brls::Label();
-            other->setFontSize(18.0f);
-            other->setMarginLeft(24.0f);
-            other->setTextColor(brls::Application::getTheme().getColor("brls/header/subtitle"));
-            other->setText(ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/homebrew/title"_i18n));
-            other->addGestureRecognizer(new brls::TapGestureRecognizer(other, [] {
-                config::ConfigManager::instance().setHomebrewSection("homebrew");
-                hb::replaceTopActivity(new HomebrewView());
-            }));
-            tabs->addView(other);
-        }
-    }
     config::ConfigManager::instance().setHomebrewSection("retro");
-    auto toHomebrew = [](brls::View*) {
-        config::ConfigManager::instance().setHomebrewSection("homebrew");
-        hb::replaceTopActivity(new HomebrewView());
+    if (tabsBox) {
+        tabsBox->clearViews();
+        tabsBox->addView(new SectionTabBar(SectionTab::Retro));
+    }
+
+    // Section tabs: strict directional navigation (L switches to Homebrew, R is already at rightmost tab).
+    this->registerAction("", brls::ControllerButton::BUTTON_LB, [](brls::View*) {
+        hb::showHomebrewSection();
         return true;
-    };
-    this->registerAction("", brls::ControllerButton::BUTTON_LB, toHomebrew, true);
-    this->registerAction("", brls::ControllerButton::BUTTON_RB, toHomebrew, true);
+    }, true);
+    this->registerAction("", brls::ControllerButton::BUTTON_RB, [](brls::View*) {
+        return true;
+    }, true);
     if (statsHint) {
         updateHeader();
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {

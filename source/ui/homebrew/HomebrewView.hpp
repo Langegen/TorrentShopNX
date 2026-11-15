@@ -20,7 +20,7 @@ class EmptyState;
 
 class HomebrewRowCell : public brls::RecyclerCell {
 public:
-    static constexpr int kColumns = 6;
+    static constexpr int kColumns = 5;
     HomebrewRowCell();
     static HomebrewRowCell* create();
     void prepareForReuse() override;
@@ -68,8 +68,7 @@ private:
     void updateStartAction();
     void updateAll();
 
-    BRLS_BIND(brls::Label, titleLabel, "titleLabel");
-    BRLS_BIND(brls::Label, otherTabLabel, "otherTabLabel");
+    BRLS_BIND(brls::Box, tabsBox, "tabsBox");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
     BRLS_BIND(brls::Box, chipsBox, "chipsBox");
     BRLS_BIND(brls::Box, emptyHolder, "emptyHolder");

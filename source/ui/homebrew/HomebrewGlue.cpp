@@ -7,6 +7,7 @@
 #include "../../utils/log.h"
 #include "../../utils/switch_utils.h"
 #include "../RetroConsolesView.hpp"
+#include "HomebrewView.hpp"
 
 #include <ctime>
 #ifdef __SWITCH__
@@ -17,7 +18,7 @@ namespace ui::hb {
 
 void loadImage(brls::Image* img, const std::string& url, const std::shared_ptr<bool>& token, bool full_size, int row,
                int col) {
-    setImageFromHTTPS(img, url, token, "romfs:/img/cover_blank.png", false, "", row, col, 0, full_size);
+    setImageFromHTTPS(img, url, token, "", false, "", row, col, 0, full_size);
 }
 
 void haptic(int style) { util::triggerHapticFeedback(style); }
@@ -27,8 +28,15 @@ std::string currentSection() { return config::ConfigManager::instance().getHomeb
 void rememberSection(const std::string& tab) { config::ConfigManager::instance().setHomebrewSection(tab); }
 
 void showRetroSection() {
+    haptic(1);
     rememberSection("retro");
     replaceTopActivity(new RetroConsolesView());
+}
+
+void showHomebrewSection() {
+    haptic(1);
+    rememberSection("homebrew");
+    replaceTopActivity(new HomebrewView());
 }
 
 std::string today() {

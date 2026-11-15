@@ -10,10 +10,7 @@
 
     <!-- Topbar: section tabs (Homebrew | Retro) and stats -->
     <brls:Box width="auto" height="56px" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="2">
-        <brls:Box id="tabsBox" axis="row" alignItems="center">
-            <brls:Label id="titleLabel" fontSize="28" />
-            <brls:Label id="otherTabLabel" fontSize="18" marginLeft="24" textColor="@theme/brls/header/subtitle" />
-        </brls:Box>
+        <brls:Box id="tabsBox" axis="row" alignItems="center" />
         <brls:Label id="statsHint" fontSize="15" textColor="@theme/brls/header/subtitle" />
     </brls:Box>
 

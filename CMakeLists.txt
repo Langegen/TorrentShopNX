@@ -61,6 +61,7 @@ target_include_directories(TorrentShopNX PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/source/config"
     "${CMAKE_CURRENT_SOURCE_DIR}/source/engine"
     "${CMAKE_CURRENT_SOURCE_DIR}/pctest/deps/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/_external/libarchive-switch/include"
     "${BOREALIS_LIBRARY}/include"
     "${BOREALIS_LIBRARY}/include/borealis/extern"
     "${BOREALIS_LIBRARY}/include/borealis/extern/nanovg"
@@ -78,6 +79,7 @@ target_compile_definitions(TorrentShopNX PRIVATE
 if (WIN32)
     # cpp-httplib needs Windows 10 APIs (CreateFile2); MinGW defaults to an older target.
     target_compile_definitions(TorrentShopNX PRIVATE _WIN32_WINNT=0x0A00)
+    target_include_directories(TorrentShopNX PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/pctest/compat")
 endif ()
 
 # Dependencies
@@ -114,6 +116,7 @@ target_link_libraries(TorrentShopNX PRIVATE
 set(HB_UI_SOURCES
     pctest/homebrew_ui/main.cpp
     pctest/homebrew_ui/harness_backend.cpp
+    source/ui/SectionTabBar.cpp
     source/ui/homebrew/HomebrewView.cpp
     source/ui/homebrew/HomebrewDetailView.cpp
     source/ui/homebrew/SysmodulesView.cpp

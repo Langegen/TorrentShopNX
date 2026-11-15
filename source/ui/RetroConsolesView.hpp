@@ -30,7 +30,7 @@ private:
     std::unordered_map<std::string, CollectionCard*> console_cards_;
     std::vector<std::vector<CollectionCard*>> grid_;
 
-    BRLS_BIND(brls::Label, titleLabel, "titleLabel");
+    BRLS_BIND(brls::Box, tabsBox, "tabsBox");
     BRLS_BIND(brls::Label, statsHint, "statsHint");
     BRLS_BIND(brls::ScrollingFrame, scroll, "scroll");
     BRLS_BIND(brls::Box, listBox, "listBox");

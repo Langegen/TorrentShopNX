@@ -4,6 +4,7 @@
 #include "HomebrewGlue.hpp"
 #include "SysmodulesView.hpp"
 #include "../EmptyState.hpp"
+#include "../SectionTabBar.hpp"
 #include "../ThemeManager.hpp"
 #include "../style/HeaderHints.hpp"
 #include "../style/UiTokens.hpp"
@@ -16,10 +17,15 @@ namespace ui {
 
 namespace {
 
-constexpr float kCardWidth = 184.0f;
-constexpr float kCardHeight = 236.0f;
-constexpr float kIconSize = 156.0f;
-constexpr float kRowHeight = 252.0f;
+constexpr float kCardWidth = 224.0f;
+constexpr float kCardHeight = 186.0f;
+constexpr float kBannerWidth = 212.0f;
+constexpr float kBannerHeight = 124.0f;
+constexpr float kRowHeight = 200.0f;
+
+homebrew::Category s_sessionCategory = homebrew::Category::All;
+homebrew::SortMode s_sessionSort = homebrew::SortMode::Popular;
+std::string s_sessionQuery;
 
 const char* categoryKey(homebrew::Category c) {
     switch (c) {
@@ -96,16 +102,16 @@ HomebrewRowCell::HomebrewRowCell() : imageToken(std::make_shared<bool>(true)) {
         c.box->setHideHighlightBackground(false);
 
         auto* iconBox = new brls::Box();
-        iconBox->setWidth(kIconSize);
-        iconBox->setHeight(kIconSize);
+        iconBox->setWidth(kBannerWidth);
+        iconBox->setHeight(kBannerHeight);
         iconBox->setCornerRadius(style::kRadiusCard);
         iconBox->setBackgroundColor(brls::Application::getTheme().getColor("brls/sidebar/separator"));
 
         c.icon = new brls::Image();
-        c.icon->setWidth(kIconSize);
-        c.icon->setHeight(kIconSize);
+        c.icon->setWidth(kBannerWidth);
+        c.icon->setHeight(kBannerHeight);
         c.icon->setCornerRadius(style::kRadiusCard);
-        c.icon->setScalingType(brls::ImageScalingType::FILL);
+        c.icon->setScalingType(brls::ImageScalingType::FIT);
         iconBox->addView(c.icon);
 
         c.badge = new brls::Label();
@@ -121,7 +127,7 @@ HomebrewRowCell::HomebrewRowCell() : imageToken(std::make_shared<bool>(true)) {
         c.box->addView(iconBox);
 
         c.title = new brls::Label();
-        c.title->setWidth(kCardWidth - 12.0f);
+        c.title->setWidth(kBannerWidth);
         c.title->setHeight(22.0f);
         c.title->setMarginTop(8.0f);
         c.title->setFontSize(style::kFontSub);
@@ -131,7 +137,7 @@ HomebrewRowCell::HomebrewRowCell() : imageToken(std::make_shared<bool>(true)) {
         c.box->addView(c.title);
 
         c.sub = new brls::Label();
-        c.sub->setWidth(kCardWidth - 12.0f);
+        c.sub->setWidth(kBannerWidth);
         c.sub->setFontSize(style::kFontCaption);
         c.sub->setTextColor(style::textSecondary());
         c.sub->setSingleLine(true);
@@ -237,15 +243,20 @@ private:
 
 // ---------------------------------------------------------------------------
 
-HomebrewView::HomebrewView() : alive_(std::make_shared<std::atomic<bool>>(true)) {}
+HomebrewView::HomebrewView()
+    : category_(s_sessionCategory),
+      sort_(s_sessionSort),
+      query_(s_sessionQuery),
+      alive_(std::make_shared<std::atomic<bool>>(true)) {}
 
 HomebrewView::~HomebrewView() { alive_->store(false); }
 
 void HomebrewView::onContentAvailable() {
     hb::rememberSection("homebrew");
-    titleLabel->setText("app/homebrew/title"_i18n);
-    otherTabLabel->setText(style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/homebrew/tab_retro"_i18n));
-    otherTabLabel->addGestureRecognizer(new brls::TapGestureRecognizer(otherTabLabel, [] { hb::showRetroSection(); }));
+    if (tabsBox) {
+        tabsBox->clearViews();
+        tabsBox->addView(new SectionTabBar(SectionTab::Homebrew));
+    }
 
     emptyState_ = new EmptyState();
     emptyHolder->addView(emptyState_);
@@ -256,13 +267,14 @@ void HomebrewView::onContentAvailable() {
 
     buildChips();
 
-    // Section tabs.
-    auto toRetro = [](brls::View*) {
+    // Section tabs: strict directional navigation (R switches to Retro, L is already at leftmost tab).
+    registerAction("", brls::ControllerButton::BUTTON_RB, [](brls::View*) {
         hb::showRetroSection();
         return true;
-    };
-    registerAction("", brls::ControllerButton::BUTTON_LB, toRetro, true);
-    registerAction("", brls::ControllerButton::BUTTON_RB, toRetro, true);
+    }, true);
+    registerAction("", brls::ControllerButton::BUTTON_LB, [](brls::View*) {
+        return true;
+    }, true);
 
     // Categories.
     registerAction("", brls::ControllerButton::BUTTON_RT, [this](brls::View*) {
@@ -281,6 +293,7 @@ void HomebrewView::onContentAvailable() {
             [this, alive](std::string text) {
                 if (!alive->load()) return;
                 query_ = text;
+                s_sessionQuery = text;
                 rebuild(false);
             },
             "app/homebrew/hint_search"_i18n, "app/homebrew/search_hint"_i18n, 40, query_);
@@ -288,6 +301,7 @@ void HomebrewView::onContentAvailable() {
     });
     registerAction("app/homebrew/hint_sort"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
         sort_ = static_cast<homebrew::SortMode>((static_cast<size_t>(sort_) + 1) % static_cast<size_t>(homebrew::SortMode::Count));
+        s_sessionSort = sort_;
         brls::Application::notify(brls::getStr("app/homebrew/sort_notify", brls::getStr(sortKey(sort_))));
         rebuild(false);
         return true;
@@ -530,6 +544,7 @@ void HomebrewView::updateAll() {
 void HomebrewView::setCategory(homebrew::Category c) {
     if (c == category_) return;
     category_ = c;
+    s_sessionCategory = c;
     hb::haptic(1);
     rebuild(false);
 }

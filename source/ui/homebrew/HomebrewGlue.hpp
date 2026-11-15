@@ -25,6 +25,9 @@ void rememberSection(const std::string& tab);
 // Switch the section to the retro tab (replaces the homebrew screen).
 void showRetroSection();
 
+// Switch the section to the homebrew tab (replaces the retro screen).
+void showHomebrewSection();
+
 // Today, "yyyy-mm-dd" (for the "New" badge).
 std::string today();
 

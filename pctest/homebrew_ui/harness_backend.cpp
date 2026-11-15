@@ -172,7 +172,7 @@ void loadImage(brls::Image* img, const std::string& url, const std::shared_ptr<b
             return;
         }
     }
-    img->setImageFromFile(std::string(BRLS_RESOURCES) + "img/cover_blank.png");
+    img->clear();
 }
 
 void haptic(int) {}
@@ -182,6 +182,7 @@ std::string currentSection() { return g_section; }
 void rememberSection(const std::string& tab) { g_section = tab; }
 
 void showRetroSection() { brls::Application::notify("Retro tab: not part of the PC window"); }
+void showHomebrewSection() { brls::Application::notify("Homebrew tab: already active in PC window"); }
 
 std::string today() {
     const std::time_t t = std::time(nullptr);
