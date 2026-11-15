@@ -7,7 +7,8 @@
         "settings": "设置",
         "footer": "TorrentShopNX v2.4 | 目录中游戏总数: {0}",
         "disclaimer": "免责声明: 使用BT协议。请在使用前确认当地法律法规。开发者对滥用概不负责。",
-        "retro_games": "自制软件与复古"
+        "retro_games": "自制软件与复古",
+        "exit_confirm_active_download": "您确定要退出吗？\n当前有正在进行的下载任务。"
     },
     "common": {
         "loading": "加载中...",

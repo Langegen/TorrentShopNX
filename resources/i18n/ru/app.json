@@ -7,7 +7,8 @@
         "settings": "Настройки",
         "footer": "TorrentShopNX v2.4 | Игр в каталоге: {0}",
         "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
-        "retro_games": "Хоумбрю и ретро"
+        "retro_games": "Хоумбрю и ретро",
+        "exit_confirm_active_download": "Вы действительно хотите выйти?\nИмеется активная загрузка."
     },
     "common": {
         "loading": "Загрузка...",

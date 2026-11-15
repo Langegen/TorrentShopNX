@@ -47,6 +47,8 @@ public:
 
     // Checks active transfers count
     int getActiveDownloadsCount() const;
+    // Checks if there is any active download or installation in progress
+    bool hasActiveDownloads() const;
 
     // Load/Save state
     void saveDownloads();

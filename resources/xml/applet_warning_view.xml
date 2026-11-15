@@ -4,6 +4,7 @@
     axis="column"
     alignItems="center"
     justifyContent="center"
+    backgroundColor="@theme/brls/background"
     paddingLeft="60px"
     paddingRight="60px"
     paddingTop="40px"
@@ -20,13 +21,13 @@
         id="lblDesc"
         text="@i18n/app/applet/desc"
         fontSize="18px"
-        textColor="#DCDCDC"
+        textColor="@theme/brls/text"
         marginBottom="24px" />
 
     <brls:Box
         width="800px"
         axis="column"
-        backgroundColor="#2C2C2C"
+        backgroundColor="@theme/brls/sidebar/separator"
         cornerRadius="8px"
         padding="20px"
         marginBottom="28px">
@@ -34,38 +35,44 @@
         <brls:Label
             text="@i18n/app/applet/steps_header"
             fontSize="18px"
-            textColor="#4CAF50"
+            textColor="@theme/brls/accent"
             marginBottom="12px" />
 
         <brls:Label
             text="@i18n/app/applet/step1"
             fontSize="16px"
+            textColor="@theme/brls/text"
             marginBottom="6px" />
 
         <brls:Label
             text="@i18n/app/applet/step2"
             fontSize="16px"
+            textColor="@theme/brls/text"
             marginBottom="6px" />
 
         <brls:Label
             text="@i18n/app/applet/step3"
             fontSize="16px"
+            textColor="@theme/brls/text"
             marginBottom="6px" />
 
         <brls:Label
             text="@i18n/app/applet/step4"
             fontSize="16px"
+            textColor="@theme/brls/text"
             marginBottom="6px" />
 
         <brls:Label
             text="@i18n/app/applet/step5"
-            fontSize="16px" />
+            fontSize="16px"
+            textColor="@theme/brls/text" />
 
     </brls:Box>
 
     <brls:Button
         id="btnExit"
         text="@i18n/app/applet/exit_btn"
+        style="primary"
         width="260px"
         height="48px" />
 

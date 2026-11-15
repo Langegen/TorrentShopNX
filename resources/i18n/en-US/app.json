@@ -7,7 +7,8 @@
         "settings": "Settings",
         "footer": "TorrentShopNX v2.4 | Games in catalog: {0}",
         "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
-        "retro_games": "Homebrew & Retro"
+        "retro_games": "Homebrew & Retro",
+        "exit_confirm_active_download": "Are you sure you want to exit?\nAn active download is in progress."
     },
     "common": {
         "loading": "Loading...",

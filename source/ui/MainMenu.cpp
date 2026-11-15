@@ -69,6 +69,12 @@ static void registerMenuShortcuts(Target* target, MainMenu* menu, bool full) {
         menu->refreshDashboardState();
         return true;
     }, true);
+    auto exitAction = [menu](brls::View*) {
+        menu->handleExitRequest();
+        return true;
+    };
+    target->registerAction("hints/exit"_i18n, brls::ControllerButton::BUTTON_B, exitAction, false, false, brls::SOUND_BACK);
+    target->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_ESCAPE), exitAction);
 }
 
 extern std::vector<Game> g_games;
@@ -127,6 +133,13 @@ brls::View* MainMenu::createContentView() {
         appletFrame_->setWidthPercentage(100.0f);
         appletFrame_->setHeightPercentage(100.0f);
         rootContainer_->addView(appletFrame_);
+
+        auto exitAction = [this](brls::View*) {
+            handleExitRequest();
+            return true;
+        };
+        rootContainer_->registerAction("hints/exit"_i18n, brls::ControllerButton::BUTTON_B, exitAction, false, false, brls::SOUND_BACK);
+        rootContainer_->registerAction(brls::BrlsKeyCombination(brls::BRLS_KBD_KEY_ESCAPE), exitAction);
     }
     return rootContainer_;
 }
@@ -647,6 +660,24 @@ void MainMenu::openFileManager() {
         util::logLine(std::string("MainMenu: EXCEPTION opening FileManager: ") + e.what());
     } catch (...) {
         util::logLine("MainMenu: UNKNOWN EXCEPTION opening FileManager");
+    }
+}
+
+void MainMenu::handleExitRequest() {
+    const auto& stack = brls::Application::getActivitiesStack();
+    if (stack.size() > 1) {
+        return;
+    }
+
+    if (ui::DownloadManager::instance().hasActiveDownloads()) {
+        brls::Dialog* dialog = new brls::Dialog("app/menu/exit_confirm_active_download"_i18n);
+        dialog->addButton("app/common/yes"_i18n, []() {
+            brls::Application::quit();
+        });
+        dialog->addButton("app/common/no"_i18n, []() {});
+        dialog->open();
+    } else {
+        brls::Application::quit();
     }
 }
 

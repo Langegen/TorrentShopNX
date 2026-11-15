@@ -7,7 +7,8 @@
         "settings": "設定",
         "footer": "TorrentShopNX v2.4 | カタログ内ゲーム数: {0}",
         "disclaimer": "免責事項: トレントプロトコルを使用します。ご利用地域の法律を確認してください。開発者は不正使用に関して一切の責任を負いません。",
-        "retro_games": "自作ソフトとレトロ"
+        "retro_games": "自作ソフトとレトロ",
+        "exit_confirm_active_download": "本当に終了しますか？\n実行中のダウンロードがあります。"
     },
     "common": {
         "loading": "読み込み中...",

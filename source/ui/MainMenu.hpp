@@ -18,6 +18,7 @@ public:
     void updateDownloadsBadge(int count);
     void refreshDashboardState();
     void openFileManager();
+    void handleExitRequest();
 
 private:
     void setupLayout();
