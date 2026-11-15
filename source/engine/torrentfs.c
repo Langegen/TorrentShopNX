@@ -361,6 +361,12 @@ static volatile int g_ram_stream = 0;
 void torrentfs_set_ram_stream(int on) { g_ram_stream = on ? 1 : 0; }
 int  torrentfs_ram_stream(void)       { return g_ram_stream; }
 
+// Netloop progress tracking & stall detection
+static volatile int g_netloop_step = 0;
+static volatile int g_netloop_info = 0;
+static volatile u64 g_netloop_step_tick = 0;
+#define NL_STEP(s, inf) do { g_netloop_step = (s); g_netloop_info = (inf); g_netloop_step_tick = armGetSystemTick(); } while (0)
+
 //-----------------------------------------------------------------------------
 // Types
 //-----------------------------------------------------------------------------
@@ -1848,14 +1854,13 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     // (nb.utp != NULL) never re-flag, so a peer cannot loop.
     bool was_tcp = (s->nb.utp == NULL);
     if (s->connecting) {
-        // still a raw socket; peer_nb was never attached
+        // still a raw socket; peer_nb was never attached (except for uTP)
         if (s->nb.sock >= 0) close(s->nb.sock);
         s->nb.sock = -1;
         // a uTP dial in flight also occupies a utp_nb session slot; without
-        // this the 128-slot table leaks and all further uTP dials fail
+        // this the 128-slot table and rx/tx buffers leak
         if (s->nb.utp) {
-            utp_nb_close((utp_nb_sess *)s->nb.utp);
-            s->nb.utp = NULL;
+            peer_nb_free(&s->nb);
         }
         if (t->st_connecting > 0) t->st_connecting--;
     } else {
@@ -1908,7 +1913,7 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     // failure, so it must not count into the backoff. A peer that closes
     // the stream before the MSE handshake finished counts as refused too.
     if (failed && !had_conn && s->nb.mse_want &&
-        (s->nb.mse_failed || !s->nb.mse_active)) {
+        (s->nb.mse_failed || !s->nb.mse_active) && s->pidx >= 0) {
         mutexLock(&t->lock);
         t->peer_mse_off[s->pidx] = 1;
         t->peer_fails[s->pidx]   = 0;
@@ -2541,6 +2546,7 @@ static int try_active(torrentfs *t, sess *s, u64 now, int64_t i, int zone,
     if (!bf_has_piece(s->nb.bitfield, s->nb.bitfield_len, i)) return 0;
     if (t->status[i] != PIECE_ACTIVE) return 0;
     aq_entry *a = aq_find(t, i);
+    bool healed = false;
     if (!a) {
         engine_log(ENGINE_LOG_WARN,
                    "[claim] healing orphaned PIECE_ACTIVE for piece %lld",
@@ -2552,9 +2558,20 @@ static int try_active(torrentfs *t, sess *s, u64 now, int64_t i, int zone,
             mutexUnlock(&t->lock);
             return 0;
         }
+        healed = true;
     }
     int b = next_block_in(t, s, a, now, zone);
-    if (b < 0) return 0;
+    if (b < 0) {
+        if (healed) {
+            mutexLock(&t->lock);
+            t->status[i] = PIECE_NEEDED;
+            a->idx = -1;
+            if (t->aq_of_piece) t->aq_of_piece[i] = -1;
+            if (t->n_active_aq > 0) t->n_active_aq--;
+            mutexUnlock(&t->lock);
+        }
+        return 0;
+    }
     *out_piece = i;
     *out_block = b;
     return 1;
@@ -2574,7 +2591,15 @@ static int try_open(torrentfs *t, sess *s, u64 now, int64_t i, int zone,
     t->status[i] = PIECE_ACTIVE;
     mutexUnlock(&t->lock);
     int b = next_block_in(t, s, a, now, zone);
-    if (b < 0) return 0;
+    if (b < 0) {
+        mutexLock(&t->lock);
+        t->status[i] = PIECE_NEEDED;
+        a->idx = -1;
+        if (t->aq_of_piece) t->aq_of_piece[i] = -1;
+        if (t->n_active_aq > 0) t->n_active_aq--;
+        mutexUnlock(&t->lock);
+        return 0;
+    }
     *out_piece = i;
     *out_block = b;
     return 1;
@@ -4514,16 +4539,19 @@ static void netloop_main(void *arg) {
     t->pf_dup = t->st_dup_bytes;
 
     while (!t->stop) {
+        NL_STEP(1, 0);
         u64 it0 = armGetSystemTick();   // [perf] iteration start
         tsnx_engine_wd_tick(4);
         hb_beat(t, HB_NET);
         u64 now = armGetSystemTick();
         if (t->reset_sessions) {
+            NL_STEP(2, t->st_live);
             t->reset_sessions = false;
             engine_log(ENGINE_LOG_WARN,
                        "[torrentfs] recovering from stall (%d live sessions): refreshing requests",
                        t->st_live);
             for (int i = 0; i < MAX_SESS; i++) {
+                NL_STEP(5, i);
                 sess *s = &t->S[i];
                 if (!s->active) continue;
                 sess_drop_requests(t, s);
@@ -4538,6 +4566,7 @@ static void netloop_main(void *arg) {
         }
         int sel = __atomic_load_n(&t->pending_select_file, __ATOMIC_ACQUIRE);
         if (sel >= 0) {
+            NL_STEP(3, sel);
             int claimed = __atomic_exchange_n(&t->pending_select_file, -1, __ATOMIC_ACQ_REL);
             if (claimed >= 0) {
                 torrentfs_apply_select_file(t, claimed);
@@ -4550,6 +4579,7 @@ static void netloop_main(void *arg) {
 
         // Upkeep every ~125 ms: dial, reap, keep-alives, rate EWMA, calm.
         if (now - last_upkeep > t->freq / 8) {
+            NL_STEP(4, 0);
             last_upkeep = now;
 
             // Download-rate EWMA (governor input).
@@ -4598,6 +4628,7 @@ static void netloop_main(void *arg) {
             int conn_secs = few_peers ? CONNECT_STARVED_SECS : CONNECT_SECS;
 
             for (int i = 0; i < MAX_SESS; i++) {
+                NL_STEP(5, i);
                 sess *s = &t->S[i];
                 if (!s->active) continue;
                 if (s->pidx >= 0 && t->peer_next_try[s->pidx] > now + (u64)60 * t->freq) {
@@ -4827,6 +4858,7 @@ static void netloop_main(void *arg) {
 
             int live = 0, connecting = 0, bf_empty = 0;
             for (int i = 0; i < MAX_SESS; i++) {
+                NL_STEP(5, i);
                 sess *s = &t->S[i];
                 if (!s->active) continue;
                 if (s->connecting) { connecting++; continue; }
@@ -4982,6 +5014,7 @@ static void netloop_main(void *arg) {
                                t->pressure_level == 0)) &&
                              t->st_live + connecting < hard_cap;
             if (t->pause_dials_until && now < t->pause_dials_until) need_dial = false;
+            NL_STEP(7, connecting);
             while (!t->paused && dial_budget > 0 &&
                    need_dial && connecting < MAX_CONNECTING) {
                 bool ok;
@@ -5016,6 +5049,7 @@ static void netloop_main(void *arg) {
             // so its assembly slot can serve the new position. Pieces with
             // blocks still in flight are left alone: the deliveries land and
             // the piece completes (anacrolix also lets stragglers finish).
+            NL_STEP(8, 0);
             for (int i = 0; i < t->n_aq; i++) {
                 aq_entry *a = &t->aq[i];
                 if (a->idx < 0) continue;
@@ -5043,6 +5077,7 @@ static void netloop_main(void *arg) {
             // first. Nothing new while paused.
             u64 scan_t0 = armGetSystemTick();
             for (int i = 0; i < MAX_SESS && !t->paused; i++) {
+                NL_STEP(9, i);
                 sess *s = &t->S[i];
                 if (!s->active || s->connecting || !s->nb.handshaked) continue;
                 if (s->nb.choked) continue;
@@ -5051,6 +5086,7 @@ static void netloop_main(void *arg) {
                 if (armGetSystemTick() - scan_t0 > (u64)25 * (t->freq / 1000)) break;
             }
 
+            NL_STEP(10, 0);
             publish_snapshot(t);
             if (now - t->pf_tick >= (u64)PERF_WINDOW_SECS * t->freq)
                 perf_emit(t, now);
@@ -5060,9 +5096,10 @@ static void netloop_main(void *arg) {
             }
         }
 
-        // One poll over the session sockets plus the shared ВµTP UDP socket,
+        // One poll over the session sockets plus the shared µTP UDP socket,
         // capped at POLL_CHUNK_MAX and rotated so a busy PC build stays under
         // the 64-handle WaitForMultipleObjects limit (see the define above).
+        NL_STEP(11, 0);
         struct pollfd pfd[POLL_CHUNK_MAX];
         int map[POLL_CHUNK_MAX];
         int n = 0;
@@ -5108,17 +5145,20 @@ static void netloop_main(void *arg) {
         }
 #endif
         u64 lt0 = armGetSystemTick();
+        NL_STEP(12, n);
         int pr = poll(pfd, (nfds_t)n, 20);
         lat_add(t, LAT_POLL, lt0);
 
         now = armGetSystemTick();
         t->last_poll_ret = now;
+        NL_STEP(13, pr);
         bool utp_serviced = false;
         if (pr > 0) {
             for (int k = 0; k < n; k++) {
+                NL_STEP(14, k);
                 if (!pfd[k].revents) continue;
                 if (map[k] == -1) {
-                    // Shared ВµTP socket: process packets and timeouts.
+                    // Shared µTP socket: process packets and timeouts.
                     utp_nb_service();
                     utp_serviced = true;
                     continue;
@@ -5159,10 +5199,12 @@ static void netloop_main(void *arg) {
                     }
             }
         }
-        // Service ВµTP sessions even if the UDP fd did not wake us, so libutp
+        // Service µTP sessions even if the UDP fd did not wake us, so libutp
         // timeouts and buffered data are handled on every loop iteration.
+        NL_STEP(15, utp_fd);
         if (!utp_serviced && utp_fd >= 0) utp_nb_service();
         for (int i = 0; i < MAX_SESS; i++) {
+            NL_STEP(16, i);
             sess *s = &t->S[i];
             if (!s->active || !s->nb.utp) continue;
             if (s->connecting) {
@@ -5181,6 +5223,8 @@ static void netloop_main(void *arg) {
                     s->fail_kind = PEER_FAIL_TIMEOUT;
                     sess_close(t, s, true);
                     continue;
+                } else {
+                    continue; // still connecting: do not service rx/tx
                 }
             }
             if (utp_serviced || (s->nb.rx_len > s->nb.rx_off) || peer_nb_tx_pending(&s->nb) ||
@@ -5189,6 +5233,7 @@ static void netloop_main(void *arg) {
             }
         }
 
+        NL_STEP(17, 0);
         // [perf] CPU time of this iteration, the poll() wait left out.
         u64 work = (lt0 - it0 - slept) + (armGetSystemTick() - now);
         perf_hist_add(&t->pf_loop, work * 1000000ULL / t->freq);
@@ -5777,14 +5822,34 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
             if (stall_secs >= 20 && tfs->st_live == 0 && tfs->peer_count < 32) {
                 tfs->announce_now = true;
             }
-            // Self-heal if the needed piece is stuck in PIECE_ACTIVE without an aq slot
+            if (g_netloop_step_tick > 0) {
+                u64 nl_age_ms = (now - g_netloop_step_tick) * 1000 / tfs->freq;
+                if (nl_age_ms > 3000) {
+                    engine_log(ENGINE_LOG_WARN,
+                               "[watchdog] netloop STUCK for %llu ms at step %d (info=%d, live=%d)",
+                               (unsigned long long)nl_age_ms, g_netloop_step, g_netloop_info, tfs->st_live);
+                }
+            }
+            // Self-heal if the needed piece is stuck in PIECE_ACTIVE
             mutexLock(&tfs->lock);
-            if (first >= 0 && first < tfs->meta.piece_count &&
-                tfs->status && tfs->status[first] == PIECE_ACTIVE && !aq_find(tfs, first)) {
-                engine_log(ENGINE_LOG_WARN,
-                           "[read] piece %lld orphaned in PIECE_ACTIVE, resetting to PIECE_NEEDED",
-                           (long long)first);
-                tfs->status[first] = PIECE_NEEDED;
+            if (first >= 0 && first < tfs->meta.piece_count && tfs->status) {
+                if (tfs->status[first] == PIECE_ACTIVE) {
+                    aq_entry *a = aq_find(tfs, first);
+                    if (!a) {
+                        engine_log(ENGINE_LOG_WARN,
+                                   "[read] piece %lld orphaned in PIECE_ACTIVE, resetting to PIECE_NEEDED",
+                                   (long long)first);
+                        tfs->status[first] = PIECE_NEEDED;
+                    } else if (stall_secs >= 10 && a->have_cnt == 0) {
+                        engine_log(ENGINE_LOG_WARN,
+                                   "[read] piece %lld stalled 10s with 0 blocks in aq, resetting to PIECE_NEEDED",
+                                   (long long)first);
+                        tfs->status[first] = PIECE_NEEDED;
+                        a->idx = -1;
+                        if (tfs->aq_of_piece) tfs->aq_of_piece[first] = -1;
+                        if (tfs->n_active_aq > 0) tfs->n_active_aq--;
+                    }
+                }
             }
             mutexUnlock(&tfs->lock);
             // Return 0 after 45s of complete stall (when not paused) so the caller's retry/timeout logic can run
