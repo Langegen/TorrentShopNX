@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#if defined(_WIN32)
+#include <direct.h>   // _mkdir
+#endif
 
 #include <switch.h>
 
@@ -142,7 +145,13 @@ void engine_log_init(const char *path) {
         char *slash = strrchr(dir, '/');
         if (slash) {
             *slash = '\0';
+#if defined(_WIN32)
+            // _mkdir, not mkdir: pctest's compat switch.h wraps mkdir as a
+            // two-argument macro, the CMake PC build does not.
+            _mkdir(dir);
+#else
             mkdir(dir, 0777);
+#endif
         }
         // Rotate previous session's log on the very first open of the process so a
         // post-crash restart does not wipe out the crash session's engine.log.

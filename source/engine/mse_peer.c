@@ -91,18 +91,19 @@ static void dh_private(uint8_t priv[MSE_DH_LEN]) {
     randomGet(priv + MSE_DH_LEN - 20, 20);
 }
 
-// pub = 2^priv mod P, regenerating priv until the first byte is 0x00..0x02
-// (a plaintext BT handshake starts with 0x13, so this keeps the two frames
-// distinguishable; libtorrent does the same).
+// pub = 2^priv mod P. Regenerated only in the rare case it starts with 0x13,
+// the first byte of a plaintext BT handshake (responders tell the two apart
+// by that). It used to be regenerated until its first byte was <= 2 -- not
+// part of the protocol, and ~85 768-bit exponentiations per encrypted dial,
+// on the netloop thread.
 static void dh_public(uint8_t pub[MSE_DH_LEN], uint8_t priv[MSE_DH_LEN],
                       int *attempts) {
     static const uint8_t two[1] = { 2 };
-    for (;;) {
+    for (int k = 0; k < 8; k++) {
         dh_private(priv);
         dh_modexp(two, 1, priv, pub);
         (*attempts)++;
-        if (pub[0] <= 2 && !(pub[0] == 0 && pub[1] == 0))
-            break;
+        if (pub[0] != 19) break;
     }
 }
 
@@ -157,7 +158,12 @@ int mse_peer_feed(mse_peer *m, const uint8_t *in, size_t in_len,
         // reply is treated as the DH public key (responders do not restrict
         // pubB's first byte to 0x00..0x02 the way initiators must).
         if (in_len == 0) return MSE_CONT;
-        if (in[0] == 19) return MSE_PLAIN;
+        // A pubB may begin with 0x13 too (1 in 256): only the whole protocol
+        // string marks a plaintext reply.
+        if (in[0] == 19) {
+            if (in_len < 20) return MSE_CONT;
+            if (memcmp(in + 1, "BitTorrent protocol", 19) == 0) return MSE_PLAIN;
+        }
         if (in_len < MSE_DH_LEN) return MSE_CONT;  // pubB not whole yet
 
         // Shared secret S = pubB^privA mod P.
@@ -212,34 +218,31 @@ int mse_peer_feed(mse_peer *m, const uint8_t *in, size_t in_len,
     }
 
     if (m->phase == 1) {
-        // Resync on the encrypted VC: the VC is 8 zero bytes under keyB, so
-        // its ciphertext is a fixed 8-byte keystream prefix. A responder with
-        // padB == 0 puts it at offset 0; with padB > 0 the offset shifts by
-        // padB_len, so we scan every plausible offset and verify each by
-        // decrypting the candidate with a COPY of the RC4 state (the live
-        // stream only advances on a confirmed match). The scan must keep the
-        // trailing 7 bytes buffered: a VC split across two feeds would
-        // otherwise be missed.
-        size_t pos = 0;
-        size_t limit = in_len >= 8 ? in_len - 8 : 0;
-        if (limit > 512) limit = 512;   // padB is at most 512 bytes
-        uint8_t zeros[8] = {0};
-        while (pos <= limit) {
-            mse_rc4 probe = m->recv_rc4;
-            mse_rc4_skip(&probe, pos);
-            uint8_t expect[8];
-            mse_rc4_crypt(&probe, zeros, expect, 8);
-            if (memcmp(in + pos, expect, 8) == 0) {
-                mse_rc4_skip(&m->recv_rc4, pos + 8);  // padB + VC
+        // Resync on the encrypted VC. padB (0..512 random bytes) is sent in
+        // PLAIN, outside the RC4 stream, so the VC is always encrypted with
+        // the first 8 bytes of the fresh keyB keystream -- m->vc -- whatever
+        // its offset. The offset is padB's length: scan for m->vc. (This used
+        // to advance the keystream by the offset as if padB were encrypted,
+        // which matched only when padB was empty: libtorrent picks a random
+        // length, and not one MSE handshake in ~300 field attempts succeeded.)
+        // The trailing 7 bytes stay buffered: a VC split across two feeds
+        // would otherwise be missed.
+        if (in_len < 8) return MSE_CONT;
+        for (size_t pos = 0; pos + 8 <= in_len; pos++) {
+            if (m->vc_scanned + pos > 512) return MSE_FAIL;   // past any legal padB
+            if (memcmp(in + pos, m->vc, 8) == 0) {
+                mse_rc4_skip(&m->recv_rc4, 8);   // the VC itself
                 m->sel_have = 0;
                 m->pad_skip = 0;
                 m->phase = 2;
                 *consumed = pos + 8;
                 return MSE_CONT;
             }
-            pos++;
         }
-        *consumed = in_len > 7 ? in_len - 7 : 0;
+        // No VC yet: drop the scanned padB, keep the last 7 bytes (a VC may
+        // start there).
+        *consumed = in_len - 7;
+        m->vc_scanned += in_len - 7;
         return MSE_CONT;
     }
 

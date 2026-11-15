@@ -10,6 +10,7 @@
 #include "../../utils/app_paths.h"
 #include "../../config/config.h"
 #include "../../catalog/retro_catalog_manager.h"
+#include "../../catalog/homebrew_catalog.hpp"
 #include "../../utils/log.h"
 #include "../../utils/i18n_plural.h"
 #include "../../net/image_downloader.h"
@@ -720,7 +721,14 @@ void DashboardSummaryView::buildCatalogSection() {
 // SECTION 1: RETRO GAMES
 // -------------------------------------------------------------
 void DashboardSummaryView::buildRetroGamesSection() {
+    // The tile is "Homebrew and retro": each card opens its own tab.
     auto openRetro = [this](brls::View*) {
+        config::ConfigManager::instance().setHomebrewSection("retro");
+        if (on_open_section_) on_open_section_(1);
+        return true;
+    };
+    auto openHomebrew = [this](brls::View*) {
+        config::ConfigManager::instance().setHomebrewSection("homebrew");
         if (on_open_section_) on_open_section_(1);
         return true;
     };
@@ -733,8 +741,27 @@ void DashboardSummaryView::buildRetroGamesSection() {
         if (c.route == catalog::RetroRoute::Tico) ++ticoSystems;
     }
 
-    addHeader("app/dashboard/retro_title"_i18n, "app/dashboard/retro_meta"_i18n);
+    addHeader("app/homebrew/dash_title"_i18n, "app/homebrew/dash_meta"_i18n);
     brls::Box* cardsRow = addCardsRow();
+
+    // Homebrew store: updates first, else what is there.
+    auto& store = homebrew::Catalog::instance();
+    brls::Box* c0 = makeCard(kCardWidth, openHomebrew);
+    addCaption(c0, "app/homebrew/dash_card_title"_i18n);
+    if (!store.loaded()) {
+        addIconValue(c0, Icon::Download, "…", style::textSecondary(), kValueFontMid);
+        addSub(c0, "app/homebrew/dash_loading"_i18n, style::textSecondary());
+    } else if (const int updates = store.updatesAvailable(); updates > 0) {
+        addIconValue(c0, Icon::Update, std::to_string(updates), style::stateWarn());
+        addSub(c0, "app/homebrew/dash_updates_sub"_i18n, style::textSecondary());
+    } else {
+        int installed = 0;
+        for (const auto& kv : *store.installedSnapshot())
+            if (kv.second.present) ++installed;
+        addIconValue(c0, Icon::Puzzle, std::to_string(store.snapshot()->size()), style::textPrimary());
+        addSub(c0, brls::getStr("app/homebrew/dash_total_sub", std::to_string(installed)), style::textSecondary());
+    }
+    cardsRow->addView(c0);
 
     // Games in the database
     brls::Box* c1 = makeCard(kCardWidth, openRetro);
@@ -753,21 +780,9 @@ void DashboardSummaryView::buildRetroGamesSection() {
     addSub(b2, "app/dashboard/retro_c2_sub"_i18n, style::textSecondary());
     cardsRow->addView(c2);
 
-    // ROM folder
-    auto& cfg = config::ConfigManager::instance();
-    std::string modeTag = cfg.isRetroCustomFolder() ? "app/dashboard/retro_mode_custom"_i18n : std::string("Tico");
-    std::string effDir = (cfg.isRetroCustomFolder() && !cfg.getRetroCustomPath().empty())
-        ? cfg.getRetroCustomPath() : std::string("sdmc:/tico/roms/");
-    brls::Box* c3 = makeCard(kCardWidth, openRetro);
-    brls::Box* b3 = c3;
-    addCaption(b3, "app/dashboard/retro_c3_title"_i18n + "  \u00B7  " + modeTag);
-    addIconValue(b3, Icon::Folder, effDir, style::textPrimary(), kValueFontMid);
-    addSub(b3, "app/dashboard/retro_c3_sub"_i18n, style::textSecondary());
-    cardsRow->addView(c3);
-
+    wireCard(c0);
     wireCard(c1);
     wireCard(c2);
-    wireCard(c3);
 }
 
 // -------------------------------------------------------------

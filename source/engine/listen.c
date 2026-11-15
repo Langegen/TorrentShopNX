@@ -282,6 +282,9 @@ void torrentfs_incoming_push(torrentfs *t, int fd, const uint8_t hs68[68]) {
     mutexLock(&iq->lock);
     if (iq->n < TSNX_INCOMING_QUEUE_MAX) {
         iq->q[iq->n].fd = fd;
+        iq->q[iq->n].utp = NULL;
+        iq->q[iq->n].ip = 0;
+        iq->q[iq->n].port = 0;
         memcpy(iq->q[iq->n].hs, hs68, 68);
         iq->n++;
         queued = iq->n;
@@ -294,4 +297,23 @@ void torrentfs_incoming_push(torrentfs *t, int fd, const uint8_t hs68[68]) {
         engine_log(ENGINE_LOG_DEBUG, "[listen] incoming queue full, dropping");
         close(fd);
     }
+}
+
+bool torrentfs_incoming_push_utp(torrentfs *t, void *utp, const uint8_t hs68[68],
+                                 uint32_t ip_net, uint16_t port_host) {
+    if (!t || !utp) return false;
+    struct torrentfs_incoming_q *iq = torrentfs_incoming_queue(t);
+    bool queued = false;
+    mutexLock(&iq->lock);
+    if (iq->n < TSNX_INCOMING_QUEUE_MAX) {
+        iq->q[iq->n].fd = -1;
+        iq->q[iq->n].utp = utp;
+        iq->q[iq->n].ip = ip_net;
+        iq->q[iq->n].port = port_host;
+        memcpy(iq->q[iq->n].hs, hs68, 68);
+        iq->n++;
+        queued = true;
+    }
+    mutexUnlock(&iq->lock);
+    return queued;
 }

@@ -23,7 +23,8 @@ try {
         if ($LASTEXITCODE -ne 0) { Write-Host "build failed" -ForegroundColor Red; exit 100 }
     }
     $need = @("test_bencode", "test_magnet", "test_torrent_meta", "test_pool", "test_mechanisms",
-              "test_registry", "test_swarm_sched", "test_rotation", "test_engine_perf")
+              "test_registry", "test_swarm_sched", "test_rotation", "test_engine_perf",
+              "test_ext_msgs", "test_holepunch")
     $missing = $need | Where-Object { -not (Test-Path ".\pctest\$_.exe") }
     if ($missing) {
         Write-Host ("missing test binaries: " + ($missing -join ", ") + " -- run with -Build") -ForegroundColor Red
@@ -31,7 +32,7 @@ try {
     }
 
     $fail = 0
-    foreach ($t in @("test_bencode", "test_magnet", "test_torrent_meta", "test_pool")) {
+    foreach ($t in @("test_bencode", "test_magnet", "test_torrent_meta", "test_pool", "test_ext_msgs")) {
         $out = & ".\pctest\$t.exe" 2>&1 | Select-Object -Last 1
         if ($LASTEXITCODE -ne 0) { $fail++ }
         "{0,-28} code={1} {2}" -f $t, $LASTEXITCODE, $out
@@ -54,6 +55,8 @@ try {
     }
 
     RunT ".\pctest\test_mechanisms.exe" "" "mechanisms" 240000 "ALL OPTIMIZATION|FAILED"
+    # Incoming uTP + ut_holepunch through a relay (3 processes on 127.0.0.1).
+    RunT ".\pctest\test_holepunch.exe" "" "holepunch" 240000 "hole-punch test|incoming utp|^FAILED"
     foreach ($i in 1..2) { RunT ".\pctest\test_registry.exe" "--secs 15" "registry#$i" 120000 "registry stress" }
     foreach ($m in @("--piece 2", "--piece 2 --appsched", "--piece 1 --appsched", "--piece 8 --appsched",
                      "--piece 2 --nozones", "--piece 2 --appsched --loose", "--piece 2 --appsched --sameip")) {

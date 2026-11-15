@@ -7,6 +7,7 @@
 #include "../utils/switch_utils.h"
 #include "../utils/nacp_text.h"
 #include "../engine/thread_cfg.h"
+#include "../ui/CompanionInstallDialog.hpp"
 #include <borealis.hpp>
 
 #include <algorithm>
@@ -1848,10 +1849,7 @@ void HybridNspInstaller::checkNcaSdk(const uint8_t* header_data, const std::stri
         util::logLine("hybrid: WARNING: Game SDK " + game_sdk.toString() +
                       " > Console SDK " + console_sdk.toString() + " for " + entry_name);
         brls::sync([game_sdk, console_sdk]() {
-            std::string msg = brls::getStr("app/installer/sdk_mismatch_warning",
-                                          game_sdk.toString(),
-                                          console_sdk.toString());
-            brls::Application::notify(msg);
+            ui::showModKitOfferDialog(game_sdk, console_sdk);
         });
     }
 }

@@ -38,6 +38,14 @@ void torrent_peer_id(uint8_t out[20]) {
     memcpy(out, s_peer_id, 20);
 }
 
+uint32_t torrent_announce_key(void) {
+    uint8_t id[20];
+    torrent_peer_id(id);
+    uint32_t k;
+    memcpy(&k, id + 12, 4);   // random bytes of the id: fixed for the process
+    return k;
+}
+
 // The port we tell trackers/DHT about. 6881 until a listener binds (and UPnP
 // possibly maps) a real one.
 static int s_announce_port = 6881;
@@ -961,10 +969,10 @@ static int announce_http(const char *tracker, const char *hash_enc,
     char url[1024];
     snprintf(url, sizeof(url),
              "%s%cinfo_hash=%s&peer_id=%s&port=%d&uploaded=0&downloaded=0"
-             "&left=%lld&compact=1&event=%s&numwant=%d",
+             "&left=%lld&compact=1&event=%s&numwant=%d&key=%08X",
              tracker, strchr(tracker, '?') ? '&' : '?',
              hash_enc, peer_id_enc, port, (long long)left,
-             first ? "started" : "", max);
+             first ? "started" : "", max, (unsigned)torrent_announce_key());
 
     membuf resp = {0};
     CURL *curl = curl_easy_init();

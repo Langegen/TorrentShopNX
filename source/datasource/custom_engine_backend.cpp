@@ -175,7 +175,17 @@ bool CustomEngineBackend::open(const ContentRequest& request) {
     if (scheduler_enabled_) {
         scheduler_.on_read_request(0, piece_size_ > 0 ? piece_size_ : 1024 * 1024);
     }
-    health_.init(engine_, info_hash_str_, nullptr);
+    health_.init(engine_, info_hash_str_, [this]() {
+        util::logLine("health: executing stage3 recovery (reset peers, resume reader) for " + info_hash_str_);
+        if (engine_ && !info_hash_str_.empty()) {
+            tsnx_engine_reset_peers(engine_, info_hash_str_.c_str());
+            tsnx_engine_resume_reader(engine_, info_hash_str_.c_str());
+            tsnx_engine_announce_now(engine_, info_hash_str_.c_str());
+            if (scheduler_enabled_) {
+                scheduler_.on_tick();
+            }
+        }
+    });
 
     opened_ = true;
     open_time_ = std::chrono::steady_clock::now();

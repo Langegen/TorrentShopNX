@@ -285,11 +285,26 @@ int DownloadManager::getActiveDownloadsCount() const {
     for (const auto& item : impl_.queue()) {
         if (item.state == download::DownloadState::Downloading ||
             item.state == download::DownloadState::StreamPreparing ||
-            item.state == download::DownloadState::StreamInstalling) {
+            item.state == download::DownloadState::StreamInstalling ||
+            item.state == download::DownloadState::Installing) {
             count++;
         }
     }
     return count;
+}
+
+bool DownloadManager::hasActiveDownloads() const {
+    std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
+    for (const auto& item : impl_.queue()) {
+        if (item.state == download::DownloadState::Downloading ||
+            item.state == download::DownloadState::StreamPreparing ||
+            item.state == download::DownloadState::StreamInstalling ||
+            item.state == download::DownloadState::Installing ||
+            item.state == download::DownloadState::Queued) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void DownloadManager::saveDownloads() {

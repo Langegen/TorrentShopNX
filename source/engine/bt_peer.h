@@ -20,7 +20,14 @@ enum {
     MSG_REQUEST = 6,
     MSG_PIECE = 7,
     MSG_CANCEL = 8,
+    MSG_PORT = 9,        // BEP 5: payload = <u16 DHT UDP port>
     MSG_EXTENDED = 20,   // BEP 10: payload = <ext_id><bencoded dict>
+};
+
+// Extended message ids WE assign (advertised in our extended handshake's "m").
+enum {
+    EXT_ID_PEX = 1,        // ut_pex (BEP 11)
+    EXT_ID_HOLEPUNCH = 2,  // ut_holepunch (BEP 55)
 };
 
 // Blocks are the unit of transfer within a piece (16 KiB is the de-facto standard).
@@ -79,7 +86,9 @@ typedef struct {
     bool choked;        // peer is choking us -> we cannot request
     bool we_unchoked;   // we have unchoked the peer
     bool ext_ok;        // peer advertised BEP 10 extensions in its handshake
+    bool dht_ok;        // peer set the DHT bit (BEP 5): it accepts a PORT message
     uint8_t pex_id;     // peer's ut_pex extended message id (0 = not offered)
+    uint8_t hp_id;      // peer's ut_holepunch extended message id (0 = not offered)
 
     uint8_t *bitfield;  // which pieces the peer has
     size_t bitfield_len;
@@ -103,7 +112,9 @@ int peer_nb_init(peer_nb *p, int sock, int64_t piece_count);
 int peer_nb_queue_keepalive(peer_nb *p);
 // Same, but uses a µTP session instead of a TCP socket.
 int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count);
-void peer_nb_apply_speed_opts(peer_nb *p);
+// Post-handshake socket buffers. Returns the receive buffer that was set, in
+// KB (0 for uTP sessions / no socket).
+int peer_nb_apply_speed_opts(peer_nb *p);
 // Set SO_RCVBUF to `bytes`, halving down to 64 KB if the stack refuses.
 // Returns the size that stuck, or 0 (TCP only; no-op without a socket).
 int peer_nb_set_rcvbuf(peer_nb *p, int bytes);
@@ -142,9 +153,58 @@ int peer_nb_recv_handshake(peer_nb *p, const uint8_t info_hash[20]);
 int peer_nb_queue_ext(peer_nb *p, uint8_t ext_id, const void *payload,
                       uint32_t plen);
 
-// Queue OUR extended handshake (ext_id 0) advertising ut_pex with id 1.
+// Build OUR extended handshake dictionary (the payload after ext_id 0) into
+// `out`; returns its length, or 0 if it does not fit. It carries:
+//   m       ut_pex (EXT_ID_PEX) and, with `holepunch`, ut_holepunch
+//   p       our listen port (omitted when listen_port <= 0)
+//   reqq    how many requests we queue per peer
+//   v       client name
+//   yourip  the peer's address as we see it (omitted when peer_ip_net == 0)
+size_t peer_build_ext_handshake(char *out, size_t cap, int listen_port,
+                                uint32_t peer_ip_net, bool holepunch);
+
+// Queue OUR extended handshake (ext_id 0), see peer_build_ext_handshake.
 // Only meaningful if the peer's handshake showed the extension bit.
-int peer_nb_queue_ext_handshake(peer_nb *p);
+int peer_nb_queue_ext_handshake(peer_nb *p, int listen_port,
+                                uint32_t peer_ip_net, bool holepunch);
+
+// What the peer told us in ITS extended handshake. Fields it did not send
+// stay 0. Never trusts lengths: every value is range-checked.
+typedef struct {
+    uint8_t  pex_id;       // m.ut_pex
+    uint8_t  hp_id;        // m.ut_holepunch
+    int      reqq;         // requests the peer queues for us (0 = not stated)
+    int      port;         // p: the peer's listen port (0 = not stated)
+    bool     upload_only;
+    uint32_t yourip;       // our address as the peer sees it, network order (0 = none)
+} peer_ext_info;
+
+// Parse a peer's extended handshake payload. Returns false if it is not a
+// bencoded dictionary.
+bool peer_parse_ext_handshake(const uint8_t *pl, uint32_t plen, peer_ext_info *out);
+
+// ut_holepunch (BEP 55). A peer behind NAT cannot be dialed, but a third peer
+// connected to both of us (the relay) can tell each side to open a uTP
+// connection to the other at the same moment, which gets through most NATs.
+//   RENDEZVOUS  initiator -> relay : "introduce me to <addr>"
+//   CONNECT     relay -> both      : "start a uTP connection to <addr> now"
+//   ERROR       relay -> initiator : "<addr>: <code>"
+enum { HP_RENDEZVOUS = 0, HP_CONNECT = 1, HP_ERROR = 2 };
+enum { HP_ERR_NO_SUCH_PEER = 1, HP_ERR_NOT_CONNECTED = 2, HP_ERR_NO_SUPPORT = 3,
+       HP_ERR_NO_SELF = 4 };
+
+typedef struct {
+    uint8_t  type;     // HP_*
+    uint32_t ip;       // network byte order (IPv4 only)
+    uint16_t port;     // host byte order
+    uint32_t err;      // HP_ERR_*, ERROR messages only
+} peer_hp_msg;
+
+// Parse a ut_holepunch payload (the bytes after the extended message id).
+// False for anything malformed, an unknown type or an IPv6 address.
+bool peer_parse_holepunch(const uint8_t *pl, uint32_t plen, peer_hp_msg *out);
+// Build one into `out` (at least 12 bytes); returns its length.
+size_t peer_build_holepunch(uint8_t *out, const peer_hp_msg *m);
 
 void peer_disconnect(peer_conn *p);
 

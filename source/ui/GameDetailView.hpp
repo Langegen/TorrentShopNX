@@ -28,6 +28,8 @@ private:
     void checkInstalled();
     // `appId`: the release's game that is installed (a multi-game release holds several)
     void applyInstalledState(const util::InstalledGameInfo& info, uint64_t appId);
+    void updateModButtons(uint64_t appId = 0);
+    void updateNavigationRoutes();
 
     Game game_;
     std::string retro_console_id_;
@@ -36,6 +38,8 @@ private:
     bool isSwitchRelease_ = false;
     bool installCheckRunning_ = false;
     brls::Box* installedBadge_ = nullptr;
+    uint64_t resolvedAppId_ = 0;
+    util::SdkVersion installedGameSdk_;
 
     BRLS_BIND(brls::ScrollingFrame, scroll, "scroll");
     BRLS_BIND(brls::Box, contentBox, "contentBox");
@@ -52,6 +56,8 @@ private:
     BRLS_BIND(brls::Button, btnDownload, "btnDownload");
     BRLS_BIND(brls::Button, btnQr, "btnQr");
     BRLS_BIND(brls::Button, btnFavorite, "btnFavorite");
+    BRLS_BIND(brls::Button, btnModCd, "btnModCd");
+    BRLS_BIND(brls::Button, btnModKit, "btnModKit");
 };
 
 } // namespace ui

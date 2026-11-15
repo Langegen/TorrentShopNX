@@ -16,6 +16,10 @@
                 <brls:Button id="btnFavorite" text="@i18n/app/detail/add_favorite_btn" width="135px" height="42px" paddingLeft="8" paddingRight="8" singleLine="true" fontSize="13" />
                 <brls:Button id="btnQr" text="@i18n/app/detail/torrent_link_btn" width="135px" height="42px" paddingLeft="8" paddingRight="8" singleLine="true" fontSize="13" />
             </brls:Box>
+
+            <!-- Companion Actions: ModCD & ModKitNX -->
+            <brls:Button id="btnModCd" width="280px" height="42px" marginTop="10" singleLine="true" fontSize="13" visibility="gone" />
+            <brls:Button id="btnModKit" width="280px" height="42px" marginTop="10" singleLine="true" fontSize="13" visibility="gone" />
         </brls:Box>
         
         <!-- Right Column: Scrollable Content -->

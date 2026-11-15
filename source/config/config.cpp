@@ -316,6 +316,7 @@ void ConfigManager::load() {
         readRawKey(body, "torrserver_login", torrserver_login_);
         readRawKey(body, "torrserver_password", torrserver_password_);
         readRawKey(body, "report_contact", report_contact_);
+        readRawKey(body, "homebrew_section", homebrew_section_);
         {
             std::string raw;
             readRawKey(body, "slow_skip_hours", raw);
@@ -431,6 +432,7 @@ void ConfigManager::save() {
         out << "sound_effects=" << (sound_effects_enabled_ ? "true" : "false") << "\n";
         out << "joycon_rumble=" << (rumble_enabled_ ? "true" : "false") << "\n";
         out << "report_contact=" << report_contact_ << "\n";
+        if (!homebrew_section_.empty()) out << "homebrew_section=" << homebrew_section_ << "\n";
     }
 
     // Write a temp file and rename it into place: a crash or power loss in the
@@ -484,6 +486,20 @@ void ConfigManager::setReportContact(const std::string& contact) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (report_contact_ != contact) {
         report_contact_ = contact;
+        save();
+    }
+}
+
+std::string ConfigManager::getHomebrewSection() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return homebrew_section_ == "retro" ? "retro" : "homebrew";
+}
+
+void ConfigManager::setHomebrewSection(const std::string& tab) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    const std::string v = tab == "retro" ? "retro" : "homebrew";
+    if (homebrew_section_ != v) {
+        homebrew_section_ = v;
         save();
     }
 }

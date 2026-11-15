@@ -124,6 +124,7 @@ int64_t  tsnx_engine_read(tsnx_engine *eng, const char *hash,
                           int64_t offset, void *buf, int64_t size);
 void     tsnx_engine_cancel_read(tsnx_engine *eng, const char *hash);
 void     tsnx_engine_resume_reader(tsnx_engine *eng, const char *hash);
+bool     tsnx_engine_reset_peers(tsnx_engine *eng, const char *hash);
 
 /* Hints the engine how far the installer has already consumed. */
 void tsnx_engine_set_min_keep_offset(tsnx_engine *eng, const char *hash,
@@ -247,6 +248,25 @@ typedef struct {
 } tsnx_engine_diag;
 
 bool tsnx_engine_get_diag(tsnx_engine *eng, const char *hash, tsnx_engine_diag *out);
+
+// Reachability: how peers got to us and how we got to the ones behind NAT.
+typedef struct {
+    const char *port_mapping;   // "upnp", "natpmp", "none" or "probing" (engine-wide)
+    int listen_port;            // TCP listen port (= the uTP UDP port when that bind worked)
+    int utp_port;               // UDP port of the uTP socket
+    int live_utp;               // live sessions over uTP
+    int incoming_tcp;           // incoming sessions attached, since the torrent opened
+    int incoming_utp;
+    int hp_tries;               // ut_holepunch rendezvous we sent
+    int hp_ok;                  // hole-punched sessions that came up
+    int hp_inbound;             // CONNECTs we answered as the target
+    int hp_relayed;             // rendezvous we relayed for others
+} tsnx_nat_stats;
+
+bool tsnx_engine_get_nat_stats(tsnx_engine *eng, const char *hash, tsnx_nat_stats *out);
+
+// NAT traversal through ut_holepunch relays (BEP 55), engine-wide; on by default.
+void tsnx_engine_set_nat_traversal(tsnx_engine *eng, int on);
 
 #ifdef __cplusplus
 }

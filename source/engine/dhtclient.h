@@ -49,6 +49,16 @@ void dht_bg_init_early(void);
 // for the next session's warm start.
 void dht_stop(void);
 
+// Hand the background DHT a node to ping (a peer announced its DHT port with a
+// BEP 5 PORT message). Any thread; the node is pinged by the DHT thread. A
+// node that sits in our swarm right now is a better routing-table entry than a
+// random one. ip in network byte order, port in host order.
+void dht_bg_add_node(uint32_t ip_net, uint16_t port_host);
+
+// UDP port of the background DHT node, to send in our own PORT message
+// (0 while the DHT is not running).
+int dht_bg_port(void);
+
 // Starvation signal for the background DHT: while set, active targets are
 // searched every ~5 s instead of ~15 s, and the transition to hungry fires an
 // immediate search. torrentfs calls this from its netloop with (live < 6).

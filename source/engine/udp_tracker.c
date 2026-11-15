@@ -183,7 +183,7 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     put64(areq + 72, 0);                     // uploaded
     put32(areq + 80, first ? 2 : 0);         // event: started or none
     put32(areq + 84, 0);                     // IP (0 = use source)
-    put32(areq + 88, (uint32_t)rand());      // key
+    put32(areq + 88, torrent_announce_key()); // key: stable for the process
     put32(areq + 92, (uint32_t)max_peers);   // num_want
     areq[96] = (uint8_t)(port >> 8);
     areq[97] = (uint8_t)(port & 0xff);

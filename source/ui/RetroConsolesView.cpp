@@ -1,4 +1,5 @@
 #include "RetroConsolesView.hpp"
+#include "SectionTabBar.hpp"
 #include "RetroCatalogView.hpp"
 #include "RetroUpdateDialog.hpp"
 #include "RetroEmulatorsView.hpp"
@@ -12,6 +13,9 @@
 #include <algorithm>
 #include <filesystem>
 #include "../utils/i18n_plural.h"
+#include "homebrew/HomebrewGlue.hpp"
+#include "homebrew/HomebrewView.hpp"
+#include "style/HeaderHints.hpp"
 
 namespace ui {
 
@@ -70,9 +74,20 @@ void RetroConsolesView::onContentAvailable() {
         scroll->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
     }
 
-    if (titleLabel) {
-        titleLabel->setText(brls::getStr("app/retro/consoles_title"));
+    config::ConfigManager::instance().setHomebrewSection("retro");
+    if (tabsBox) {
+        tabsBox->clearViews();
+        tabsBox->addView(new SectionTabBar(SectionTab::Retro));
     }
+
+    // Section tabs: strict directional navigation (L switches to Homebrew, R is already at rightmost tab).
+    this->registerAction("", brls::ControllerButton::BUTTON_LB, [](brls::View*) {
+        hb::showHomebrewSection();
+        return true;
+    }, true);
+    this->registerAction("", brls::ControllerButton::BUTTON_RB, [](brls::View*) {
+        return true;
+    }, true);
     if (statsHint) {
         updateHeader();
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {

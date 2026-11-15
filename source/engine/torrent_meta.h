@@ -49,6 +49,11 @@ int torrent_largest_file(const torrent_meta *t);
 // peer address); a fresh one per process is expected and normal.
 void torrent_peer_id(uint8_t out[20]);
 
+// The announce "key" (HTTP &key=, the UDP announce's key field): one value for
+// the whole process, so a tracker recognises our re-announces as the same
+// client. The UDP path used to send a fresh random key every time.
+uint32_t torrent_announce_key(void);
+
 // The port trackers/DHT should advertise for us: the real listen port, or the
 // UPnP-mapped external port when a router mapping succeeded. Default 6881.
 // Peers dial this port, so without a listener/forward it is cosmetic.
