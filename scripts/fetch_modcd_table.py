@@ -65,6 +65,21 @@ def main():
 
     out_path = os.path.join(os.path.dirname(__file__), '..', 'resources', 'modcd.json')
     out_path = os.path.abspath(out_path)
+    existing_patch_versions = {}
+    if os.path.exists(out_path):
+        try:
+            with open(out_path, 'r', encoding='utf-8') as ef:
+                old_data = json.load(ef)
+                for old_tid, old_val in old_data.get('titles', {}).items():
+                    if 'patch_versions' in old_val:
+                        existing_patch_versions[old_tid.upper()] = old_val['patch_versions']
+        except Exception:
+            pass
+
+    for tid, info in titles.items():
+        if tid in existing_patch_versions:
+            info['patch_versions'] = existing_patch_versions[tid]
+
     output = {
         'format': 1,
         'titles': titles

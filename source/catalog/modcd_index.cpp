@@ -78,6 +78,14 @@ bool parseIndex(const std::string& text, TitleMap& out, std::string& err) {
                 if (t.is_string()) m.types.push_back(t.get<std::string>());
             }
         }
+        if (v.contains("patch_versions") && v["patch_versions"].is_object()) {
+            for (auto pit = v["patch_versions"].begin(); pit != v["patch_versions"].end(); ++pit) {
+                uint32_t pver = static_cast<uint32_t>(std::strtoul(pit.key().c_str(), nullptr, 10));
+                if (pit.value().is_string()) {
+                    m.patch_versions[pver] = pit.value().get<std::string>();
+                }
+            }
+        }
         out[tid & ~0x1FFFULL] = std::move(m);
     }
     if (out.empty()) {

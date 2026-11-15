@@ -9,7 +9,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "393216": "1.2.1"
+      }
     },
     "01003DD00D658000": {
       "name": "Bulletstorm: Duke of Switch Edition",
@@ -19,7 +22,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "01002620102C6000": {
       "name": "BioShock 2 Remastered",
@@ -29,7 +35,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.2"
+      }
     },
     "0100A5C00D162000": {
       "name": "Cuphead",
@@ -39,7 +48,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "655360": "1.3.7"
+      }
     },
     "010093801237C000": {
       "name": "Metroid Dread",
@@ -49,7 +61,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "2.1.0"
+      }
     },
     "010075D00E8BA000": {
       "name": "Alien: Isolation",
@@ -59,7 +74,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "1.1.5"
+      }
     },
     "0100D560102C8000": {
       "name": "BioShock Infinite",
@@ -69,7 +87,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.2"
+      }
     },
     "01002FC00412C000": {
       "name": "Little Nightmares",
@@ -79,7 +100,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "0100F8F014190000": {
       "name": "Darksiders III",
@@ -89,7 +113,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "01009040091E0000": {
       "name": "Wolfenstein II: The New Colossus",
@@ -100,7 +127,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0",
+        "131072": "1.1.0"
+      }
     },
     "01006000040C2000": {
       "name": "Yoshi's Crafted World",
@@ -110,7 +141,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "0100416004C00000": {
       "name": "DOOM",
@@ -120,7 +154,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.4"
+      }
     },
     "010044500CF8E000": {
       "name": "Hellblade: Senua's Sacrifice",
@@ -130,7 +167,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.1.0"
+      }
     },
     "0100E0A01DD20000": {
       "name": "Beyond Good & Evil \\- 20th Anniversary Edition",
@@ -140,7 +180,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "01007820196A6000": {
       "name": "Red Dead Redemption",
@@ -150,7 +193,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.0.4"
+      }
     },
     "01007EF00011E000": {
       "name": "The Legend of Zelda: Breath of the Wild",
@@ -160,7 +206,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "786432": "1.6.0"
+      }
     },
     "010084F017B32000": {
       "name": "The Dark Pictures Anthology: Little Hope",
@@ -170,7 +219,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "01003D100E9C6000": {
       "name": "The Witcher 3: Wild Hunt",
@@ -180,7 +232,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "458752": "4.04b"
+      }
     },
     "0100DCA0064A6000": {
       "name": "Luigi’s Mansion 3",
@@ -190,7 +245,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "1.4.0"
+      }
     },
     "010067300059A000": {
       "name": "Luigi’s Mansion 3",
@@ -200,7 +258,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "589824": "1.9.589692"
+      }
     },
     "010028600EBDA000": {
       "name": "Super Mario 3D World \\+ Bowser's Fury",
@@ -210,7 +271,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.1.0"
+      }
     },
     "0100317013770000": {
       "name": "Mario \\+ Rabbids Sparks of Hope",
@@ -220,7 +284,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "393216": "1.6.2225577"
+      }
     },
     "010048701995E000": {
       "name": "Luigi's Mansion 2 HD",
@@ -230,7 +297,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "0100623017A58000": {
       "name": "Alan Wake Remastered",
@@ -240,7 +310,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "0100626011656000": {
       "name": "The Outer Worlds",
@@ -250,7 +323,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "1.0.5"
+      }
     },
     "010028D00BA1A000": {
       "name": "The Sinking City",
@@ -260,7 +336,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.2.0"
+      }
     },
     "0100B1A00D8CE000": {
       "name": "DOOM Eternal",
@@ -270,7 +349,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "917504": "1.14"
+      }
     },
     "010077B00E046000": {
       "name": "Spyro Reignited Trilogy",
@@ -280,7 +362,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.01"
+      }
     },
     "010029B0118E8000": {
       "name": "Need for Speed: Hot Pursuit",
@@ -290,7 +375,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.0.3"
+      }
     },
     "01004D300C5AE000": {
       "name": "Kirby and the Forgotten Land",
@@ -300,7 +388,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "0100650018FE0000": {
       "name": "Kingdom Come: Deliverance",
@@ -310,7 +401,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.9.6H"
+      }
     },
     "01007300020FA000": {
       "name": "Astral Chain",
@@ -320,7 +414,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "0100AD10102B2000": {
       "name": "BioShock Remastered",
@@ -331,7 +428,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.2",
+        "9895936": "1.0.3"
+      }
     },
     "0100830004FB6000": {
       "name": "L\\.A\\. Noire",
@@ -341,7 +442,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.2"
+      }
     },
     "010042D00D900000": {
       "name": "Lego Star Wars: The Skywalker Saga",
@@ -351,7 +455,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "589824": "1.10.0"
+      }
     },
     "0100DBF01000A000": {
       "name": "Burnout Paradise Remastered",
@@ -361,7 +468,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "010065A014024000": {
       "name": "Grand Theft Auto: San Andreas – The Definitive Edition",
@@ -372,7 +482,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "458752": "1.0.7",
+        "524288": "1.0.8"
+      }
     },
     "0100C3C012718000": {
       "name": "Grand Theft Auto III – The Definitive Edition",
@@ -383,7 +497,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "458752": "1.0.7",
+        "524288": "1.0.8"
+      }
     },
     "0100182014022000": {
       "name": "Grand Theft Auto: Vice City – The Definitive Edition",
@@ -393,7 +511,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "524288": "1.0.8"
+      }
     },
     "01004A600EC0A000": {
       "name": "Immortals Fenyx Rising",
@@ -403,7 +524,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "720896": "1.3.4"
+      }
     },
     "01004BA017CD6000": {
       "name": "Biomutant",
@@ -413,7 +537,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "010073401175E000": {
       "name": "Crash Bandicoot 4: It’s About Time",
@@ -423,7 +550,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.2"
+      }
     },
     "010097100EDD6000": {
       "name": "Little Nightmares II",
@@ -433,7 +563,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.4"
+      }
     },
     "0100000000010000": {
       "name": "Super Mario Odyssey",
@@ -445,7 +578,12 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.3.0",
+        "327680": "1.4.0",
+        "393216": "1.4.1"
+      }
     },
     "0100B8E016F76000": {
       "name": "NieR: Automata \\- The End of YoRHa Edition",
@@ -455,7 +593,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.2"
+      }
     },
     "0100E3401D660000": {
       "name": "Ace Combat 7: Skies Unknown",
@@ -465,7 +606,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "0100B04011742000": {
       "name": "Monster Hunter: Rise",
@@ -475,7 +619,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "2228224": "16.0.2"
+      }
     },
     "01008C8012920000": {
       "name": "Dying Light",
@@ -485,7 +632,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "1.0.5"
+      }
     },
     "0100F7E00C70E000": {
       "name": "Hogwarts Legacy",
@@ -496,7 +646,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.0.4",
+        "327680": "1.0.5"
+      }
     },
     "01008CF01BAAC000": {
       "name": "The Legend of Zelda: Echoes of Wisdom",
@@ -506,7 +660,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "0100210019428000": {
       "name": "Prince of Persia: The Lost Crown",
@@ -516,7 +673,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "720896": "1.1.0"
+      }
     },
     "0100DA201EBF8000": {
       "name": "Disney Epic Mickey: Rebrushed",
@@ -527,7 +687,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2",
+        "262144": "1.0.4"
+      }
     },
     "01001A9018560000": {
       "name": "Bright Memory: Infinite",
@@ -537,7 +701,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.3"
+      }
     },
     "010007B010FCC000": {
       "name": "Sniper Elite 4",
@@ -547,7 +714,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.0.3"
+      }
     },
     "01004A4010FEA000": {
       "name": "Bayonetta 3",
@@ -557,7 +727,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.2.0"
+      }
     },
     "0100ACD0163D0000": {
       "name": "Batman: Arkham Knight",
@@ -567,7 +740,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.0.3"
+      }
     },
     "0100C8E01DD16000": {
       "name": "Europa",
@@ -577,7 +753,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.4.0"
+      }
     },
     "01005EA01C0FC000": {
       "name": "Shadow Generations",
@@ -587,7 +766,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "01004A001E32E000": {
       "name": "S\\.T\\.A\\.L\\.K\\.E\\.R\\.: Shadow of Chornobyl",
@@ -598,7 +780,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1",
+        "131072": "1.0.2"
+      }
     },
     "010027B01E32C000": {
       "name": "S\\.T\\.A\\.L\\.K\\.E\\.R\\.: Clear Sky",
@@ -609,7 +795,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1",
+        "131072": "1.0.2"
+      }
     },
     "010008E01E32A000": {
       "name": "S\\.T\\.A\\.L\\.K\\.E\\.R\\.: Call of Pripyat",
@@ -620,7 +810,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1",
+        "131072": "1.0.2"
+      }
     },
     "010073C01AF34000": {
       "name": "LEGO Horizon Adventures",
@@ -630,7 +824,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.0.1"
+      }
     },
     "010097000BC10000": {
       "name": "Resident Evil 0",
@@ -640,7 +837,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "0100C9801FEE6000": {
       "name": "Yakuza Kiwami",
@@ -650,7 +850,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.01"
+      }
     },
     "0100BB901FA12000": {
       "name": "Little Big Adventure \\- Twinsen's Quest",
@@ -660,7 +863,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.1.3"
+      }
     },
     "01006C100EC08000": {
       "name": "Minecraft Dungeons",
@@ -670,7 +876,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "1769472": "1.17.0.0"
+      }
     },
     "01007BE01FCC2000": {
       "name": "Achilles: Legends Untold",
@@ -680,7 +889,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "010036601EB1E000": {
       "name": "Mark of the Deep",
@@ -690,7 +902,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0.0.0"
+      }
     },
     "0100CE101B698000": {
       "name": "Monster Jam Showdown",
@@ -700,7 +915,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "458752": "1.0.7"
+      }
     },
     "01008F701C074000": {
       "name": "Sonic Superstars",
@@ -710,7 +928,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "1.1.8"
+      }
     },
     "010057D006492000": {
       "name": "Octopath Traveler",
@@ -721,7 +942,11 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "262144": "1.0.4",
+        "327680": "1.0.5"
+      }
     },
     "0100A3501946E000": {
       "name": "Octopath Traveler 2",
@@ -731,7 +956,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.1.1"
+      }
     },
     "0100DD301A686000": {
       "name": "Lollipop Chainsaw RePop",
@@ -741,7 +969,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "589824": "1.0.9"
+      }
     },
     "010047E01EA24000": {
       "name": "Star Overdrive",
@@ -751,7 +982,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "327680": "1.0.5"
+      }
     },
     "01006F301AE9C000": {
       "name": "Grounded",
@@ -761,7 +995,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "786432": "1.12"
+      }
     },
     "0100F300169B6000": {
       "name": "GRIME",
@@ -771,7 +1008,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "458752": "1.3.9"
+      }
     },
     "01009FB0172F4000": {
       "name": "SpongeBob SquarePants: The Cosmic Shake",
@@ -781,7 +1021,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "458752": "1.0.7"
+      }
     },
     "0100E0601DC2A000": {
       "name": "Bō: Path of the Teal Lotus",
@@ -791,7 +1034,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.0.3"
+      }
     },
     "010069C01AB82000": {
       "name": "Shin Megami Tensei V: Vengeance",
@@ -801,7 +1047,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.0.3"
+      }
     },
     "0100C1101EE5A000": {
       "name": "High on Life",
@@ -811,7 +1060,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "010083A018262000": {
       "name": "Hitman: Blood Money — Reprisal",
@@ -821,7 +1073,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "65536": "1.2"
+      }
     },
     "0100927023A34000": {
       "name": "SOMA",
@@ -831,7 +1086,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "196608": "1.0.3"
+      }
     },
     "01004E401B3EA000": {
       "name": "SteamWorld Build",
@@ -841,7 +1099,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "1048576": "1.0.156"
+      }
     },
     "0100C1F0051B6000": {
       "name": "Donkey Kong Country: Tropical Freeze",
@@ -851,7 +1112,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "01006E001823C000": {
       "name": "Sonic Racing: CrossWorlds",
@@ -861,7 +1125,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "010066101A55A000": {
       "name": "Little Nightmares III",
@@ -871,7 +1138,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "010037C022390000": {
       "name": "Hitman: Absolution",
@@ -881,7 +1151,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     },
     "0100092021C80000": {
       "name": "Tomb Raider: Definitive Edition",
@@ -891,7 +1164,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "131072": "1.0.2"
+      }
     },
     "0100152000022000": {
       "name": "Mario Kart 8 Deluxe",
@@ -901,7 +1177,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "1376256": "3.0.1"
+      }
     },
     "01001DD020796000": {
       "name": "The Expanse: A Telltale Series",
@@ -911,7 +1190,10 @@
       ],
       "types": [
         "gfx"
-      ]
+      ],
+      "patch_versions": {
+        "0": "1.0.0"
+      }
     }
   }
 }

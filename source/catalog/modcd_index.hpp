@@ -33,6 +33,7 @@ struct TitleMods {
     int mods = 0;
     std::vector<uint32_t> versions;  // game updates (N << 16, 0 = none) the mods are made for
     std::vector<std::string> types;  // "gfx", ...
+    std::unordered_map<uint32_t, std::string> patch_versions;  // update number -> display version ("1.3.0")
 };
 
 using TitleMap = std::unordered_map<uint64_t, TitleMods>;  // key: application ID

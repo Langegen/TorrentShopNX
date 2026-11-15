@@ -1,7 +1,9 @@
 #include "CompanionInstallDialog.hpp"
 
+#include "../GameData.hpp"
 #include "../catalog/companion_installer.hpp"
 #include "../catalog/game_version.hpp"
+#include "../catalog/release_finder.h"
 #include "../utils/app_paths.h"
 #include "../utils/log.h"
 #include "ThemeManager.hpp"
@@ -168,17 +170,60 @@ void showCompanionInstallDialog(const std::string& repo,
     });
 }
 
+static std::string formatPatchVersion(uint64_t appId, uint32_t v, const modcd::TitleMods& mods) {
+    if (v == 0) {
+        return "1.0.0 (v0)";
+    }
+
+    std::string displayVer;
+    // 1. Static / cached mapping from modcd.json
+    auto it = mods.patch_versions.find(v);
+    if (it != mods.patch_versions.end() && !it->second.empty()) {
+        displayVer = it->second;
+    }
+
+    // 2. Currently installed game on console (NACP display version)
+    if (displayVer.empty()) {
+        util::InstalledGameInfo info = util::queryInstalledGame(appId);
+        if (info.installed && info.patchVersion == v && !info.displayVersion.empty()) {
+            displayVer = info.displayVersion;
+        }
+    }
+
+    // 3. Catalog releases
+    if (displayVer.empty()) {
+        auto snap = getCatalogSnapshot();
+        if (snap) {
+            for (const auto& g : *snap) {
+                catalog::TitleVersion tv = catalog::titleVersion(g, appId);
+                if ((tv.updateKnown || tv.update != 0) && tv.update == v && catalog::isPlausibleVersion(tv.version)) {
+                    displayVer = catalog::trimVersion(tv.version);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!displayVer.empty()) {
+        return displayVer + " (v" + std::to_string(v) + ")";
+    }
+
+    return "Update #" + std::to_string(catalog::updateOrdinal(v)) + " (v" + std::to_string(v) + ")";
+}
+
 void showModCdOfferDialog(uint64_t appId, const modcd::TitleMods& mods, std::function<void()> onDone) {
+    std::string versionsStr;
+    if (!mods.versions.empty()) {
+        for (size_t i = 0; i < mods.versions.size(); ++i) {
+            if (i > 0) versionsStr += ", ";
+            versionsStr += formatPatchVersion(appId, mods.versions[i], mods);
+        }
+    }
+
     if (modcd::isModCdInstalled()) {
         std::string msg = brls::getStr("app/modcd/installed_info", std::to_string(mods.mods));
-        if (!mods.versions.empty()) {
-            msg += "\n\n" + "app/modcd/versions_supported"_i18n + ":\n";
-            for (size_t i = 0; i < mods.versions.size(); ++i) {
-                if (i > 0) msg += ", ";
-                uint32_t v = mods.versions[i];
-                if (v == 0) msg += "Base (v1.0.0)";
-                else msg += "Update #" + std::to_string(catalog::updateOrdinal(v));
-            }
+        if (!versionsStr.empty()) {
+            msg += "\n\n" + "app/modcd/versions_supported"_i18n + ":\n" + versionsStr;
         }
         msg += "\n\n" + "app/modcd/launch_hint"_i18n;
         auto* dialog = new brls::Dialog(msg);
@@ -187,6 +232,9 @@ void showModCdOfferDialog(uint64_t appId, const modcd::TitleMods& mods, std::fun
         dialog->open();
     } else {
         std::string msg = brls::getStr("app/modcd/not_installed_prompt", std::to_string(mods.mods));
+        if (!versionsStr.empty()) {
+            msg += "\n\n" + "app/modcd/versions_supported"_i18n + ":\n" + versionsStr;
+        }
         auto* dialog = new brls::Dialog(msg);
         dialog->addButton("app/modcd/install_now"_i18n, [onDone]() {
             showCompanionInstallDialog(modcd::kModCdRepo, "ModCD", "ModCD.nro", "switch/ModCD/ModCD.nro", [onDone](bool ok) {
