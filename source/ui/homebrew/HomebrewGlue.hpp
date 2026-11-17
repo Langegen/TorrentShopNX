@@ -28,6 +28,9 @@ void showRetroSection();
 // Switch the section to the homebrew tab (replaces the retro screen).
 void showHomebrewSection();
 
+// Switch the section to the PC games tab.
+void showPcSection();
+
 // Today, "yyyy-mm-dd" (for the "New" badge).
 std::string today();
 

@@ -52,6 +52,7 @@
 #define TSNX_TICO_NRO_PATH       "sdmc:/switch/tico/tico.nro"
 #define TSNX_VITA3K_DIR          "sdmc:/switch/vita3k"
 #define TSNX_CEMU_DIR            "sdmc:/switch/cemu"
+#define TSNX_PC_GAMES_DIR        "sdmc:/pc_games"
 #else
 #define TSNX_SD_ROOT             "./"
 #define TSNX_ROMS_BASE_DIR       "./roms"
@@ -59,6 +60,7 @@
 #define TSNX_TICO_NRO_PATH       "./switch/tico/tico.nro"
 #define TSNX_VITA3K_DIR          "./switch/vita3k"
 #define TSNX_CEMU_DIR            "./switch/cemu"
+#define TSNX_PC_GAMES_DIR        "./pc_games"
 #endif
 
 // PS Vita games are saved as .vpk/.zip that Vita3K-nx installs from its file
@@ -73,6 +75,11 @@
 #define TSNX_TICO_MODULES_DIR    TSNX_TICO_BASE_DIR "/modules"
 
 #define TSNX_RETRO_DATA_DIR      TSNX_DATA_DIR "/retro"
+#define TSNX_PC_DATA_DIR         TSNX_DATA_DIR "/pc"
+#define TSNX_PC_GAMES_JSON       TSNX_PC_DATA_DIR "/pc_games.json"
+#define TSNX_PC_GAMES_BIN        TSNX_PC_DATA_DIR "/pc_games.bin"
+#define TSNX_PC_SUBFORUMS_JSON   TSNX_PC_DATA_DIR "/subforums.json"
+#define TSNX_PC_STATS_JSON       TSNX_CACHE_DIR "/pc_games_stats.json"
 
 #define TSNX_CONFIG_PATH         TSNX_BASE_DIR "/config.ini"
 #define TSNX_LOG_PATH            TSNX_BASE_DIR "/log.txt"

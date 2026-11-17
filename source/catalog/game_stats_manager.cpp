@@ -26,6 +26,10 @@ std::string GameStatsManager::getConsoleStatsCachePath() {
     return std::string(TSNX_CACHE_DIR) + "/console_games_stats.json";
 }
 
+std::string GameStatsManager::getPcStatsCachePath() {
+    return std::string(TSNX_CACHE_DIR) + "/pc_games_stats.json";
+}
+
 int64_t GameStatsManager::parseTimestamp(const std::string& date_str) {
     if (date_str.empty()) return 0;
     int64_t ts = 0;
@@ -167,6 +171,23 @@ void GameStatsManager::loadFromDiskInternal() {
         util::logLine("GameStatsManager: unknown exception loading console stats");
     }
 
+    try {
+        // Load PC stats cache
+        std::string pcPath = getPcStatsCachePath();
+        std::string pcBody;
+        if (readFileFast(pcPath, pcBody) && !pcBody.empty()) {
+            std::unordered_map<std::string, GameStats> loaded;
+            if (parseStatsJson(pcBody, loaded)) {
+                pc_stats_ = std::move(loaded);
+                util::logLine("GameStatsManager: loaded " + std::to_string(pc_stats_.size()) + " PC stats from disk");
+            }
+        }
+    } catch (const std::exception& e) {
+        util::logLine(std::string("GameStatsManager: exception loading PC stats: ") + e.what());
+    } catch (...) {
+        util::logLine("GameStatsManager: unknown exception loading PC stats");
+    }
+
     loaded_from_disk_.store(true, std::memory_order_release);
 }
 
@@ -198,6 +219,15 @@ std::optional<GameStats> GameStatsManager::getConsoleStats(const std::string& to
     return std::nullopt;
 }
 
+std::optional<GameStats> GameStatsManager::getPcStats(const std::string& topic_id) const {
+    if (topic_id.empty()) return std::nullopt;
+    ensureLoaded();
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = pc_stats_.find(topic_id);
+    if (it != pc_stats_.end()) return it->second;
+    return std::nullopt;
+}
+
 std::optional<GameStats> GameStatsManager::getAnyStats(const std::string& topic_id) const {
     if (topic_id.empty()) return std::nullopt;
     ensureLoaded();
@@ -206,6 +236,8 @@ std::optional<GameStats> GameStatsManager::getAnyStats(const std::string& topic_
     if (it != switch_stats_.end()) return it->second;
     auto itC = console_stats_.find(topic_id);
     if (itC != console_stats_.end()) return itC->second;
+    auto itP = pc_stats_.find(topic_id);
+    if (itP != pc_stats_.end()) return itP->second;
     return std::nullopt;
 }
 
@@ -271,6 +303,31 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
             } else {
                 util::logLine("GameStatsManager: console stats fetch failed with status " +
                               std::to_string(consoleRes.status_code));
+            }
+
+            // 3. Download PC stats (gracefully handles 404)
+            util::logLine("GameStatsManager: downloading PC stats from " + std::string(kPcStatsUrl));
+            auto pcRes = client.httpGet(kPcStatsUrl);
+            if (pcRes.status_code == 200 && !pcRes.body.empty()) {
+                std::unordered_map<std::string, GameStats> newMap;
+                if (parseStatsJson(pcRes.body, newMap)) {
+                    writeTextFile(getPcStatsCachePath(), pcRes.body);
+                    size_t pcCount = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        pc_stats_ = std::move(newMap);
+                        pcCount = pc_stats_.size();
+                        loaded_from_disk_.store(true, std::memory_order_release);
+                    }
+                    anySuccess = true;
+                    util::logLine("GameStatsManager: successfully updated PC stats (" +
+                                  std::to_string(pcCount) + " entries)");
+                }
+            } else if (pcRes.status_code == 404) {
+                util::logLine("GameStatsManager: PC stats file not found on GitHub (404), keeping existing");
+            } else {
+                util::logLine("GameStatsManager: PC stats fetch failed with status " +
+                              std::to_string(pcRes.status_code));
             }
 
             if (onDone) {

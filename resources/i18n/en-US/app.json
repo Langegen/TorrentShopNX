@@ -7,7 +7,7 @@
         "settings": "Settings",
         "footer": "TorrentShopNX v2.4 | Games in catalog: {0}",
         "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
-        "retro_games": "Homebrew & Retro",
+        "retro_games": "Homebrew, Retro & PC",
         "exit_confirm_active_download": "Are you sure you want to exit?\nAn active download is in progress."
     },
     "common": {
@@ -1353,6 +1353,7 @@
     "homebrew": {
         "title": "Homebrew",
         "tab_retro": "Retro",
+        "tab_pc": "PC Games",
         "cat_all": "All",
         "cat_apps": "Apps",
         "cat_games": "Games",
@@ -1499,5 +1500,30 @@
         "install_error": "Error installing application",
         "cancelled": "Installation cancelled",
         "cancelling": "Cancelling installation..."
+    },
+    "pc": {
+        "title": "PC Games",
+        "all_catalog": "Full Catalog",
+        "all_catalog_desc": "All PC games in catalog",
+        "new_games": "New Releases",
+        "new_games_desc": "Fresh Rutracker releases",
+        "games_count": "{} games",
+        "sec_main": "MAIN",
+        "sec_genres": "GENRES",
+        "sec_strategies": "STRATEGY",
+        "sec_actions": "ACTION",
+        "sec_quests": "ADVENTURE & QUESTS",
+        "sec_retro": "OLD GAMES (RETRO PC)",
+        "download_all": "Download entire release",
+        "select_files": "Select files",
+        "download_hint": "Files saved to sdmc:/pc_games/",
+        "update_catalog_btn": "Update PC catalog",
+        "updating_catalog": "Downloading PC games catalog...",
+        "catalog_updated": "PC catalog updated successfully",
+        "catalog_update_error": "Failed to update PC catalog",
+        "badge_pc": "PC",
+        "badge_portable": "Portable",
+        "stats_hint": "Catalog: {} games",
+        "stats_hint_update": "[-] Update"
     }
 }

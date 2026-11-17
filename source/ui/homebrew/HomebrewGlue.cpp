@@ -7,6 +7,7 @@
 #include "../../utils/log.h"
 #include "../../utils/switch_utils.h"
 #include "../RetroConsolesView.hpp"
+#include "../PcCategoriesView.hpp"
 #include "HomebrewView.hpp"
 
 #include <ctime>
@@ -37,6 +38,12 @@ void showHomebrewSection() {
     haptic(1);
     rememberSection("homebrew");
     replaceTopActivity(new HomebrewView());
+}
+
+void showPcSection() {
+    haptic(1);
+    rememberSection("pc");
+    replaceTopActivity(new PcCategoriesView());
 }
 
 std::string today() {

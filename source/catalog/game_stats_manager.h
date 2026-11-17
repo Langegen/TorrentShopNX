@@ -29,6 +29,7 @@ public:
     std::optional<GameStats> getSwitchStats(const std::string& topic_id) const;
     bool copySwitchStats(const std::string& topic_id, GameStats& out) const;
     std::optional<GameStats> getConsoleStats(const std::string& topic_id) const;
+    std::optional<GameStats> getPcStats(const std::string& topic_id) const;
     std::optional<GameStats> getAnyStats(const std::string& topic_id) const;
 
     // Load cached stats from SD / disk
@@ -43,11 +44,14 @@ public:
     static int64_t parseTimestamp(const std::string& date_str);
     static std::string getSwitchStatsCachePath();
     static std::string getConsoleStatsCachePath();
+    static std::string getPcStatsCachePath();
 
     static constexpr const char* kSwitchStatsUrl =
         "https://raw.githubusercontent.com/Langegen/switch-games/main/switch_games_stats.json";
     static constexpr const char* kConsoleStatsUrl =
         "https://raw.githubusercontent.com/Langegen/console-games/main/data/console_games_stats.json";
+    static constexpr const char* kPcStatsUrl =
+        "https://raw.githubusercontent.com/Langegen/pc-games/main/data/pc_games_stats.json";
 
 private:
     GameStatsManager();
@@ -59,6 +63,7 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<std::string, GameStats> switch_stats_;
     std::unordered_map<std::string, GameStats> console_stats_;
+    std::unordered_map<std::string, GameStats> pc_stats_;
     std::atomic<bool> loaded_from_disk_{false};
     std::atomic<bool> loading_{false};
     std::atomic<bool> updating_{false};

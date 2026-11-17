@@ -7,6 +7,7 @@
 #include "SettingsTab.hpp"
 #include "RemoteAddView.hpp"
 #include "RetroConsolesView.hpp"
+#include "PcCategoriesView.hpp"
 #include "homebrew/HomebrewView.hpp"
 #include "FileManagerView.hpp"
 #include "CatalogProgressNotification.hpp"
@@ -503,9 +504,11 @@ void MainMenu::onTileClicked(int index) {
         case 0:
             brls::Application::pushActivity(new ui::CollectionsView());
             break;
-        case 1:  // "Homebrew and retro": opens on the tab used last
+        case 1:  // "Homebrew, retro and PC": opens on the tab used last
             if (config::ConfigManager::instance().getHomebrewSection() == "retro")
                 brls::Application::pushActivity(new ui::RetroConsolesView());
+            else if (config::ConfigManager::instance().getHomebrewSection() == "pc")
+                brls::Application::pushActivity(new ui::PcCategoriesView());
             else
                 brls::Application::pushActivity(new ui::HomebrewView());
             break;

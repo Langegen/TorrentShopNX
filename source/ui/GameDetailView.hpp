@@ -36,6 +36,7 @@ private:
     std::shared_ptr<bool> imageToken;
     std::shared_ptr<bool> alive_;
     bool isSwitchRelease_ = false;
+    bool isPcRelease_ = false;
     bool installCheckRunning_ = false;
     brls::Box* installedBadge_ = nullptr;
     uint64_t resolvedAppId_ = 0;

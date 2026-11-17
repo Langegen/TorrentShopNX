@@ -471,6 +471,12 @@ void FileSelectView::onContentAvailable() {
             installLocationText->setText(catalog::RetroCatalogManager::instance().getTargetDir(retro_console_id_));
             installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
+    } else if (isPcGame(game_)) {
+        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+        if (installLocationText) {
+            installLocationText->setText(TSNX_PC_GAMES_DIR);
+            installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
+        }
     } else if (isHomebrewGame(game_)) {
         if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
         if (installLocationText) {

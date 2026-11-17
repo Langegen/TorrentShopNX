@@ -80,12 +80,13 @@ void RetroConsolesView::onContentAvailable() {
         tabsBox->addView(new SectionTabBar(SectionTab::Retro));
     }
 
-    // Section tabs: strict directional navigation (L switches to Homebrew, R is already at rightmost tab).
+    // Section tabs: strict directional navigation (L switches to Homebrew, R switches to PC).
     this->registerAction("", brls::ControllerButton::BUTTON_LB, [](brls::View*) {
         hb::showHomebrewSection();
         return true;
     }, true);
     this->registerAction("", brls::ControllerButton::BUTTON_RB, [](brls::View*) {
+        hb::showPcSection();
         return true;
     }, true);
     if (statsHint) {

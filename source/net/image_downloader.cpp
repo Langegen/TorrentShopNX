@@ -67,53 +67,45 @@ void ensureParentDirectory(const std::string& filePath) {
     tsnx_ensure_parent_dirs(filePath.c_str());
 }
 
-std::vector<uint8_t> resizeImageAreaAverage(const uint8_t* src, int srcW, int srcH, int channels, int dstW, int dstH) {
+std::vector<uint8_t> resizeImageBilinear(const uint8_t* src, int srcW, int srcH, int channels, int dstW, int dstH) {
     std::vector<uint8_t> dst(dstW * dstH * channels);
-    float xRatio = static_cast<float>(srcW) / static_cast<float>(dstW);
-    float yRatio = static_cast<float>(srcH) / static_cast<float>(dstH);
+    if (dstW <= 0 || dstH <= 0 || srcW <= 0 || srcH <= 0) return dst;
+
+    float xRatio = static_cast<float>(srcW - 1) / static_cast<float>(std::max(1, dstW - 1));
+    float yRatio = static_cast<float>(srcH - 1) / static_cast<float>(std::max(1, dstH - 1));
 
     for (int y = 0; y < dstH; ++y) {
-        float srcYStart = y * yRatio;
-        float srcYEnd = (y + 1) * yRatio;
-        int y0 = static_cast<int>(srcYStart);
-        int y1 = std::min(srcH, static_cast<int>(srcYEnd + 0.9999f));
+        float srcY = y * yRatio;
+        int y0 = static_cast<int>(srcY);
+        int y1 = std::min(y0 + 1, srcH - 1);
+        float yDiff = srcY - y0;
+        float yDiffInv = 1.0f - yDiff;
+
+        const uint8_t* row0 = src + y0 * srcW * channels;
+        const uint8_t* row1 = src + y1 * srcW * channels;
+        uint8_t* dstRow = dst.data() + y * dstW * channels;
 
         for (int x = 0; x < dstW; ++x) {
-            float srcXStart = x * xRatio;
-            float srcXEnd = (x + 1) * xRatio;
-            int x0 = static_cast<int>(srcXStart);
-            int x1 = std::min(srcW, static_cast<int>(srcXEnd + 0.9999f));
+            float srcX = x * xRatio;
+            int x0 = static_cast<int>(srcX);
+            int x1 = std::min(x0 + 1, srcW - 1);
+            float xDiff = srcX - x0;
+            float xDiffInv = 1.0f - xDiff;
 
-            float totalWeight = 0.0f;
-            float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            float w00 = xDiffInv * yDiffInv;
+            float w01 = xDiff * yDiffInv;
+            float w10 = xDiffInv * yDiff;
+            float w11 = xDiff * yDiff;
 
-            for (int sy = y0; sy < y1; ++sy) {
-                float yWeight = 1.0f;
-                if (sy < srcYStart) yWeight -= (srcYStart - sy);
-                if (sy + 1 > srcYEnd) yWeight -= (sy + 1 - srcYEnd);
-                if (yWeight < 0.0f) yWeight = 0.0f;
+            int px0 = x0 * channels;
+            int px1 = x1 * channels;
 
-                for (int sx = x0; sx < x1; ++sx) {
-                    float xWeight = 1.0f;
-                    if (sx < srcXStart) xWeight -= (srcXStart - sx);
-                    if (sx + 1 > srcXEnd) xWeight -= (sx + 1 - srcXEnd);
-                    if (xWeight < 0.0f) xWeight = 0.0f;
-
-                    float w = xWeight * yWeight;
-                    totalWeight += w;
-                    const uint8_t* p = src + (sy * srcW + sx) * channels;
-                    for (int c = 0; c < channels; ++c) {
-                        acc[c] += p[c] * w;
-                    }
-                }
-            }
-
-            uint8_t* out = dst.data() + (y * dstW + x) * channels;
-            if (totalWeight > 0.0001f) {
-                for (int c = 0; c < channels; ++c) {
-                    float v = acc[c] / totalWeight;
-                    out[c] = static_cast<uint8_t>(std::clamp(v + 0.5f, 0.0f, 255.0f));
-                }
+            for (int c = 0; c < channels; ++c) {
+                float val = row0[px0 + c] * w00 +
+                            row0[px1 + c] * w01 +
+                            row1[px0 + c] * w10 +
+                            row1[px1 + c] * w11;
+                dstRow[x * channels + c] = static_cast<uint8_t>(val + 0.5f);
             }
         }
     }
@@ -589,6 +581,9 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
         
         std::string bodyToDisplay = std::move(res.body);
 
+        int dw = 0, dh = 0, dcomp = 0;
+        stbi_uc* rgba = nullptr;
+
         if (cacheEnabled && !thumbPath.empty()) {
             int srcW = 0, srcH = 0, comp = 0;
             stbi_uc* decoded = stbi_load_from_memory(
@@ -634,7 +629,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 const uint8_t* pixelData = nullptr;
 
                 if (dstW < activeW || dstH < activeH) {
-                    resizedData = resizeImageAreaAverage(sourcePixels, activeW, activeH, 3, dstW, dstH);
+                    resizedData = resizeImageBilinear(sourcePixels, activeW, activeH, 3, dstW, dstH);
                     pixelData = resizedData.data();
                 } else {
                     pixelData = sourcePixels;
@@ -642,7 +637,6 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
 
                 std::vector<uint8_t> thumbJpeg;
                 stbi_write_jpg_to_func(stbiWriteToVector, &thumbJpeg, dstW, dstH, 3, pixelData, task.fullSize ? 90 : 80);
-                stbi_image_free(decoded);
 
                 if (!thumbJpeg.empty()) {
                     ensureParentDirectory(thumbPath);
@@ -650,23 +644,33 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                     if (out.is_open()) {
                         out.write(reinterpret_cast<const char*>(thumbJpeg.data()), thumbJpeg.size());
                         out.close();
-                        util::logLine("ImageDownloader: saved thumbnail to " + thumbPath + " (" +
-                                      std::to_string(thumbJpeg.size()) + " bytes, " +
-                                      std::to_string(dstW) + "x" + std::to_string(dstH) + ")");
                     }
-                    bodyToDisplay.assign(reinterpret_cast<const char*>(thumbJpeg.data()), thumbJpeg.size());
                 }
+
+                // Directly convert RGB pixelData to RGBA without redundant JPEG decompression!
+                dw = dstW;
+                dh = dstH;
+                rgba = static_cast<stbi_uc*>(malloc(dw * dh * 4));
+                if (rgba) {
+                    for (int i = 0; i < dw * dh; ++i) {
+                        rgba[i * 4 + 0] = pixelData[i * 3 + 0];
+                        rgba[i * 4 + 1] = pixelData[i * 3 + 1];
+                        rgba[i * 4 + 2] = pixelData[i * 3 + 2];
+                        rgba[i * 4 + 3] = 255;
+                    }
+                }
+                stbi_image_free(decoded);
             }
         }
 
-        // Pre-decode RGBA in worker thread before scheduling on main thread
-        int dw = 0, dh = 0, dcomp = 0;
         perf::imageLoaded(msSince(task.enqueuedAt), false);
-        stbi_uc* rgba = stbi_load_from_memory(
-            reinterpret_cast<const stbi_uc*>(bodyToDisplay.data()),
-            static_cast<int>(bodyToDisplay.size()),
-            &dw, &dh, &dcomp, 4
-        );
+        if (!rgba) {
+            rgba = stbi_load_from_memory(
+                reinterpret_cast<const stbi_uc*>(bodyToDisplay.data()),
+                static_cast<int>(bodyToDisplay.size()),
+                &dw, &dh, &dcomp, 4
+            );
+        }
 
         brls::sync([img = task.img, cacheKey = task.cacheKey, rgba, dw, dh, token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
             if (g_appExiting.load()) {

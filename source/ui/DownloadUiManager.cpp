@@ -93,7 +93,8 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         const uint64_t lock_wait_start = perf::nowUs();
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
         perf::LockTimer lock_timer(perf::LockSite::UiAdd, lock_wait_start);
-        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id);
+        const bool is_pc = isPcGame(game);
+        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id, is_pc);
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
@@ -102,6 +103,7 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         item.priorities_set = false;
         item.cover_url = game.cover;
         item.is_homebrew = isHomebrewGame(game);
+        item.is_pc = is_pc;
         item.retro_console_id = retro_console_id;
 
         item.download_total_bytes = initial_file_size;

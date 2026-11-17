@@ -508,6 +508,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
                            const std::vector<int>& selected_files,
                            bool is_homebrew,
                            const std::string& retro_console_id,
+                           bool is_pc,
                            const std::shared_ptr<std::atomic<bool>>& cancel,
                            const std::shared_ptr<std::atomic<bool>>& pause,
                            const std::shared_ptr<FileDownloadState>& st) {
@@ -561,6 +562,9 @@ static void fileCopyWorker(datasource::IDataSource* source,
     };
     if (retro_info) {
         release_base = std::filesystem::path(catalog::RetroCatalogManager::instance().getTargetDir(retro_console_id));
+    } else if (is_pc) {
+        release_folder = extractReleaseFolderName(release_title);
+        release_base = std::filesystem::path(TSNX_PC_GAMES_DIR) / release_folder;
     } else {
         release_folder = extractReleaseFolderName(release_title);
         release_base = downloadsBaseDir() / release_folder;
@@ -1056,7 +1060,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
         bool is_archive = util::isArchiveFile(rel_path);
         bool is_mod = false;
         std::string mod_dest;
-        if (retro_console_id.empty() && !is_homebrew && !is_archive) {
+        if (retro_console_id.empty() && !is_homebrew && !is_pc && !is_archive) {
             is_mod = resolveAtmosphereModDest(rel_path, effective_tid, mod_dest);
         }
 
@@ -1231,7 +1235,7 @@ static void fileCopyWorker(datasource::IDataSource* source,
 
     if (all_ok && !cancel->load()) {
         // 1. Автораспаковка Switch модов/русификаторов из архивов (.zip, .7z, .rar)
-        if (retro_console_id.empty() && !is_homebrew) {
+        if (retro_console_id.empty() && !is_homebrew && !is_pc) {
             for (int idx : target_indices) {
                 if (cancel->load() || g_appExiting.load()) break;
                 if (idx < 0 || idx >= n) continue;
@@ -2398,7 +2402,8 @@ size_t DownloadManager::addToQueue(const std::string& title,
                                    int forced_file_index,
                                    const std::string& forced_stream_name,
                                    bool is_homebrew,
-                                   const std::string& retro_console_id) {
+                                   const std::string& retro_console_id,
+                                   bool is_pc) {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     DownloadItem item;
     item.title = title;
@@ -2407,6 +2412,7 @@ size_t DownloadManager::addToQueue(const std::string& title,
     item.forced_stream_name = forced_stream_name;
     item.is_homebrew = is_homebrew;
     item.retro_console_id = retro_console_id;
+    item.is_pc = is_pc;
     item.state = DownloadState::Queued;
     item.queue_seq = ++next_queue_seq_;
     if (isLocalBackend()) {
@@ -3153,13 +3159,14 @@ void DownloadManager::handleFileDownload(size_t index,
         const auto sel_files = item.selected_files;
         const bool is_hb = item.is_homebrew;
         const std::string retro_cid = item.retro_console_id;
+        const bool is_pc = item.is_pc;
         const std::string title_id = item.title_id;
         const std::string cover_url = item.cover_url;
         const std::string topic_id = item.topic_id;
 
         item.file_dl_worker = std::make_shared<std::future<void>>(
-            std::async(std::launch::async, [source, hash, magnet, title, title_id, cover_url, topic_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st]() {
-                fileCopyWorker(source, hash, magnet, title, title_id, cover_url, topic_id, idx, sel_files, is_hb, retro_cid, cancel, pause, st);
+            std::async(std::launch::async, [source, hash, magnet, title, title_id, cover_url, topic_id, idx, sel_files, is_hb, retro_cid, is_pc, cancel, pause, st]() {
+                fileCopyWorker(source, hash, magnet, title, title_id, cover_url, topic_id, idx, sel_files, is_hb, retro_cid, is_pc, cancel, pause, st);
             }));
         item.file_dl_dispatched = true;
         util::logLine("download: file download started hash=" + hash +
@@ -3712,10 +3719,11 @@ void DownloadManager::trackProgressLocked(bool list_refreshed) {
             continue;
         }
 
-        // Homebrew/ports, retro ROMs, or non-game files: download directly to downloads/ or retro folder without installation
+        // Homebrew/ports, retro ROMs, PC games, or non-game files: download directly without installation
         if (isLocalBackend() &&
             item.state == DownloadState::Downloading &&
             (item.is_homebrew ||
+             item.is_pc ||
              !item.retro_console_id.empty() ||
              (item.forced_file_index >= 0 && !isSwitchGameFile(item.forced_stream_name)) ||
              (!item.selected_files.empty() && !isSwitchGameFile(item.forced_stream_name)))) {
@@ -4092,7 +4100,7 @@ bool DownloadManager::startHybridInstall(size_t index) {
     std::lock_guard<std::recursive_mutex> lock(queue_mutex_);
     if (index >= queue_.size()) return false;
     auto& item = queue_[index];
-    if (item.is_homebrew || !item.retro_console_id.empty()) {
+    if (item.is_homebrew || item.is_pc || !item.retro_console_id.empty()) {
         return false;
     }
 

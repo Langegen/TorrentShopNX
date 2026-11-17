@@ -7,7 +7,7 @@
         "settings": "Настройки",
         "footer": "TorrentShopNX v2.4 | Игр в каталоге: {0}",
         "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
-        "retro_games": "Хоумбрю и ретро",
+        "retro_games": "Хоумбрю, ретро и ПК",
         "exit_confirm_active_download": "Вы действительно хотите выйти?\nИмеется активная загрузка."
     },
     "common": {
@@ -1353,6 +1353,7 @@
     "homebrew": {
         "title": "Хоумбрю",
         "tab_retro": "Ретро",
+        "tab_pc": "ПК игры",
         "cat_all": "Все",
         "cat_apps": "Приложения",
         "cat_games": "Игры",
@@ -1499,5 +1500,30 @@
         "install_error": "Ошибка при установке приложения",
         "cancelled": "Установка отменена",
         "cancelling": "Отмена установки..."
+    },
+    "pc": {
+        "title": "ПК игры",
+        "all_catalog": "Полный каталог",
+        "all_catalog_desc": "Все игры каталога ПК",
+        "new_games": "Новинки",
+        "new_games_desc": "Свежие раздачи Rutracker",
+        "games_count": "{} игр",
+        "sec_main": "ГЛАВНОЕ",
+        "sec_genres": "ЖАНРЫ",
+        "sec_strategies": "СТРАТЕГИИ",
+        "sec_actions": "ЭКШЕНЫ",
+        "sec_quests": "ПРИКЛЮЧЕНИЯ И КВЕСТЫ",
+        "sec_retro": "СТАРЫЕ ИГРЫ (РЕТРО ПК)",
+        "download_all": "Скачать всё целиком",
+        "select_files": "Выбрать файлы",
+        "download_hint": "Файлы сохраняются в sdmc:/pc_games/",
+        "update_catalog_btn": "Обновить базы ПК",
+        "updating_catalog": "Загрузка баз ПК-игр...",
+        "catalog_updated": "Базы ПК-игр успешно обновлены",
+        "catalog_update_error": "Ошибка загрузки баз ПК-игр",
+        "badge_pc": "PC",
+        "badge_portable": "Portable",
+        "stats_hint": "База: {} игр",
+        "stats_hint_update": "[-] Обновить"
     }
 }
