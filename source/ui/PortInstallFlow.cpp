@@ -112,6 +112,7 @@ void showPreview(const Game& game, std::shared_ptr<installer::PortInstallPlan> p
     }
     // Archives: their unpacked size is known only from the listing read at install time.
     if (!plan->getArchivesForVariant(variant).empty()) lines.push_back({"app/ports/preview_space_note"_i18n, 17.0f});
+    lines.push_back({"app/ports/preview_data_note"_i18n, 16.0f, true});
     if (!folders.empty()) {
         lines.push_back({"app/ports/preview_folders"_i18n});
         size_t shown = 0;

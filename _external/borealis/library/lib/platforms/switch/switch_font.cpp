@@ -49,16 +49,15 @@ void SwitchFontLoader::loadFonts()
     }
 
     // Simplified Chinese
-    // custom Font
-    if (access(USER_FONT_PATH.c_str(), F_OK) != -1)
+    std::string customChinesePath = "sdmc:/switch/TorrentShopNX/font/chinese.ttf";
+    if (access(customChinesePath.c_str(), F_OK) != -1)
     {
-        brls::Logger::info("Load custom font: {}", USER_FONT_PATH);
-        if (this->loadFontFromFile(FONT_CHINESE_SIMPLIFIED, USER_FONT_PATH))
+        brls::Logger::info("Load custom Chinese font: {}", customChinesePath);
+        if (this->loadFontFromFile(FONT_CHINESE_SIMPLIFIED, customChinesePath))
             nvgAddFallbackFontId(vg, Application::getFont(FONT_REGULAR), Application::getFont(FONT_CHINESE_SIMPLIFIED));
     }
     else
     {
-        brls::Logger::warning("Cannot find custom font, (Searched at: {})", USER_FONT_PATH);
         rc = plGetSharedFontByType(&font, PlSharedFontType_ChineseSimplified);
         if (R_SUCCEEDED(rc) && Application::loadFontFromMemory(FONT_CHINESE_SIMPLIFIED, font.address, font.size, false))
             nvgAddFallbackFontId(vg, Application::getFont(FONT_REGULAR), Application::getFont(FONT_CHINESE_SIMPLIFIED));

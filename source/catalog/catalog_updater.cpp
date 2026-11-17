@@ -1,5 +1,6 @@
 #include "../utils/atomic_file.h"
 #include "catalog_updater.h"
+#include "catalog_fallback.hpp"
 #include "catalog_manager.h"
 #include "collections_manager.h"
 #include "game_stats_manager.h"
@@ -39,15 +40,19 @@ static void updateNewReleasesCollectionInBackground() {
         }
     }
 
-    util::logLine("catalog_updater: updating new_release.json from " + url);
-    net::HttpClient http;
-    http.setTimeout(20);
-    auto res = http.httpGet(url);
-    if (res.status_code == 200 && !res.body.empty()) {
-        writeTextFile(cachePath, res.body);
-        util::logLine("catalog_updater: successfully updated new_release.json (" + std::to_string(res.body.size()) + " bytes)");
-    } else {
-        util::logLine("catalog_updater: failed to update new_release.json, status=" + std::to_string(res.status_code));
+    auto urls = catalog::getFallbackUrls(url);
+    for (const auto& u : urls) {
+        util::logLine("catalog_updater: updating new_release.json from " + u);
+        net::HttpClient http;
+        http.setTimeout(20);
+        auto res = http.httpGet(u);
+        if (res.status_code == 200 && !res.body.empty()) {
+            writeTextFile(cachePath, res.body);
+            util::logLine("catalog_updater: successfully updated new_release.json (" + std::to_string(res.body.size()) + " bytes)");
+            break;
+        } else {
+            util::logLine("catalog_updater: failed to update new_release.json from " + u + ", status=" + std::to_string(res.status_code));
+        }
     }
 }
 
@@ -63,22 +68,26 @@ static void updatePortRecipesInBackground() {
         if (now > 0 && (now - st.st_mtime) < (12 * 3600)) return;
     }
 
-    net::HttpClient http;
-    http.setTimeout(20);
-    auto res = http.httpGet(url);
-    if (res.status_code != 200 || res.body.empty()) {
-        util::logLine("catalog_updater: port_recipes.json not updated, status=" + std::to_string(res.status_code));
-        return;
+    auto urls = catalog::getFallbackUrls(url);
+    for (const auto& u : urls) {
+        net::HttpClient http;
+        http.setTimeout(20);
+        auto res = http.httpGet(u);
+        if (res.status_code != 200 || res.body.empty()) {
+            util::logLine("catalog_updater: port_recipes.json not updated from " + u + ", status=" + std::to_string(res.status_code));
+            continue;
+        }
+        std::vector<installer::PortRecipe> recipes;
+        std::string err;
+        if (!installer::parsePortRecipes(res.body, recipes, err)) {
+            util::logLine("catalog_updater: port_recipes.json from " + u + " rejected: " + err);
+            continue;
+        }
+        writeTextFile(path, res.body);
+        installer::PortRecipeStore::instance().reload();
+        util::logLine("catalog_updater: port_recipes.json updated from " + u + ", " + std::to_string(recipes.size()) + " recipes");
+        break;
     }
-    std::vector<installer::PortRecipe> recipes;
-    std::string err;
-    if (!installer::parsePortRecipes(res.body, recipes, err)) {
-        util::logLine("catalog_updater: port_recipes.json rejected: " + err);
-        return;
-    }
-    writeTextFile(path, res.body);
-    installer::PortRecipeStore::instance().reload();
-    util::logLine("catalog_updater: port_recipes.json updated, " + std::to_string(recipes.size()) + " recipes");
 }
 
 // Homebrew store data: read the cache, then download changes at most every
@@ -389,7 +398,15 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
 
     net::HttpClient http;
     std::string tempDiffPath = getCatalogPath() + ".diff.tmp";
-    auto dl_res = http.downloadToFileEx(diffUrl, tempDiffPath, extra_headers, &g_appExiting, 60);
+    net::HttpClient::DownloadResult dl_res;
+    auto diffCandidates = catalog::getFallbackUrls(diffUrl);
+    for (const auto& u : diffCandidates) {
+        if (g_appExiting.load()) break;
+        util::logLine("catalog_updater: trying diff download from: " + u);
+        dl_res = http.downloadToFileEx(u, tempDiffPath, extra_headers, &g_appExiting, 60);
+        if (dl_res.success || dl_res.not_modified) break;
+        util::logLine("catalog_updater: diff download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
+    }
 
     if (dl_res.not_modified && !g_appExiting.load()) {
         util::logLine("catalog_updater: diff HTTP 304 Not Modified - catalog is already up to date");
@@ -562,7 +579,15 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         util::logLine("catalog_updater: checking full catalog with ETag: " + savedEtag);
     }
 
-    auto dl_res = http.downloadToFileEx(catalogUrl, tempJsonPath, extra_headers, &g_appExiting, 180);
+    net::HttpClient::DownloadResult dl_res;
+    auto catalogCandidates = catalog::getFallbackUrls(catalogUrl);
+    for (const auto& u : catalogCandidates) {
+        if (g_appExiting.load()) break;
+        util::logLine("catalog_updater: trying full catalog download from: " + u);
+        dl_res = http.downloadToFileEx(u, tempJsonPath, extra_headers, &g_appExiting, 180);
+        if (dl_res.success || dl_res.not_modified) break;
+        util::logLine("catalog_updater: full catalog download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
+    }
 
     if (dl_res.not_modified && !g_appExiting.load()) {
         util::logLine("catalog_updater: full catalog HTTP 304 Not Modified");

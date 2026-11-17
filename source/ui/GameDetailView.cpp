@@ -136,6 +136,13 @@ public:
             auto& state = brls::Application::getControllerState();
             float leftY = state.axes[brls::LEFT_Y];
             float rightY = state.axes[brls::RIGHT_Y];
+            float leftX = state.axes[brls::LEFT_X];
+
+            // If focus is directly on the scrollable container and left stick is pushed left, return to action buttons
+            if (currentFocus == targetScroll_ && leftX < -0.4f) {
+                brls::Application::giveFocus(btnDownload_);
+                return;
+            }
             
             float currentOffset = targetScroll_->getContentOffsetY();
             float contentHeight = 0;
@@ -455,9 +462,27 @@ void GameDetailView::onContentAvailable() {
                 if (currentOffset > 0) {
                     float newOffset = std::max(0.0f, currentOffset - 60.0f);
                     scroll->setContentOffsetY(newOffset, true);
+                    return true;
                 }
+                brls::Application::giveFocus(btnDownload);
                 return true;
             }, true, true, brls::SOUND_NONE);
+
+            // B on any screenshot returns focus to the left action buttons
+            scrImg->registerAction("", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+                brls::Application::giveFocus(btnDownload);
+                return true;
+            }, true, true, brls::SOUND_CLICK);
+
+            if (i == 0) {
+                // Moving left from the first screenshot explicitly returns to download button
+                scrImg->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
+                    brls::Application::giveFocus(btnDownload);
+                    return true;
+                }, true, true, brls::SOUND_NONE);
+                scrImg->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+                firstScr_ = scrImg;
+            }
 
             setImageFromHTTPS(scrImg, scrUrl, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 1900000 - static_cast<int>(i) * 10, true);
             screenshotsBox->addView(scrImg);
@@ -551,6 +576,65 @@ void GameDetailView::onContentAvailable() {
 
     ScrollAndFocusController* scrollController = new ScrollAndFocusController(scroll, btnDownload, btnFavorite, btnQr, btnModCd, btnModKit);
     contentBox->addView(scrollController);
+
+    // Configure scroll container navigation and actions to always allow returning to action buttons
+    scroll->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+
+    // D-Pad Left on scroll explicitly returns to action buttons if the scroll container itself has focus
+    scroll->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
+        brls::View* f = brls::Application::getCurrentFocus();
+        if (f == scroll || f == screenshotsScroll) {
+            brls::Application::giveFocus(btnDownload);
+            return true;
+        }
+        return false;
+    }, true, true, brls::SOUND_NONE);
+
+    // B button on scroll returns focus to action buttons (instead of accidentally popping activity)
+    scroll->registerAction("", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::Application::giveFocus(btnDownload);
+        return true;
+    }, true, true, brls::SOUND_CLICK);
+
+    // D-Pad Up on scroll: if at top, return focus to action buttons; otherwise scroll up
+    scroll->registerAction("", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
+        brls::View* f = brls::Application::getCurrentFocus();
+        if (f != scroll && f != screenshotsScroll) {
+            return false;
+        }
+        float currentOffset = scroll->getContentOffsetY();
+        if (currentOffset > 0.01f) {
+            float newOffset = std::max(0.0f, currentOffset - 60.0f);
+            scroll->setContentOffsetY(newOffset, true);
+            return true;
+        }
+        brls::Application::giveFocus(btnDownload);
+        return true;
+    }, true, true, brls::SOUND_NONE);
+
+    // D-Pad Down on scroll: scroll down
+    scroll->registerAction("", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
+        brls::View* f = brls::Application::getCurrentFocus();
+        if (f != scroll && f != screenshotsScroll) {
+            return false;
+        }
+        float contentHeight = (!scroll->getChildren().empty()) ? scroll->getChildren().front()->getHeight() : 0;
+        float maxOffset = contentHeight - scroll->getHeight();
+        if (maxOffset > 0) {
+            float currentOffset = scroll->getContentOffsetY();
+            float newOffset = std::min(maxOffset, currentOffset + 60.0f);
+            scroll->setContentOffsetY(newOffset, true);
+        }
+        return true;
+    }, true, true, brls::SOUND_NONE);
+
+    if (screenshotsScroll) {
+        screenshotsScroll->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+        screenshotsScroll->registerAction("", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            brls::Application::giveFocus(btnDownload);
+            return true;
+        }, true, true, brls::SOUND_CLICK);
+    }
 
     resolvedAppId_ = catalog::releaseAppId(game_);
     updateModButtons(resolvedAppId_);
@@ -739,6 +823,14 @@ void GameDetailView::updateNavigationRoutes() {
         btnModKit->setCustomNavigationRoute(brls::FocusDirection::UP, btnFavorite);
         btnModKit->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
         btnModKit->setCustomNavigationRoute(brls::FocusDirection::RIGHT, rightTarget);
+    }
+
+    scroll->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+    if (screenshotsScroll) {
+        screenshotsScroll->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
+    }
+    if (firstScr_) {
+        firstScr_->setCustomNavigationRoute(brls::FocusDirection::LEFT, btnDownload);
     }
 }
 

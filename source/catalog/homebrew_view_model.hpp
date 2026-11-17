@@ -12,7 +12,7 @@
 namespace homebrew {
 
 enum class Category { All, Apps, Games, Emulators, Overlays, Sysmodules, Themes, Installed, Count };
-enum class SortMode { Popular, Updated, Name, Count };
+enum class SortMode { Popular, Updated, Name, Size, Count };
 
 constexpr size_t kCategoryCount = static_cast<size_t>(Category::Count);
 

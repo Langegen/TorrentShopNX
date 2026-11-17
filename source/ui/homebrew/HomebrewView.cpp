@@ -46,7 +46,8 @@ const char* sortKey(homebrew::SortMode s) {
     switch (s) {
         case homebrew::SortMode::Popular: return "app/homebrew/sort_popular";
         case homebrew::SortMode::Updated: return "app/homebrew/sort_updated";
-        case homebrew::SortMode::Name: return "app/homebrew/sort_name";
+        case homebrew::SortMode::Size:    return "app/homebrew/sort_size";
+        case homebrew::SortMode::Name:    return "app/homebrew/sort_name";
         case homebrew::SortMode::Count: break;
     }
     return "";

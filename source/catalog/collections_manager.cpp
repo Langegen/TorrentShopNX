@@ -1,4 +1,5 @@
 #include "collections_manager.h"
+#include "catalog_fallback.hpp"
 
 #include "../GameData.hpp"
 #include "../net/http_client.h"
@@ -138,19 +139,23 @@ bool CollectionsManager::loadCollection(const CollectionInfo& info,
 
     const int maxAge = (info.id == "new_release") ? (4 * 3600) : 86400;
     if (!readWholeFileLocal(cache_path, body) || !isCacheFresh(cache_path, maxAge)) {
-        util::logLine("collections: fetching " + info.id + " from " + url);
+        auto urls = catalog::getFallbackUrls(url);
         net::HttpClient http;
         http.setTimeout(30);
-        auto res = http.httpGet(url);
-        if (res.status_code == 200 && !res.body.empty()) {
-            writeTextFile(cache_path, res.body);
-            body = res.body;
-            from_cache = false;
-            util::logLine("collections: fetched and cached " + info.id +
-                          " (" + std::to_string(body.size()) + " bytes)");
-        } else {
-            util::logLine("collections: fetch failed for " + info.id +
-                          ", status=" + std::to_string(res.status_code));
+        for (const auto& u : urls) {
+            util::logLine("collections: fetching " + info.id + " from " + u);
+            auto res = http.httpGet(u);
+            if (res.status_code == 200 && !res.body.empty()) {
+                writeTextFile(cache_path, res.body);
+                body = res.body;
+                from_cache = false;
+                util::logLine("collections: fetched and cached " + info.id +
+                              " (" + std::to_string(body.size()) + " bytes)");
+                break;
+            } else {
+                util::logLine("collections: fetch failed for " + info.id + " from " + u +
+                              ", status=" + std::to_string(res.status_code));
+            }
         }
     }
 

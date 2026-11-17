@@ -3,6 +3,7 @@
 #include "GameDetailView.hpp"
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
+#include "style/HeaderHints.hpp"
 #include "../catalog/filter_manager.hpp"
 #include "../utils/log.h"
 #include "../installer/installed_ports.h"
@@ -138,6 +139,24 @@ void CollectionGamesView::onContentAvailable() {
         return true;
     });
 
+    this->registerAction("app/homebrew/hint_sort"_i18n, brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+        if (filterState_.sort == catalog::SortOption::DEFAULT) {
+            filterState_.sort = catalog::SortOption::TITLE_ASC;
+            brls::Application::notify("app/filter/sort_title_asc"_i18n);
+        } else if (filterState_.sort == catalog::SortOption::TITLE_ASC) {
+            filterState_.sort = catalog::SortOption::SIZE_DESC;
+            brls::Application::notify("app/filter/sort_size_desc"_i18n);
+        } else if (filterState_.sort == catalog::SortOption::SIZE_DESC) {
+            filterState_.sort = catalog::SortOption::YEAR_DESC;
+            brls::Application::notify("app/filter/sort_year_desc"_i18n);
+        } else {
+            filterState_.sort = catalog::SortOption::DEFAULT;
+            brls::Application::notify("app/filter/sort_default"_i18n);
+        }
+        rebuildDisplay();
+        return true;
+    });
+
     this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
         auto catalog = getCatalogSnapshot();
         FilterSortDialog::show(filterState_, *catalog, [this](const catalog::FilterSortState& newState) {
@@ -147,12 +166,12 @@ void CollectionGamesView::onContentAvailable() {
             resetFilters();
         });
         return true;
-    }, true);
+    }, true /* hidden */);
 
     this->registerAction("", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
         resetFilters();
         return true;
-    }, true);
+    }, true /* hidden */);
 
     recycler->registerCell("Row", []() { return CollectionGameRowCell::create(); });
     recycler->setDataSource(new GamesDataSource(this));
@@ -289,7 +308,10 @@ void CollectionGamesView::rebuildDisplay() {
     } else {
         countStr = brls::getStr("app/collections/games_count", std::to_string(displayIdx_.size()));
     }
-    statsHint->setText(countStr);
+    statsHint->setText(ui::style::headerMeta(countStr, {
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n)
+    }));
 
     if (recycler && recycler->getVisibility() == brls::Visibility::VISIBLE) {
         CollectionGameRowCell::s_lastFocusedColumn = 0;

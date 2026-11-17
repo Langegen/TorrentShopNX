@@ -229,3 +229,12 @@ extern "C" mode_t umask(mode_t mask) {
 
 #endif // __SWITCH__
 
+#ifdef _WIN32
+#include <ctime>
+
+extern "C" struct tm* gmtime_r(const time_t* timep, struct tm* result) {
+    if (!timep || !result) return nullptr;
+    return gmtime_s(result, timep) == 0 ? result : nullptr;
+}
+#endif
+

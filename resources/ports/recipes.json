@@ -29,6 +29,54 @@
           ]
         }
       ]
+    },
+    {
+      "topic_id": "6884802",
+      "title_match": "DuckTales",
+      "game": "ducktales",
+      "default": "cemu",
+      "combinable": false,
+      "note": "DuckTales: Remastered (Cemu NX / LayeredFS)",
+      "variants": [
+        {
+          "id": "cemu",
+          "title": "DuckTales: Remastered",
+          "steps": [
+            { "install_nsp": "DuckTales: Remastered_05EED4700F38A000.nsp" }
+          ],
+          "check": [ "sdmc:/switch/cemu/cemu.nro" ]
+        }
+      ]
+    },
+    {
+      "topic_id": "6083989",
+      "title_match": "Arx Libertatis",
+      "game": "arx",
+      "default": "ru",
+      "combinable": false,
+      "note": "Управление: ZR/ZL мышь, B активация, X оружие, Y прыжок, L+R магия. Файлы в sdmc:/arx/",
+      "variants": [
+        {
+          "id": "ru",
+          "title": "Русская версия (1C-Nival)",
+          "steps": [
+            { "copy": "Homebrew (210721)/arx/", "to": "sdmc:/arx/" },
+            { "extract": "arx_Russian.7z", "to": "sdmc:/" },
+            { "install_nsp": "Arx Libertatis_0580A6E9A8430000.nsp" }
+          ],
+          "check": [ "sdmc:/arx/arx.nro" ]
+        },
+        {
+          "id": "en",
+          "title": "English version (GOG)",
+          "steps": [
+            { "copy": "Homebrew (210721)/arx/", "to": "sdmc:/arx/" },
+            { "extract": "arx_English.7z", "to": "sdmc:/" },
+            { "install_nsp": "Arx Libertatis_0580A6E9A8430000.nsp" }
+          ],
+          "check": [ "sdmc:/arx/arx.nro" ]
+        }
+      ]
     }
   ]
 }

@@ -548,6 +548,40 @@ int main(int argc, char** argv) {
                 }
             }
         }
+
+        // Ensure Chinese fallback font is registered with NVG if needed
+        int zhFont = brls::Application::getFont(brls::FONT_CHINESE_SIMPLIFIED);
+        if (vg && baseFont != brls::FONT_INVALID && zhFont == brls::FONT_INVALID) {
+            std::vector<std::string> candidateZhPaths = {
+                "sdmc:/switch/TorrentShopNX/font/chinese.ttf",
+                "sdmc:/switch/TorrentShopNX/chinese.ttf",
+            };
+#if defined(_WIN32)
+            const char* winDir = getenv("SystemRoot");
+            std::string winFonts = (winDir ? std::string(winDir) : "C:\\Windows") + "\\Fonts\\";
+            candidateZhPaths.push_back(winFonts + "msyh.ttc");
+            candidateZhPaths.push_back(winFonts + "msyh.ttf");
+            candidateZhPaths.push_back(winFonts + "simsun.ttc");
+            candidateZhPaths.push_back(winFonts + "simsun.ttf");
+            candidateZhPaths.push_back(winFonts + "simhei.ttf");
+#elif !defined(__SWITCH__)
+            candidateZhPaths.push_back("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc");
+            candidateZhPaths.push_back("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf");
+#endif
+            for (const auto& path : candidateZhPaths) {
+                if (access(path.c_str(), F_OK) != -1) {
+                    if (brls::Application::loadFontFromFile(brls::FONT_CHINESE_SIMPLIFIED, path)) {
+                        zhFont = brls::Application::getFont(brls::FONT_CHINESE_SIMPLIFIED);
+                        if (zhFont != brls::FONT_INVALID) {
+                            util::logLine("main: loaded Chinese font from: " + path);
+                            nvgAddFallbackFontId(vg, baseFont, zhFont);
+                            util::logLine("main: registered Chinese fallback font");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
     brls::Application::getPlatform()->setThemeVariant(brls::ThemeVariant::LIGHT);
     brls::Application::setGlobalQuit(false);

@@ -58,6 +58,8 @@ private:
     BRLS_BIND(brls::Button, btnFavorite, "btnFavorite");
     BRLS_BIND(brls::Button, btnModCd, "btnModCd");
     BRLS_BIND(brls::Button, btnModKit, "btnModKit");
+
+    brls::View* firstScr_ = nullptr;
 };
 
 } // namespace ui
