@@ -4,6 +4,7 @@
 #include "homebrew_catalog.hpp"
 
 #include "collections_manager.h"
+#include "catalog_fallback.hpp"
 #include "net/http_client.h"
 #include "utils/app_paths.h"
 #include "utils/log.h"
@@ -25,23 +26,33 @@ FetchResult appHttpFetch(const std::string& url, const std::string& etag) {
     if (!etag.empty()) headers.push_back("If-None-Match: " + etag);
 
     net::HttpClient http;
-    const auto res = http.downloadToFileEx(url, tmp, headers, &g_appExiting, 60);
     FetchResult out;
-    out.status = res.not_modified ? 304 : res.http_code;
-    out.etag = res.etag;
-    if (res.success && !res.not_modified) {
-        if (FILE* f = std::fopen(tmp.c_str(), "rb")) {
-            char buf[64 * 1024];
-            size_t n;
-            while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) out.body.append(buf, n);
-            std::fclose(f);
-        } else {
-            out.status = 0;
+    out.status = 0;
+
+    auto candidateUrls = catalog::getFallbackUrls(url);
+    for (const auto& candidateUrl : candidateUrls) {
+        if (g_appExiting.load()) break;
+        const auto res = http.downloadToFileEx(candidateUrl, tmp, headers, &g_appExiting, 60);
+        out.status = res.not_modified ? 304 : res.http_code;
+        out.etag = res.etag;
+        if (res.success && !res.not_modified) {
+            if (FILE* f = std::fopen(tmp.c_str(), "rb")) {
+                char buf[64 * 1024];
+                size_t n;
+                out.body.clear();
+                while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) out.body.append(buf, n);
+                std::fclose(f);
+            } else {
+                out.status = 0;
+            }
+        }
+        std::remove(tmp.c_str());
+        util::logLine("homebrew: GET " + candidateUrl + " -> " + std::to_string(out.status) + ", " +
+                      std::to_string(out.body.size()) + " bytes");
+        if (res.success || res.not_modified) {
+            break;
         }
     }
-    std::remove(tmp.c_str());
-    util::logLine("homebrew: GET " + url + " -> " + std::to_string(out.status) + ", " +
-                  std::to_string(out.body.size()) + " bytes");
     return out;
 }
 

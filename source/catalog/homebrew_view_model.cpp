@@ -83,6 +83,9 @@ std::vector<ViewItem> buildView(const PackageList& pkgs, const InstalledMap& ins
                 if (a.pkg->downloads != b.pkg->downloads) return a.pkg->downloads > b.pkg->downloads;
                 return by_updated(a, b);
             case SortMode::Updated: return by_updated(a, b);
+            case SortMode::Size:
+                if (a.pkg->download_bytes != b.pkg->download_bytes) return a.pkg->download_bytes > b.pkg->download_bytes;
+                return by_name(a, b);
             case SortMode::Name:
             case SortMode::Count: break;
         }

@@ -1699,6 +1699,33 @@ void LibraryView::scanForUpdates() {
             }), displayItems.end());
         }
 
+        // Heuristic: identify manually installed forwarders / ports (Title ID starts with 0x05)
+        for (auto& it : displayItems) {
+            if (!it.isPort && ((it.titleId >> 56) == 0x05)) {
+                if (it.status == GameUpdateStatus::Unknown || it.game.title_id.empty()) {
+                    it.isPort = true;
+                    if (it.portVariant.empty()) {
+                        it.portVariant = "Port / Homebrew";
+                    }
+                    if (it.game.title.empty()) {
+                        it.game.title = it.rawName;
+                    }
+                    if (catalog && it.game.title_id.empty() && !it.rawName.empty()) {
+                        std::string lowerRaw = it.rawName;
+                        std::transform(lowerRaw.begin(), lowerRaw.end(), lowerRaw.begin(), ::tolower);
+                        for (const auto& c : *catalog) {
+                            std::string lowerCat = c.title;
+                            std::transform(lowerCat.begin(), lowerCat.end(), lowerCat.begin(), ::tolower);
+                            if (lowerCat.find(lowerRaw) != std::string::npos || lowerRaw.find(lowerCat) != std::string::npos) {
+                                it.game = c;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Sync with UI thread
         brls::sync([this, cancelToken, items = std::move(displayItems)]() mutable {
             if (cancelToken && *cancelToken) return;
