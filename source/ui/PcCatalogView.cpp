@@ -136,7 +136,7 @@ public:
 
                 cards[i].card->registerAction("app/actions/toggle_favorite"_i18n, brls::ControllerButton::BUTTON_Y, [game](brls::View* view) {
                     bool fav = catalog::FavoritesManager::instance().toggleFavorite(game);
-                    brls::Application::notify(fav ? "app/catalog/added_to_favorites"_i18n : "app/catalog/removed_from_favorites"_i18n);
+                    brls::Application::notify(fav ? "app/favorites/added"_i18n : "app/favorites/removed"_i18n);
                     return true;
                 });
 

@@ -22,7 +22,9 @@
         "continue": "Continue",
         "later": "Later",
         "restart": "Restart",
-        "error": "Error"
+        "error": "Error",
+        "confirm": "Confirm",
+        "processing": "Processing..."
     },
     "actions": {
         "search": "Search",

@@ -22,7 +22,9 @@
         "continue": "Продолжить",
         "later": "Позже",
         "restart": "Перезапустить",
-        "error": "Ошибка"
+        "error": "Ошибка",
+        "confirm": "Подтвердить",
+        "processing": "Обработка..."
     },
     "actions": {
         "search": "Поиск",

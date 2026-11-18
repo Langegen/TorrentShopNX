@@ -7,7 +7,7 @@
         "settings": "Einstellungen",
         "footer": "TorrentShopNX v2.4 | Spiele im Katalog: {0}",
         "disclaimer": "Hinweis: Verwendet Torrent-Protokolle. Lokale Gesetze beachten. Die Autoren übernehmen keine Haftung.",
-        "retro_games": "Homebrew & Retro",
+        "retro_games": "Homebrew, Retro & PC",
         "exit_confirm_active_download": "Möchten Sie die Anwendung wirklich beenden?\nEin Download ist noch aktiv."
     },
     "common": {
@@ -22,7 +22,9 @@
         "continue": "Weiter",
         "later": "Später",
         "restart": "Neu starten",
-        "error": "Fehler"
+        "error": "Fehler",
+        "confirm": "Bestätigen",
+        "processing": "Wird verarbeitet..."
     },
     "actions": {
         "search": "Suchen",
@@ -201,7 +203,9 @@
         "expand": "Ausklappen",
         "comp_base_game": "Basisspiel",
         "comp_patch": "Update {0}",
-        "comp_patch_plain": "Update"
+        "comp_patch_plain": "Update",
+        "saved_to_sd": "Auf SD gespeichert",
+        "error_fat32_limit": "Dateien über 4 GB werden vom FAT32-Dateisystem nicht unterstützt"
     },
     "detail": {
         "unknown_publisher": "Unbekannter Publisher",
@@ -245,7 +249,8 @@
         "modcd_has_mods_btn": "Mods in ModCD",
         "modcd_installed_btn": "Mods in ModCD (Installiert)",
         "modkit_warn_btn": "ModKitNX erforderlich",
-        "modkit_installed_btn": "ModKitNX installiert"
+        "modkit_installed_btn": "ModKitNX installiert",
+        "download_no_install_btn": "Herunterladen ohne Installation"
     },
     "fileselect": {
         "title": "Torrent-Dateien",
@@ -315,7 +320,14 @@
         "extra_files_bundle": "Zusatzdateien [{0}]",
         "folder_prefix": "Ordner: ",
         "parent_folder": ".. (Übergeordneter Ordner)",
-        "toggle_folder": "Ordner auswählen"
+        "toggle_folder": "Ordner auswählen",
+        "subtitle_no_install": "NSPs/NSZs ohne Installation auf SD-Karte speichern",
+        "target_mode_lbl": "Modus (Klicken zum Ändern):",
+        "loc_no_install": "SD-Karte (ohne Installation)",
+        "fat32_badge": "FAT32 > 4 GB",
+        "fat32_file_too_large_notice": "Datei überschreitet 4 GB. FAT32-Karten können keine Dateien über 4 GB speichern.",
+        "fat32_cannot_download_dlg": "Die Datei „{0}“ ({1}) überschreitet 4 GB.\n\nDas FAT32-Dateisystem unterstützt keine Dateien über 4 GB ohne Installation.",
+        "fat32_all_files_too_large": "Alle Dateien überschreiten 4 GB und können nicht auf einer FAT32-Karte gespeichert werden"
     },
     "remote": {
         "title": "Torrent hinzufügen",
@@ -1243,7 +1255,8 @@
         "variant_main": "Hauptversion",
         "variant_all": "Alle Versionen",
         "variant_default": "Standardinstallation",
-        "variant_folder": "Version „{0}“"
+        "variant_folder": "Version „{0}“",
+        "preview_data_note": "Port erfordert Original-Spieldateien auf der SD-Karte und sys-patch für Verknüpfungen"
     },
     "plural": {
         "games_one": "{0} Spiel",
@@ -1470,7 +1483,9 @@
         "update_all": "Alle aktualisieren ({})",
         "update_all_confirm": "{} Apps aktualisieren?",
         "update_all_done": "{} von {} aktualisiert",
-        "update_all_progress": "Aktualisiere {} von {}: {}"
+        "update_all_progress": "Aktualisiere {} von {}: {}",
+        "tab_pc": "PC-Spiele",
+        "sort_size": "Nach Größe"
     },
     "modcd": {
         "dialog_title": "Mods in ModCD",
@@ -1497,5 +1512,30 @@
         "install_error": "Fehler beim Installieren der Anwendung",
         "cancelled": "Installation abgebrochen",
         "cancelling": "Installation wird abgebrochen..."
+    },
+    "pc": {
+        "title": "PC-Spiele",
+        "all_catalog": "Gesamter Katalog",
+        "all_catalog_desc": "Alle PC-Spiele im Katalog",
+        "new_games": "Neuerscheinungen",
+        "new_games_desc": "Frische Rutracker-Releases",
+        "games_count": "{} Spiele",
+        "sec_main": "HAUPTSEITE",
+        "sec_genres": "GENRES",
+        "sec_strategies": "STRATEGIE",
+        "sec_actions": "ACTION",
+        "sec_quests": "ABENTEUER & QUESTS",
+        "sec_retro": "ALTE SPIELE (RETRO PC)",
+        "download_all": "Gesamtes Release herunterladen",
+        "select_files": "Dateien auswählen",
+        "download_hint": "Dateien werden in sdmc:/pc_games/ gespeichert",
+        "update_catalog_btn": "PC-Katalog aktualisieren",
+        "updating_catalog": "PC-Spielekatalog wird heruntergeladen...",
+        "catalog_updated": "PC-Katalog erfolgreich aktualisiert",
+        "catalog_update_error": "Fehler beim Aktualisieren des PC-Katalogs",
+        "badge_pc": "PC",
+        "badge_portable": "Portable",
+        "stats_hint": "Katalog: {} Spiele",
+        "stats_hint_update": "[-] Aktualisieren"
     }
 }
