@@ -7,7 +7,7 @@
         "settings": "Settings",
         "footer": "TorrentShopNX v2.4 | Games in catalog: {0}",
         "disclaimer": "Disclaimer: Uses torrent protocols. Verify local torrent laws before use. Authors accept no liability for misuse.",
-        "retro_games": "Homebrew & Retro",
+        "retro_games": "Homebrew, Retro & PC",
         "exit_confirm_active_download": "Are you sure you want to exit?\nAn active download is in progress."
     },
     "common": {
@@ -22,7 +22,9 @@
         "continue": "Continue",
         "later": "Later",
         "restart": "Restart",
-        "error": "Error"
+        "error": "Error",
+        "confirm": "Confirm",
+        "processing": "Processing..."
     },
     "actions": {
         "search": "Search",
@@ -156,6 +158,8 @@
         "eta_s": "ETA: {0}s",
         "elapsed": "Time: {0}",
         "saved_to": "Saved to: {0}",
+        "saved_to_sd": "Saved to SD",
+        "error_fat32_limit": "File over 4 GB is not supported by FAT32 filesystem",
         "installed": "Installed",
         "release_completed": "All files in release downloaded: {0}",
         "unknown_error": "Unknown error",
@@ -211,6 +215,7 @@
         "description_header": "Description",
         "screenshots_header": "Screenshots",
         "download_btn": "Download",
+        "download_no_install_btn": "Download without installing",
         "add_favorite_btn": "Add to Favorites",
         "remove_favorite_btn": "Remove Favorite",
         "torrent_link_btn": "QR / Link",
@@ -250,6 +255,7 @@
     "fileselect": {
         "title": "File Selection",
         "subtitle": "Select files to download from torrent",
+        "subtitle_no_install": "Saving NSPs/NSZs to SD card without installing",
         "sdk_game": "Game SDK: {0}",
         "sdk_console": "Console SDK: {0}",
         "sdk_warning": "⚠ Game SDK ({0}) exceeds console SDK ({1}) — game may not launch!",
@@ -262,9 +268,15 @@
         "free_nand": "Free on Console: {0}",
         "free_unknown": "---",
         "install_location_lbl": "Install location (click to change):",
+        "target_mode_lbl": "Mode (click to change):",
         "loc_auto": "Auto",
         "loc_sd": "SD Card",
         "loc_nand": "Console Memory",
+        "loc_no_install": "SD Card (no install)",
+        "fat32_badge": "FAT32 > 4 GB",
+        "fat32_file_too_large_notice": "File exceeds 4 GB. FAT32 cards cannot store files larger than 4 GB.",
+        "fat32_cannot_download_dlg": "File '{0}' ({1}) exceeds 4 GB.\n\nFAT32 filesystem does not support files larger than 4 GB without installing.",
+        "fat32_all_files_too_large": "All files exceed 4 GB and cannot be saved to a FAT32 card",
         "group_uninstalled": "NOT INSTALLED",
         "group_other": "OTHER FILES (PATCHES & EXTRA FILES)",
         "group_installed": "INSTALLED",
@@ -1353,6 +1365,7 @@
     "homebrew": {
         "title": "Homebrew",
         "tab_retro": "Retro",
+        "tab_pc": "PC Games",
         "cat_all": "All",
         "cat_apps": "Apps",
         "cat_games": "Games",
@@ -1499,5 +1512,30 @@
         "install_error": "Error installing application",
         "cancelled": "Installation cancelled",
         "cancelling": "Cancelling installation..."
+    },
+    "pc": {
+        "title": "PC Games",
+        "all_catalog": "Full Catalog",
+        "all_catalog_desc": "All PC games in catalog",
+        "new_games": "New Releases",
+        "new_games_desc": "Fresh Rutracker releases",
+        "games_count": "{} games",
+        "sec_main": "MAIN",
+        "sec_genres": "GENRES",
+        "sec_strategies": "STRATEGY",
+        "sec_actions": "ACTION",
+        "sec_quests": "ADVENTURE & QUESTS",
+        "sec_retro": "OLD GAMES (RETRO PC)",
+        "download_all": "Download entire release",
+        "select_files": "Select files",
+        "download_hint": "Files saved to sdmc:/pc_games/",
+        "update_catalog_btn": "Update PC catalog",
+        "updating_catalog": "Downloading PC games catalog...",
+        "catalog_updated": "PC catalog updated successfully",
+        "catalog_update_error": "Failed to update PC catalog",
+        "badge_pc": "PC",
+        "badge_portable": "Portable",
+        "stats_hint": "Catalog: {} games",
+        "stats_hint_update": "[-] Update"
     }
 }

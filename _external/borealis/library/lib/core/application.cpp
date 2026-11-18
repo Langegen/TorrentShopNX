@@ -20,6 +20,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 #include <yoga/YGNode.h>
 #include <yoga/event/event.h>
 
@@ -826,6 +829,26 @@ AudioPlayer* Application::getAudioPlayer()
 
 void Application::quit()
 {
+    util::logLine("Application::quit() CALLED!");
+#if defined(_WIN32)
+    void* stack[16];
+    typedef unsigned short (WINAPI *CSBT)(unsigned long, unsigned long, void**, unsigned long*);
+    HMODULE hK32 = GetModuleHandleA("kernel32.dll");
+    if (hK32) {
+        CSBT pCSBT = (CSBT)GetProcAddress(hK32, "RtlCaptureStackBackTrace");
+        if (pCSBT) {
+            uintptr_t base = (uintptr_t)GetModuleHandleA(NULL);
+            unsigned short frames = pCSBT(0, 16, stack, NULL);
+            for (unsigned short i = 0; i < frames; ++i) {
+                char b[128];
+                std::snprintf(b, sizeof(b), "  quit frame [%02u] 0x%llx (offset: 0x%llx)",
+                              (unsigned)i, (unsigned long long)stack[i],
+                              (unsigned long long)((uintptr_t)stack[i] - base));
+                util::logLine(b);
+            }
+        }
+    }
+#endif
     Application::quitRequested = true;
 }
 

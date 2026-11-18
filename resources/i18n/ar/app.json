@@ -7,7 +7,7 @@
         "settings": "الإعدادات",
         "footer": "TorrentShopNX v2.17 | الألعاب في الكتالوج: {0}",
         "disclaimer": "إخلاء مسؤولية: يستخدم هذا التطبيق بروتوكولات التورنت. يرجى مراجعة القوانين المحلية قبل الاستخدام. لا يتحمل المطورون أي مسؤولية عن سوء الاستخدام.",
-        "retro_games": "هوم برو وريترو",
+        "retro_games": "هوم برو، ريترو وحاسوب",
         "exit_confirm_active_download": "هل أنت متأكد من رغبتك في الخروج؟\nهناك تنزيل نشط قيد التقدم."
     },
     "common": {
@@ -22,7 +22,9 @@
         "continue": "متابعة",
         "later": "لاحقاً",
         "restart": "إعادة التشغيل",
-        "error": "خطأ"
+        "error": "خطأ",
+        "confirm": "تأكيد",
+        "processing": "جارٍ المعالجة..."
     },
     "actions": {
         "search": "بحث",
@@ -201,7 +203,9 @@
         "expand": "توسيع",
         "comp_base_game": "اللعبة الأساسية",
         "comp_patch": "تحديث {0}",
-        "comp_patch_plain": "تحديث"
+        "comp_patch_plain": "تحديث",
+        "saved_to_sd": "تم الحفظ على SD",
+        "error_fat32_limit": "الملف الأكبر من 4 غيغابايت غير مدعوم في نظام ملفات FAT32"
     },
     "detail": {
         "description_header": "الوصف",
@@ -245,7 +249,8 @@
         "modcd_has_mods_btn": "تعديلات في ModCD",
         "modcd_installed_btn": "تعديلات في ModCD (مثبت)",
         "modkit_warn_btn": "يتطلب ModKitNX",
-        "modkit_installed_btn": "ModKitNX مثبت"
+        "modkit_installed_btn": "ModKitNX مثبت",
+        "download_no_install_btn": "تنزيل بدون تثبيت"
     },
     "fileselect": {
         "title": "اختيار الملفات",
@@ -315,7 +320,14 @@
         "warn_nand_space": "المساحة غير كافية على ذاكرة NAND",
         "warn_ram_applet": "وضع التطبيق المصغر يحد من الذاكرة العشوائية RAM",
         "warn_ram_nsp": "الذاكرة العشوائية RAM غير كافية لمعالجة الملف",
-        "warn_sd_space": "المساحة غير كافية على بطاقة SD"
+        "warn_sd_space": "المساحة غير كافية على بطاقة SD",
+        "subtitle_no_install": "حفظ NSPs/NSZs على بطاقة SD بدون تثبيت",
+        "target_mode_lbl": "الوضع (انقر للتغيير):",
+        "loc_no_install": "بطاقة SD (بدون تثبيت)",
+        "fat32_badge": "FAT32 > 4 غيغابايت",
+        "fat32_file_too_large_notice": "يتجاوز حجم الملف 4 غيغابايت. لا يمكن لبطاقات FAT32 تخزين ملفات أكبر من 4 غيغابايت.",
+        "fat32_cannot_download_dlg": "الملف «{0}» ({1}) يتجاوز 4 غيغابايت.\n\nلا يدعم نظام ملفات FAT32 ملفات أكبر من 4 غيغابايت دون تثبيتها في النظام.",
+        "fat32_all_files_too_large": "جميع الملفات تتجاوز 4 غيغابايت ولا يمكن حفظها على بطاقة FAT32"
     },
     "remote": {
         "title": "إضافة عن بُعد",
@@ -1243,7 +1255,8 @@
         "variant_main": "النسخة الرئيسية",
         "variant_all": "جميع النسخ",
         "variant_default": "تثبيت قياسي",
-        "variant_folder": "النسخة \"{0}\""
+        "variant_folder": "النسخة \"{0}\"",
+        "preview_data_note": "يتطلب المنفذ ملفات بيانات اللعبة الأصلية على SD و sys-patch للاختصارات"
     },
     "plural": {
         "games_one": "لعبة واحدة",
@@ -1470,7 +1483,9 @@
         "update_all": "تحديث الكل ({})",
         "update_all_confirm": "تحديث {} تطبيقات؟",
         "update_all_done": "تم تحديث {} من {}",
-        "update_all_progress": "جارٍ تحديث {} من {}: {}"
+        "update_all_progress": "جارٍ تحديث {} من {}: {}",
+        "tab_pc": "ألعاب الحاسوب",
+        "sort_size": "حسب الحجم"
     },
     "modcd": {
         "dialog_title": "تعديلات في ModCD",
@@ -1497,5 +1512,30 @@
         "install_error": "خطأ أثناء تثبيت التطبيق",
         "cancelled": "تم إلغاء التثبيت",
         "cancelling": "جارٍ إلغاء التثبيت..."
+    },
+    "pc": {
+        "title": "ألعاب الحاسوب",
+        "all_catalog": "الكتالوج الكامل",
+        "all_catalog_desc": "جميع ألعاب كتالوج الحاسوب",
+        "new_games": "أحدث الألعاب",
+        "new_games_desc": "إصدارات Rutracker الحديثة",
+        "games_count": "{} لعبة",
+        "sec_main": "الرئيسية",
+        "sec_genres": "الأنواع",
+        "sec_strategies": "استراتيجية",
+        "sec_actions": "حركة وأكشن",
+        "sec_quests": "مغامرات وألغاز",
+        "sec_retro": "ألعاب قديمة (حاسوب ريترو)",
+        "download_all": "تنزيل الإصدار بالكامل",
+        "select_files": "تحديد الملفات",
+        "download_hint": "يتم حفظ الملفات في sdmc:/pc_games/",
+        "update_catalog_btn": "تحديث كتالوج الحاسوب",
+        "updating_catalog": "جارٍ تنزيل كتالوج ألعاب الحاسوب...",
+        "catalog_updated": "تم تحديث كتالوج الحاسوب بنجاح",
+        "catalog_update_error": "فشل تحديث كتالوج ألعاب الحاسوب",
+        "badge_pc": "حاسوب",
+        "badge_portable": "نسخة محمولة",
+        "stats_hint": "الكتالوج: {} لعبة",
+        "stats_hint_update": "[-] تحديث"
     }
 }

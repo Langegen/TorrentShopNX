@@ -7,7 +7,7 @@
         "settings": "设置",
         "footer": "TorrentShopNX v2.4 | 目录中游戏总数: {0}",
         "disclaimer": "免责声明: 使用BT协议。请在使用前确认当地法律法规。开发者对滥用概不负责。",
-        "retro_games": "自制软件与复古",
+        "retro_games": "自制软件、复古与PC",
         "exit_confirm_active_download": "您确定要退出吗？\n当前有正在进行的下载任务。"
     },
     "common": {
@@ -22,7 +22,9 @@
         "continue": "继续",
         "later": "稍后",
         "restart": "重启",
-        "error": "错误"
+        "error": "错误",
+        "confirm": "确认",
+        "processing": "正在处理..."
     },
     "actions": {
         "search": "搜索",
@@ -201,7 +203,9 @@
         "expand": "展开",
         "comp_base_game": "游戏本体",
         "comp_patch": "更新补丁 {0}",
-        "comp_patch_plain": "更新补丁"
+        "comp_patch_plain": "更新补丁",
+        "saved_to_sd": "已保存到 SD 卡",
+        "error_fat32_limit": "FAT32 文件系统不支持大于 4 GB 的文件"
     },
     "detail": {
         "unknown_publisher": "未知发行商",
@@ -245,7 +249,8 @@
         "modcd_has_mods_btn": "ModCD 中的模组",
         "modcd_installed_btn": "ModCD 中的模组 (已安装)",
         "modkit_warn_btn": "需要 ModKitNX",
-        "modkit_installed_btn": "ModKitNX 已安装"
+        "modkit_installed_btn": "ModKitNX 已安装",
+        "download_no_install_btn": "下载但不安装"
     },
     "fileselect": {
         "title": "种子包含文件",
@@ -315,7 +320,14 @@
         "extra_files_bundle": "附加文件 [{0}]",
         "folder_prefix": "文件夹: ",
         "parent_folder": ".. (上一级目录)",
-        "toggle_folder": "选择文件夹"
+        "toggle_folder": "选择文件夹",
+        "subtitle_no_install": "保存 NSP/NSZ 到 SD 卡（不安装）",
+        "target_mode_lbl": "模式（点击切换）：",
+        "loc_no_install": "SD 卡（不安装）",
+        "fat32_badge": "FAT32 > 4 GB",
+        "fat32_file_too_large_notice": "文件超过 4 GB。FAT32 格式卡无法存储大于 4 GB 的文件。",
+        "fat32_cannot_download_dlg": "文件“{0}”（{1}）超过 4 GB。\n\nFAT32 文件系统不支持在不安装到系统的情况下存储大于 4 GB 的文件。",
+        "fat32_all_files_too_large": "所有文件均超过 4 GB，无法保存到 FAT32 卡"
     },
     "remote": {
         "title": "添加种子",
@@ -1243,7 +1255,8 @@
         "variant_main": "主版本",
         "variant_all": "全部版本",
         "variant_default": "标准安装",
-        "variant_folder": "版本“{0}”"
+        "variant_folder": "版本“{0}”",
+        "preview_data_note": "移植版需要 SD 卡上的游戏原版数据文件以及用于快捷方式的 sys-patch"
     },
     "plural": {
         "games_one": "{0} 款游戏",
@@ -1470,7 +1483,9 @@
         "update_all": "全部更新 ({})",
         "update_all_confirm": "更新 {} 个应用?",
         "update_all_done": "已更新 {}/{}",
-        "update_all_progress": "正在更新 {}/{}: {}"
+        "update_all_progress": "正在更新 {}/{}: {}",
+        "tab_pc": "PC 游戏",
+        "sort_size": "按大小"
     },
     "modcd": {
         "dialog_title": "ModCD 中的模组",
@@ -1497,5 +1512,30 @@
         "install_error": "安装应用程序时出错",
         "cancelled": "安装已取消",
         "cancelling": "正在取消安装..."
+    },
+    "pc": {
+        "title": "PC 游戏",
+        "all_catalog": "完整目录",
+        "all_catalog_desc": "PC 目录中的所有游戏",
+        "new_games": "最新游戏",
+        "new_games_desc": "Rutracker 最新发布资源",
+        "games_count": "{} 款游戏",
+        "sec_main": "主要",
+        "sec_genres": "分类",
+        "sec_strategies": "策略",
+        "sec_actions": "动作",
+        "sec_quests": "冒险与解谜",
+        "sec_retro": "怀旧经典（复古 PC）",
+        "download_all": "下载全部内容",
+        "select_files": "选择文件",
+        "download_hint": "文件将保存至 sdmc:/pc_games/",
+        "update_catalog_btn": "更新 PC 目录",
+        "updating_catalog": "正在下载 PC 游戏目录...",
+        "catalog_updated": "PC 目录更新成功",
+        "catalog_update_error": "更新 PC 目录失败",
+        "badge_pc": "PC",
+        "badge_portable": "免安装版",
+        "stats_hint": "总计：{} 款游戏",
+        "stats_hint_update": "[-] 更新"
     }
 }

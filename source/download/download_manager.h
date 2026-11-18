@@ -199,6 +199,8 @@ struct DownloadItem {
     std::shared_ptr<FileDownloadState> file_dl_state;
     std::string file_dl_dest;   // итоговый путь (для логов/UI)
     bool is_homebrew = false;   // Homebrew/порт: скачивается как файл(ы) в downloads/ без установки
+    bool is_pc = false;         // ПК игра: скачивается в sdmc:/pc_games/<раздача>/
+    bool no_install = false;    // Режим «Скачать без установки»: сохранение NSPs/NSZs на SD-карту
     std::string retro_console_id;
     std::string retro_result_key;   // i18n key of the finished retro download
 
@@ -234,7 +236,9 @@ public:
                       int forced_file_index = -1,
                       const std::string& forced_stream_name = "",
                       bool is_homebrew = false,
-                      const std::string& retro_console_id = "");
+                      const std::string& retro_console_id = "",
+                      bool is_pc = false,
+                      bool no_install = false);
     size_t addPortInstall(const std::string& title,
                           const std::string& magnet,
                           std::shared_ptr<installer::PortInstallPlan> plan,

@@ -27,7 +27,7 @@ namespace ui {
 namespace {
 
 bool isFileDownloadItem(const download::DownloadItem& item) {
-    if (item.is_homebrew || !item.retro_console_id.empty() || item.file_dl_dispatched || !item.file_dl_dest.empty()) {
+    if (item.is_homebrew || item.no_install || !item.retro_console_id.empty() || item.file_dl_dispatched || !item.file_dl_dest.empty()) {
         return true;
     }
     if (!item.forced_stream_name.empty() && !util::isGamePackage(item.forced_stream_name)) {
@@ -1285,9 +1285,12 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         cell->statsText->setText(formatEta(group.dl_speed_kbps, remaining_dl));
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (group.state == download::DownloadState::Completed) {
+        size_t qidx = group.item_indices.empty() ? static_cast<size_t>(-1) : group.item_indices.front();
         if (!group.retro_console_id.empty()) {
             cell->statsText->setText(group.retro_result_key.empty()
                 ? "app/retro/ready_to_play"_i18n : brls::getStr(group.retro_result_key));
+        } else if (qidx < queue.size() && isFileDownloadItem(queue[qidx])) {
+            cell->statsText->setText("app/downloads/saved_to_sd"_i18n);
         } else {
             cell->statsText->setText("app/downloads/installed"_i18n);
         }

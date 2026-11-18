@@ -353,6 +353,42 @@ void GameDetailView::onContentAvailable() {
         }
     }
 
+    // PC Games badges
+    if (isPcGame(game_)) {
+        isPcRelease_ = true;
+        btnDownload->setText("app/detail/download_btn"_i18n);
+
+        brls::Box* pcBadge = new brls::Box();
+        pcBadge->setPadding(5, 10, 5, 10);
+        pcBadge->setMarginRight(10);
+        pcBadge->setMarginBottom(10);
+        pcBadge->setBackgroundColor(nvgRGB(30, 136, 229)); // Blue
+        pcBadge->setCornerRadius(6);
+
+        brls::Label* pcLabel = new brls::Label();
+        pcLabel->setText("app/pc/badge_pc"_i18n);
+        pcLabel->setFontSize(14);
+        pcLabel->setTextColor(nvgRGB(255, 255, 255));
+        pcBadge->addView(pcLabel);
+        badgesBox->addView(pcBadge);
+
+        if (game_.image_format == "Portable" || game_.title.find("[Portable]") != std::string::npos) {
+            brls::Box* portBadge = new brls::Box();
+            portBadge->setPadding(5, 10, 5, 10);
+            portBadge->setMarginRight(10);
+            portBadge->setMarginBottom(10);
+            portBadge->setBackgroundColor(nvgRGB(230, 124, 115)); // Portable Orange
+            portBadge->setCornerRadius(6);
+
+            brls::Label* portLabel = new brls::Label();
+            portLabel->setText("app/pc/badge_portable"_i18n);
+            portLabel->setFontSize(14);
+            portLabel->setTextColor(nvgRGB(255, 255, 255));
+            portBadge->addView(portLabel);
+            badgesBox->addView(portBadge);
+        }
+    }
+
     // Port installed by the auto-installer (has a manifest)
     if ((isHomebrewGame(game_) || isHomebrewPort(game_)) && ui::isPortInstalled(game_)) {
         btnDownload->setText("app/ports/installed_btn"_i18n);
@@ -494,17 +530,41 @@ void GameDetailView::onContentAvailable() {
     
     // Buttons Actions
     const bool isPortRelease = retro_console_id_.empty() && (isHomebrewGame(game_) || isHomebrewPort(game_));
-    isSwitchRelease_ = retro_console_id_.empty() && !isPortRelease && catalog::releaseAppId(game_) != 0;
-    if (isPortRelease || !retro_console_id_.empty()) {
-        // Ports and retro games: picking files by hand is the advanced path, kept on X.
+    isPcRelease_ = isPcGame(game_);
+    isSwitchRelease_ = retro_console_id_.empty() && !isPortRelease && !isPcRelease_ && catalog::releaseAppId(game_) != 0;
+    if (isPortRelease || !retro_console_id_.empty() || isPcRelease_) {
+        // Ports, retro games, and PC games: picking files by hand is on X
         btnDownload->registerAction("app/detail/select_files_btn"_i18n, brls::ControllerButton::BUTTON_X,
                                     [this](brls::View*) {
             brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
             return true;
         });
+    } else {
+        // Switch games: X is "Download without installing" (saves raw NSPs/NSZs to SD card)
+        btnDownload->registerAction("app/detail/download_no_install_btn"_i18n, brls::ControllerButton::BUTTON_X,
+                                    [this](brls::View*) {
+            brls::Application::pushActivity(new FileSelectView(game_, "", true /* no_install */));
+            return true;
+        });
     }
 
     btnDownload->registerClickAction([this, isPortRelease](brls::View* view) {
+        if (isPcRelease_) {
+            auto* dialog = new brls::Dialog(cleanTitle(game_.title));
+            dialog->setCancelable(true);
+            dialog->addButton("app/pc/download_all"_i18n, [this]() {
+                ui::DownloadManager::instance().addDownload(game_, {}, -1, "");
+                brls::sync([]() {
+                    brls::Application::pushActivity(new ui::DownloadsView());
+                });
+            });
+            dialog->addButton("app/pc/select_files"_i18n, [this]() {
+                brls::Application::pushActivity(new FileSelectView(game_));
+            });
+            dialog->addButton("app/common/cancel"_i18n, []() {});
+            dialog->open();
+            return true;
+        }
         // Ports: "Download" starts the installer straight away (file list ->
         // version -> where files go). "Files only" is offered in that preview.
         if (isPortRelease) {

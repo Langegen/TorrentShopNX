@@ -383,7 +383,42 @@ static bool checkAndApplyPendingUpdate(bool relaunch) {
 }
 #endif // __SWITCH__
 
+#if defined(_WIN32)
+#include <dbghelp.h>
+
+static LONG WINAPI Win32CrashHandler(EXCEPTION_POINTERS* ep) {
+    char buf[512];
+    std::snprintf(buf, sizeof(buf), "=== CRASH: Code 0x%08lX at address %p ===",
+                  (unsigned long)ep->ExceptionRecord->ExceptionCode,
+                  ep->ExceptionRecord->ExceptionAddress);
+    util::logLine(buf);
+
+    void* stack[32];
+    USHORT frames = CaptureStackBackTrace(0, 32, stack, NULL);
+    for (USHORT i = 0; i < frames; ++i) {
+        std::snprintf(buf, sizeof(buf), "  frame [%02u] %p", i, stack[i]);
+        util::logLine(buf);
+    }
+
+    HANDLE hFile = CreateFileA("crash.dmp", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        MINIDUMP_EXCEPTION_INFORMATION mei;
+        mei.ThreadId = GetCurrentThreadId();
+        mei.ExceptionPointers = ep;
+        mei.ClientPointers = FALSE;
+        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile, MiniDumpWithFullMemory, &mei, NULL, NULL);
+        CloseHandle(hFile);
+        util::logLine("Saved minidump to crash.dmp");
+    }
+    util::logFlush();
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    SetUnhandledExceptionFilter(Win32CrashHandler);
+#endif
     std::set_terminate([]() {
         std::string err = "std::terminate called!";
         std::exception_ptr ex = std::current_exception();

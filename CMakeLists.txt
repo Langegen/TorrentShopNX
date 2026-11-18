@@ -108,6 +108,7 @@ target_link_libraries(TorrentShopNX PRIVATE
     crypto
     crypt32
     winmm
+    dbghelp
     iconv
     z
     pthread

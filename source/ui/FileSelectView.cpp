@@ -310,7 +310,7 @@ uint64_t torrentFileTitleId(const std::string& filename, const std::string& game
     return resolveFileTitleId(filename, gameTitleId);
 }
 
-void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file) {
+void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file, bool no_install) {
     std::vector<int> singleSelected = { file.index };
     Game singleGame = game;
     singleGame.title = cleanTitle(game.title);
@@ -320,7 +320,7 @@ void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file) 
     unsigned long long pkgSize = (file.size > 0) ? static_cast<unsigned long long>(file.size) : 0;
     ui::DownloadManager::instance().addDownload(
         singleGame, singleSelected, file.index, file.name, "",
-        game.topic_id, cleanTitle(game.title), comp.label, comp.cleanName, comp.type, pkgSize);
+        game.topic_id, cleanTitle(game.title), comp.label, comp.cleanName, comp.type, pkgSize, no_install);
 }
 
 namespace {
@@ -400,9 +400,10 @@ void showOldUpdateWarning(const ReleaseUpdateCheck& r) {
 
 std::atomic<bool> g_file_select_view_active{false};
 
-FileSelectView::FileSelectView(const Game& game, const std::string& retro_console_id)
+FileSelectView::FileSelectView(const Game& game, const std::string& retro_console_id, bool no_install)
     : game_(game),
       retro_console_id_(retro_console_id),
+      noInstall_(no_install),
       alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
     g_file_select_view_active = true;
     // Background cover downloads compete for BSD sockets/sessions with the
@@ -471,6 +472,12 @@ void FileSelectView::onContentAvailable() {
             installLocationText->setText(catalog::RetroCatalogManager::instance().getTargetDir(retro_console_id_));
             installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
         }
+    } else if (isPcGame(game_)) {
+        if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+        if (installLocationText) {
+            installLocationText->setText(TSNX_PC_GAMES_DIR);
+            installLocationText->setTextColor(ThemeManager::instance().getAccentColor());
+        }
     } else if (isHomebrewGame(game_)) {
         if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
         if (installLocationText) {
@@ -480,6 +487,18 @@ void FileSelectView::onContentAvailable() {
     } else {
         auto updateInstallLocationDisplay = [this, &cfg]() {
             if (!installLocationText) return;
+            if (noInstall_) {
+                if (installLocationLabel) {
+                    installLocationLabel->setText("app/fileselect/target_mode_lbl"_i18n);
+                }
+                installLocationText->setText("app/fileselect/loc_no_install"_i18n);
+                installLocationText->setTextColor(nvgRGB(46, 204, 113)); // green
+                if (freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
+                return;
+            }
+            if (installLocationLabel) {
+                installLocationLabel->setText("app/fileselect/install_location_lbl"_i18n);
+            }
             std::string loc = cfg.getInstallLocation();
             if (loc == "sd") {
                 installLocationText->setText("app/fileselect/loc_sd"_i18n);
@@ -496,11 +515,24 @@ void FileSelectView::onContentAvailable() {
 
         if (installLocationBox) {
             installLocationBox->registerClickAction([this, updateInstallLocationDisplay, &cfg](brls::View* view) {
+                if (noInstall_) {
+                    noInstall_ = false;
+                    updateInstallLocationDisplay();
+                    updateTotalSize();
+                    rebuildFileList();
+                    return true;
+                }
                 std::string loc = cfg.getInstallLocation();
                 if (loc == "auto") {
                     cfg.setInstallLocation("sd");
                 } else if (loc == "sd") {
                     cfg.setInstallLocation("nand");
+                } else if (loc == "nand") {
+                    noInstall_ = true;
+                    updateInstallLocationDisplay();
+                    updateTotalSize();
+                    rebuildFileList();
+                    return true;
                 } else {
                     cfg.setInstallLocation("auto");
                 }
@@ -653,16 +685,33 @@ void FileSelectView::startProbe() {
                     updateRetroSubtitle();
                 } else {
                     SwitchServiceGuard guard;
+                    const bool isFat = util::isSdCardFat32();
+                    bool anySelected = false;
                     for (size_t i = 0; i < files_.size(); ++i) {
                         uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
                         uint32_t ver = util::parseVersionFromFileName(files_[i].name);
                         bool isGame = isSwitchGameFile(files_[i].name);
                         bool installed = isTitleIdInstalled(tid, guard, ver);
-                        if (isGame && !installed) {
-                            selected_[i] = true;
+                        bool tooLarge = noInstall_ && isFat && (static_cast<uint64_t>(files_[i].size) > util::kFat32MaxFileSize);
+                        if (isGame && !tooLarge) {
+                            if (!noInstall_ && !installed) {
+                                selected_[i] = true;
+                                anySelected = true;
+                            } else if (noInstall_) {
+                                selected_[i] = true;
+                                anySelected = true;
+                            }
                         }
                     }
-                    subtitle->setText("app/fileselect/select_prompt"_i18n);
+                    if (noInstall_) {
+                        if (!anySelected && isFat) {
+                            subtitle->setText("app/fileselect/fat32_all_files_too_large"_i18n);
+                        } else {
+                            subtitle->setText("app/fileselect/subtitle_no_install"_i18n);
+                        }
+                    } else {
+                        subtitle->setText("app/fileselect/select_prompt"_i18n);
+                    }
                 }
                 calculateUncompressedSizes();
                 updateTotalSize();
@@ -1297,6 +1346,11 @@ void FileSelectView::rebuildSwitchFileList() {
             hasUninstalled = true;
             size_t idx = i;
             const auto& file = files_[idx];
+            bool isFat = util::isSdCardFat32();
+            bool tooLarge = noInstall_ && isFat && (static_cast<uint64_t>(file.size) > util::kFat32MaxFileSize);
+            if (tooLarge && idx < selected_.size()) {
+                selected_[idx] = false;
+            }
             bool isSel = (idx < selected_.size()) && selected_[idx];
 
             auto* row = new brls::Box();
@@ -1324,21 +1378,30 @@ void FileSelectView::rebuildSwitchFileList() {
             nameLbl->setText(file.name);
             nameLbl->setMarginLeft(10);
             nameLbl->setMarginRight(10);
-            nameLbl->setTextColor(ThemeManager::instance().getTextPrimaryColor());
+            nameLbl->setTextColor(tooLarge ? ThemeManager::instance().getTextSecondaryColor() : ThemeManager::instance().getTextPrimaryColor());
             row->addView(nameLbl);
 
             auto* sizeLbl = new brls::Label();
-            sizeLbl->setWidth(140);
+            sizeLbl->setWidth(tooLarge ? 220 : 140);
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
-            sizeLbl->setText(util::formatFileSize(file.size));
-            sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            if (tooLarge) {
+                sizeLbl->setText(util::formatFileSize(file.size) + "  " + "app/fileselect/fat32_badge"_i18n);
+                sizeLbl->setTextColor(nvgRGB(231, 76, 60)); // Red warning
+            } else {
+                sizeLbl->setText(util::formatFileSize(file.size));
+                sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            }
             row->addView(sizeLbl);
 
             std::string rowKey = "game:" + std::to_string(idx);
             focusMap[rowKey] = row;
 
-            row->registerClickAction([this, idx](brls::View*) {
+            row->registerClickAction([this, idx, tooLarge](brls::View*) {
+                if (tooLarge) {
+                    brls::Application::notify("app/fileselect/fat32_file_too_large_notice"_i18n);
+                    return true;
+                }
                 if (idx < selected_.size()) {
                     selected_[idx] = !selected_[idx];
                     updateRowSelectionState(idx);
@@ -1438,6 +1501,11 @@ void FileSelectView::rebuildSwitchFileList() {
             hasInstalled = true;
             size_t idx = i;
             const auto& file = files_[idx];
+            bool isFat = util::isSdCardFat32();
+            bool tooLarge = noInstall_ && isFat && (static_cast<uint64_t>(file.size) > util::kFat32MaxFileSize);
+            if (tooLarge && idx < selected_.size()) {
+                selected_[idx] = false;
+            }
             bool isSel = (idx < selected_.size()) && selected_[idx];
 
             auto* row = new brls::Box();
@@ -1469,17 +1537,26 @@ void FileSelectView::rebuildSwitchFileList() {
             row->addView(nameLbl);
 
             auto* sizeLbl = new brls::Label();
-            sizeLbl->setWidth(140);
+            sizeLbl->setWidth(tooLarge ? 220 : 140);
             sizeLbl->setHeight(brls::View::AUTO);
             sizeLbl->setFontSize(14);
-            sizeLbl->setText(util::formatFileSize(file.size));
-            sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            if (tooLarge) {
+                sizeLbl->setText(util::formatFileSize(file.size) + "  " + "app/fileselect/fat32_badge"_i18n);
+                sizeLbl->setTextColor(nvgRGB(231, 76, 60)); // Red warning
+            } else {
+                sizeLbl->setText(util::formatFileSize(file.size));
+                sizeLbl->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+            }
             row->addView(sizeLbl);
 
             std::string rowKey = "game_inst:" + std::to_string(idx);
             focusMap[rowKey] = row;
 
-            row->registerClickAction([this, idx](brls::View*) {
+            row->registerClickAction([this, idx, tooLarge](brls::View*) {
+                if (tooLarge) {
+                    brls::Application::notify("app/fileselect/fat32_file_too_large_notice"_i18n);
+                    return true;
+                }
                 if (idx < selected_.size()) {
                     selected_[idx] = !selected_[idx];
                     updateRowSelectionState(idx);
@@ -1569,18 +1646,20 @@ void FileSelectView::updateTotalSize() {
     for (size_t i = 0; i < files_.size(); ++i) {
         if (i < selected_.size() && selected_[i]) {
             totalCompressed += files_[i].size;
-            if (i < probe_info_.size()) {
-                totalUnpacked += probe_info_[i].uncompressed_size;
-                if (probe_info_[i].is_estimated) anyEstimated = true;
-            } else {
-                totalUnpacked += files_[i].size;
+            if (!noInstall_) {
+                if (i < probe_info_.size()) {
+                    totalUnpacked += probe_info_[i].uncompressed_size;
+                    if (probe_info_[i].is_estimated) anyEstimated = true;
+                } else {
+                    totalUnpacked += files_[i].size;
+                }
             }
         }
     }
 
     if (totalSizeText) {
         std::string sizeStr = util::formatFileSize(totalCompressed);
-        if (totalUnpacked > totalCompressed) {
+        if (!noInstall_ && totalUnpacked > totalCompressed) {
             std::string prefix = brls::getStr("app/fileselect/unpacked_prefix");
             if (anyEstimated) {
                 sizeStr += " (" + prefix + ": ~" + util::formatFileSize(totalUnpacked) + " " + "app/fileselect/estimated"_i18n + ")";
@@ -1593,7 +1672,7 @@ void FileSelectView::updateTotalSize() {
 
     // Free space comes from ncm under g_switch_service_mutex, which an install
     // can hold: query it in the pool. This runs on every selection toggle.
-    const bool folderMode = isFolderHierarchyMode();
+    const bool folderMode = isFolderHierarchyMode() || noInstall_;
     if (folderMode && freeSpaceNandText) freeSpaceNandText->setVisibility(brls::Visibility::GONE);
     auto alive = alive_flag_;
     brls::async([this, alive, folderMode]() {
@@ -1616,6 +1695,8 @@ void FileSelectView::updateTotalSize() {
                 } else {
                     freeSpaceNandText->setText(brls::getStr("app/fileselect/free_nand", "app/fileselect/free_unknown"_i18n));
                 }
+            } else if (folderMode && freeSpaceNandText) {
+                freeSpaceNandText->setVisibility(brls::Visibility::GONE);
             }
         });
     });
@@ -1657,8 +1738,17 @@ void FileSelectView::toggleAllSelection() {
         for (bool s : selected_) {
             if (s) { anySelected = true; break; }
         }
+        const bool isFat = util::isSdCardFat32();
         for (size_t i = 0; i < selected_.size(); ++i) {
-            selected_[i] = !anySelected;
+            if (!anySelected) {
+                if (noInstall_ && isFat && static_cast<uint64_t>(files_[i].size) > util::kFat32MaxFileSize) {
+                    selected_[i] = false;
+                } else {
+                    selected_[i] = true;
+                }
+            } else {
+                selected_[i] = false;
+            }
         }
         if (isFolderHierarchyMode()) {
             rebuildRetroFolderList();
@@ -1675,7 +1765,7 @@ void FileSelectView::toggleAllSelection() {
 
 void FileSelectView::startDownloadAndGoToDownloads() {
     if (files_.empty()) {
-        ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_);
+        ui::DownloadManager::instance().addDownload(game_, {}, -1, "", retro_console_id_, "", "", "", "", 0, 0, noInstall_);
         brls::Application::notify(brls::getStr("app/downloads/state_queued"));
         brls::Application::popActivity();
         return;
@@ -1691,7 +1781,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         if (i < selected_.size() && selected_[i]) {
             selectedIndices.push_back(files_[i].index);
             uint64_t needed = files_[i].size;
-            if (i < probe_info_.size() && probe_info_[i].uncompressed_size > 0) {
+            if (!noInstall_ && i < probe_info_.size() && probe_info_[i].uncompressed_size > 0) {
                 needed = probe_info_[i].uncompressed_size;
             }
             totalNeededSize += needed;
@@ -1708,6 +1798,19 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         return;
     }
 
+    // Safety check for FAT32 in no_install mode
+    if (noInstall_ && util::isSdCardFat32()) {
+        for (size_t i = 0; i < files_.size(); ++i) {
+            if (i < selected_.size() && selected_[i] && static_cast<uint64_t>(files_[i].size) > util::kFat32MaxFileSize) {
+                std::string msg = brls::getStr("app/fileselect/fat32_cannot_download_dlg", files_[i].name, util::formatFileSize(files_[i].size));
+                brls::Dialog* dialog = new brls::Dialog(msg);
+                dialog->addButton("app/common/ok"_i18n, []() {});
+                dialog->open();
+                return;
+            }
+        }
+    }
+
     // Fallback: largest file overall
     if (forcedIndex < 0) {
         unsigned long long maxOverall = 0;
@@ -1720,7 +1823,7 @@ void FileSelectView::startDownloadAndGoToDownloads() {
         }
     }
 
-    if (isFolderHierarchyMode()) {
+    if (isFolderHierarchyMode() || noInstall_) {
         int64_t freeSpace = 0;
         util::getStorageFreeSpace(1, freeSpace);
         if (static_cast<int64_t>(totalNeededSize) > freeSpace) {
@@ -1869,7 +1972,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
             // 1. Добавляем установочные пакеты (каждый устанавливается отдельно в NCM)
             // (this branch is the Switch mode: no retro console / target)
             for (size_t idx : packages) {
-                queueSwitchPackage(game_, files_[idx]);
+                queueSwitchPackage(game_, files_[idx], noInstall_);
             }
 
             // 2. Все выбранные доп. файлы (русификаторы, патчи, моды) объединяем в 1 загрузку
@@ -1894,7 +1997,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
 
                 ui::DownloadManager::instance().addDownload(
                     extraGame, extraIndices, firstIndex, forcedName, retro_console_id_,
-                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes);
+                    game_.topic_id, cleanTitle(game_.title), comp.label, comp.cleanName, comp.type, extraTotalBytes, noInstall_);
             }
         }
     } catch (const std::exception& e) {

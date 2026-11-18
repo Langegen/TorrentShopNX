@@ -7,6 +7,7 @@
 #include "../../utils/log.h"
 #include "../../utils/switch_utils.h"
 #include "../RetroConsolesView.hpp"
+#include "../PcCategoriesView.hpp"
 #include "HomebrewView.hpp"
 
 #include <ctime>
@@ -18,6 +19,7 @@ namespace ui::hb {
 
 void loadImage(brls::Image* img, const std::string& url, const std::shared_ptr<bool>& token, bool full_size, int row,
                int col) {
+    if (!img || !token || !*token) return;
     setImageFromHTTPS(img, url, token, "", false, "", row, col, 0, full_size);
 }
 
@@ -37,6 +39,12 @@ void showHomebrewSection() {
     haptic(1);
     rememberSection("homebrew");
     replaceTopActivity(new HomebrewView());
+}
+
+void showPcSection() {
+    haptic(1);
+    rememberSection("pc");
+    replaceTopActivity(new PcCategoriesView());
 }
 
 std::string today() {

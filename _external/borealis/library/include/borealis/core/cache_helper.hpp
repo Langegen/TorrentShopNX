@@ -204,15 +204,16 @@ class LRUCache
         if (num <= 0)
             return 0;
         auto vg = brls::Application::getNVGContext();
-        for (auto i = cacheList.rbegin(); i != cacheList.rend(); i++)
+        for (auto it = cacheList.end(); it != cacheList.begin(); )
         {
-            if (i->count <= 0)
+            --it;
+            if (it->count <= 0)
             {
                 num--;
-                nvgDeleteImage(vg, i->value);
-                cacheMap.erase(i->key);
-                valueMap.erase(i->value);
-                cacheList.erase(std::next(i).base());
+                nvgDeleteImage(vg, it->value);
+                cacheMap.erase(it->key);
+                valueMap.erase(it->value);
+                it = cacheList.erase(it);
                 if (num == 0)
                     break;
             }

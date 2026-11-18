@@ -384,6 +384,42 @@ bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
     return getStorageStats(storageId, out_free_space, total);
 }
 
+bool isSdCardFat32() {
+#ifdef __SWITCH__
+    static int cached_is_fat32 = -1;
+    if (cached_is_fat32 != -1) return (cached_is_fat32 == 1);
+
+    FsFileSystem* fs = fsdevGetDeviceFileSystem("sdmc");
+    if (!fs) {
+        cached_is_fat32 = 1;
+        return true;
+    }
+
+    const char* testPath = "/switch/TorrentShopNX/cache/.fs_test";
+    tsnx_ensure_parent_dirs(testPath);
+    fsFsDeleteFile(fs, testPath);
+
+    // Testing creation of standard file > 4 GiB without FsCreateOption_BigFile.
+    // On FAT32, normal file creation with size > 0xFFFFFFFFULL fails immediately
+    // with Result 0x2EE202 (Path/Size invalid for FAT).
+    // On exFAT, it succeeds (or returns 0x2EE602 if free space is insufficient).
+    Result rc = fsFsCreateFile(fs, testPath, 0x100000001ULL, 0);
+    if (R_SUCCEEDED(rc)) {
+        fsFsDeleteFile(fs, testPath);
+        cached_is_fat32 = 0; // exFAT
+        util::logLine("switch_utils: detected exFAT SD card filesystem");
+    } else {
+        cached_is_fat32 = 1; // FAT32
+        util::logLine("switch_utils: detected FAT32 SD card filesystem (4GB limit active)");
+    }
+    return (cached_is_fat32 == 1);
+#else
+    const char* fake = std::getenv("TSNX_FAKE_FAT32");
+    if (fake && std::string(fake) == "1") return true;
+    return false;
+#endif
+}
+
 SdkVersion getConsoleSdkVersion() {
     static SdkVersion cached_ver;
     static bool cached = false;

@@ -1538,6 +1538,15 @@ inline std::string normalizeImageUrl(const std::string& url) {
     if (norm.rfind("https://wsrv.nl/", 0) == 0 || norm.rfind("https://images.weserv.nl/", 0) == 0) {
         norm.replace(0, 5, "http");
     }
+    // Steam CDN subdomains: rewrite shared.cloudflare/akamai/fastly directly to shared.steamstatic.com
+    // to eliminate 301 redirects and duplicate TLS handshakes for ~2,700 PC game covers!
+    if (norm.find(".steamstatic.com") != std::string::npos) {
+        size_t proto = norm.find("://");
+        size_t p = norm.find(".steamstatic.com");
+        if (proto != std::string::npos && p != std::string::npos) {
+            norm = norm.substr(0, proto + 3) + "shared.steamstatic.com" + norm.substr(p + 16);
+        }
+    }
     return norm;
 }
 
@@ -1795,6 +1804,19 @@ inline bool isHomebrewPort(const Game& g) {
     return false;
 }
 
+// Check if a game belongs to the PC games catalog
+inline bool isPcGame(const Game& g) {
+    return g.content_type == "pc" || g.content_type.rfind("pc:", 0) == 0;
+}
+
+// Extract Rutracker subforum ID from PC game's content_type ("pc:<subforum_id>")
+inline std::string getPcSubforumId(const Game& g) {
+    if (g.content_type.rfind("pc:", 0) == 0) {
+        return g.content_type.substr(3);
+    }
+    return "";
+}
+
 // Asynchronously download and cache images from URLs, showing placeholder during download
 inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::shared_ptr<bool> token = nullptr, const std::string& placeholder = "romfs:/img/cover_blank.png", bool bypassCache = false, const std::string& fallbackUrl = "", int row = -1, int col = -1, int priorityOverride = 0, bool fullSize = false) {
 #ifndef __SWITCH__
@@ -1806,8 +1828,8 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
     const std::string& actualPlaceholder = placeholder;
 #endif
 
-    if (url.empty() || !img) {
-        if (img) img->setImageFromFile(actualPlaceholder);
+    if (url.empty() || !img || !token || !*token) {
+        if (img && token && *token) img->setImageFromFile(actualPlaceholder);
         return;
     }
     
@@ -1837,6 +1859,19 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
             (effectiveFallback.empty() || effectiveFallback == normUrl ||
              !imageProxyFallback(effectiveFallback).empty())) {
             effectiveFallback = proxyFb;
+        }
+    }
+    // Steam library covers: if library_600x900.jpg 404s, fall back to header.jpg
+    if (effectiveFallback.empty() &&
+        normUrl.find("shared.steamstatic.com/store_item_assets/steam/apps/") != std::string::npos &&
+        normUrl.find("library_600x900.jpg") != std::string::npos) {
+        size_t appsPos = normUrl.find("/apps/");
+        if (appsPos != std::string::npos) {
+            size_t slash = normUrl.find('/', appsPos + 6);
+            if (slash != std::string::npos) {
+                std::string appId = normUrl.substr(appsPos + 6, slash - (appsPos + 6));
+                effectiveFallback = "https://cdn.akamai.steamstatic.com/steam/apps/" + appId + "/header.jpg";
+            }
         }
     }
 

@@ -7,7 +7,7 @@
         "settings": "設定",
         "footer": "TorrentShopNX v2.4 | カタログ内ゲーム数: {0}",
         "disclaimer": "免責事項: トレントプロトコルを使用します。ご利用地域の法律を確認してください。開発者は不正使用に関して一切の責任を負いません。",
-        "retro_games": "自作ソフトとレトロ",
+        "retro_games": "自作ソフト、レトロ＆PC",
         "exit_confirm_active_download": "本当に終了しますか？\n実行中のダウンロードがあります。"
     },
     "common": {
@@ -22,7 +22,9 @@
         "continue": "続ける",
         "later": "後で",
         "restart": "再起動",
-        "error": "エラー"
+        "error": "エラー",
+        "confirm": "確認",
+        "processing": "処理中..."
     },
     "actions": {
         "search": "検索",
@@ -201,7 +203,9 @@
         "expand": "展開",
         "comp_base_game": "ゲーム本編",
         "comp_patch": "更新データ {0}",
-        "comp_patch_plain": "更新データ"
+        "comp_patch_plain": "更新データ",
+        "saved_to_sd": "SDに保存されました",
+        "error_fat32_limit": "4 GBを超えるファイルはFAT32ファイルシステムでサポートされていません"
     },
     "detail": {
         "unknown_publisher": "発売元不明",
@@ -245,7 +249,8 @@
         "modcd_has_mods_btn": "ModCD 内の Mod",
         "modcd_installed_btn": "ModCD 内の Mod (インストール済み)",
         "modkit_warn_btn": "ModKitNX が必要",
-        "modkit_installed_btn": "ModKitNX インストール済み"
+        "modkit_installed_btn": "ModKitNX インストール済み",
+        "download_no_install_btn": "インストールせずにダウンロード"
     },
     "fileselect": {
         "title": "トレント内ファイル",
@@ -315,7 +320,14 @@
         "extra_files_bundle": "追加ファイル [{0}]",
         "folder_prefix": "フォルダ: ",
         "parent_folder": ".. (親ディレクトリ)",
-        "toggle_folder": "フォルダを選択"
+        "toggle_folder": "フォルダを選択",
+        "subtitle_no_install": "インストールせずにNSP/NSZをSDカードに保存",
+        "target_mode_lbl": "モード（クリックして変更）:",
+        "loc_no_install": "SDカード（非インストール）",
+        "fat32_badge": "FAT32 > 4 GB",
+        "fat32_file_too_large_notice": "ファイルサイズが4 GBを超えています。FAT32カードには4 GBを超えるファイルを保存できません。",
+        "fat32_cannot_download_dlg": "ファイル「{0}」（{1}）は4 GBを超えています。\n\nFAT32ファイルシステムでは、システムにインストールしない限り4 GBを超えるファイルに対応していません。",
+        "fat32_all_files_too_large": "すべてのファイルが4 GBを超えているため、FAT32カードに保存できません"
     },
     "remote": {
         "title": "トレントを追加",
@@ -1243,7 +1255,8 @@
         "variant_main": "メインバージョン",
         "variant_all": "すべてのバージョン",
         "variant_default": "標準インストール",
-        "variant_folder": "バージョン「{0}」"
+        "variant_folder": "バージョン「{0}」",
+        "preview_data_note": "ポートの起動にはSD上のゲームデータファイルとショートカット用のsys-patchが必要です"
     },
     "plural": {
         "games_one": "{0} 本",
@@ -1470,7 +1483,9 @@
         "update_all": "すべてアップデート ({})",
         "update_all_confirm": "{} 本のアプリをアップデートしますか?",
         "update_all_done": "{} / {} 本をアップデートしました",
-        "update_all_progress": "アップデート中 {} / {}: {}"
+        "update_all_progress": "アップデート中 {} / {}: {}",
+        "tab_pc": "PCゲーム",
+        "sort_size": "サイズ順"
     },
     "modcd": {
         "dialog_title": "ModCD 内の Mod",
@@ -1497,5 +1512,30 @@
         "install_error": "アプリケーションのインストール中にエラーが発生しました",
         "cancelled": "インストールがキャンセルされました",
         "cancelling": "インストールをキャンセル中..."
+    },
+    "pc": {
+        "title": "PCゲーム",
+        "all_catalog": "全カタログ",
+        "all_catalog_desc": "PCカタログの全ゲーム",
+        "new_games": "新着タイトル",
+        "new_games_desc": "Rutracker 最新リリース",
+        "games_count": "{} 本",
+        "sec_main": "メイン",
+        "sec_genres": "ジャンル",
+        "sec_strategies": "ストラテジー",
+        "sec_actions": "アクション",
+        "sec_quests": "アドベンチャー＆クエスト",
+        "sec_retro": "レトロゲーム（レトロPC）",
+        "download_all": "全体をダウンロード",
+        "select_files": "ファイルを選択",
+        "download_hint": "ファイルは sdmc:/pc_games/ に保存されます",
+        "update_catalog_btn": "PCカタログを更新",
+        "updating_catalog": "PCゲームカタログをダウンロード中...",
+        "catalog_updated": "PCカタログが正常に更新されました",
+        "catalog_update_error": "PCカタログの更新に失敗しました",
+        "badge_pc": "PC",
+        "badge_portable": "ポータブル",
+        "stats_hint": "カタログ：{} 本",
+        "stats_hint_update": "[-] 更新"
     }
 }

@@ -26,10 +26,14 @@ void SectionTabBar::buildTabs(SectionTab activeTab) {
     hintL->setFontSize(18.0f);
     hintL->setMarginRight(8.0f);
     hintL->setFocusable(false);
-    hintL->setTextColor(activeTab == SectionTab::Retro ? style::textPrimary() : textSec);
+    hintL->setTextColor(activeTab != SectionTab::Homebrew ? style::textPrimary() : textSec);
     if (activeTab == SectionTab::Retro) {
         hintL->addGestureRecognizer(new brls::TapGestureRecognizer(hintL, [] {
             hb::showHomebrewSection();
+        }));
+    } else if (activeTab == SectionTab::PcGames) {
+        hintL->addGestureRecognizer(new brls::TapGestureRecognizer(hintL, [] {
+            hb::showRetroSection();
         }));
     }
     this->addView(hintL);
@@ -100,6 +104,33 @@ void SectionTabBar::buildTabs(SectionTab activeTab) {
     }
     pillBox->addView(tabRetro);
 
+    // Tab 3: PC Games
+    auto* tabPc = new brls::Box();
+    tabPc->setHeight(32.0f);
+    tabPc->setCornerRadius(16.0f);
+    tabPc->setPadding(0.0f, 18.0f, 0.0f, 18.0f);
+    tabPc->setAlignItems(brls::AlignItems::CENTER);
+    tabPc->setJustifyContent(brls::JustifyContent::CENTER);
+    tabPc->setFocusable(false);
+
+    auto* lblPc = new brls::Label();
+    lblPc->setText(brls::getStr("app/homebrew/tab_pc"));
+    lblPc->setFontSize(17.0f);
+    lblPc->setSingleLine(true);
+    tabPc->addView(lblPc);
+
+    if (activeTab == SectionTab::PcGames) {
+        tabPc->setBackgroundColor(accent);
+        lblPc->setTextColor(hb::textOn(accent));
+    } else {
+        tabPc->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+        lblPc->setTextColor(textSec);
+        tabPc->addGestureRecognizer(new brls::TapGestureRecognizer(tabPc, [] {
+            hb::showPcSection();
+        }));
+    }
+    pillBox->addView(tabPc);
+
     this->addView(pillBox);
 
     // 3. [R] bumper glyph
@@ -108,10 +139,14 @@ void SectionTabBar::buildTabs(SectionTab activeTab) {
     hintR->setFontSize(18.0f);
     hintR->setMarginLeft(8.0f);
     hintR->setFocusable(false);
-    hintR->setTextColor(activeTab == SectionTab::Homebrew ? style::textPrimary() : textSec);
+    hintR->setTextColor(activeTab != SectionTab::PcGames ? style::textPrimary() : textSec);
     if (activeTab == SectionTab::Homebrew) {
         hintR->addGestureRecognizer(new brls::TapGestureRecognizer(hintR, [] {
             hb::showRetroSection();
+        }));
+    } else if (activeTab == SectionTab::Retro) {
+        hintR->addGestureRecognizer(new brls::TapGestureRecognizer(hintR, [] {
+            hb::showPcSection();
         }));
     }
     this->addView(hintR);

@@ -7,6 +7,7 @@
 #include "SettingsTab.hpp"
 #include "RemoteAddView.hpp"
 #include "RetroConsolesView.hpp"
+#include "PcCategoriesView.hpp"
 #include "homebrew/HomebrewView.hpp"
 #include "FileManagerView.hpp"
 #include "CatalogProgressNotification.hpp"
@@ -266,7 +267,26 @@ void MainMenu::updateDashboardVisibility() {
 
 void MainMenu::onResume() {
     brls::Activity::onResume();
+    last_resume_time_ = std::chrono::steady_clock::now();
     updateDashboardVisibility();
+
+    std::string newLocale = brls::Application::getLocale();
+    int newFontScale = config::ConfigManager::instance().getFontScale();
+    if (newLocale != current_locale_ || newFontScale != current_font_scale_) {
+        current_locale_ = newLocale;
+        current_font_scale_ = newFontScale;
+        if (tiles_.size() >= 5) {
+            tiles_[0]->setTitle("app/menu/catalog"_i18n);
+            tiles_[1]->setTitle("app/menu/retro_games"_i18n);
+            tiles_[2]->setTitle("app/menu/library"_i18n);
+            tiles_[3]->setTitle("app/menu/downloads"_i18n);
+            tiles_[4]->setTitle("app/menu/settings"_i18n);
+        }
+        if (summaryView_) {
+            summaryView_->refreshLocale();
+        }
+    }
+
     refreshDashboardState();
     for (auto* tile : tiles_) {
         if (tile) tile->refreshTheme();
@@ -503,9 +523,11 @@ void MainMenu::onTileClicked(int index) {
         case 0:
             brls::Application::pushActivity(new ui::CollectionsView());
             break;
-        case 1:  // "Homebrew and retro": opens on the tab used last
+        case 1:  // "Homebrew, retro and PC": opens on the tab used last
             if (config::ConfigManager::instance().getHomebrewSection() == "retro")
                 brls::Application::pushActivity(new ui::RetroConsolesView());
+            else if (config::ConfigManager::instance().getHomebrewSection() == "pc")
+                brls::Application::pushActivity(new ui::PcCategoriesView());
             else
                 brls::Application::pushActivity(new ui::HomebrewView());
             break;
@@ -669,16 +691,23 @@ void MainMenu::handleExitRequest() {
         return;
     }
 
-    if (ui::DownloadManager::instance().hasActiveDownloads()) {
-        brls::Dialog* dialog = new brls::Dialog("app/menu/exit_confirm_active_download"_i18n);
-        dialog->addButton("app/common/yes"_i18n, []() {
-            brls::Application::quit();
-        });
-        dialog->addButton("app/common/no"_i18n, []() {});
-        dialog->open();
-    } else {
-        brls::Application::quit();
+    // Ignore exit requests within 600ms of resuming MainMenu
+    // (prevents trailing 'B' / Escape presses from popped sub-screens from accidentally exiting)
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_resume_time_).count() < 600) {
+        return;
     }
+
+    std::string msg = ui::DownloadManager::instance().hasActiveDownloads()
+        ? "app/menu/exit_confirm_active_download"_i18n
+        : "hints/exit_hint"_i18n;
+
+    brls::Dialog* dialog = new brls::Dialog(msg);
+    dialog->addButton("app/common/yes"_i18n, []() {
+        brls::Application::quit();
+    });
+    dialog->addButton("app/common/no"_i18n, []() {});
+    dialog->open();
 }
 
 void MainMenu::onContentAvailable() {

@@ -100,6 +100,13 @@ bool getStorageFreeSpace(int storageId, int64_t& out_free_space);
 // On non-Switch platforms, returns simulated values.
 bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space);
 
+// 4 GiB - 1 byte: max single file size supported by FAT32
+constexpr uint64_t kFat32MaxFileSize = 0xFFFFFFFFULL;
+
+// Returns true if the SD card filesystem is FAT32 (imposing a 4GB file size limit).
+// Returns false on exFAT (and PC host platforms unless TSNX_FAKE_FAT32=1 is set).
+bool isSdCardFat32();
+
 // Refcounted sleep inhibitor: disables auto-sleep (appletSetAutoSleepDisabled)
 // and asserts media playback keep-awake (appletSetMediaPlaybackState) so the
 // console screen does not dim or enter sleep during long background work.

@@ -6,7 +6,8 @@ namespace ui {
 
 enum class SectionTab {
     Homebrew,
-    Retro
+    Retro,
+    PcGames
 };
 
 class SectionTabBar : public brls::Box {
