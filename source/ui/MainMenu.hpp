@@ -37,4 +37,5 @@ private:
     int current_focused_index_ = 0;
     std::string current_locale_;
     int current_font_scale_ = 0;
+    std::chrono::steady_clock::time_point last_resume_time_{};
 };

@@ -19,15 +19,14 @@ bool isSwitchPackageFile(const std::string& filename);
 // Title ID a torrent file installs: from its name ([0100...] tag), or the
 // game's title_id for an unlabelled base-game package. 0 if unknown.
 uint64_t torrentFileTitleId(const std::string& filename, const std::string& gameTitleId);
-// Queues one package of `game` for download + install, the way the file
-// picker does it for every selected package.
-void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file);
+// Queues one package of `game` for download + install (or raw download without install)
+void queueSwitchPackage(const Game& game, const torrent::TorrentFileInfo& file, bool no_install = false);
 
 class FileSelectView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("file_select_view.xml");
 
-    FileSelectView(const Game& game, const std::string& retro_console_id = "");
+    FileSelectView(const Game& game, const std::string& retro_console_id = "", bool no_install = false);
     ~FileSelectView();
     void onContentAvailable() override;
     static brls::View* create(); // XML support stub
@@ -41,6 +40,7 @@ public:
 private:
     Game game_;
     std::string retro_console_id_;
+    bool noInstall_ = false;
     bool isFolderHierarchyMode() const { return !retro_console_id_.empty() || isHomebrewGame(game_); }
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;

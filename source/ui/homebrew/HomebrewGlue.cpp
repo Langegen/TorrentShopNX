@@ -19,6 +19,7 @@ namespace ui::hb {
 
 void loadImage(brls::Image* img, const std::string& url, const std::shared_ptr<bool>& token, bool full_size, int row,
                int col) {
+    if (!img || !token || !*token) return;
     setImageFromHTTPS(img, url, token, "", false, "", row, col, 0, full_size);
 }
 

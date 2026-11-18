@@ -16,7 +16,7 @@ if (-not (Test-Path "_external/libarchive-switch/lib/libarchive.a")) {
     }
 }
 
-$nproc = 2
+$nproc = 4
 Write-Host "Parallel jobs: $nproc"
 & make -j $nproc
 

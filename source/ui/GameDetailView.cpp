@@ -539,6 +539,13 @@ void GameDetailView::onContentAvailable() {
             brls::Application::pushActivity(new FileSelectView(game_, retro_console_id_));
             return true;
         });
+    } else {
+        // Switch games: X is "Download without installing" (saves raw NSPs/NSZs to SD card)
+        btnDownload->registerAction("app/detail/download_no_install_btn"_i18n, brls::ControllerButton::BUTTON_X,
+                                    [this](brls::View*) {
+            brls::Application::pushActivity(new FileSelectView(game_, "", true /* no_install */));
+            return true;
+        });
     }
 
     btnDownload->registerClickAction([this, isPortRelease](brls::View* view) {

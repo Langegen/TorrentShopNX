@@ -22,6 +22,7 @@ class HomebrewRowCell : public brls::RecyclerCell {
 public:
     static constexpr int kColumns = 5;
     HomebrewRowCell();
+    ~HomebrewRowCell() override;
     static HomebrewRowCell* create();
     void prepareForReuse() override;
     brls::View* getDefaultFocus() override;

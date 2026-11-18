@@ -1828,8 +1828,8 @@ inline void setImageFromHTTPS(brls::Image* img, const std::string& url, std::sha
     const std::string& actualPlaceholder = placeholder;
 #endif
 
-    if (url.empty() || !img) {
-        if (img) img->setImageFromFile(actualPlaceholder);
+    if (url.empty() || !img || !token || !*token) {
+        if (img && token && *token) img->setImageFromFile(actualPlaceholder);
         return;
     }
     

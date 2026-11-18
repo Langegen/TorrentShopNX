@@ -309,12 +309,12 @@ void ImageDownloader::enqueue(brls::Image* img,
                                int col,
                                int priorityOverride,
                                bool fullSize) {
-    if (url.empty() || !img) {
-        if (img) img->setImageFromFile(placeholder);
+    if (!img || !token || !*token) return;
+
+    if (url.empty()) {
+        img->setImageFromFile(placeholder);
         return;
     }
-
-    if (token && !*token) return;
 
     // Set placeholder on UI thread immediately without marking shared placeholder as freeable
     if (bypassCache) {
@@ -356,7 +356,7 @@ void ImageDownloader::enqueueInternal(brls::Image* img,
         // Prune invalidated tasks if queue grows
         if (tasks_.size() > 30) {
             for (auto it = tasks_.begin(); it != tasks_.end(); ) {
-                if (it->token && !*it->token) {
+                if (!it->token || !*it->token) {
                     it = tasks_.erase(it);
                 } else {
                     ++it;
@@ -407,7 +407,7 @@ void ImageDownloader::workerLoop() {
                 bool foundExecutableTask = false;
 
                 for (auto it = tasks_.begin(); it != tasks_.end(); ) {
-                    if (it->token && !*it->token) {
+                    if (!it->token || !*it->token) {
                         it = tasks_.erase(it);
                         continue;
                     }
@@ -425,7 +425,7 @@ void ImageDownloader::workerLoop() {
                             if (!deadTask.placeholder.empty() && deadTask.img) {
                                 brls::sync([img = deadTask.img, token = deadTask.token, placeholder = deadTask.placeholder]() {
                                     if (g_appExiting.load()) return;
-                                    if (token && !*token) return;
+                                    if (!token || !*token) return;
                                     if (img) {
                                         img->setImageFromFile(placeholder);
                                         img->setFreeTexture(false);
@@ -469,7 +469,7 @@ void ImageDownloader::workerLoop() {
             break;
         }
 
-        if (task.token && !*task.token) {
+        if (!task.token || !*task.token) {
             util::logLine("ImageDownloader: task skipped (token invalidated) url=" + task.url);
             continue; // Skip invalidated task (card scrolled offscreen)
         }
@@ -480,7 +480,7 @@ void ImageDownloader::workerLoop() {
 
 void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) {
     if (g_appExiting.load()) return;
-    if (task.token && !*task.token) return;
+    if (!task.token || !*task.token) return;
 
     bool cacheEnabled = config::ConfigManager::instance().getCacheCoverThumbnails() && !task.bypassCache;
     std::string thumbPath = task.url.empty() ? "" : getThumbnailCachePath(task.url, task.fullSize);
@@ -497,6 +497,11 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
             );
             brls::sync([img = task.img, cacheKey = task.cacheKey, rgba, dw, dh, token = task.token, bypassCache = task.bypassCache, url = task.url, row = task.row, col = task.col]() {
                 if (g_appExiting.load()) {
+                    if (rgba) stbi_image_free(rgba);
+                    return;
+                }
+
+                if (!token || !*token) {
                     if (rgba) stbi_image_free(rgba);
                     return;
                 }
@@ -520,7 +525,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 if (rgba) {
                     stbi_image_free(rgba);
                 }
-                if (token && !*token) {
+                if (!token || !*token) {
                     // The cell scrolled away: release the reference taken by
                     // addCache/getCache above so the texture can be evicted.
                     if (tex > 0) brls::TextureCache::instance().removeCache(tex);
@@ -551,12 +556,12 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
         util::logLine("ImageDownloader: host " + host + " in hard cooldown, skipping network fetch for " + task.url);
         std::string fbHost = extractHost(task.fallbackUrl);
         if (!task.fallbackUrl.empty() && fbHost != host && !isHostInCooldown(fbHost)) {
-            if (task.token && !*task.token) return;
+            if (!task.token || !*task.token) return;
             enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride, task.fullSize);
         } else if (!task.placeholder.empty()) {
             brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
                 if (g_appExiting.load()) return;
-                if (token && !*token) return;
+                if (!token || !*token) return;
                 if (img) {
                     img->setImageFromFile(placeholder);
                     img->setFreeTexture(false);
@@ -679,7 +684,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
             }
 
             if (bypassCache) {
-                if (token && !*token) {
+                if (!token || !*token) {
                     if (rgba) stbi_image_free(rgba);
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
@@ -696,7 +701,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                     stbi_image_free(rgba);
                 }
                 if (tex > 0) {
-                    if (token && !*token) {
+                    if (!token || !*token) {
                         nvgDeleteImage(brls::Application::getNVGContext(), tex);
                         return;
                     }
@@ -708,6 +713,10 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                     util::logLine("ImageDownloader: nvgCreateImageRGBA failed for " + url);
                 }
             } else {
+                if (!token || !*token) {
+                    if (rgba) stbi_image_free(rgba);
+                    return;
+                }
                 int tex = brls::TextureCache::instance().getCache(cacheKey);
                 if (tex == 0) {
                     if (rgba) {
@@ -727,7 +736,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                 if (rgba) {
                     stbi_image_free(rgba);
                 }
-                if (token && !*token) {
+                if (!token || !*token) {
                     util::logLine("ImageDownloader: set skipped (token invalidated) row=" + std::to_string(row) +
                                   " col=" + std::to_string(col) + " url=" + url);
                     if (tex > 0) brls::TextureCache::instance().removeCache(tex);
@@ -752,7 +761,7 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
             std::string fbHost0 = extractHost(task.fallbackUrl);
             if (res.status_code == 0 && !task.fallbackUrl.empty() && !fbHost0.empty() &&
                 fbHost0 != host && !isHostInCooldown(fbHost0)) {
-                if (task.token && !*task.token) return;
+                if (!task.token || !*task.token) return;
                 util::logLine("ImageDownloader: switching to fallback host " + fbHost0 + " for " + task.url);
                 enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder,
                                 task.bypassCache, "", task.row, task.col, task.priorityOverride, task.fullSize);
@@ -781,12 +790,12 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
                               (res.status_code != 0 || fbHost != host) &&
                               !isHostInCooldown(fbHost);
         if (canTryFallback) {
-            if (task.token && !*task.token) return;
+            if (!task.token || !*task.token) return;
             enqueueInternal(task.img, task.fallbackUrl, task.cacheKey, task.token, task.placeholder, task.bypassCache, "", task.row, task.col, task.priorityOverride, task.fullSize);
         } else if (!task.placeholder.empty()) {
             brls::sync([img = task.img, token = task.token, placeholder = task.placeholder]() {
                 if (g_appExiting.load()) return;
-                if (token && !*token) return;
+                if (!token || !*token) return;
                 if (img) {
                     img->setImageFromFile(placeholder);
                     img->setFreeTexture(false);

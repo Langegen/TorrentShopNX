@@ -50,6 +50,7 @@ std::recursive_mutex g_switch_service_mutex;
 static void setImageFromLocalFileAsync(brls::Image* img, const std::string& path,
                                        std::shared_ptr<bool> token, const std::string& placeholder,
                                        std::function<void()> onMissing) {
+    if (!img || !token || !*token) return;
     auto& cache = brls::TextureCache::instance();
     if (int tex = cache.getCache(path); tex > 0) {
         img->setImageFromFile(path);
@@ -59,7 +60,7 @@ static void setImageFromLocalFileAsync(brls::Image* img, const std::string& path
 
     img->setImageFromFile(placeholder);
     brls::async([img, path, token, onMissing]() {
-        if (token && !*token) return;
+        if (!token || !*token) return;
         int w = 0, h = 0, comp = 0;
         stbi_uc* rgba = nullptr;
         struct stat st;
@@ -67,7 +68,7 @@ static void setImageFromLocalFileAsync(brls::Image* img, const std::string& path
             rgba = stbi_load(path.c_str(), &w, &h, &comp, 4);
 
         brls::sync([img, path, token, onMissing, rgba, w, h]() {
-            if (g_appExiting.load() || (token && !*token)) {
+            if (g_appExiting.load() || !token || !*token) {
                 if (rgba) stbi_image_free(rgba);
                 return;
             }
@@ -78,6 +79,11 @@ static void setImageFromLocalFileAsync(brls::Image* img, const std::string& path
                 if (tex > 0) cache.addCache(path, tex);
             }
             if (rgba) stbi_image_free(rgba);
+
+            if (!token || !*token) {
+                if (tex > 0) cache.removeCache(tex);
+                return;
+            }
 
             if (tex > 0) {
                 img->setImageFromFile(path);

@@ -48,6 +48,7 @@ public:
         GameRowCell* rowCell = dynamic_cast<GameRowCell*>(recycler->dequeueReusableCell("Row"));
         if (!rowCell) return nullptr;
 
+        if (rowCell->imageToken) *(rowCell->imageToken) = false;
         rowCell->imageToken = std::make_shared<bool>(true);
 
         int row = indexPath.row;

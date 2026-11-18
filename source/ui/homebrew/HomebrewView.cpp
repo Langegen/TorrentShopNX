@@ -151,9 +151,13 @@ HomebrewRowCell::HomebrewRowCell() : imageToken(std::make_shared<bool>(true)) {
 
 HomebrewRowCell* HomebrewRowCell::create() { return new HomebrewRowCell(); }
 
+HomebrewRowCell::~HomebrewRowCell() {
+    if (imageToken) *imageToken = false;
+}
+
 void HomebrewRowCell::prepareForReuse() {
     brls::RecyclerCell::prepareForReuse();
-    *imageToken = false;  // images still on their way belong to the old row
+    if (imageToken) *imageToken = false;
     imageToken = std::make_shared<bool>(true);
     for (auto& c : cards) {
         if (c.box->isFocused()) c.box->onFocusLost();

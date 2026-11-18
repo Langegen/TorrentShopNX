@@ -81,7 +81,7 @@ bool DownloadManager::hasActiveDownload(const std::string& topic_id, const std::
 
 void DownloadManager::addDownload(const Game& game, const std::vector<int>& selected_files, int forced_file_index, const std::string& forced_stream_name, const std::string& retro_console_id,
                                  const std::string& group_id, const std::string& group_title, const std::string& component_label, const std::string& component_name, int component_type,
-                                 unsigned long long initial_file_size) {
+                                 unsigned long long initial_file_size, bool no_install) {
     if (hasActiveDownload(game.topic_id, game.magnet, forced_file_index)) {
         util::logLine("download_ui: game " + game.title + " (topic_id=" + game.topic_id + ") is already in download queue, ignoring duplicate");
         brls::Application::notify("app/downloads/already_in_queue"_i18n);
@@ -94,7 +94,7 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         std::lock_guard<std::recursive_mutex> lock(impl_.queueMutex());
         perf::LockTimer lock_timer(perf::LockSite::UiAdd, lock_wait_start);
         const bool is_pc = isPcGame(game);
-        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id, is_pc);
+        idx = impl_.addToQueue(game.title, game.magnet, forced_file_index, forced_stream_name, isHomebrewGame(game), retro_console_id, is_pc, no_install);
 
         auto& item = impl_.queueMutable()[idx];
         item.topic_id = game.topic_id;
@@ -104,6 +104,7 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
         item.cover_url = game.cover;
         item.is_homebrew = isHomebrewGame(game);
         item.is_pc = is_pc;
+        item.no_install = no_install;
         item.retro_console_id = retro_console_id;
 
         item.download_total_bytes = initial_file_size;
@@ -120,7 +121,7 @@ void DownloadManager::addDownload(const Game& game, const std::vector<int>& sele
             impl_.startDownload(idx);
         }
 
-        util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue, is_homebrew=" + (item.is_homebrew ? "true" : "false") + ", retro=" + retro_console_id + ", group=" + item.group_id + ", size=" + std::to_string(initial_file_size));
+        util::logLine("download_ui: added game " + game.title + " (topic_id=" + game.topic_id + ") to download queue, is_homebrew=" + (item.is_homebrew ? "true" : "false") + ", no_install=" + (item.no_install ? "true" : "false") + ", retro=" + retro_console_id + ", group=" + item.group_id + ", size=" + std::to_string(initial_file_size));
     }
     saveDownloads();
 }
