@@ -1567,6 +1567,120 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     ncmContentMetaDatabaseClose(&meta_db);
 
     // =========================================================================
+    // Шаг 5в-2: Очистка устаревших версий обновлений (Patch 0x81)
+    // =========================================================================
+    if (cnmt.meta_type == 0x81) {
+        util::logLine("hybrid: patch installed (v" + std::to_string(key.version) +
+                      "), checking for obsolete patch versions to clean up");
+
+        auto isNewContentId = [&](const NcmContentId& cid) -> bool {
+            for (const auto& ci : content_infos) {
+                if (std::memcmp(ci.content_id.c, cid.c, sizeof(NcmContentId)) == 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const NcmStorageId storages[] = {
+            config_.storage,
+            (config_.storage == NcmStorageId_SdCard) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard
+        };
+
+        for (NcmStorageId st_id : storages) {
+            NcmContentMetaDatabase db = {};
+            if (R_FAILED(ncmOpenContentMetaDatabase(&db, st_id))) continue;
+
+            std::vector<NcmContentMetaKey> keys(32);
+            s32 total = 0, written = 0;
+            Result list_rc = ncmContentMetaDatabaseList(&db, &total, &written, keys.data(),
+                                                        static_cast<s32>(keys.size()),
+                                                        NcmContentMetaType_Patch,
+                                                        0, key.id, key.id,
+                                                        NcmContentInstallType_Full);
+            if (R_SUCCEEDED(list_rc) && total > written) {
+                keys.resize(static_cast<size_t>(total));
+                list_rc = ncmContentMetaDatabaseList(&db, &total, &written, keys.data(),
+                                                    static_cast<s32>(keys.size()),
+                                                    NcmContentMetaType_Patch,
+                                                    0, key.id, key.id,
+                                                    NcmContentInstallType_Full);
+            }
+            if (R_FAILED(list_rc) || written == 0) {
+                // Fallback: list all patch records across this storage and match by ID
+                keys.resize(512);
+                total = written = 0;
+                list_rc = ncmContentMetaDatabaseList(&db, &total, &written, keys.data(),
+                                                    static_cast<s32>(keys.size()),
+                                                    NcmContentMetaType_Patch,
+                                                    0, 0, UINT64_MAX,
+                                                    NcmContentInstallType_Full);
+                if (R_SUCCEEDED(list_rc) && total > written) {
+                    keys.resize(static_cast<size_t>(total));
+                    list_rc = ncmContentMetaDatabaseList(&db, &total, &written, keys.data(),
+                                                        static_cast<s32>(keys.size()),
+                                                        NcmContentMetaType_Patch,
+                                                        0, 0, UINT64_MAX,
+                                                        NcmContentInstallType_Full);
+                }
+            }
+
+            if (R_SUCCEEDED(list_rc) && written > 0) {
+                bool db_modified = false;
+                NcmContentStorage cs = {};
+                bool cs_opened = false;
+
+                for (s32 i = 0; i < written; ++i) {
+                    const auto& old_k = keys[static_cast<size_t>(i)];
+                    if (old_k.id != key.id) continue;
+
+                    // Clean up strictly older versions on the same storage,
+                    // or older/duplicate versions on the alternate storage.
+                    bool should_remove = (st_id == config_.storage)
+                                       ? (old_k.version < key.version)
+                                       : (old_k.version <= key.version);
+                    if (!should_remove) continue;
+
+                    util::logLine("hybrid: cleaning up obsolete patch v" + std::to_string(old_k.version) +
+                                  " on storage " + std::to_string(static_cast<int>(st_id)));
+
+                    std::vector<NcmContentInfo> old_cis(64);
+                    s32 old_entries = 0;
+                    if (R_SUCCEEDED(ncmContentMetaDatabaseListContentInfo(&db, &old_entries, old_cis.data(),
+                                                                         static_cast<s32>(old_cis.size()), &old_k, 0))) {
+                        if (!cs_opened) {
+                            if (R_SUCCEEDED(ncmOpenContentStorage(&cs, st_id))) {
+                                cs_opened = true;
+                            }
+                        }
+                        if (cs_opened) {
+                            for (s32 j = 0; j < old_entries; ++j) {
+                                if (!isNewContentId(old_cis[static_cast<size_t>(j)].content_id)) {
+                                    ncmContentStorageDelete(&cs, &old_cis[static_cast<size_t>(j)].content_id);
+                                } else {
+                                    util::logLine("hybrid: preserving shared NCA between patch versions");
+                                }
+                            }
+                        }
+                    }
+
+                    if (R_SUCCEEDED(ncmContentMetaDatabaseRemove(&db, &old_k))) {
+                        db_modified = true;
+                    }
+                }
+
+                if (cs_opened) {
+                    ncmContentStorageClose(&cs);
+                }
+                if (db_modified) {
+                    ncmContentMetaDatabaseCommit(&db);
+                }
+            }
+            ncmContentMetaDatabaseClose(&db);
+        }
+    }
+
+    // =========================================================================
     // Шаг 5г: nsPushApplicationRecord
     // =========================================================================
     {
@@ -1606,6 +1720,8 @@ bool HybridNspInstaller::registerContentMetaPhase() {
             } else {
                 util::logLine("hybrid: nsPushApplicationRecord FAILED, rc=" + std::to_string(ns_rc));
             }
+
+            nsDeleteRedundantApplicationEntity();
 
             std::vector<NsApplicationControlData> app_ctrl(1);
             size_t app_ctrl_size = 0;
