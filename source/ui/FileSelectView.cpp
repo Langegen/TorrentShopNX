@@ -527,12 +527,6 @@ void FileSelectView::onContentAvailable() {
                     cfg.setInstallLocation("sd");
                 } else if (loc == "sd") {
                     cfg.setInstallLocation("nand");
-                } else if (loc == "nand") {
-                    noInstall_ = true;
-                    updateInstallLocationDisplay();
-                    updateTotalSize();
-                    rebuildFileList();
-                    return true;
                 } else {
                     cfg.setInstallLocation("auto");
                 }
