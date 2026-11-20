@@ -85,9 +85,10 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
         std::string cancelText = brls::getStr("app/common/cancel");
         if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
-        progressDialog->addButton(cancelText, [cancelFlag, statusLabel]() {
+        // Borealis dismisses and frees the dialog after this callback.
+        progressDialog->addButton(cancelText, [cancelFlag, closedFlag]() {
             cancelFlag->store(true);
-            statusLabel->setText("app/retro/cancelling_update"_i18n);
+            closedFlag->store(true);
         });
 
         progressDialog->open();
@@ -104,12 +105,12 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
 
             if (targets.empty()) {
                 brls::sync([progressDialog, closedFlag, onComplete]() {
-                    if (!closedFlag->exchange(true)) {
-                        progressDialog->close([onComplete]() {
-                            brls::Application::notify("app/retro/no_cached_bases"_i18n);
-                            if (onComplete) onComplete(0);
-                        });
-                    }
+                    auto finish = [onComplete]() {
+                        brls::Application::notify("app/retro/no_cached_bases"_i18n);
+                        if (onComplete) onComplete(0);
+                    };
+                    if (closedFlag->exchange(true)) finish();
+                    else progressDialog->close(finish);
                 });
                 return;
             }
@@ -123,7 +124,8 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
                 const auto& c = targets[i];
                 int current = i + 1;
 
-                brls::sync([statusLabel, progressFill, counterLabel, current, total, c]() {
+                brls::sync([statusLabel, progressFill, counterLabel, closedFlag, current, total, c]() {
+                    if (closedFlag->load()) return;
                     statusLabel->setText(c.name + " (" + std::to_string(current) + "/" + std::to_string(total) + ")");
                     float pct = static_cast<float>(current) / static_cast<float>(total);
                     progressFill->setWidth(440.0f * pct);
@@ -139,18 +141,18 @@ void showRetroCatalogUpdateDialog(std::function<void(int updatedCount)> onComple
             bool cancelled = cancelFlag->load();
 
             brls::sync([progressDialog, closedFlag, cancelled, successCount, total, onComplete]() {
-                if (!closedFlag->exchange(true)) {
-                    progressDialog->close([cancelled, successCount, total, onComplete]() {
-                        if (cancelled) {
-                            brls::Application::notify("app/retro/update_interrupted"_i18n + std::to_string(successCount) + "/" + std::to_string(total) + ")");
-                        } else if (successCount > 0) {
-                            brls::Application::notify("app/retro/platforms_updated"_i18n + std::to_string(successCount) + "app/retro/of_prefix"_i18n + std::to_string(total));
-                        } else {
-                            brls::Application::notify("app/retro/update_error_offline"_i18n);
-                        }
-                        if (onComplete) onComplete(successCount);
-                    });
-                }
+                auto finish = [cancelled, successCount, total, onComplete]() {
+                    if (cancelled) {
+                        brls::Application::notify("app/retro/update_interrupted"_i18n + std::to_string(successCount) + "/" + std::to_string(total) + ")");
+                    } else if (successCount > 0) {
+                        brls::Application::notify("app/retro/platforms_updated"_i18n + std::to_string(successCount) + "app/retro/of_prefix"_i18n + std::to_string(total));
+                    } else {
+                        brls::Application::notify("app/retro/update_error_offline"_i18n);
+                    }
+                    if (onComplete) onComplete(successCount);
+                };
+                if (closedFlag->exchange(true)) finish();
+                else progressDialog->close(finish);
             });
         });
     };
