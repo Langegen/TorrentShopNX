@@ -41,6 +41,7 @@ static bool hasExtension(const std::string& name, const std::string& ext) {
 
 constexpr size_t XCI_HEADER_SIZE = 0x200;
 constexpr size_t HFS0_MAGIC = 0x30534648; // "HFS0"
+constexpr uint64_t HFS0_HEADER_MAX_SIZE = 4 * 1024 * 1024; // same guard as NSP_HEADER_MAX_SIZE
 
 // Structure defining a parsed Hfs0 Partition
 struct Hfs0Partition {
@@ -62,7 +63,12 @@ static bool parseHfs0Header(datasource::IDataSource* source, uint64_t hfs0_offse
     uint32_t file_count = readU32(header + 4);
     uint32_t string_table_sz = readU32(header + 8);
 
-    size_t header_sz = 16 + file_count * 0x40 + string_table_sz;
+    // 64-bit math: file_count * 0x40 wraps in 32 bits on hostile headers.
+    uint64_t header_sz = 16 + static_cast<uint64_t>(file_count) * 0x40 + string_table_sz;
+    if (header_sz > HFS0_HEADER_MAX_SIZE) {
+        util::logLine("XciHeader: HFS0 header too large (" + std::to_string(header_sz) + ")");
+        return false;
+    }
     data_region_abs = hfs0_offset + header_sz;
 
     std::vector<uint8_t> file_entries(file_count * 0x40);
