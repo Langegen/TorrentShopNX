@@ -206,6 +206,10 @@ bool NcmInstaller::finalizePlaceHolder(const NcmContentId& id) {
     NcmPlaceHolderId placeholder_id;
     std::memcpy(&placeholder_id, &id, sizeof(NcmPlaceHolderId));
 
+    // Content IDs are content hashes: an existing ID is the same NCA the current install still uses.
+    bool existed = false;
+    if (R_FAILED(ncmContentStorageHas(&content_storage_, &existed, &id))) existed = false;
+
     // РЈРґР°Р»СЏРµРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ РєРѕРЅС‚РµРЅС‚, РµСЃР»Рё РµСЃС‚СЊ (РїРµСЂРµСѓСЃС‚Р°РЅРѕРІРєР°)
     ncmContentStorageDelete(&content_storage_, &id);
 
@@ -215,7 +219,11 @@ bool NcmInstaller::finalizePlaceHolder(const NcmContentId& id) {
         util::logLine("ncm: register failed, rc=" + std::to_string(rc));
         return false;
     }
-    registered_.push_back(id);
+    if (existed) {
+        util::logLine("ncm: content already installed, kept out of rollback");
+    } else {
+        registered_.push_back(id);
+    }
 
     // РЈР±РёСЂР°РµРј РёР· СЃРїРёСЃРєР° РїР»РµР№СЃС…РѕР»РґРµСЂРѕРІ
     for (auto it = placeholders_.begin(); it != placeholders_.end(); ++it) {

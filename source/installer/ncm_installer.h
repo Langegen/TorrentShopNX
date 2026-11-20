@@ -76,6 +76,7 @@ public:
 
     /// Delete the contents registered by finalizePlaceHolder() during this
     /// install (failed or cancelled install), or forget them once it succeeded.
+    /// Contents that were already installed before this install are never rolled back.
     void rollbackRegistered();
     void forgetRegistered() { registered_.clear(); }
 
