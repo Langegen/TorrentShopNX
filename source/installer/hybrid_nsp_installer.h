@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -247,6 +248,8 @@ private:
     std::thread installer_thread_;
     bool   threads_started_  = false;
 #endif
+    // cancel() is called from the UI, the dialog worker and the destructor; it joins and closes threads.
+    std::mutex cancel_mutex_;
     std::atomic<bool> is_paused_{false};
 };
 

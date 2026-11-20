@@ -1785,6 +1785,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
 // cancel()
 // =============================================================================
 void HybridNspInstaller::cancel() {
+    std::lock_guard<std::mutex> lock(cancel_mutex_);
     if (state_ == InstallState::Idle ||
         state_ == InstallState::Completed ||
         state_ == InstallState::Failed ||

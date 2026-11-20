@@ -172,16 +172,12 @@ InstallProgressDialog::InstallProgressDialog(
     std::string cancelText = brls::getStr("app/common/cancel");
     if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
+    // Only signal here: the worker runs the blocking cancel and the destructor joins it.
     this->addButton(cancelText, [this]() {
         if (cancelToken_) {
             cancelToken_->store(true);
         }
-        if (installer_) {
-            installer_->cancel();
-        }
-        if (statusLabel_) {
-            statusLabel_->setText("app/installer/step_cancelling"_i18n);
-        }
+        closed_.store(true);  // the dialog is going away: the worker must not close() it again
     });
 
     this->setCancelable(false);
