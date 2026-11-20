@@ -1256,8 +1256,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     if (group.state == download::DownloadState::Failed && !group.failed_name.empty()) {
         statusStr = brls::getStr("app/downloads/state_failed") + " (" + group.failed_name + ")";
     }
+    // A stream install stalled on an empty swarm otherwise just sits at "Installing".
+    const bool noPeers = group.state == download::DownloadState::StreamInstalling &&
+                         group.peers <= 0 && group.dl_speed_kbps <= 0.0f &&
+                         group.dl_written < group.dl_total;
+    if (noPeers) statusStr = "app/downloads/state_no_peers"_i18n;
     cell->statusText->setText(statusStr);
-    cell->statusText->setTextColor(getDownloadStateColor(group.state, isLight));
+    cell->statusText->setTextColor(noPeers ? (isLight ? nvgRGB(216, 100, 0) : nvgRGB(255, 152, 0))
+                                           : getDownloadStateColor(group.state, isLight));
 
     // Stats text (ETA, stage label, etc.)
     std::string stageMsg;
