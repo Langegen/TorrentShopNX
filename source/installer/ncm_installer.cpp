@@ -13,7 +13,7 @@
 extern std::recursive_mutex g_switch_service_mutex;
 
 // [perf] inst: time inside ncmContentStorageWritePlaceHolder, one line per 5 s
-// to engine.log (installer thread only). The SD write path (ncm -> fs) runs on
+// to engine.log (one writing thread at a time). The SD write path (ncm -> fs) runs on
 // the system core next to bsd and vi; this lets the netloop's slow-socket
 // windows (sock_us/call) be lined up with slow writes.
 namespace {
