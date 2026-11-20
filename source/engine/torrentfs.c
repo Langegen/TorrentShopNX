@@ -170,6 +170,7 @@ enum { DUPREQ_HEAD_SLOW = 0,  // head piece, every holder slow
 // network (software SHA-1 at loopback speed) grew the queue to 150+ jobs:
 // the ring wrapped onto itself, jobs ran twice and the heap was corrupted.
 #define WQ_CAP           (AQ_MAX + 2)
+#define HAVE_Q_CAP       256
 
 // Streaming window
 #define STREAM_WINDOW    (384LL * 1024 * 1024)
@@ -618,6 +619,10 @@ struct torrentfs {
     int wq_head, wq_n;
     int64_t writing_idx;
     uint8_t *writing_buf;
+    // Pieces verified by the writer, announced (HAVE) by the netloop that owns the sessions.
+    uint32_t have_q[HAVE_Q_CAP];
+    int have_q_n;
+    int have_q_pending;   // atomic hint so the netloop skips the lock when empty
 
     sess S[MAX_SESS];
 
@@ -1661,6 +1666,37 @@ static void mark_ever_done(torrentfs *t, int64_t idx) {
     }
 }
 
+// Caller holds t->lock.
+static void have_q_push(torrentfs *t, int64_t idx) {
+    if (t->have_q_n < HAVE_Q_CAP) {
+        t->have_q[t->have_q_n++] = (uint32_t)idx;
+        __atomic_store_n(&t->have_q_pending, 1, __ATOMIC_RELEASE);
+    } else {
+        engine_log(ENGINE_LOG_WARN, "[writer] HAVE queue full, piece %lld not announced", (long long)idx);
+    }
+}
+
+// Netloop only: announce pieces the writer has verified to every live peer.
+static void announce_verified(torrentfs *t) {
+    if (!__atomic_load_n(&t->have_q_pending, __ATOMIC_ACQUIRE)) return;
+    uint32_t q[HAVE_Q_CAP];
+    int n;
+    mutexLock(&t->lock);
+    n = t->have_q_n;
+    memcpy(q, t->have_q, (size_t)n * sizeof(q[0]));
+    t->have_q_n = 0;
+    __atomic_store_n(&t->have_q_pending, 0, __ATOMIC_RELEASE);
+    mutexUnlock(&t->lock);
+    for (int k = 0; k < n; k++) {
+        uint32_t hv = htonl(q[k]);
+        for (int i = 0; i < MAX_SESS; i++) {
+            sess *s = &t->S[i];
+            if (!s->active || s->connecting || !s->nb.handshaked) continue;
+            peer_nb_queue(&s->nb, MSG_HAVE, &hv, 4);
+        }
+    }
+}
+
 static void writer_main(void *arg) {
     torrentfs *t = arg;
     for (;;) {
@@ -1707,6 +1743,7 @@ static void writer_main(void *arg) {
             mutexLock(&t->lock);
             condvarWakeAll(&t->piece_cv);
             mark_ever_done(t, j.idx);
+            have_q_push(t, j.idx);
             t->st_piece_ok++;
             t->st_cache_written += j.plen;
             engine_log(ENGINE_LOG_DEBUG, "[writer] piece %lld verified (RAM)", (long long)j.idx);
@@ -1737,6 +1774,7 @@ static void writer_main(void *arg) {
                 }
                 condvarWakeAll(&t->piece_cv);
                 mark_ever_done(t, j.idx);
+                have_q_push(t, j.idx);
                 t->st_piece_ok++;
                 t->st_cache_written += j.plen;
                 engine_log(ENGINE_LOG_DEBUG, "[writer] piece %lld verified (SD)", (long long)j.idx);
@@ -2814,14 +2852,11 @@ static void request_scan_rx(torrentfs *t, sess *s, u64 now) {
 static void piece_full(torrentfs *t, aq_entry *a) {
     int64_t idx = a->idx;
     t->last_progress_tick = armGetSystemTick();
-    // Announce the piece to every live peer so we look like a well-behaved
-    // client (and seeders learn what we hold for later piece exchange), and
-    // purge any lingering request entries for this completed piece.
-    uint32_t hv = htonl((uint32_t)idx);
+    // Purge lingering request entries for this completed piece. HAVE is sent
+    // only after the writer verified it (announce_verified), not here.
     for (int i = 0; i < MAX_SESS; i++) {
         sess *s = &t->S[i];
         if (!s->active || s->connecting || !s->nb.handshaked) continue;
-        peer_nb_queue(&s->nb, MSG_HAVE, &hv, 4);
         int kept = 0;
         for (int k = 0; k < s->req_n; k++) {
             if (s->req_piece[k] != (int)idx) {
@@ -3620,9 +3655,8 @@ static void sess_msg(torrentfs *t, sess *s, int sid, uint8_t id, uint8_t *pl,
 // qBittorrent) expect a bitfield -- or at least a HAVE-less handshake -- and
 // some of them close a peer that never states its pieces (measured: seeds
 // dropped our connection within seconds of the handshake until the empty
-// bitfield was sent). v1 does not broadcast HAVE updates afterwards; every new
-// connection gets the full picture, which is enough for the reciprocation the
-// swarm's choking policy rewards.
+// bitfield was sent). Pieces verified later are announced with HAVE by
+// announce_verified().
 static void send_our_bitfield(torrentfs *t, sess *s) {
     size_t n = s->nb.bitfield_len;
     uint8_t *bf = malloc(n);
@@ -4575,6 +4609,7 @@ static void netloop_main(void *arg) {
                 last_upkeep = 0; // force immediate request_scan for the newly selected file
             }
         }
+        announce_verified(t);
         now = armGetSystemTick();
 
         // Upkeep every ~125 ms: dial, reap, keep-alives, rate EWMA, calm.
