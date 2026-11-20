@@ -303,12 +303,12 @@ void InstallProgressDialog::startInstallation() {
             util::logLine("InstallProgressDialog: threadStart failed, rc=" + std::to_string(rc));
             threadClose(&thread_);
             threadStarted_ = false;
-            if (onComplete_) onComplete_(false, "Failed to start installer thread");
+            if (onComplete_) onComplete_(false, "app/common/thread_failed"_i18n);
             if (!closed_.exchange(true)) this->close();
         }
     } else {
         util::logLine("InstallProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
-        if (onComplete_) onComplete_(false, "Failed to create installer thread");
+        if (onComplete_) onComplete_(false, "app/common/thread_failed"_i18n);
         if (!closed_.exchange(true)) this->close();
     }
 #else

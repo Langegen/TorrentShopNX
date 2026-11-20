@@ -469,9 +469,26 @@ static std::string componentDisplayName(const download::DownloadItem& itm) {
     return name;
 }
 
+// Raw installer/stream errors are English developer text (kept in the log); show users a localized cause + hint instead.
+static std::string friendlyInstallError(const std::string& raw) {
+    const std::string s = util::toLowerCopy(raw);
+    auto has = [&s](std::initializer_list<const char*> needles) {
+        for (const char* n : needles) if (s.find(n) != std::string::npos) return true;
+        return false;
+    };
+    if (has({"cancel"})) return "app/downloads/state_cancelled"_i18n;
+    if (has({"free space", "no space", "create placeholder"})) return "app/downloads/err_no_space"_i18n;
+    if (has({"out of memory", "bad_alloc", "thread, rc="})) return "app/downloads/err_no_memory"_i18n;
+    if (has({"open stream", "stream open", "metadata timeout", "collector stopped early", "data source", "failed to read"}))
+        return "app/downloads/err_no_peers"_i18n;
+    if (has({"invalid", "parse", "corrupt", "magic", "unexpected eof", "decompress"}))
+        return "app/downloads/err_bad_file"_i18n;
+    return raw;
+}
+
 static std::string formatEta(float speed_kbps, unsigned long long remaining_bytes) {
     if (speed_kbps <= 5.0f || remaining_bytes == 0) {
-        return "ETA: --";
+        return "app/downloads/eta_unknown"_i18n;
     }
     double speed_bytes = (double)speed_kbps * 1024.0;
     double sec = (double)remaining_bytes / speed_bytes;
@@ -623,38 +640,38 @@ static void showPeerInspector(const download::DownloadItem& item) {
     };
 
     if (hasDiag) {
-        std::string peersStr = std::to_string(diag.live) + " live (" + std::to_string(diag.connecting) + " connecting, " + std::to_string(diag.peak) + " peak)";
-        addStatRow("Peers / Connections", peersStr);
+        addStatRow("app/downloads/peers_connections"_i18n, brls::getStr("app/downloads/peers_live_fmt",
+            std::to_string(diag.live), std::to_string(diag.connecting), std::to_string(diag.peak)));
 
-        std::string workStr = std::to_string(diag.claiming) + " downloading, " + std::to_string(diag.idle) + " idle / choked";
-        addStatRow("Session Activity", workStr);
+        addStatRow("app/downloads/session_activity"_i18n, brls::getStr("app/downloads/session_activity_fmt",
+            std::to_string(diag.claiming), std::to_string(diag.idle)));
 
         if (diag.pieces_total > 0) {
             std::string pieceStr = std::to_string(diag.pieces_done) + " / " + std::to_string(diag.pieces_total) +
                                    " (" + std::to_string((int)((diag.pieces_done * 100) / diag.pieces_total)) + "%)";
-            addStatRow("Pieces Resident", pieceStr);
+            addStatRow("app/downloads/pieces_resident"_i18n, pieceStr);
         }
 
         std::string dataStr = formatBytes(diag.bytes_recv);
         if (diag.dup_bytes > 0) {
-            dataStr += " (dup " + formatBytes(diag.dup_bytes) + ")";
+            dataStr += " " + brls::getStr("app/downloads/data_dup", formatBytes(diag.dup_bytes));
         }
-        addStatRow("Data Received", dataStr);
+        addStatRow("app/downloads/data_received"_i18n, dataStr);
 
-        std::string errorsStr = "Timeouts: " + std::to_string(diag.timeouts) + " · Sock: " + std::to_string(diag.sock_fail) + " · Handshake: " + std::to_string(diag.hs_fail);
-        addStatRow("Connection Issues", errorsStr);
+        addStatRow("app/downloads/conn_issues"_i18n, brls::getStr("app/downloads/conn_issues_fmt",
+            std::to_string(diag.timeouts), std::to_string(diag.sock_fail), std::to_string(diag.hs_fail)));
     } else {
-        std::string seedsPeers = "Seeds: " + std::to_string(item.seeds) + " · Peers: " + std::to_string(item.peers) + " · DHT: " + std::to_string(item.dht);
-        addStatRow("Swarm Summary", seedsPeers);
+        addStatRow("app/downloads/swarm_summary"_i18n, brls::getStr("app/downloads/peers_standard",
+            std::to_string(item.seeds), std::to_string(item.peers), std::to_string(item.dht)));
         if (!hash.empty()) {
-            addStatRow("Info Hash", hash);
+            addStatRow("app/downloads/info_hash"_i18n, hash);
         }
     }
     content->addView(statsBox);
 
     // Peer List Header
     auto* peerListHeader = new brls::Label();
-    peerListHeader->setText("Active Peer Sessions");
+    peerListHeader->setText("app/downloads/active_peers"_i18n);
     peerListHeader->setFontSize(15.0f);
     peerListHeader->setTextColor(primaryText);
     peerListHeader->setMarginBottom(8.0f);
@@ -700,18 +717,18 @@ static void showPeerInspector(const download::DownloadItem& item) {
             std::string statusStr;
             NVGcolor statusCol = secondaryText;
             if (p.connecting) {
-                statusStr = "Connecting...";
+                statusStr = "app/downloads/peer_connecting"_i18n;
                 statusCol = isLight ? nvgRGB(180, 110, 0) : nvgRGB(255, 193, 7);
             } else if (p.claim_piece >= 0) {
                 char speedBuf[32];
                 std::snprintf(speedBuf, sizeof(speedBuf), "%.1f KB/s", p.rate_bps / 1024.0);
-                statusStr = "Piece #" + std::to_string(p.claim_piece) + " (" + speedBuf + ")";
+                statusStr = brls::getStr("app/downloads/peer_piece", std::to_string(p.claim_piece), std::string(speedBuf));
                 statusCol = isLight ? nvgRGB(34, 139, 34) : nvgRGB(76, 175, 80);
             } else if (p.choked) {
-                statusStr = "Choked";
+                statusStr = "app/downloads/peer_choked"_i18n;
                 statusCol = isLight ? nvgRGB(210, 40, 40) : nvgRGB(244, 67, 54);
             } else {
-                statusStr = "Idle (Unchoked)";
+                statusStr = "app/downloads/peer_idle"_i18n;
                 statusCol = isLight ? nvgRGB(20, 100, 200) : nvgRGB(33, 150, 243);
             }
 
@@ -1302,7 +1319,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         }
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else if (group.state == download::DownloadState::Failed) {
-        cell->statsText->setText(group.failed_error.empty() ? "app/downloads/unknown_error"_i18n : group.failed_error);
+        cell->statsText->setText(group.failed_error.empty() ? "app/downloads/unknown_error"_i18n : friendlyInstallError(group.failed_error));
         cell->statsText->setVisibility(brls::Visibility::VISIBLE);
     } else {
         cell->statsText->setVisibility(brls::Visibility::GONE);
@@ -1724,7 +1741,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                         summaryTxt->setText("app/downloads/state_paused"_i18n + (itm_dl_t > 0 ? (" · " + formatProgressBytes(itm_dl_w, itm_dl_t)) : ""));
                         summaryTxt->setTextColor(secondaryText);
                     } else if (isFailed) {
-                        summaryTxt->setText(itm.error_message.empty() ? "app/downloads/state_failed"_i18n : itm.error_message);
+                        summaryTxt->setText(itm.error_message.empty() ? "app/downloads/state_failed"_i18n : friendlyInstallError(itm.error_message));
                         summaryTxt->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(244, 67, 54));
                     } else {
                         summaryTxt->setText(getStatusString(itm.state));
