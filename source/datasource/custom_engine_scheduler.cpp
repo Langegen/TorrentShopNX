@@ -195,14 +195,18 @@ CustomSchedulerSnapshot CustomEngineScheduler::on_read_request(std::int64_t offs
         return last_snapshot_;
     }
     last_apply_at_ = now;
+    const int prev_piece = last_current_piece_;
     last_current_piece_ = current_piece;
 
     CustomSchedulerSnapshot snap = rebuild(current_piece);
     apply_zones(snap);
 
-    bool should_log = (last_log_piece_ != current_piece) ||
+    // Sequential progress is one line per piece over a whole install and pushes
+    // everything else out of the 64 KB bug-report tail; log jumps, throttle the rest.
+    const bool sequential = current_piece == prev_piece || current_piece == prev_piece + 1;
+    bool should_log = !sequential ||
                       (last_log_at_.time_since_epoch().count() == 0) ||
-                      (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_at_).count() >= 5000);
+                      (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_at_).count() >= 10000);
     if (should_log) {
         last_log_piece_ = current_piece;
         last_log_at_ = now;
