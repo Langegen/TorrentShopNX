@@ -24,7 +24,8 @@
         "restart": "Riavvia",
         "error": "Errore",
         "confirm": "Conferma",
-        "processing": "Elaborazione..."
+        "processing": "Elaborazione...",
+        "thread_failed": "Impossibile avviare un'attività in background. Chiudi le altre app e riprova."
     },
     "actions": {
         "search": "Cerca",
@@ -205,7 +206,28 @@
         "comp_patch": "Aggiornamento {0}",
         "comp_patch_plain": "Aggiornamento",
         "saved_to_sd": "Salvato su SD",
-        "error_fat32_limit": "I file superiori a 4 GB non sono supportati dal file system FAT32"
+        "error_fat32_limit": "I file superiori a 4 GB non sono supportati dal file system FAT32",
+        "eta_unknown": "Rimanente: --",
+        "peers_connections": "Peer / connessioni",
+        "peers_live_fmt": "{0} attivi ({1} in connessione, picco {2})",
+        "session_activity": "Attività della sessione",
+        "session_activity_fmt": "{0} in download, {1} inattivi / bloccati",
+        "pieces_resident": "Pezzi caricati",
+        "data_received": "Dati ricevuti",
+        "data_dup": "(duplicati {0})",
+        "conn_issues": "Problemi di connessione",
+        "conn_issues_fmt": "Timeout: {0} · Socket: {1} · Handshake: {2}",
+        "swarm_summary": "Riepilogo dello sciame",
+        "info_hash": "Info Hash",
+        "active_peers": "Sessioni peer attive",
+        "peer_connecting": "Connessione...",
+        "peer_piece": "Pezzo #{0} ({1})",
+        "peer_choked": "Bloccato",
+        "peer_idle": "Inattivo (sbloccato)",
+        "err_no_space": "Spazio libero insufficiente. Libera spazio sulla scheda SD o nella memoria della console e riprova.",
+        "err_no_memory": "Memoria insufficiente. Avvia l'app tramite title override (tieni premuto R all'avvio di un gioco) invece che dall'album.",
+        "err_no_peers": "Impossibile ricevere dati dallo sciame: nessun peer o troppo lenti. Riprova più tardi o scegli un'altra release.",
+        "err_bad_file": "Il file è danneggiato o non supportato. Prova un'altra release."
     },
     "detail": {
         "unknown_publisher": "Editore sconosciuto",
@@ -327,7 +349,8 @@
         "fat32_badge": "FAT32 > 4 GB",
         "fat32_file_too_large_notice": "Il file supera i 4 GB. Le schede FAT32 non possono memorizzare file superiori a 4 GB.",
         "fat32_cannot_download_dlg": "Il file \"{0}\" ({1}) supera i 4 GB.\n\nIl file system FAT32 non supporta file superiori a 4 GB senza installazione nel sistema.",
-        "fat32_all_files_too_large": "Tutti i file superano i 4 GB e non possono essere salvati su una scheda FAT32"
+        "fat32_all_files_too_large": "Tutti i file superano i 4 GB e non possono essere salvati su una scheda FAT32",
+        "queue_add_failed": "Impossibile aggiungere alla coda: {0}"
     },
     "remote": {
         "title": "Aggiungi torrent",
@@ -462,7 +485,11 @@
         "uninstall_with_mods_prompt": "Trovate mod/traduzioni ({1}) per \"{0}\". Eliminarle insieme al gioco?",
         "badge_not_installed": "NON INSTALLATO",
         "stats_not_installed": "Non installati: {0}",
-        "section_not_installed": "NON INSTALLATI (SU UN'ALTRA SCHEDA SD O ARCHIVIATI) — {0}"
+        "section_not_installed": "NON INSTALLATI (SU UN'ALTRA SCHEDA SD O ARCHIVIATI) — {0}",
+        "comp_total_size": "Dimensione totale: {0}",
+        "comp_none": "Nessun componente trovato",
+        "comp_confirm_delete_base": "Eliminando il gioco base lo rimuoverai completamente dalla console.\nContinuare?",
+        "comp_mods_label": "Mod"
     },
     "filter": {
         "sort_label": "Ordina per",
@@ -872,7 +899,8 @@
         "create_archive_title": "Crea archivio ZIP",
         "create_archive_success": "Archivio creato con successo!",
         "create_archive_error": "Errore durante la creazione dell'archivio",
-        "archive_exists_overwrite": "Il file '{0}' esiste già. Sovrascrivere?"
+        "archive_exists_overwrite": "Il file '{0}' esiste già. Sovrascrivere?",
+        "archive_read_failed": "Impossibile leggere l'archivio"
     },
     "retro": {
         "consoles_title": "Giochi Retrò",

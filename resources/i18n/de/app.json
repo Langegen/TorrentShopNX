@@ -24,7 +24,8 @@
         "restart": "Neu starten",
         "error": "Fehler",
         "confirm": "Bestätigen",
-        "processing": "Wird verarbeitet..."
+        "processing": "Wird verarbeitet...",
+        "thread_failed": "Hintergrundaufgabe konnte nicht gestartet werden. Schließe andere Apps und versuche es erneut."
     },
     "actions": {
         "search": "Suchen",
@@ -205,7 +206,28 @@
         "comp_patch": "Update {0}",
         "comp_patch_plain": "Update",
         "saved_to_sd": "Auf SD gespeichert",
-        "error_fat32_limit": "Dateien über 4 GB werden vom FAT32-Dateisystem nicht unterstützt"
+        "error_fat32_limit": "Dateien über 4 GB werden vom FAT32-Dateisystem nicht unterstützt",
+        "eta_unknown": "Restzeit: --",
+        "peers_connections": "Peers / Verbindungen",
+        "peers_live_fmt": "{0} aktiv ({1} verbinden, Spitze {2})",
+        "session_activity": "Sitzungsaktivität",
+        "session_activity_fmt": "{0} laden, {1} untätig / gedrosselt",
+        "pieces_resident": "Geladene Teile",
+        "data_received": "Empfangene Daten",
+        "data_dup": "(doppelt {0})",
+        "conn_issues": "Verbindungsprobleme",
+        "conn_issues_fmt": "Timeouts: {0} · Socket: {1} · Handshake: {2}",
+        "swarm_summary": "Schwarm-Übersicht",
+        "info_hash": "Info-Hash",
+        "active_peers": "Aktive Peer-Sitzungen",
+        "peer_connecting": "Verbinde...",
+        "peer_piece": "Teil #{0} ({1})",
+        "peer_choked": "Gedrosselt",
+        "peer_idle": "Untätig (freigegeben)",
+        "err_no_space": "Nicht genug freier Speicher. Schaffe Platz auf der SD-Karte oder im Konsolenspeicher und versuche es erneut.",
+        "err_no_memory": "Nicht genug Arbeitsspeicher. Starte die App per Title-Override (beim Spielstart R gedrückt halten) statt über das Album.",
+        "err_no_peers": "Keine Daten aus dem Schwarm erhalten: keine Peers oder zu langsam. Versuche es später erneut oder wähle ein anderes Release.",
+        "err_bad_file": "Die Datei ist beschädigt oder wird nicht unterstützt. Versuche ein anderes Release."
     },
     "detail": {
         "unknown_publisher": "Unbekannter Publisher",
@@ -327,7 +349,8 @@
         "fat32_badge": "FAT32 > 4 GB",
         "fat32_file_too_large_notice": "Datei überschreitet 4 GB. FAT32-Karten können keine Dateien über 4 GB speichern.",
         "fat32_cannot_download_dlg": "Die Datei „{0}“ ({1}) überschreitet 4 GB.\n\nDas FAT32-Dateisystem unterstützt keine Dateien über 4 GB ohne Installation.",
-        "fat32_all_files_too_large": "Alle Dateien überschreiten 4 GB und können nicht auf einer FAT32-Karte gespeichert werden"
+        "fat32_all_files_too_large": "Alle Dateien überschreiten 4 GB und können nicht auf einer FAT32-Karte gespeichert werden",
+        "queue_add_failed": "Hinzufügen zur Warteschlange fehlgeschlagen: {0}"
     },
     "remote": {
         "title": "Torrent hinzufügen",
@@ -462,7 +485,11 @@
         "uninstall_with_mods_prompt": "Mods/Übersetzungen ({1}) für \"{0}\" gefunden. Zusammen mit dem Spiel löschen?",
         "badge_not_installed": "NICHT INSTALLIERT",
         "stats_not_installed": "Nicht installiert: {0}",
-        "section_not_installed": "NICHT INSTALLIERT (AUF ANDERER SD-KARTE ODER ARCHIVIERT) — {0}"
+        "section_not_installed": "NICHT INSTALLIERT (AUF ANDERER SD-KARTE ODER ARCHIVIERT) — {0}",
+        "comp_total_size": "Gesamtgröße: {0}",
+        "comp_none": "Keine Komponenten gefunden",
+        "comp_confirm_delete_base": "Das Löschen des Basisspiels entfernt das Spiel vollständig von der Konsole.\nFortfahren?",
+        "comp_mods_label": "Mods"
     },
     "filter": {
         "sort_label": "Sortieren nach",
@@ -872,7 +899,8 @@
         "create_archive_title": "ZIP-Archiv erstellen",
         "create_archive_success": "Archiv erfolgreich erstellt!",
         "create_archive_error": "Fehler beim Erstellen des Archivs",
-        "archive_exists_overwrite": "Datei '{0}' existiert bereits. Überschreiben?"
+        "archive_exists_overwrite": "Datei '{0}' existiert bereits. Überschreiben?",
+        "archive_read_failed": "Archiv konnte nicht gelesen werden"
     },
     "retro": {
         "consoles_title": "Retro-Spiele",

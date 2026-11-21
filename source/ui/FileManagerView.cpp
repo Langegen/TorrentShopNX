@@ -485,7 +485,7 @@ void FileManagerView::loadPanel(int panelIdx, const std::string& dir, const std:
             if (panels_[panelIdx].loadGen != gen) return;  // a newer request replaced this one
             if (!ok) {
                 util::logLine("FileManagerView: listArchiveFolder failed: " + err);
-                brls::Application::notify(err.empty() ? "Failed to read archive" : err);
+                brls::Application::notify(err.empty() ? "app/file_manager/archive_read_failed"_i18n : err);
             }
             applyListing(panelIdx, target, std::move(items), isArchive, focusChild);
         });

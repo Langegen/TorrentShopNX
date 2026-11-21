@@ -136,6 +136,7 @@ void GameStatsManager::loadFromDiskAsync() {
     });
 }
 
+// A network update may already have filled a map; fresher data wins over the disk cache.
 void GameStatsManager::loadFromDiskInternal() {
     try {
         // Load switch stats cache
@@ -144,8 +145,10 @@ void GameStatsManager::loadFromDiskInternal() {
         if (readFileFast(switchPath, switchBody) && !switchBody.empty()) {
             std::unordered_map<std::string, GameStats> loaded;
             if (parseStatsJson(switchBody, loaded)) {
-                switch_stats_ = std::move(loaded);
-                util::logLine("GameStatsManager: loaded " + std::to_string(switch_stats_.size()) + " switch stats from disk");
+                if (switch_stats_.empty()) {
+                    switch_stats_ = std::move(loaded);
+                    util::logLine("GameStatsManager: loaded " + std::to_string(switch_stats_.size()) + " switch stats from disk");
+                }
             }
         }
     } catch (const std::exception& e) {
@@ -161,8 +164,10 @@ void GameStatsManager::loadFromDiskInternal() {
         if (readFileFast(consolePath, consoleBody) && !consoleBody.empty()) {
             std::unordered_map<std::string, GameStats> loaded;
             if (parseStatsJson(consoleBody, loaded)) {
-                console_stats_ = std::move(loaded);
-                util::logLine("GameStatsManager: loaded " + std::to_string(console_stats_.size()) + " console stats from disk");
+                if (console_stats_.empty()) {
+                    console_stats_ = std::move(loaded);
+                    util::logLine("GameStatsManager: loaded " + std::to_string(console_stats_.size()) + " console stats from disk");
+                }
             }
         }
     } catch (const std::exception& e) {
@@ -178,8 +183,10 @@ void GameStatsManager::loadFromDiskInternal() {
         if (readFileFast(pcPath, pcBody) && !pcBody.empty()) {
             std::unordered_map<std::string, GameStats> loaded;
             if (parseStatsJson(pcBody, loaded)) {
-                pc_stats_ = std::move(loaded);
-                util::logLine("GameStatsManager: loaded " + std::to_string(pc_stats_.size()) + " PC stats from disk");
+                if (pc_stats_.empty()) {
+                    pc_stats_ = std::move(loaded);
+                    util::logLine("GameStatsManager: loaded " + std::to_string(pc_stats_.size()) + " PC stats from disk");
+                }
             }
         }
     } catch (const std::exception& e) {
@@ -269,7 +276,6 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                         std::lock_guard<std::mutex> lock(mutex_);
                         switch_stats_ = std::move(newMap);
                         switchCount = switch_stats_.size();
-                        loaded_from_disk_.store(true, std::memory_order_release);
                     }
                     anySuccess = true;
                     util::logLine("GameStatsManager: successfully updated switch stats (" +
@@ -292,7 +298,6 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                         std::lock_guard<std::mutex> lock(mutex_);
                         console_stats_ = std::move(newMap);
                         consoleCount = console_stats_.size();
-                        loaded_from_disk_.store(true, std::memory_order_release);
                     }
                     anySuccess = true;
                     util::logLine("GameStatsManager: successfully updated console stats (" +
@@ -317,7 +322,6 @@ void GameStatsManager::updateStatsInBackground(std::function<void(bool success)>
                         std::lock_guard<std::mutex> lock(mutex_);
                         pc_stats_ = std::move(newMap);
                         pcCount = pc_stats_.size();
-                        loaded_from_disk_.store(true, std::memory_order_release);
                     }
                     anySuccess = true;
                     util::logLine("GameStatsManager: successfully updated PC stats (" +

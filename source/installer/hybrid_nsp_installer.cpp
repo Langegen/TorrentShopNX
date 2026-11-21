@@ -2,6 +2,7 @@
 #include "installer_flow.h"
 #include "ncm_installer.h"
 #include "ncz_parser.h"
+#include "write_behind.h"
 #include "../buffer/ring_buffer.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
@@ -1049,7 +1050,12 @@ void HybridNspInstaller::installerThreadFunc() {
 
                         util::logLine("ncz: installing " + current_entry->name + " (compressed: " + std::to_string(ncz_total_compressed/(1024*1024)) + "MB, orig: " + std::to_string(d_size/(1024*1024)) + "MB)");
 
-                        std::vector<uint8_t> out_buf(4 * 1024 * 1024); // 4MB buffer for NCM
+                        constexpr size_t kOutBufSize = 4 * 1024 * 1024; // 4MB buffer for NCM
+                        const NcmContentId ncz_content_id = current_entry->content_id;
+                        // The SD write of one buffer overlaps decompression of the next.
+                        WriteBehind writer([this, ncz_content_id](uint64_t off, const uint8_t* data, size_t size) {
+                            return ncm_.writePlaceHolder(ncz_content_id, off, data, size);
+                        }, kOutBufSize);
                         const uint64_t progress_base = progress_pos;
                         uint64_t out_written = 0;
                         bool ok = true;
@@ -1060,8 +1066,15 @@ void HybridNspInstaller::installerThreadFunc() {
                         }
                         
                         while (out_written < d_size && !cancel_requested_) {
-                            size_t got = decompressor.read(out_buf.data(), out_buf.size());
+                            uint8_t* out_buf = writer.acquire();
+                            if (!out_buf) {
+                                setError("NCZ: Failed to write placeholder " + current_entry->name);
+                                ok = false;
+                                break;
+                            }
+                            size_t got = decompressor.read(out_buf, kOutBufSize);
                             if (got == 0) {
+                                writer.release(out_buf);
                                 if (out_written < d_size) {
                                     setError("NCZ: Unexpected EOF decompessing " + current_entry->name);
                                     ok = false;
@@ -1070,27 +1083,32 @@ void HybridNspInstaller::installerThreadFunc() {
                             }
 
                             if (out_written == 0 && got >= 0x4000) {
-                                checkNcaSdk(out_buf.data(), current_entry->name);
+                                checkNcaSdk(out_buf, current_entry->name);
                             }
 
-                            if (!ncm_.writePlaceHolder(current_entry->content_id, out_written, out_buf.data(), got)) {
-                                setError("NCZ: Failed to write placeholder " + current_entry->name);
-                                ok = false;
-                                break;
-                            }
-                            
                             if (config_.verify_sha256 && hashing_active) {
-                                sha256ContextUpdate(&sha_ctx, out_buf.data(), got);
+                                sha256ContextUpdate(&sha_ctx, out_buf, got);
                             }
 
                             if (current_entry->type == NspEntryType::CnmtNca) {
-                                cnmt_nca_data_.insert(cnmt_nca_data_.end(), out_buf.data(), out_buf.data() + got);
+                                cnmt_nca_data_.insert(cnmt_nca_data_.end(), out_buf, out_buf + got);
+                            }
+
+                            if (!writer.submit(out_buf, out_written, got)) {
+                                setError("NCZ: Failed to write placeholder " + current_entry->name);
+                                ok = false;
+                                break;
                             }
 
                             out_written += got;
 
                             // Report progress using decompressed bytes written to NCM.
                             bytes_installed_ = progress_base + out_written;
+                        }
+
+                        if (ok && !cancel_requested_ && !writer.finish()) {
+                            setError("NCZ: Failed to write placeholder " + current_entry->name);
+                            ok = false;
                         }
 
                         if (cancel_requested_) {
@@ -1785,6 +1803,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
 // cancel()
 // =============================================================================
 void HybridNspInstaller::cancel() {
+    std::lock_guard<std::mutex> lock(cancel_mutex_);
     if (state_ == InstallState::Idle ||
         state_ == InstallState::Completed ||
         state_ == InstallState::Failed ||

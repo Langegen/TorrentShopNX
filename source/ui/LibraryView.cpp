@@ -1939,12 +1939,12 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
     rootBox->addView(titleLabel);
 
     auto* subtitleLabel = new brls::Label();
-    std::string subText = "Общий размер: " + util::formatFileSize(currentItem.totalSizeBytes, 1);
+    std::string subText = brls::getStr("app/library/comp_total_size", util::formatFileSize(currentItem.totalSizeBytes, 1));
     if (currentItem.dlcCount > 0) {
         subText += " • DLC: " + std::to_string(currentItem.dlcCount);
     }
     if (currentItem.hasMods) {
-        subText += " • Моды: " + (currentItem.modDetails.empty() ? "RomFS" : currentItem.modDetails);
+        subText += " • " + "app/library/comp_mods_label"_i18n + ": " + (currentItem.modDetails.empty() ? "RomFS" : currentItem.modDetails);
     }
     subtitleLabel->setText(subText);
     subtitleLabel->setFontSize(14.0f);
@@ -1975,7 +1975,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
 
     if (currentItem.components.empty()) {
         auto* emptyLabel = new brls::Label();
-        emptyLabel->setText("Компоненты не найдены");
+        emptyLabel->setText("app/library/comp_none"_i18n);
         emptyLabel->setFontSize(15.0f);
         emptyLabel->setTextColor(ThemeManager::instance().getTextSecondaryColor());
         emptyLabel->setMarginTop(20.0f);
@@ -2049,7 +2049,7 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
             delBtn->registerClickAction([this, comp, currentItem, displayName, currentSection, currentRow, compDialog, refreshOrClose](brls::View* v) {
                 std::string confirmMsg;
                 if (comp.type == InstalledComponent::Type::BaseGame) {
-                    confirmMsg = "Удаление базовой игры полностью удалит игру из памяти.\nПродолжить?";
+                    confirmMsg = "app/library/comp_confirm_delete_base"_i18n;
                 } else {
                     confirmMsg = brls::getStr("app/library/comp_confirm_delete", comp.displayName);
                 }

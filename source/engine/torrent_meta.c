@@ -121,9 +121,19 @@ static void add_tracker_single(torrent_meta *t, const char *url, size_t len) {
     t->trackers[t->tracker_count++] = copy;
 }
 
+// url points into the raw .torrent buffer, which is not NUL-terminated.
+static int url_contains(const char *url, size_t len, const char *needle) {
+    size_t n = strlen(needle);
+    for (size_t i = 0; i + n <= len; i++)
+        if (memcmp(url + i, needle, n) == 0) return 1;
+    return 0;
+}
+
 static void add_tracker(torrent_meta *t, const char *url, size_t len) {
     add_tracker_single(t, url, len);
-    if (len >= 13 && (strstr(url, "t-ru.org/ann") != NULL || strstr(url, "bt.t-ru.org") != NULL || strstr(url, "bt2.t-ru.org") != NULL || strstr(url, "bt3.t-ru.org") != NULL || strstr(url, "bt4.t-ru.org") != NULL)) {
+    if (url_contains(url, len, "t-ru.org/ann") || url_contains(url, len, "bt.t-ru.org") ||
+        url_contains(url, len, "bt2.t-ru.org") || url_contains(url, len, "bt3.t-ru.org") ||
+        url_contains(url, len, "bt4.t-ru.org")) {
         static const char *RU_MIRRORS[] = {
             "http://bt.t-ru.org/ann?magnet",
             "http://bt2.t-ru.org/ann?magnet",

@@ -24,7 +24,8 @@
         "restart": "Restart",
         "error": "Error",
         "confirm": "Confirm",
-        "processing": "Processing..."
+        "processing": "Processing...",
+        "thread_failed": "Couldn't start a background task. Close other apps and try again."
     },
     "actions": {
         "search": "Search",
@@ -205,7 +206,28 @@
         "expand": "Expand",
         "comp_base_game": "Base game",
         "comp_patch": "Update {0}",
-        "comp_patch_plain": "Update"
+        "comp_patch_plain": "Update",
+        "eta_unknown": "ETA: --",
+        "peers_connections": "Peers / Connections",
+        "peers_live_fmt": "{0} live ({1} connecting, {2} peak)",
+        "session_activity": "Session Activity",
+        "session_activity_fmt": "{0} downloading, {1} idle / choked",
+        "pieces_resident": "Pieces Resident",
+        "data_received": "Data Received",
+        "data_dup": "(dup {0})",
+        "conn_issues": "Connection Issues",
+        "conn_issues_fmt": "Timeouts: {0} · Socket: {1} · Handshake: {2}",
+        "swarm_summary": "Swarm Summary",
+        "info_hash": "Info Hash",
+        "active_peers": "Active Peer Sessions",
+        "peer_connecting": "Connecting...",
+        "peer_piece": "Piece #{0} ({1})",
+        "peer_choked": "Choked",
+        "peer_idle": "Idle (Unchoked)",
+        "err_no_space": "Not enough free space. Free up space on the SD card or console memory and try again.",
+        "err_no_memory": "Not enough memory. Launch the app via title override (hold R while starting a game) instead of the album.",
+        "err_no_peers": "Couldn't get data from the swarm: no peers or they are too slow. Try again later or pick another release.",
+        "err_bad_file": "The file is damaged or not supported. Try another release."
     },
     "detail": {
         "modcd_has_mods_btn": "Mods in ModCD",
@@ -327,7 +349,8 @@
         "warn_nand_space": "Not enough space on NAND storage",
         "warn_ram_applet": "Applet mode limits available RAM",
         "warn_ram_nsp": "Insufficient RAM to process file",
-        "warn_sd_space": "Not enough space on SD card"
+        "warn_sd_space": "Not enough space on SD card",
+        "queue_add_failed": "Failed to add to queue: {0}"
     },
     "remote": {
         "title": "Remote Add",
@@ -462,7 +485,11 @@
         "badge_dlc_count": "DLC ({0})",
         "badge_not_installed": "NOT INSTALLED",
         "stats_not_installed": "Not installed: {0}",
-        "section_not_installed": "NOT INSTALLED (ON ANOTHER SD CARD OR ARCHIVED) — {0}"
+        "section_not_installed": "NOT INSTALLED (ON ANOTHER SD CARD OR ARCHIVED) — {0}",
+        "comp_total_size": "Total size: {0}",
+        "comp_none": "No components found",
+        "comp_confirm_delete_base": "Deleting the base game will remove the game from the console completely.\nContinue?",
+        "comp_mods_label": "Mods"
     },
     "filter": {
         "title": "Filters & Sorting",
@@ -897,7 +924,8 @@
         "create_archive_title": "Create ZIP Archive",
         "create_archive_success": "Archive created successfully!",
         "create_archive_error": "Failed to create archive",
-        "archive_exists_overwrite": "File '{0}' already exists. Overwrite?"
+        "archive_exists_overwrite": "File '{0}' already exists. Overwrite?",
+        "archive_read_failed": "Failed to read archive"
     },
     "retro": {
         "consoles_title": "Retro Games",

@@ -99,9 +99,10 @@ void showCompanionInstallDialog(const std::string& repo,
     std::string cancelText = brls::getStr("app/common/cancel");
     if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
-    dialog->addButton(cancelText, [cancelFlag, statusLabel]() {
+    // Borealis dismisses and frees the dialog after this callback.
+    dialog->addButton(cancelText, [cancelFlag, closedFlag]() {
         cancelFlag->store(true);
-        statusLabel->setText("app/companion/cancelling"_i18n);
+        closedFlag->store(true);
     });
 
     dialog->open();
@@ -110,7 +111,7 @@ void showCompanionInstallDialog(const std::string& repo,
         auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
         auto isSyncPending = std::make_shared<std::atomic<bool>>(false);
 
-        auto onProgress = [lastUpdate, isSyncPending, statusLabel, progressFill, statsLabel, cancelFlag](const homebrew::InstallProgress& p) {
+        auto onProgress = [lastUpdate, isSyncPending, statusLabel, progressFill, statsLabel, cancelFlag, closedFlag](const homebrew::InstallProgress& p) {
             if (cancelFlag->load()) return;
             if (isSyncPending->load(std::memory_order_relaxed)) return;
             auto now = std::chrono::steady_clock::now();
@@ -119,8 +120,9 @@ void showCompanionInstallDialog(const std::string& repo,
             *lastUpdate = now;
             isSyncPending->store(true, std::memory_order_relaxed);
 
-            brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, p]() {
+            brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, closedFlag, p]() {
                 isSyncPending->store(false, std::memory_order_relaxed);
+                if (closedFlag->load()) return;
                 progressFill->setWidth(440.0f * std::clamp(p.fraction, 0.0f, 1.0f));
                 int pct = static_cast<int>(std::clamp(p.fraction, 0.0f, 1.0f) * 100.0f);
                 switch (p.stage) {
@@ -145,8 +147,7 @@ void showCompanionInstallDialog(const std::string& repo,
         bool wasCancelled = cancelFlag->load();
 
         brls::sync([dialog, closedFlag, appName, ok, wasCancelled, err, onComplete]() {
-            if (closedFlag->exchange(true)) return;
-            dialog->close([appName, ok, wasCancelled, err, onComplete]() {
+            auto finish = [appName, ok, wasCancelled, err, onComplete]() {
                 if (wasCancelled) {
                     brls::Application::notify("app/companion/cancelled"_i18n);
                     if (onComplete) onComplete(false);
@@ -165,7 +166,9 @@ void showCompanionInstallDialog(const std::string& repo,
                     successDialog->setCancelable(true);
                     successDialog->open();
                 }
-            });
+            };
+            if (closedFlag->exchange(true)) finish();
+            else dialog->close(finish);
         });
     });
 }

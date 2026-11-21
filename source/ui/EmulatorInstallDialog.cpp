@@ -89,9 +89,10 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
     std::string cancelText = brls::getStr("app/common/cancel");
     if (cancelText.empty() || cancelText == "app/common/cancel") cancelText = "Cancel";
 
-    dialog->addButton(cancelText, [cancelFlag, statusLabel]() {
+    // Borealis dismisses and frees the dialog after this callback.
+    dialog->addButton(cancelText, [cancelFlag, closedFlag]() {
         cancelFlag->store(true);
-        statusLabel->setText("app/retro/cancelling_install"_i18n);
+        closedFlag->store(true);
     });
 
     dialog->open();
@@ -100,7 +101,7 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
         auto lastUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
         auto isSyncPending = std::make_shared<std::atomic<bool>>(false);
 
-        auto onProgress = [lastUpdate, isSyncPending, statusLabel, progressFill, statsLabel, cancelFlag](const catalog::InstallProgress& p) {
+        auto onProgress = [lastUpdate, isSyncPending, statusLabel, progressFill, statsLabel, cancelFlag, closedFlag](const catalog::InstallProgress& p) {
             if (cancelFlag->load()) return;
             if (isSyncPending->load(std::memory_order_relaxed)) return;
             auto now = std::chrono::steady_clock::now();
@@ -109,8 +110,9 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
             *lastUpdate = now;
             isSyncPending->store(true, std::memory_order_relaxed);
 
-            brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, p]() {
+            brls::sync([isSyncPending, statusLabel, progressFill, statsLabel, closedFlag, p]() {
                 isSyncPending->store(false, std::memory_order_relaxed);
+                if (closedFlag->load()) return;
                 progressFill->setWidth(440.0f * std::min(1.0f, p.fraction));
                 int pct = static_cast<int>(std::min(1.0f, p.fraction) * 100.0f);
                 switch (p.stage) {
@@ -142,8 +144,7 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
         bool wasCancelled = cancelFlag->load();
 
         brls::sync([dialog, closedFlag, pkg, ok, wasCancelled, err, onComplete]() {
-            if (closedFlag->exchange(true)) return;
-            dialog->close([pkg, ok, wasCancelled, err, onComplete]() {
+            auto finish = [pkg, ok, wasCancelled, err, onComplete]() {
                 if (wasCancelled) {
                     brls::Application::notify("app/retro/install_cancelled"_i18n);
                 } else if (!ok) {
@@ -156,7 +157,9 @@ void showEmulatorInstallDialog(const catalog::EmulatorPackage& pkg,
                     brls::Application::notify(brls::getStr("app/retro/emu_installed_success_format", pkg.name));
                 }
                 if (onComplete) onComplete(ok && !wasCancelled);
-            });
+            };
+            if (closedFlag->exchange(true)) finish();
+            else dialog->close(finish);
         });
     });
 }

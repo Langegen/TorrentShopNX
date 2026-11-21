@@ -1996,7 +1996,7 @@ void FileSelectView::executeDownloads(const std::vector<int>& selectedIndices, i
         }
     } catch (const std::exception& e) {
         brls::Logger::error("FileSelectView: failed to queue downloads: {}", e.what());
-        brls::Application::notify("Ошибка добавления в очередь: " + std::string(e.what()));
+        brls::Application::notify(brls::getStr("app/fileselect/queue_add_failed", std::string(e.what())));
     }
 
     brls::sync([]() {
