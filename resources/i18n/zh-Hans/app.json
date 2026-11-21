@@ -24,7 +24,8 @@
         "restart": "重启",
         "error": "错误",
         "confirm": "确认",
-        "processing": "正在处理..."
+        "processing": "正在处理...",
+        "thread_failed": "无法启动后台任务。请关闭其他应用后重试。"
     },
     "actions": {
         "search": "搜索",
@@ -205,7 +206,28 @@
         "comp_patch": "更新补丁 {0}",
         "comp_patch_plain": "更新补丁",
         "saved_to_sd": "已保存到 SD 卡",
-        "error_fat32_limit": "FAT32 文件系统不支持大于 4 GB 的文件"
+        "error_fat32_limit": "FAT32 文件系统不支持大于 4 GB 的文件",
+        "eta_unknown": "剩余时间: --",
+        "peers_connections": "节点 / 连接",
+        "peers_live_fmt": "{0} 个活动（{1} 个连接中，峰值 {2}）",
+        "session_activity": "会话活动",
+        "session_activity_fmt": "{0} 个下载中，{1} 个空闲 / 阻塞",
+        "pieces_resident": "已获取分块",
+        "data_received": "已接收数据",
+        "data_dup": "（重复 {0}）",
+        "conn_issues": "连接问题",
+        "conn_issues_fmt": "超时: {0} · 套接字: {1} · 握手: {2}",
+        "swarm_summary": "种群概况",
+        "info_hash": "Info Hash",
+        "active_peers": "活动节点会话",
+        "peer_connecting": "连接中...",
+        "peer_piece": "分块 #{0}（{1}）",
+        "peer_choked": "已阻塞",
+        "peer_idle": "空闲（未阻塞）",
+        "err_no_space": "可用空间不足。请释放 SD 卡或主机存储空间后重试。",
+        "err_no_memory": "内存不足。请通过游戏覆盖模式启动（启动游戏时按住 R），而不是从相册启动。",
+        "err_no_peers": "无法从种群获取数据：没有节点或速度过慢。请稍后重试或选择其他发布版本。",
+        "err_bad_file": "文件已损坏或不受支持。请尝试其他发布版本。"
     },
     "detail": {
         "unknown_publisher": "未知发行商",
@@ -327,7 +349,8 @@
         "fat32_badge": "FAT32 > 4 GB",
         "fat32_file_too_large_notice": "文件超过 4 GB。FAT32 格式卡无法存储大于 4 GB 的文件。",
         "fat32_cannot_download_dlg": "文件“{0}”（{1}）超过 4 GB。\n\nFAT32 文件系统不支持在不安装到系统的情况下存储大于 4 GB 的文件。",
-        "fat32_all_files_too_large": "所有文件均超过 4 GB，无法保存到 FAT32 卡"
+        "fat32_all_files_too_large": "所有文件均超过 4 GB，无法保存到 FAT32 卡",
+        "queue_add_failed": "添加到队列失败：{0}"
     },
     "remote": {
         "title": "添加种子",
@@ -462,7 +485,11 @@
         "uninstall_with_mods_prompt": "检测到“{0}”存在模组/补丁（{1}）。是否与游戏一同删除？",
         "badge_not_installed": "未安装",
         "stats_not_installed": "未安装: {0}",
-        "section_not_installed": "未安装（在其他 SD 卡上或已归档）— {0}"
+        "section_not_installed": "未安装（在其他 SD 卡上或已归档）— {0}",
+        "comp_total_size": "总大小：{0}",
+        "comp_none": "未找到组件",
+        "comp_confirm_delete_base": "删除基础游戏将从主机中彻底移除该游戏。\n是否继续？",
+        "comp_mods_label": "MOD"
     },
     "filter": {
         "sort_label": "排序方式",
@@ -872,7 +899,8 @@
         "create_archive_title": "创建 ZIP 压缩包",
         "create_archive_success": "压缩包创建成功！",
         "create_archive_error": "创建压缩包失败",
-        "archive_exists_overwrite": "文件 '{0}' 已存在。是否覆盖？"
+        "archive_exists_overwrite": "文件 '{0}' 已存在。是否覆盖？",
+        "archive_read_failed": "无法读取压缩包"
     },
     "retro": {
         "consoles_title": "复古怀旧游戏",

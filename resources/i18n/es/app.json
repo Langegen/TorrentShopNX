@@ -24,7 +24,8 @@
         "restart": "Reiniciar",
         "error": "Error",
         "confirm": "Confirmar",
-        "processing": "Procesando..."
+        "processing": "Procesando...",
+        "thread_failed": "No se pudo iniciar una tarea en segundo plano. Cierra otras aplicaciones e inténtalo de nuevo."
     },
     "actions": {
         "search": "Buscar",
@@ -205,7 +206,28 @@
         "comp_patch": "Actualización {0}",
         "comp_patch_plain": "Actualización",
         "saved_to_sd": "Guardado en SD",
-        "error_fat32_limit": "El archivo de más de 4 GB no es compatible con el sistema de archivos FAT32"
+        "error_fat32_limit": "El archivo de más de 4 GB no es compatible con el sistema de archivos FAT32",
+        "eta_unknown": "Restante: --",
+        "peers_connections": "Pares / conexiones",
+        "peers_live_fmt": "{0} activos ({1} conectando, máximo {2})",
+        "session_activity": "Actividad de la sesión",
+        "session_activity_fmt": "{0} descargando, {1} inactivos / bloqueados",
+        "pieces_resident": "Piezas cargadas",
+        "data_received": "Datos recibidos",
+        "data_dup": "(duplicados {0})",
+        "conn_issues": "Problemas de conexión",
+        "conn_issues_fmt": "Tiempos agotados: {0} · Socket: {1} · Handshake: {2}",
+        "swarm_summary": "Resumen del enjambre",
+        "info_hash": "Info Hash",
+        "active_peers": "Sesiones de pares activas",
+        "peer_connecting": "Conectando...",
+        "peer_piece": "Pieza #{0} ({1})",
+        "peer_choked": "Bloqueado",
+        "peer_idle": "Inactivo (desbloqueado)",
+        "err_no_space": "No hay suficiente espacio libre. Libera espacio en la tarjeta SD o en la memoria de la consola e inténtalo de nuevo.",
+        "err_no_memory": "Memoria insuficiente. Abre la aplicación mediante title override (mantén R al iniciar un juego) en lugar del álbum.",
+        "err_no_peers": "No se pudieron obtener datos del enjambre: no hay pares o son demasiado lentos. Inténtalo más tarde o elige otra versión.",
+        "err_bad_file": "El archivo está dañado o no es compatible. Prueba otra versión."
     },
     "detail": {
         "unknown_publisher": "Editor desconocido",
@@ -327,7 +349,8 @@
         "fat32_badge": "FAT32 > 4 GB",
         "fat32_file_too_large_notice": "El archivo supera los 4 GB. Las tarjetas FAT32 no pueden almacenar archivos de más de 4 GB.",
         "fat32_cannot_download_dlg": "El archivo «{0}» ({1}) supera los 4 GB.\n\nEl sistema de archivos FAT32 no admite archivos de más de 4 GB sin instalarlos en el sistema.",
-        "fat32_all_files_too_large": "Todos los archivos superan los 4 GB y no se pueden guardar en una tarjeta FAT32"
+        "fat32_all_files_too_large": "Todos los archivos superan los 4 GB y no se pueden guardar en una tarjeta FAT32",
+        "queue_add_failed": "Error al añadir a la cola: {0}"
     },
     "remote": {
         "title": "Añadir torrent",
@@ -462,7 +485,11 @@
         "uninstall_with_mods_prompt": "Se encontraron mods/traducciones ({1}) para \"{0}\". ¿Deseas eliminarlos junto con el juego?",
         "badge_not_installed": "NO INSTALADO",
         "stats_not_installed": "No instalados: {0}",
-        "section_not_installed": "NO INSTALADOS (EN OTRA TARJETA SD O ARCHIVADOS) — {0}"
+        "section_not_installed": "NO INSTALADOS (EN OTRA TARJETA SD O ARCHIVADOS) — {0}",
+        "comp_total_size": "Tamaño total: {0}",
+        "comp_none": "No se encontraron componentes",
+        "comp_confirm_delete_base": "Eliminar el juego base lo borrará por completo de la consola.\n¿Continuar?",
+        "comp_mods_label": "Mods"
     },
     "filter": {
         "sort_label": "Ordenar por",
@@ -872,7 +899,8 @@
         "create_archive_title": "Crear archivo ZIP",
         "create_archive_success": "¡Archivo creado con éxito!",
         "create_archive_error": "Error al crear el archivo",
-        "archive_exists_overwrite": "El archivo '{0}' ya existe. ¿Sobrescribir?"
+        "archive_exists_overwrite": "El archivo '{0}' ya existe. ¿Sobrescribir?",
+        "archive_read_failed": "No se pudo leer el archivo comprimido"
     },
     "retro": {
         "consoles_title": "Juegos Retro",

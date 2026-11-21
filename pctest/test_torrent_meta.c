@@ -97,11 +97,62 @@ TEST(meta_cache_hit) {
     remove(path);
 }
 
+static int write_file(const char *path, const char *data) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    size_t n = strlen(data);
+    int ok = fwrite(data, 1, n, f) == n;
+    fclose(f);
+    return ok ? 0 : -1;
+}
+
+static int has_tracker(const torrent_meta *t, const char *url) {
+    for (int i = 0; i < t->tracker_count; i++)
+        if (strcmp(t->trackers[i], url) == 0) return 1;
+    return 0;
+}
+
+// The t-ru mirror check must look only at the announce URL, not at whatever
+// follows it in the file (here: a comment mentioning the tracker).
+TEST(tracker_mirrors_only_from_announce_url) {
+    const char *path = "pctest/tmp_comment.torrent";
+    ASSERT(write_file(path,
+        "d8:announce22:http://a.example/annou"
+        "7:comment25:mirror at bt.t-ru.org/ann"
+        "4:infod6:lengthi1024e4:name4:test12:piece lengthi1024e"
+        "6:pieces20:aaaaaaaaaaaaaaaaaaaaee") == 0);
+    torrent_meta t;
+    char err[256] = {0};
+    int rc = torrent_load(&t, path, err, sizeof(err));
+    remove(path);
+    ASSERT(rc == 0);
+    ASSERT(has_tracker(&t, "http://a.example/annou"));
+    ASSERT(!has_tracker(&t, "http://bt2.t-ru.org/ann?magnet"));
+    torrent_unload(&t);
+}
+
+TEST(tracker_mirrors_added_for_t_ru_announce) {
+    const char *path = "pctest/tmp_tru.torrent";
+    ASSERT(write_file(path,
+        "d8:announce26:http://bt.t-ru.org/ann?x=1"
+        "4:infod6:lengthi1024e4:name4:test12:piece lengthi1024e"
+        "6:pieces20:aaaaaaaaaaaaaaaaaaaaee") == 0);
+    torrent_meta t;
+    char err[256] = {0};
+    int rc = torrent_load(&t, path, err, sizeof(err));
+    remove(path);
+    ASSERT(rc == 0);
+    ASSERT(has_tracker(&t, "http://bt2.t-ru.org/ann?magnet"));
+    torrent_unload(&t);
+}
+
 int main(void) {
     printf("Running torrent_meta unit tests:\n");
     RUN(load_torrent_file);
     RUN(piece_len_last);
     RUN(meta_cache_hit);
+    RUN(tracker_mirrors_only_from_announce_url);
+    RUN(tracker_mirrors_added_for_t_ru_announce);
     printf("\n%d tests run, %d failed\n", tests_run, tests_failed);
     return tests_failed ? 1 : 0;
 }

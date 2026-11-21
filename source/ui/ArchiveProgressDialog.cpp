@@ -314,12 +314,12 @@ void ArchiveProgressDialog::startExtraction() {
             util::logLine("ArchiveProgressDialog: threadStart failed, rc=" + std::to_string(rc));
             threadClose(&thread_);
             threadStarted_ = false;
-            if (onComplete_) onComplete_(false, "Failed to start extraction thread");
+            if (onComplete_) onComplete_(false, "app/common/thread_failed"_i18n);
             if (!closed_.exchange(true)) closeSelf();
         }
     } else {
         util::logLine("ArchiveProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
-        if (onComplete_) onComplete_(false, "Failed to create extraction thread");
+        if (onComplete_) onComplete_(false, "app/common/thread_failed"_i18n);
         if (!closed_.exchange(true)) closeSelf();
     }
 #else
@@ -428,12 +428,12 @@ void ArchiveProgressDialog::startCreation() {
             util::logLine("ArchiveProgressDialog: threadStart failed, rc=" + std::to_string(rc));
             threadClose(&thread_);
             threadStarted_ = false;
-            if (onComplete_) onComplete_(false, "Failed to start creation thread");
+            if (onComplete_) onComplete_(false, "app/common/thread_failed"_i18n);
             if (!closed_.exchange(true)) closeSelf();
         }
     } else {
         util::logLine("ArchiveProgressDialog: threadCreate failed, rc=" + std::to_string(rc));
-        if (onComplete_) onComplete_(false, "Failed to create creation thread");
+        if (onComplete_) onComplete_(false, "app/common/thread_failed"_i18n);
         if (!closed_.exchange(true)) closeSelf();
     }
 #else

@@ -24,7 +24,8 @@
         "restart": "再起動",
         "error": "エラー",
         "confirm": "確認",
-        "processing": "処理中..."
+        "processing": "処理中...",
+        "thread_failed": "バックグラウンド処理を開始できませんでした。他のアプリを閉じてからもう一度お試しください。"
     },
     "actions": {
         "search": "検索",
@@ -205,7 +206,28 @@
         "comp_patch": "更新データ {0}",
         "comp_patch_plain": "更新データ",
         "saved_to_sd": "SDに保存されました",
-        "error_fat32_limit": "4 GBを超えるファイルはFAT32ファイルシステムでサポートされていません"
+        "error_fat32_limit": "4 GBを超えるファイルはFAT32ファイルシステムでサポートされていません",
+        "eta_unknown": "残り時間: --",
+        "peers_connections": "ピア / 接続",
+        "peers_live_fmt": "接続中 {0}（接続試行 {1}、最大 {2}）",
+        "session_activity": "セッションの状況",
+        "session_activity_fmt": "ダウンロード中 {0}、待機 / チョーク {1}",
+        "pieces_resident": "取得済みピース",
+        "data_received": "受信データ",
+        "data_dup": "（重複 {0}）",
+        "conn_issues": "接続の問題",
+        "conn_issues_fmt": "タイムアウト: {0} · ソケット: {1} · ハンドシェイク: {2}",
+        "swarm_summary": "スウォーム概要",
+        "info_hash": "Info Hash",
+        "active_peers": "アクティブなピア",
+        "peer_connecting": "接続中...",
+        "peer_piece": "ピース #{0} ({1})",
+        "peer_choked": "チョーク",
+        "peer_idle": "待機中（アンチョーク）",
+        "err_no_space": "空き容量が不足しています。SDカードまたは本体保存メモリーの空きを増やしてから再試行してください。",
+        "err_no_memory": "メモリが不足しています。アルバムではなく、タイトルオーバーライド（ゲーム起動時にRを長押し）でアプリを起動してください。",
+        "err_no_peers": "スウォームからデータを取得できませんでした（ピアがいないか遅すぎます）。後でもう一度試すか、別のリリースを選んでください。",
+        "err_bad_file": "ファイルが破損しているか、対応していません。別のリリースをお試しください。"
     },
     "detail": {
         "unknown_publisher": "発売元不明",
@@ -327,7 +349,8 @@
         "fat32_badge": "FAT32 > 4 GB",
         "fat32_file_too_large_notice": "ファイルサイズが4 GBを超えています。FAT32カードには4 GBを超えるファイルを保存できません。",
         "fat32_cannot_download_dlg": "ファイル「{0}」（{1}）は4 GBを超えています。\n\nFAT32ファイルシステムでは、システムにインストールしない限り4 GBを超えるファイルに対応していません。",
-        "fat32_all_files_too_large": "すべてのファイルが4 GBを超えているため、FAT32カードに保存できません"
+        "fat32_all_files_too_large": "すべてのファイルが4 GBを超えているため、FAT32カードに保存できません",
+        "queue_add_failed": "キューへの追加に失敗しました: {0}"
     },
     "remote": {
         "title": "トレントを追加",
@@ -462,7 +485,11 @@
         "uninstall_with_mods_prompt": "「{0}」のMOD/翻訳（{1}）が見つかりました。ゲームと一緒に削除しますか？",
         "badge_not_installed": "未インストール",
         "stats_not_installed": "未インストール: {0}",
-        "section_not_installed": "未インストール (別のSDカードまたはアーカイブ済み) — {0}"
+        "section_not_installed": "未インストール (別のSDカードまたはアーカイブ済み) — {0}",
+        "comp_total_size": "合計サイズ: {0}",
+        "comp_none": "コンポーネントが見つかりません",
+        "comp_confirm_delete_base": "ベースゲームを削除すると、ゲームが本体から完全に削除されます。\n続行しますか？",
+        "comp_mods_label": "MOD"
     },
     "filter": {
         "sort_label": "並び替え",
@@ -872,7 +899,8 @@
         "create_archive_title": "ZIPアーカイブを作成",
         "create_archive_success": "アーカイブが正常に作成されました！",
         "create_archive_error": "アーカイブの作成に失敗しました",
-        "archive_exists_overwrite": "ファイル '{0}' は既に存在します。上書きしますか？"
+        "archive_exists_overwrite": "ファイル '{0}' は既に存在します。上書きしますか？",
+        "archive_read_failed": "アーカイブを読み込めませんでした"
     },
     "retro": {
         "consoles_title": "レトロゲーム",
