@@ -90,6 +90,7 @@ private:
     CustomEngineClient& operator=(const CustomEngineClient&) = delete;
 
     bool ensureEngine();
+    void releaseKeptHashLocked();
 
     tsnx_engine* engine_ = nullptr;
     std::string last_error_;
@@ -99,6 +100,8 @@ private:
     bool probing_ = false;
 
     mutable std::mutex keep_mtx_;
+    bool probe_running_ = false;         // guarded by keep_mtx_; true while probeFiles() holds probe_mtx_
+    bool release_after_probe_ = false;   // guarded by keep_mtx_; deferred release requested during probe
     std::string kept_hash_;              // probe torrent kept for download
     std::vector<std::string> in_use_;    // hashes adopted by a download
 };
