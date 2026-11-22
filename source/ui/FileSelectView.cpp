@@ -860,9 +860,8 @@ void FileSelectView::onContentAvailable() {
     }
 
     // Activity controller shortcuts
-    this->registerAction("", brls::ControllerButton::BUTTON_X,
+    this->registerAction("app/fileselect/select_all"_i18n, brls::ControllerButton::BUTTON_X,
         [this](brls::View*) { toggleAllSelection(); return true; }, false);
-    this->updateActionHint(brls::ControllerButton::BUTTON_X, "app/fileselect/select_all"_i18n);
 
     this->registerAction("app/fileselect/download_btn"_i18n, brls::ControllerButton::BUTTON_START,
         [this](brls::View*) { startDownloadAndGoToDownloads(); return true; });
@@ -2392,8 +2391,10 @@ void FileSelectView::updateSummaryUi() {
         btnToggleAll->setText(anySelected ? "app/fileselect/deselect_all"_i18n : "app/fileselect/select_all"_i18n);
         btnToggleAll->setAlpha(files_.empty() ? 0.55f : 1.0f);
     }
-    this->updateActionHint(brls::ControllerButton::BUTTON_X,
-                           anySelected ? "app/fileselect/deselect_all"_i18n : "app/fileselect/select_all"_i18n);
+    if (auto* cv = this->getContentView()) {
+        cv->updateActionHint(brls::ControllerButton::BUTTON_X,
+                             anySelected ? "app/fileselect/deselect_all"_i18n : "app/fileselect/select_all"_i18n);
+    }
 }
 
 void FileSelectView::updateTotalSize() {
