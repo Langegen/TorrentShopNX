@@ -323,7 +323,7 @@ void ConfigManager::load() {
             if (!raw.empty()) slow_skip_hours_ = normalizeSlowSkipHours(std::atoi(raw.c_str()));
         }
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
-        if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
+        if (install_location_ != "sd" && install_location_ != "nand" && install_location_ != "usb") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
         if (retro_roms_mode_ != "custom") {
             retro_roms_mode_ = "auto";
@@ -359,7 +359,7 @@ void ConfigManager::load() {
                         sound_effects_enabled_, rumble_enabled_,
                         catalog_app_version_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
-        if (install_location_ != "sd" && install_location_ != "nand") install_location_ = "auto";
+        if (install_location_ != "sd" && install_location_ != "nand" && install_location_ != "usb") install_location_ = "auto";
         if (!isValidLanguage(language_)) language_ = "auto";
         if (retro_roms_mode_ != "custom") {
             retro_roms_mode_ = "auto";

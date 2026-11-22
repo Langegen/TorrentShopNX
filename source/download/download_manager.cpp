@@ -28,6 +28,7 @@
 #include "../utils/archive_peek.h"
 #include "../installer/installed_ports.h"
 #include "../installer/PortInstallPlanner.hpp"
+#include "../installer/nexus_usb_client.h"
 #include "../GameData.hpp"
 
 #include <engine/engine.h>
@@ -4372,9 +4373,18 @@ bool DownloadManager::startHybridInstall(size_t index) {
         config.install_ticket = true;
 #ifdef __SWITCH__
         std::string loc = config::ConfigManager::instance().getInstallLocation();
-        if (loc == "sd") {
+        if (loc == "usb") {
+            config.storage_target = installer::StorageTarget::Usb;
+            config.storage = NcmStorageId_SdCard;
+            installer::NexusUsbStatus usb_status = {};
+            if (installer::NexusUsbClient::instance().queryStatus(usb_status) && usb_status.isAvailable()) {
+                config.usb_generation = usb_status.generation;
+            }
+        } else if (loc == "sd") {
+            config.storage_target = installer::StorageTarget::SdCard;
             config.storage = NcmStorageId_SdCard;
         } else if (loc == "nand") {
+            config.storage_target = installer::StorageTarget::Nand;
             config.storage = NcmStorageId_BuiltInUser;
         } else { // "auto"
             s64 sdFree = 0;
@@ -4383,10 +4393,13 @@ bool DownloadManager::startHybridInstall(size_t index) {
             util::getStorageFreeSpace(1, sdFree);
             util::getStorageFreeSpace(0, nandFree);
             if (static_cast<s64>(needed) <= sdFree) {
+                config.storage_target = installer::StorageTarget::SdCard;
                 config.storage = NcmStorageId_SdCard;
             } else if (static_cast<s64>(needed) <= nandFree) {
+                config.storage_target = installer::StorageTarget::Nand;
                 config.storage = NcmStorageId_BuiltInUser;
             } else {
+                config.storage_target = installer::StorageTarget::SdCard;
                 config.storage = NcmStorageId_SdCard; // Default fallback
             }
         }

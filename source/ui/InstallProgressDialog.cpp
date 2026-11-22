@@ -1,5 +1,6 @@
 #include "InstallProgressDialog.hpp"
 #include "ui/ThemeManager.hpp"
+#include "../installer/nexus_usb_client.h"
 #include "../utils/file_ops.h"
 #include "../utils/switch_utils.h"
 #include "../utils/log.h"
@@ -124,9 +125,9 @@ InstallProgressDialog::InstallProgressDialog(
     headerTextCol->addView(titleLabel_);
 
     targetStorageLabel_ = new brls::Label();
-    std::string storageText = (storageId_ == 1)
-        ? "app/installer/target_sd"_i18n
-        : "app/installer/target_nand"_i18n;
+    std::string storageText = (storageId_ == 2)
+        ? "app/installer/target_usb"_i18n
+        : ((storageId_ == 1) ? "app/installer/target_sd"_i18n : "app/installer/target_nand"_i18n);
     targetStorageLabel_->setText(storageText);
     targetStorageLabel_->setFontSize(13.0f);
     targetStorageLabel_->setTextColor(ui::ThemeManager::instance().getAccentColor());
@@ -355,7 +356,17 @@ void InstallProgressDialog::runInstallation() {
     config.verify_sha256 = true;
     config.install_ticket = true;
 #ifdef __SWITCH__
-    config.storage = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
+    if (storageId == 2) {
+        config.storage_target = installer::StorageTarget::Usb;
+        config.storage = NcmStorageId_SdCard;
+        installer::NexusUsbStatus usb_status = {};
+        if (installer::NexusUsbClient::instance().queryStatus(usb_status) && usb_status.isAvailable()) {
+            config.usb_generation = usb_status.generation;
+        }
+    } else {
+        config.storage_target = (storageId == 1) ? installer::StorageTarget::SdCard : installer::StorageTarget::Nand;
+        config.storage = (storageId == 1) ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser;
+    }
 #else
     config.storage = storageId;
 #endif

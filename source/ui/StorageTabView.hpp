@@ -36,6 +36,10 @@ private:
     brls::Box* nandTrack_ = nullptr;
     brls::Rectangle* nandFill_ = nullptr;
     brls::Label* nandInfo_ = nullptr;
+    brls::Box* usbRow_ = nullptr;
+    brls::Box* usbTrack_ = nullptr;
+    brls::Rectangle* usbFill_ = nullptr;
+    brls::Label* usbInfo_ = nullptr;
 
     int placeholderCount_ = 0;
     uint64_t placeholderSize_ = 0;
@@ -44,7 +48,7 @@ private:
 
     void addSectionHeader(brls::Box* parent, const std::string& title);
     void addStorageRow(brls::Box* parent, const std::string& title, brls::Box** out_track,
-                       brls::Rectangle** out_fill, brls::Label** out_info);
+                       brls::Rectangle** out_fill, brls::Label** out_info, brls::Box** out_row = nullptr);
     void addCacheRow(const std::string& title, const std::string& path, bool is_file,
                      const std::function<uint64_t()>& computeFn = std::function<uint64_t()>(),
                      const std::function<uint64_t()>& clearFn = std::function<uint64_t()>());

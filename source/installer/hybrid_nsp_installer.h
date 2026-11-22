@@ -39,8 +39,10 @@ struct InstallConfig {
     size_t   chunk_size   = 4 * 1024 * 1024;    ///< Размер одного chunk для read/write
     bool     verify_sha256 = true;              ///< Проверять SHA-256 NCA на лету
     bool     install_ticket = true;             ///< Устанавливать тикеты
+    StorageTarget storage_target = StorageTarget::SdCard; ///< Целевой накопитель (SD/NAND/USB)
+    uint64_t usb_generation = 0;               ///< Поколение внешнего диска для Nexus USB
 #ifdef __SWITCH__
-    NcmStorageId storage  = NcmStorageId_SdCard; ///< Куда устанавливать (SD/NAND)
+    NcmStorageId storage  = NcmStorageId_SdCard; ///< Куда устанавливать (legacy SD/NAND)
 #else
     int      storage      = 0;
 #endif

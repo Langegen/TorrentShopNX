@@ -31,6 +31,10 @@ StorageTabView::StorageTabView() : brls::Box(brls::Axis::COLUMN) {
     addSectionHeader(this, "app/settings/storage_section"_i18n);
     addStorageRow(this, "app/settings/storage_sd"_i18n, &sdTrack_, &sdFill_, &sdInfo_);
     addStorageRow(this, "app/settings/storage_nand"_i18n, &nandTrack_, &nandFill_, &nandInfo_);
+    addStorageRow(this, "app/settings/storage_usb"_i18n, &usbTrack_, &usbFill_, &usbInfo_, &usbRow_);
+    if (usbRow_) {
+        usbRow_->setVisibility(brls::Visibility::GONE);
+    }
 
     // ---- Кэш ----
     addSectionHeader(this, "app/settings/cache_section"_i18n);
@@ -116,7 +120,7 @@ void StorageTabView::addSectionHeader(brls::Box* parent, const std::string& titl
 
 void StorageTabView::addStorageRow(brls::Box* parent, const std::string& title,
                                    brls::Box** out_track, brls::Rectangle** out_fill,
-                                   brls::Label** out_info) {
+                                   brls::Label** out_info, brls::Box** out_row) {
     auto* row = new brls::Box(brls::Axis::ROW);
     row->setWidth(brls::View::AUTO);
     row->setAlignItems(brls::AlignItems::CENTER);
@@ -162,6 +166,7 @@ void StorageTabView::addStorageRow(brls::Box* parent, const std::string& title,
     *out_track = track;
     *out_fill = fill;
     *out_info = info;
+    if (out_row) *out_row = row;
 }
 
 void StorageTabView::addCacheRow(const std::string& title, const std::string& path, bool is_file,
@@ -304,8 +309,12 @@ void StorageTabView::refreshAll() {
         bool sdOk = util::getStorageStats(1, sdFree, sdTotal);
         bool nandOk = util::getStorageStats(0, nandFree, nandTotal);
 
+        int64_t usbFree = 0, usbTotal = 0;
+        bool usbOk = util::getUsbStorageStats(usbFree, usbTotal);
+
         brls::sync([alive, sizes, phCountSd, phSizeSd, phCountNand, phSizeNand,
-                    sdOk, sdFree, sdTotal, nandOk, nandFree, nandTotal, this]() {
+                    sdOk, sdFree, sdTotal, nandOk, nandFree, nandTotal,
+                    usbOk, usbFree, usbTotal, this]() {
             if (!*alive) return; // view уже уничтожен (вкладка переключена)
 
             busy_ = false;
@@ -341,6 +350,15 @@ void StorageTabView::refreshAll() {
             else sdInfo_->setText("app/settings/storage_unknown"_i18n);
             if (nandOk) updateBar(nandTrack_, nandFill_, nandInfo_, nandFree, nandTotal);
             else nandInfo_->setText("app/settings/storage_unknown"_i18n);
+
+            if (usbRow_) {
+                if (usbOk && usbTotal > 0) {
+                    usbRow_->setVisibility(brls::Visibility::VISIBLE);
+                    updateBar(usbTrack_, usbFill_, usbInfo_, usbFree, usbTotal);
+                } else {
+                    usbRow_->setVisibility(brls::Visibility::GONE);
+                }
+            }
         });
     });
 }
