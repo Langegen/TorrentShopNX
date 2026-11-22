@@ -4,81 +4,487 @@
         width="auto"
         height="auto"
         axis="column"
-        padding="40"
+        paddingTop="20"
+        paddingRight="32"
+        paddingBottom="12"
+        paddingLeft="32"
         grow="1.0">
 
-        <!-- Header -->
+        <!-- Unified Header (56 px, aligned with other screens) -->
+        <brls:Box
+            width="auto"
+            height="56px"
+            axis="row"
+            alignItems="center"
+            justifyContent="spaceBetween"
+            marginBottom="12">
+
+            <brls:Label
+                id="title"
+                text="@i18n/app/fileselect/title"
+                fontSize="28"
+                singleLine="true"
+                grow="1.0"
+                shrink="1.0"
+                marginRight="16" />
+
+            <brls:Label
+                id="headerMeta"
+                text=""
+                fontSize="15"
+                singleLine="true"
+                textColor="@theme/brls/header/subtitle" />
+
+        </brls:Box>
+
+        <!-- Two-Column Body -->
         <brls:Box
             width="auto"
             height="auto"
             axis="row"
-            alignItems="center"
-            justifyContent="spaceBetween"
-            marginBottom="10">
-
-            <brls:Box
-                axis="column"
-                grow="1.0"
-                shrink="1.0"
-                marginRight="20">
-                <brls:Label id="title" text="@i18n/app/fileselect/title" fontSize="26" marginBottom="4" />
-                <brls:Label id="subtitle" text="@i18n/app/fileselect/subtitle" fontSize="16" textColor="@theme/brls/header/subtitle" />
-            </brls:Box>
-
-            <!-- Top-right hint for Button X (Toggle All) -->
-            <brls:Box
-                id="toggleAllBox"
-                width="auto"
-                height="40"
-                axis="row"
-                alignItems="center"
-                paddingLeft="14"
-                paddingRight="14"
-                cornerRadius="8"
-                focusable="false">
-                <brls:Label id="toggleAllBtnIcon" fontSize="18" marginRight="8" />
-                <brls:Label id="toggleAllBtnText" text="@i18n/app/actions/toggle_all" fontSize="15" />
-            </brls:Box>
-
-        </brls:Box>
-
-
-        <!-- Scrollable file list -->
-        <brls:ScrollingFrame
-            id="fileListScroll"
-            width="auto"
-            height="auto"
             grow="1.0"
-            marginBottom="20">
+            alignItems="stretch">
 
+            <!-- Left Column: File List / Loading / Error -->
             <brls:Box
-                id="fileListBox"
+                id="leftPanel"
                 width="auto"
                 height="auto"
+                grow="1.0"
+                shrink="1.0"
                 axis="column"
-                paddingRight="30" />
+                marginRight="20"
+                cornerRadius="14"
+                paddingTop="12"
+                paddingRight="14"
+                paddingBottom="12"
+                paddingLeft="14">
 
-        </brls:ScrollingFrame>
+                <!-- Breadcrumb Bar (visible in folder hierarchy mode) -->
+                <brls:Box
+                    id="breadcrumbBar"
+                    visibility="gone"
+                    width="auto"
+                    height="38px"
+                    axis="row"
+                    alignItems="center"
+                    justifyContent="spaceBetween"
+                    paddingLeft="12"
+                    paddingRight="12"
+                    cornerRadius="8"
+                    marginBottom="10">
 
-        <!-- Bottom Summary & Storage Selector -->
-        <brls:Box id="bottomSummaryBox" width="auto" axis="column" padding="15" cornerRadius="8">
-            <!-- Row 1: Selected files size & Free space -->
-            <brls:Box width="auto" axis="row" alignItems="center" justifyContent="spaceBetween" marginBottom="10">
-                <brls:Box axis="row" alignItems="center">
-                    <brls:Label text="@i18n/app/fileselect/total_selected" fontSize="16" />
-                    <brls:Label id="totalSizeText" text="0 MB" fontSize="16" textColor="@theme/brls/accent" />
+                    <brls:Label
+                        id="breadcrumbIcon"
+                        text="&#xE2C7;"
+                        fontSize="18"
+                        marginRight="8" />
+
+                    <brls:Label
+                        id="breadcrumbPath"
+                        text="/"
+                        fontSize="15"
+                        singleLine="true"
+                        grow="1.0"
+                        shrink="1.0" />
+
+                    <brls:Label
+                        id="breadcrumbCount"
+                        text=""
+                        fontSize="14"
+                        singleLine="true"
+                        marginLeft="10" />
+
                 </brls:Box>
-                <brls:Box axis="column" alignItems="flexEnd">
-                    <brls:Label id="freeSpaceSdText" text="---" fontSize="13" textColor="@theme/brls/header/subtitle" />
-                    <brls:Label id="freeSpaceNandText" text="---" fontSize="13" textColor="@theme/brls/header/subtitle" />
+
+                <!-- Loading State -->
+                <brls:Box
+                    id="loadingStateBox"
+                    width="auto"
+                    height="auto"
+                    grow="1.0"
+                    axis="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    focusable="true"
+                    hideHighlight="true">
+
+                    <brls:Box
+                        id="spinnerSlot"
+                        width="64px"
+                        height="64px"
+                        alignItems="center"
+                        justifyContent="center"
+                        marginBottom="18" />
+
+                    <brls:Label
+                        id="loadingTitle"
+                        text="@i18n/app/fileselect/loading_title"
+                        fontSize="22"
+                        horizontalAlign="center"
+                        singleLine="true"
+                        marginBottom="8" />
+
+                    <brls:Label
+                        id="loadingStatus"
+                        text="@i18n/app/fileselect/probing"
+                        fontSize="15"
+                        horizontalAlign="center"
+                        width="560px"
+                        maxLines="2"
+                        autoAnimate="false"
+                        textColor="@theme/brls/header/subtitle" />
+
                 </brls:Box>
+
+                <!-- Error State -->
+                <brls:Box
+                    id="errorStateBox"
+                    visibility="gone"
+                    width="auto"
+                    height="auto"
+                    grow="1.0"
+                    axis="column"
+                    alignItems="center"
+                    justifyContent="center">
+
+                    <brls:Box
+                        id="errorIconSlot"
+                        width="88px"
+                        height="88px"
+                        alignItems="center"
+                        justifyContent="center"
+                        marginBottom="16" />
+
+                    <brls:Label
+                        id="errorTitle"
+                        text="@i18n/app/fileselect/error_title"
+                        fontSize="22"
+                        horizontalAlign="center"
+                        singleLine="true"
+                        marginBottom="8" />
+
+                    <brls:Label
+                        id="errorMessage"
+                        text=""
+                        fontSize="15"
+                        horizontalAlign="center"
+                        width="560px"
+                        maxLines="2"
+                        autoAnimate="false"
+                        textColor="@theme/brls/header/subtitle"
+                        marginBottom="22" />
+
+                    <brls:Box
+                        width="auto"
+                        height="auto"
+                        axis="row"
+                        alignItems="center"
+                        justifyContent="center">
+
+                        <brls:Button
+                            id="btnRetry"
+                            text="@i18n/app/fileselect/retry_btn"
+                            style="primary"
+                            width="210px"
+                            height="46px"
+                            marginRight="14" />
+
+                        <brls:Button
+                            id="btnDownloadAll"
+                            text="@i18n/app/fileselect/download_all_btn"
+                            width="230px"
+                            height="46px" />
+
+                    </brls:Box>
+
+                </brls:Box>
+
+                <!-- File List Scroll Container -->
+                <brls:ScrollingFrame
+                    id="fileListScroll"
+                    visibility="gone"
+                    width="auto"
+                    height="auto"
+                    grow="1.0">
+
+                    <brls:Box
+                        id="fileListBox"
+                        width="auto"
+                        height="auto"
+                        axis="column"
+                        paddingRight="18"
+                        paddingTop="2"
+                        paddingBottom="6" />
+
+                </brls:ScrollingFrame>
+
             </brls:Box>
-            
-            <!-- Row 2: Install location selector (clickable & focusable) -->
-            <brls:Box id="installLocationBox" width="auto" height="50px" axis="row" alignItems="center" justifyContent="spaceBetween" paddingLeft="14" paddingRight="14" cornerRadius="8" focusable="true">
-                <brls:Label id="installLocationLabel" text="@i18n/app/fileselect/install_location_lbl" fontSize="16" />
-                <brls:Label id="installLocationText" text="" fontSize="16" />
+
+            <!-- Right Column: Summary, Storage & Actions -->
+            <brls:Box
+                id="rightPanel"
+                width="376px"
+                height="auto"
+                shrink="0.0"
+                axis="column"
+                justifyContent="spaceBetween"
+                cornerRadius="14"
+                paddingTop="18"
+                paddingRight="20"
+                paddingBottom="18"
+                paddingLeft="20">
+
+                <!-- Top: Selection Summary -->
+                <brls:Box width="auto" height="auto" axis="column">
+                    <brls:Box
+                        width="auto"
+                        height="auto"
+                        axis="row"
+                        alignItems="center"
+                        justifyContent="spaceBetween">
+
+                        <brls:Label
+                            id="selectedCaption"
+                            text="@i18n/app/fileselect/section_selected"
+                            fontSize="14"
+                            singleLine="true" />
+
+                        <brls:Label
+                            id="selectedCountText"
+                            text=""
+                            fontSize="14"
+                            singleLine="true" />
+
+                    </brls:Box>
+
+                    <brls:Label
+                        id="totalSizeText"
+                        text="0 MB"
+                        fontSize="30"
+                        singleLine="true"
+                        marginTop="4" />
+
+                    <brls:Label
+                        id="unpackedSizeText"
+                        text=""
+                        fontSize="14"
+                        singleLine="true"
+                        marginTop="2"
+                        visibility="gone" />
+
+                    <brls:Box
+                        id="summaryDivider"
+                        width="auto"
+                        height="1px"
+                        marginTop="12"
+                        marginBottom="12" />
+                </brls:Box>
+
+                <!-- Middle: Storage Target & Space Bar -->
+                <brls:Box width="auto" height="auto" axis="column" grow="1.0">
+
+                    <brls:Label
+                        id="storageCaption"
+                        text="@i18n/app/fileselect/section_storage"
+                        fontSize="14"
+                        singleLine="true" />
+
+                    <!-- Switch mode: Storage Chips [Auto][SD][NAND][USB] -->
+                    <brls:Box
+                        id="storageChipsRow"
+                        width="auto"
+                        height="38px"
+                        axis="row"
+                        alignItems="center"
+                        marginTop="8">
+
+                        <brls:Box
+                            id="chipAuto"
+                            width="auto"
+                            height="38px"
+                            grow="1.0"
+                            shrink="1.0"
+                            cornerRadius="8"
+                            alignItems="center"
+                            justifyContent="center"
+                            marginRight="6"
+                            focusable="true">
+                            <brls:Label
+                                id="chipAutoLabel"
+                                text="@i18n/app/fileselect/chip_auto"
+                                fontSize="14"
+                                singleLine="true"
+                                horizontalAlign="center" />
+                        </brls:Box>
+
+                        <brls:Box
+                            id="chipSd"
+                            width="auto"
+                            height="38px"
+                            grow="1.0"
+                            shrink="1.0"
+                            cornerRadius="8"
+                            alignItems="center"
+                            justifyContent="center"
+                            marginRight="6"
+                            focusable="true">
+                            <brls:Label
+                                id="chipSdLabel"
+                                text="SD"
+                                fontSize="14"
+                                singleLine="true"
+                                horizontalAlign="center" />
+                        </brls:Box>
+
+                        <brls:Box
+                            id="chipNand"
+                            width="auto"
+                            height="38px"
+                            grow="1.0"
+                            shrink="1.0"
+                            cornerRadius="8"
+                            alignItems="center"
+                            justifyContent="center"
+                            focusable="true">
+                            <brls:Label
+                                id="chipNandLabel"
+                                text="NAND"
+                                fontSize="14"
+                                singleLine="true"
+                                horizontalAlign="center" />
+                        </brls:Box>
+
+                        <brls:Box
+                            id="chipUsb"
+                            visibility="gone"
+                            width="auto"
+                            height="38px"
+                            grow="1.0"
+                            shrink="1.0"
+                            cornerRadius="8"
+                            alignItems="center"
+                            justifyContent="center"
+                            marginLeft="6"
+                            focusable="true">
+                            <brls:Label
+                                id="chipUsbLabel"
+                                text="USB"
+                                fontSize="14"
+                                singleLine="true"
+                                horizontalAlign="center" />
+                        </brls:Box>
+
+                    </brls:Box>
+
+                    <!-- Switch mode: No-Install Toggle -->
+                    <brls:Box
+                        id="noInstallToggleRow"
+                        width="auto"
+                        height="42px"
+                        axis="row"
+                        alignItems="center"
+                        justifyContent="spaceBetween"
+                        marginTop="8"
+                        paddingLeft="12"
+                        paddingRight="12"
+                        cornerRadius="8"
+                        focusable="true">
+
+                        <brls:Label
+                            id="noInstallLabel"
+                            text="@i18n/app/fileselect/no_install_toggle"
+                            fontSize="15"
+                            singleLine="true"
+                            grow="1.0"
+                            shrink="1.0"
+                            marginRight="8" />
+
+                        <brls:Box
+                            id="noInstallSwitchSlot"
+                            width="40px"
+                            height="22px"
+                            shrink="0.0"
+                            alignItems="center"
+                            justifyContent="center" />
+
+                    </brls:Box>
+
+                    <!-- Fixed Target Path (Retro / Homebrew / PC) -->
+                    <brls:Box
+                        id="targetPathBox"
+                        visibility="gone"
+                        width="auto"
+                        height="auto"
+                        axis="row"
+                        alignItems="center"
+                        marginTop="8"
+                        paddingTop="10"
+                        paddingRight="12"
+                        paddingBottom="10"
+                        paddingLeft="12"
+                        cornerRadius="8">
+
+                        <brls:Label
+                            id="targetPathIcon"
+                            text="&#xE2C7;"
+                            fontSize="18"
+                            marginRight="8" />
+
+                        <brls:Label
+                            id="targetPathText"
+                            text=""
+                            fontSize="14"
+                            maxLines="2"
+                            autoAnimate="false"
+                            grow="1.0"
+                            shrink="1.0" />
+
+                    </brls:Box>
+
+                    <!-- 3-Segment Storage Bar -->
+                    <brls:Box
+                        id="storageBarSlot"
+                        width="auto"
+                        height="12px"
+                        marginTop="14" />
+
+                    <brls:Label
+                        id="spaceStatusText"
+                        text=""
+                        fontSize="14"
+                        singleLine="true"
+                        marginTop="8" />
+
+                    <brls:Label
+                        id="secondarySpaceText"
+                        text=""
+                        fontSize="14"
+                        singleLine="true"
+                        marginTop="4"
+                        textColor="@theme/brls/header/subtitle" />
+
+                </brls:Box>
+
+                <!-- Bottom: Action Buttons -->
+                <brls:Box width="auto" height="auto" axis="column" marginTop="12">
+                    <brls:Button
+                        id="btnDownload"
+                        text="@i18n/app/fileselect/download_btn"
+                        style="primary"
+                        width="auto"
+                        height="48px" />
+
+                    <brls:Button
+                        id="btnToggleAll"
+                        text="@i18n/app/fileselect/select_all"
+                        width="auto"
+                        height="42px"
+                        marginTop="8" />
+                </brls:Box>
+
             </brls:Box>
+
         </brls:Box>
 
     </brls:Box>
