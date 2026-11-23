@@ -1,6 +1,7 @@
 #include "hybrid_nsp_installer.h"
 #include "installer_flow.h"
 #include "ncm_installer.h"
+#include "nexus_usb_client.h"
 #include "ncz_parser.h"
 #include "write_behind.h"
 #include "../buffer/ring_buffer.h"
@@ -413,7 +414,11 @@ bool HybridNspInstaller::createPlaceHoldersPhase() {
     util::logLine("hybrid: phase 2 - creating placeholders");
 
 #ifdef __SWITCH__
-    if (!ncm_.begin(config_.storage)) {
+    StorageTarget target = config_.storage_target;
+    if (target == StorageTarget::SdCard && config_.storage == NcmStorageId_BuiltInUser) {
+        target = StorageTarget::Nand;
+    }
+    if (!ncm_.begin(target, config_.usb_generation)) {
         setError("Failed to initialize NCM");
         return false;
     }
@@ -1366,6 +1371,20 @@ bool HybridNspInstaller::installTicketsPhase() {
             util::logLine("hybrid: warning - ticket " + std::to_string(i) +
                           " install failed (title may require fixes)");
         }
+
+        if (config_.storage_target == StorageTarget::Usb) {
+            uint64_t tid = hint_title_id_;
+            if (tik.size() >= 0x2A8) {
+                uint64_t tik_tid = 0;
+                for (int b = 0; b < 8; ++b) {
+                    tik_tid = (tik_tid << 8) | tik[0x2A0 + b];
+                }
+                if (tik_tid != 0) tid = tik_tid;
+            }
+            if (tid != 0) {
+                NexusUsbClient::instance().saveTicketBackup(tid, tik.data(), tik.size());
+            }
+        }
     }
 #endif
 
@@ -1722,9 +1741,12 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         if (R_SUCCEEDED(ns_rc)) {
             // Как в Awoo-Installer: пушим единичную запись для текущего мета-ключа,
             // не трогая и не удаляя существующие записи base/dlc через nsDeleteApplicationRecord!
+            NcmStorageId app_storage = (config_.storage_target == StorageTarget::Nand || config_.storage == NcmStorageId_BuiltInUser)
+                ? NcmStorageId_BuiltInUser
+                : NcmStorageId_SdCard;
             ContentStorageRecord rec = {};
             rec.key = key;
-            rec.storage_id = static_cast<u64>(config_.storage);
+            rec.storage_id = static_cast<u64>(app_storage);
 
             ns_rc = nsPushApplicationRecordCustom(base_tid,
                                                   NsApplicationRecordType_Installed,

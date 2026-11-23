@@ -91,14 +91,20 @@ struct SdkVersion {
 SdkVersion getConsoleSdkVersion();
 
 // Returns true if free space was successfully queried.
-// storageId: 1 for SD card, 0 for NAND (built-in user storage).
+// storageId: 1 for SD card, 0 for NAND (built-in user storage), 2 for external USB.
 // On non-Switch platforms, returns simulated values.
 bool getStorageFreeSpace(int storageId, int64_t& out_free_space);
 
-// Returns both free and total space of a storage (SD or NAND).
-// storageId: 1 for SD card, 0 for NAND (built-in user storage).
+// Returns both free and total space of a storage (SD, NAND or USB).
+// storageId: 1 for SD card, 0 for NAND (built-in user storage), 2 for external USB.
 // On non-Switch platforms, returns simulated values.
 bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space);
+
+// Nexus USB / External HDD helper functions
+bool isNexusUsbSupported();
+bool isNexusUsbConnected();
+bool getUsbStorageStats(int64_t& out_free_space, int64_t& out_total_space);
+bool getUsbStorageFreeSpace(int64_t& out_free_space);
 
 // 4 GiB - 1 byte: max single file size supported by FAT32
 constexpr uint64_t kFat32MaxFileSize = 0xFFFFFFFFULL;

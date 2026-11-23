@@ -1,10 +1,10 @@
 #pragma once
 
 #include <borealis.hpp>
-#include <memory>
 #include <atomic>
-#include <set>
 #include <map>
+#include <memory>
+#include <set>
 #include <string>
 #include <vector>
 #include "../GameData.hpp"
@@ -12,6 +12,10 @@
 #include "../utils/switch_utils.h"
 
 namespace ui {
+
+class VectorCheckboxView;
+class ToggleSwitchView;
+class StorageBarView;
 
 // Shared with the game manager's "Update all".
 // True for installable Switch packages (.nsp/.nsz/.xci/.xcz).
@@ -38,6 +42,8 @@ public:
     void executeDownloads(const std::vector<int>& selectedIndices, int forcedIndex, const std::string& forcedName);
 
 private:
+    enum class LeftState { Loading, Error, List };
+
     Game game_;
     std::string retro_console_id_;
     bool noInstall_ = false;
@@ -45,25 +51,98 @@ private:
     std::vector<torrent::TorrentFileInfo> files_;
     std::vector<bool> selected_;
     // Per file: is its title already installed? Filled once per probe result
-    // (rebuildSwitchFileList runs on every checkbox toggle).
+    // (rebuildSwitchFileList runs on spoiler toggle / tree expand / mode toggle).
     std::vector<signed char> installedCache_;
-    std::vector<brls::Label*> checkboxLabels_;
     std::shared_ptr<std::atomic<bool>> alive_flag_;
 
-    BRLS_BIND(brls::Label,          title,          "title");
-    BRLS_BIND(brls::Label,          subtitle,       "subtitle");
-    BRLS_BIND(brls::Box,            toggleAllBox,   "toggleAllBox");
-    BRLS_BIND(brls::Label,          toggleAllBtnIcon, "toggleAllBtnIcon");
-    BRLS_BIND(brls::Label,          toggleAllBtnText, "toggleAllBtnText");
-    BRLS_BIND(brls::ScrollingFrame, fileListScroll, "fileListScroll");
-    BRLS_BIND(brls::Box,            fileListBox,    "fileListBox");
-    BRLS_BIND(brls::Label,          totalSizeText,  "totalSizeText");
-    BRLS_BIND(brls::Label,          freeSpaceSdText, "freeSpaceSdText");
-    BRLS_BIND(brls::Label,          freeSpaceNandText, "freeSpaceNandText");
-    BRLS_BIND(brls::Box,            bottomSummaryBox, "bottomSummaryBox");
-    BRLS_BIND(brls::Box,            installLocationBox, "installLocationBox");
-    BRLS_BIND(brls::Label,          installLocationLabel, "installLocationLabel");
-    BRLS_BIND(brls::Label,          installLocationText, "installLocationText");
+    // Header
+    BRLS_BIND(brls::Label,          title,               "title");
+    BRLS_BIND(brls::Label,          headerMeta,          "headerMeta");
+
+    // Left column
+    BRLS_BIND(brls::Box,            leftPanel,           "leftPanel");
+    BRLS_BIND(brls::Box,            breadcrumbBar,       "breadcrumbBar");
+    BRLS_BIND(brls::Label,          breadcrumbIcon,      "breadcrumbIcon");
+    BRLS_BIND(brls::Label,          breadcrumbPath,      "breadcrumbPath");
+    BRLS_BIND(brls::Label,          breadcrumbCount,     "breadcrumbCount");
+    BRLS_BIND(brls::Box,            loadingStateBox,     "loadingStateBox");
+    BRLS_BIND(brls::Box,            spinnerSlot,         "spinnerSlot");
+    BRLS_BIND(brls::Label,          loadingTitle,        "loadingTitle");
+    BRLS_BIND(brls::Label,          loadingStatus,       "loadingStatus");
+    BRLS_BIND(brls::Box,            errorStateBox,       "errorStateBox");
+    BRLS_BIND(brls::Box,            errorIconSlot,       "errorIconSlot");
+    BRLS_BIND(brls::Label,          errorTitle,          "errorTitle");
+    BRLS_BIND(brls::Label,          errorMessage,        "errorMessage");
+    BRLS_BIND(brls::Button,         btnRetry,            "btnRetry");
+    BRLS_BIND(brls::Button,         btnDownloadAll,      "btnDownloadAll");
+    BRLS_BIND(brls::ScrollingFrame, fileListScroll,      "fileListScroll");
+    BRLS_BIND(brls::Box,            fileListBox,         "fileListBox");
+
+    // Right column
+    BRLS_BIND(brls::Box,            rightPanel,          "rightPanel");
+    BRLS_BIND(brls::Label,          selectedCaption,     "selectedCaption");
+    BRLS_BIND(brls::Label,          selectedCountText,   "selectedCountText");
+    BRLS_BIND(brls::Label,          totalSizeText,       "totalSizeText");
+    BRLS_BIND(brls::Label,          unpackedSizeText,    "unpackedSizeText");
+    BRLS_BIND(brls::Box,            summaryDivider,      "summaryDivider");
+    BRLS_BIND(brls::Label,          storageCaption,      "storageCaption");
+    BRLS_BIND(brls::Box,            storageChipsRow,     "storageChipsRow");
+    BRLS_BIND(brls::Box,            chipAuto,            "chipAuto");
+    BRLS_BIND(brls::Label,          chipAutoLabel,       "chipAutoLabel");
+    BRLS_BIND(brls::Box,            chipSd,              "chipSd");
+    BRLS_BIND(brls::Label,          chipSdLabel,         "chipSdLabel");
+    BRLS_BIND(brls::Box,            chipNand,            "chipNand");
+    BRLS_BIND(brls::Label,          chipNandLabel,       "chipNandLabel");
+    BRLS_BIND(brls::Box,            chipUsb,             "chipUsb");
+    BRLS_BIND(brls::Label,          chipUsbLabel,        "chipUsbLabel");
+    BRLS_BIND(brls::Box,            noInstallToggleRow,  "noInstallToggleRow");
+    BRLS_BIND(brls::Label,          noInstallLabel,      "noInstallLabel");
+    BRLS_BIND(brls::Box,            noInstallSwitchSlot, "noInstallSwitchSlot");
+    BRLS_BIND(brls::Box,            targetPathBox,       "targetPathBox");
+    BRLS_BIND(brls::Label,          targetPathIcon,      "targetPathIcon");
+    BRLS_BIND(brls::Label,          targetPathText,      "targetPathText");
+    BRLS_BIND(brls::Box,            storageBarSlot,      "storageBarSlot");
+    BRLS_BIND(brls::Label,          spaceStatusText,     "spaceStatusText");
+    BRLS_BIND(brls::Label,          secondarySpaceText,  "secondarySpaceText");
+    BRLS_BIND(brls::Button,         btnDownload,         "btnDownload");
+    BRLS_BIND(brls::Button,         btnToggleAll,        "btnToggleAll");
+
+    // Embedded NanoVG / Borealis widgets
+    brls::ProgressSpinner* spinner_ = nullptr;
+    ToggleSwitchView* noInstallSwitch_ = nullptr;
+    StorageBarView* storageBar_ = nullptr;
+
+    // Cached storage stats (populated asynchronously by refreshStorageStats)
+    bool sdOk_ = false;
+    int64_t sdFree_ = 0;
+    int64_t sdTotal_ = 0;
+    bool nandOk_ = false;
+    int64_t nandFree_ = 0;
+    int64_t nandTotal_ = 0;
+    bool usbOk_ = false;
+    int64_t usbFree_ = 0;
+    int64_t usbTotal_ = 0;
+    bool usbAvailable_ = false;
+
+    LeftState leftState_ = LeftState::Loading;
+    bool installedExpanded_ = false;
+    brls::View* lastFocusedListRow_ = nullptr;
+
+    struct FileRowBinding {
+        brls::Box* row = nullptr;
+        VectorCheckboxView* checkbox = nullptr;
+        brls::Label* title = nullptr;
+        bool installed = false;
+        bool tooLarge = false;
+    };
+    std::vector<FileRowBinding> fileRowBindings_;
+
+    struct FolderRowBinding {
+        brls::Box* row = nullptr;
+        VectorCheckboxView* checkbox = nullptr;
+        std::vector<size_t> fileIndices;
+    };
+    std::vector<FolderRowBinding> folderRowBindings_;
 
     struct FileProbeInfo {
         uint64_t uncompressed_size = 0;
@@ -90,21 +169,34 @@ private:
         std::vector<OtherFileTreeNode> directFiles;
     };
 
-    void renderOtherFilesTree(const OtherFileTreeNode& node, int depth, brls::View*& lastFocusable, std::map<std::string, brls::View*>& focusMap);
+    void renderOtherFilesTree(const OtherFileTreeNode& node, int depth, std::map<std::string, brls::View*>& focusMap);
 
     // Rebuild the visible list from files_ / selected_
-    void rebuildFileList();
-    void rebuildRetroFolderList();
-    void rebuildSwitchFileList();
+    void rebuildFileList(bool keepRightFocus = false);
+    void rebuildRetroFolderList(bool keepRightFocus = false);
+    void rebuildSwitchFileList(bool keepRightFocus = false);
     void navigateToFolder(const std::string& folder);
     void navigateUp();
-    void updateRetroSubtitle();
+    void updateBreadcrumb(size_t folderCount, size_t fileCount);
     void updateRowSelectionState(size_t idx);
+    void refreshFolderCheckboxes();
     void calculateUncompressedSizes();
     void startProbe();
     void scheduleProbeStatusPoll(std::shared_ptr<std::atomic<bool>> alive,
                                  std::shared_ptr<std::atomic<bool>> running);
     bool probeInFlight_ = false;  // Y must not start a second probe and poller
+
+    void setLeftState(LeftState state);
+    void refreshStorageStats();
+    void updateSummaryUi();
+    void updateStorageChipsUi();
+    void updateHeaderMeta();
+    void updateCrossColumnRoutes();
+    void bindRightPanelLeftRoute(brls::View* target);
+    brls::View* getRightPanelEntryView();
+    brls::View* getLeftPanelFallbackView();
+    void selectStorageLocation(const std::string& loc, brls::View* clickedChip);
+    void toggleNoInstallMode();
 };
 
 } // namespace ui

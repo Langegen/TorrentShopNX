@@ -403,12 +403,16 @@ void RetroCatalogView::toggleViewMode() {
     if (statsHint) {
         size_t total = filteredRomsets_.size() + filteredStandalone_.size();
         std::string countStr = "app/retro/games_prefix"_i18n + std::to_string(total);
+        if (total != allGames_.size()) {
+            countStr += "app/retro/of_prefix"_i18n + std::to_string(allGames_.size());
+        }
         if (!filteredRomsets_.empty()) {
             countStr += "app/retro/romsets_prefix"_i18n + std::to_string(filteredRomsets_.size()) + ")";
         }
         statsHint->setText(ui::style::headerMeta(countStr, {
             ui::style::buttonHint(brls::ControllerButton::BUTTON_LSB, "app/header_hint/view"_i18n),
             ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, "app/header_hint/refresh"_i18n),
+            filterState_.isDefault() ? std::string() : ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n),
             ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)}));
     }
 
@@ -527,6 +531,7 @@ void RetroCatalogView::filterCatalog() {
         statsHint->setText(ui::style::headerMeta(countStr, {
             ui::style::buttonHint(brls::ControllerButton::BUTTON_LSB, "app/header_hint/view"_i18n),
             ui::style::buttonHint(brls::ControllerButton::BUTTON_BACK, "app/header_hint/refresh"_i18n),
+            filterState_.isDefault() ? std::string() : ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n),
             ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)}));
     }
 
@@ -549,6 +554,7 @@ void RetroCatalogView::filterCatalog() {
 void RetroCatalogView::resetFilters() {
     filterState_.reset();
     filterCatalog();
+    brls::Application::notify("app/catalog/filters_reset"_i18n);
 }
 
 void RetroCatalogView::willAppear(bool resetState) {

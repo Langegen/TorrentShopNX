@@ -1,4 +1,5 @@
 #include "ncm_installer.h"
+#include "nexus_usb_client.h"
 
 #include <algorithm>
 #include <cctype>
@@ -85,7 +86,7 @@ NcmInstaller::~NcmInstaller() {
 
 #ifdef __SWITCH__
 
-bool NcmInstaller::begin(NcmStorageId storage) {
+bool NcmInstaller::begin(StorageTarget target, uint64_t usb_generation) {
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
     if (initialized_) {
         util::logLine("ncm: already initialized, resetting...");
@@ -102,7 +103,14 @@ bool NcmInstaller::begin(NcmStorageId storage) {
         initialized_ = false;
     }
 
-    storage_id_ = storage;
+    target_ = target;
+    usb_generation_ = usb_generation;
+
+    if (target_ == StorageTarget::Usb) {
+        storage_id_ = NcmStorageId_SdCard;
+    } else {
+        storage_id_ = (target_ == StorageTarget::Nand) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
+    }
 
     // Инициализация сервиса ncm
     Result rc = ncmInitialize();
@@ -111,29 +119,74 @@ bool NcmInstaller::begin(NcmStorageId storage) {
         return false;
     }
 
-    // Открыть ContentStorage для выбранного хранилища
-    rc = ncmOpenContentStorage(&content_storage_, storage_id_);
-    if (R_FAILED(rc)) {
-        util::logLine("ncm: ncmOpenContentStorage failed, rc=" + std::to_string(rc));
-        ncmExit();
-        return false;
-    }
-    storage_opened_ = true;
+    if (target_ == StorageTarget::Usb) {
+        if (!NexusUsbClient::instance().isSupported()) {
+            util::logLine("ncm: Nexus USB not supported by firmware");
+            ncmExit();
+            return false;
+        }
 
-    // Открыть ContentMetaDatabase
-    rc = ncmOpenContentMetaDatabase(&meta_db_, storage_id_);
-    if (R_FAILED(rc)) {
-        util::logLine("ncm: ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));
-        ncmContentStorageClose(&content_storage_);
-        storage_opened_ = false;
-        ncmExit();
-        return false;
+        if (usb_generation_ == 0) {
+            NexusUsbStatus status = {};
+            if (NexusUsbClient::instance().queryStatus(status) && status.isAvailable()) {
+                usb_generation_ = status.generation;
+            } else {
+                util::logLine("ncm: USB drive not ready");
+                ncmExit();
+                return false;
+            }
+        }
+
+        rc = NexusUsbClient::instance().openPinnedContentStorage(usb_generation_, &content_storage_);
+        if (R_FAILED(rc)) {
+            util::logLine("ncm: openPinnedContentStorage failed, rc=" + std::to_string(rc));
+            ncmExit();
+            return false;
+        }
+        storage_opened_ = true;
+
+        // ContentMetaDatabase для USB-игр размещается на SD-карте
+        rc = ncmOpenContentMetaDatabase(&meta_db_, NcmStorageId_SdCard);
+        if (R_FAILED(rc)) {
+            util::logLine("ncm: ncmOpenContentMetaDatabase(SdCard) failed, rc=" + std::to_string(rc));
+            ncmContentStorageClose(&content_storage_);
+            storage_opened_ = false;
+            ncmExit();
+            return false;
+        }
+        db_opened_ = true;
+    } else {
+        // Открыть ContentStorage для выбранного хранилища
+        rc = ncmOpenContentStorage(&content_storage_, storage_id_);
+        if (R_FAILED(rc)) {
+            util::logLine("ncm: ncmOpenContentStorage failed, rc=" + std::to_string(rc));
+            ncmExit();
+            return false;
+        }
+        storage_opened_ = true;
+
+        // Открыть ContentMetaDatabase
+        rc = ncmOpenContentMetaDatabase(&meta_db_, storage_id_);
+        if (R_FAILED(rc)) {
+            util::logLine("ncm: ncmOpenContentMetaDatabase failed, rc=" + std::to_string(rc));
+            ncmContentStorageClose(&content_storage_);
+            storage_opened_ = false;
+            ncmExit();
+            return false;
+        }
+        db_opened_ = true;
     }
-    db_opened_ = true;
 
     initialized_ = true;
-    util::logLine("ncm: initialized, storage=" + std::to_string(static_cast<int>(storage_id_)));
+    util::logLine("ncm: initialized, target=" + std::to_string(static_cast<int>(target_)) +
+                  " storage=" + std::to_string(static_cast<int>(storage_id_)) +
+                  " usb_gen=" + std::to_string(usb_generation_));
     return true;
+}
+
+bool NcmInstaller::begin(NcmStorageId storage) {
+    StorageTarget target = (storage == NcmStorageId_BuiltInUser) ? StorageTarget::Nand : StorageTarget::SdCard;
+    return begin(target, 0);
 }
 
 bool NcmInstaller::createPlaceHolder(const NcmContentId& id, uint64_t size) {
@@ -225,7 +278,14 @@ bool NcmInstaller::finalizePlaceHolder(const NcmContentId& id) {
         registered_.push_back(id);
     }
 
-    // РЈР±РёСЂР°РµРј РёР· СЃРїРёСЃРєР° РїР»РµР№СЃС…РѕР»РґРµСЂРѕРІ
+    if (target_ == StorageTarget::Usb) {
+        s64 content_size = 0;
+        if (R_SUCCEEDED(ncmContentStorageGetSizeFromContentId(&content_storage_, &content_size, &id)) && content_size > 0) {
+            NexusUsbClient::instance().ensureContentRegistered(usb_generation_, id, content_size);
+        }
+    }
+
+    // Убираем из списка плейсхолдеров
     for (auto it = placeholders_.begin(); it != placeholders_.end(); ++it) {
         if (std::memcmp(&(*it), &id, sizeof(NcmContentId)) == 0) {
             placeholders_.erase(it);

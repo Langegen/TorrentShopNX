@@ -2,6 +2,7 @@
 #include "app_paths.h"
 #include "log.h"
 #include "../config/config.h"
+#include "../installer/nexus_usb_client.h"
 #include "nacp_text.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <fstream>
@@ -44,7 +45,7 @@ struct SpaceCache {
     s64 total_space = 0;
     bool valid = false;
 };
-SpaceCache g_space_cache[2]; // 0: NAND (BuiltInUser), 1: SD (SdCard)
+SpaceCache g_space_cache[3]; // 0: NAND (BuiltInUser), 1: SD (SdCard), 2: USB (NexusUsb)
 // Guards g_space_cache only. A cache hit must not wait for
 // g_switch_service_mutex, which the installer and library hold across slow
 // ns/ncm work.
@@ -308,7 +309,10 @@ void triggerHapticFeedback(int style) {
 
 bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space) {
 #ifdef __SWITCH__
-    int cache_idx = (storageId == 1) ? 1 : 0;
+    int cache_idx = 0;
+    if (storageId == 1) cache_idx = 1;
+    else if (storageId == 2) cache_idx = 2;
+
     const auto now = std::chrono::steady_clock::now();
     {
         std::lock_guard<std::mutex> cache_lock(g_space_cache_mtx);
@@ -319,6 +323,32 @@ bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_
             return true;
         }
     }
+#endif
+
+    if (storageId == 2) {
+#ifdef __SWITCH__
+        uint64_t free_b = 0, total_b = 0;
+        if (installer::NexusUsbClient::instance().getSpace(0, free_b, total_b)) {
+            out_free_space = static_cast<int64_t>(free_b);
+            out_total_space = static_cast<int64_t>(total_b);
+            {
+                std::lock_guard<std::mutex> cache_lock(g_space_cache_mtx);
+                g_space_cache[2].free_space = out_free_space;
+                g_space_cache[2].total_space = out_total_space;
+                g_space_cache[2].last_query = std::chrono::steady_clock::now();
+                g_space_cache[2].valid = true;
+            }
+            return true;
+        }
+        return false;
+#else
+        out_total_space = 256ULL * 1024 * 1024 * 1024;
+        out_free_space  = 128ULL * 1024 * 1024 * 1024;
+        return true;
+#endif
+    }
+
+#ifdef __SWITCH__
 
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
 
@@ -382,6 +412,23 @@ bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_
 bool getStorageFreeSpace(int storageId, int64_t& out_free_space) {
     int64_t total = 0;
     return getStorageStats(storageId, out_free_space, total);
+}
+
+bool isNexusUsbSupported() {
+    return installer::NexusUsbClient::instance().isSupported();
+}
+
+bool isNexusUsbConnected() {
+    return installer::NexusUsbClient::instance().isDriveConnected();
+}
+
+bool getUsbStorageStats(int64_t& out_free_space, int64_t& out_total_space) {
+    return getStorageStats(2, out_free_space, out_total_space);
+}
+
+bool getUsbStorageFreeSpace(int64_t& out_free_space) {
+    int64_t total = 0;
+    return getUsbStorageStats(out_free_space, total);
 }
 
 bool isSdCardFat32() {

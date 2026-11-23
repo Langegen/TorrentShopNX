@@ -81,6 +81,9 @@ static void showPeerInspector(const download::DownloadItem& item);
 // DOWNLOADCELL IMPLEMENTATION
 DownloadCell::DownloadCell() {
     this->inflateFromXMLRes("xml/download_cell.xml");
+    if (headerBox) {
+        headerBox->addGestureRecognizer(new brls::TapGestureRecognizer(headerBox));
+    }
 }
 
 DownloadCell* DownloadCell::create() {
@@ -174,6 +177,10 @@ brls::View* DownloadCell::getNextFocus(brls::FocusDirection direction, brls::Vie
             return getNextCellFocus(brls::FocusDirection::DOWN);
         }
 
+        if (currentView == componentsBox) {
+            return getNextCellFocus(brls::FocusDirection::DOWN);
+        }
+
         if (componentsBox && componentsBox->getVisibility() == brls::Visibility::VISIBLE) {
             const auto& children = componentsBox->getChildren();
             for (size_t i = 0; i < children.size(); ++i) {
@@ -192,6 +199,13 @@ brls::View* DownloadCell::getNextFocus(brls::FocusDirection direction, brls::Vie
     }
 
     if (direction == brls::FocusDirection::UP) {
+        if (currentView == componentsBox) {
+            if (headerBox && headerBox->isFocusable() && headerBox->getVisibility() == brls::Visibility::VISIBLE) {
+                return headerBox;
+            }
+            return getNextCellFocus(brls::FocusDirection::UP);
+        }
+
         if (componentsBox && componentsBox->getVisibility() == brls::Visibility::VISIBLE) {
             const auto& children = componentsBox->getChildren();
             for (size_t i = 0; i < children.size(); ++i) {
@@ -332,7 +346,7 @@ void DownloadsView::registerProgressCallback() {
             }
 
             // If focus was lost and queue is not empty, restore focus
-            if (!groups_.empty() && brls::Application::getCurrentFocus() == nullptr) {
+            if (!groups_.empty() && (brls::Application::getCurrentFocus() == nullptr || brls::Application::getCurrentFocus() == recycler)) {
                 int validRow = std::clamp(focusedRow_, 0, static_cast<int>(groups_.size()) - 1);
                 recycler->setDefaultCellFocus(brls::IndexPath(0, validRow));
                 recycler->selectRowAt(brls::IndexPath(0, validRow), false);
@@ -1386,6 +1400,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
         if (hasSdkMismatch) {
             cell->sdkWarningBox->setVisibility(brls::Visibility::VISIBLE);
             cell->sdkWarningBox->setFocusable(true);
+            if (cell->headerBox) {
+                cell->sdkWarningBox->setCustomNavigationRoute(brls::FocusDirection::LEFT, cell->headerBox);
+            }
             cell->sdkWarningBox->registerClickAction([gSdk, cSdk](brls::View*) {
                 ui::showModKitOfferDialog(gSdk, cSdk);
                 return true;
@@ -1404,12 +1421,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 cell->sdkGameLabel->setTextColor(isLight ? nvgRGB(211, 47, 47) : nvgRGB(255, 112, 67));
             }
         } else {
+            cell->sdkWarningBox->setFocusable(false);
             cell->sdkWarningBox->setVisibility(brls::Visibility::GONE);
         }
     }
 
     // Accordion Component List Box
     if (group.is_expanded && group.total_count > 1) {
+        constexpr float kCompBarWidth = 160.0f;
         cell->componentsBox->setVisibility(brls::Visibility::VISIBLE);
 
         NVGcolor compBg = isLight ? nvgRGBA(242, 245, 248, 220) : nvgRGBA(32, 35, 42, 180);
@@ -1446,12 +1465,14 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 rowBox->setPadding(6.0f, 10.0f, 6.0f, 10.0f);
                 rowBox->setMarginBottom(4.0f);
                 rowBox->setFocusable(true);
+                rowBox->addGestureRecognizer(new brls::TapGestureRecognizer(rowBox));
 
                 // 0. Left Info Box (fixed width 290px): [Badge] [Name] [SDK pill]
                 auto* infoBox = new brls::Box();
                 infoBox->setAxis(brls::Axis::ROW);
                 infoBox->setAlignItems(brls::AlignItems::CENTER);
                 infoBox->setWidth(290.0f);
+                infoBox->setShrink(0.0f);
                 infoBox->setMarginRight(10.0f);
 
                 // Badge Box
@@ -1496,15 +1517,19 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 progCol->setAxis(brls::Axis::COLUMN);
                 progCol->setJustifyContent(brls::JustifyContent::CENTER);
                 progCol->setGrow(1.0f);
+                progCol->setShrink(1.0f);
                 progCol->setMarginRight(12.0f);
 
                 // Summary row (for queued / completed / idle states)
                 auto* summaryRow = new brls::Box();
                 summaryRow->setAxis(brls::Axis::ROW);
                 summaryRow->setAlignItems(brls::AlignItems::CENTER);
+                summaryRow->setWidthPercentage(100.0f);
                 auto* summaryTxt = new brls::Label();
                 summaryTxt->setFontSize(14.0f);
                 summaryTxt->setSingleLine(true);
+                summaryTxt->setGrow(1.0f);
+                summaryTxt->setShrink(1.0f);
                 summaryRow->addView(summaryTxt);
                 progCol->addView(summaryRow);
 
@@ -1512,13 +1537,17 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 auto* dlRow = new brls::Box();
                 dlRow->setAxis(brls::Axis::ROW);
                 dlRow->setAlignItems(brls::AlignItems::CENTER);
+                dlRow->setWidthPercentage(100.0f);
                 dlRow->setMarginBottom(2.0f);
                 auto* dlLbl = new brls::Label();
                 dlLbl->setText("app/downloads/download_label"_i18n);
                 dlLbl->setFontSize(14.0f);
-                dlLbl->setWidth(70.0f);
+                dlLbl->setWidth(120.0f);
+                dlLbl->setShrink(0.0f);
+                dlLbl->setSingleLine(true);
                 auto* dlBarBg = new brls::Box();
-                dlBarBg->setWidth(110.0f);
+                dlBarBg->setWidth(kCompBarWidth);
+                dlBarBg->setShrink(0.0f);
                 dlBarBg->setHeight(6.0f);
                 dlBarBg->setCornerRadius(3.0f);
                 dlBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
@@ -1530,8 +1559,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 dlBarBg->addView(dlBar);
                 auto* dlTxt = new brls::Label();
                 dlTxt->setFontSize(14.0f);
-                dlTxt->setMarginLeft(8.0f);
-                dlTxt->setWidth(165.0f);
+                dlTxt->setMarginLeft(10.0f);
+                dlTxt->setGrow(1.0f);
+                dlTxt->setShrink(1.0f);
                 dlTxt->setSingleLine(true);
                 dlRow->addView(dlLbl);
                 dlRow->addView(dlBarBg);
@@ -1542,12 +1572,16 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 auto* instRow = new brls::Box();
                 instRow->setAxis(brls::Axis::ROW);
                 instRow->setAlignItems(brls::AlignItems::CENTER);
+                instRow->setWidthPercentage(100.0f);
                 auto* instLbl = new brls::Label();
                 instLbl->setText("app/downloads/install_label"_i18n);
                 instLbl->setFontSize(14.0f);
-                instLbl->setWidth(70.0f);
+                instLbl->setWidth(120.0f);
+                instLbl->setShrink(0.0f);
+                instLbl->setSingleLine(true);
                 auto* instBarBg = new brls::Box();
-                instBarBg->setWidth(110.0f);
+                instBarBg->setWidth(kCompBarWidth);
+                instBarBg->setShrink(0.0f);
                 instBarBg->setHeight(6.0f);
                 instBarBg->setCornerRadius(3.0f);
                 instBarBg->setBackgroundColor(nvgRGB(50, 50, 50));
@@ -1559,8 +1593,9 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 instBarBg->addView(instBar);
                 auto* instTxt = new brls::Label();
                 instTxt->setFontSize(14.0f);
-                instTxt->setMarginLeft(8.0f);
-                instTxt->setWidth(165.0f);
+                instTxt->setMarginLeft(10.0f);
+                instTxt->setGrow(1.0f);
+                instTxt->setShrink(1.0f);
                 instTxt->setSingleLine(true);
                 instRow->addView(instLbl);
                 instRow->addView(instBarBg);
@@ -1575,6 +1610,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                 statusCol->setAlignItems(brls::AlignItems::FLEX_END);
                 statusCol->setJustifyContent(brls::JustifyContent::CENTER);
                 statusCol->setWidth(155.0f);
+                statusCol->setShrink(0.0f);
 
                 // Status Label
                 auto* compStatusLabel = new brls::Label();
@@ -1759,7 +1795,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     auto* dlTxt = dynamic_cast<brls::Label*>(dlRow->getChildren()[2]);
 
                     float dl_prog = std::clamp(itm.progress, 0.0f, 1.0f);
-                    if (dlBar) dlBar->setWidth(dl_prog * 110.0f);
+                    if (dlBar) dlBar->setWidth(dl_prog * kCompBarWidth);
 
                     char buf[64];
                     if (itm_dl_t > 0) {
@@ -1787,7 +1823,7 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                         auto* instTxt = dynamic_cast<brls::Label*>(instRow->getChildren()[2]);
 
                         float inst_prog = std::clamp(itm.install_progress, 0.0f, 1.0f);
-                        if (instBar) instBar->setWidth(inst_prog * 110.0f);
+                        if (instBar) instBar->setWidth(inst_prog * kCompBarWidth);
 
                         char buf[64];
                         if (itm_inst_t > 0) {
@@ -1914,6 +1950,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
                         groups_[row].has_manual_toggle = true;
                         groups_[row].is_expanded = !groups_[row].is_expanded;
+                        this->focusedRow_ = row;
+                        recycler->setDefaultCellFocus(brls::IndexPath(0, row));
                         recycler->reloadData();
                     }
                     return true;
@@ -1951,6 +1989,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
                         groups_[row].has_manual_toggle = true;
                         groups_[row].is_expanded = !groups_[row].is_expanded;
+                        this->focusedRow_ = row;
+                        recycler->setDefaultCellFocus(brls::IndexPath(0, row));
                         recycler->reloadData();
                     }
                     return true;
@@ -1976,6 +2016,8 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
                     if (row >= 0 && static_cast<size_t>(row) < groups_.size()) {
                         groups_[row].has_manual_toggle = true;
                         groups_[row].is_expanded = !groups_[row].is_expanded;
+                        this->focusedRow_ = row;
+                        recycler->setDefaultCellFocus(brls::IndexPath(0, row));
                         recycler->reloadData();
                     }
                     return true;
@@ -2050,6 +2092,8 @@ void DownloadsView::DownloadsDataSource::didSelectRowAt(brls::RecyclerFrame* rec
     if (group.total_count > 1) {
         group.has_manual_toggle = true;
         group.is_expanded = !group.is_expanded;
+        parent_->focusedRow_ = row;
+        recycler->setDefaultCellFocus(brls::IndexPath(0, row));
         recycler->reloadData();
     } else if (!group.item_indices.empty()) {
         std::lock_guard<std::recursive_mutex> lock(ui::DownloadManager::instance().getImpl().queueMutex());

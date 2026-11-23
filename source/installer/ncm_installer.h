@@ -15,6 +15,12 @@
 
 namespace installer {
 
+enum class StorageTarget {
+    SdCard,
+    Nand,
+    Usb
+};
+
 class NcmInstaller {
 public:
     NcmInstaller();
@@ -25,8 +31,12 @@ public:
     NcmInstaller& operator=(const NcmInstaller&) = delete;
 
 #ifdef __SWITCH__
-    /// Инициализировать ncm-сессию для указанного хранилища
-    /// @param storage NcmStorageId_SdCard или NcmStorageId_BuiltInUser (NAND)
+    /// Инициализировать ncm-сессию для указанного целевого накопителя
+    /// @param target StorageTarget::SdCard, StorageTarget::Nand или StorageTarget::Usb
+    /// @param usb_generation токен поколения накопителя при установке на USB (0 для автоопределения)
+    bool begin(StorageTarget target, uint64_t usb_generation = 0);
+
+    /// Обратная совместимость с вызовами по NcmStorageId
     bool begin(NcmStorageId storage);
 
     /// Создать плейсхолдер для NCA-файла
@@ -82,14 +92,19 @@ public:
 
     bool isInitialized() const { return initialized_; }
     NcmStorageId storageId() const { return storage_id_; }
+    StorageTarget target() const { return target_; }
+    uint64_t usbGeneration() const { return usb_generation_; }
 
 #else
     // Заглушки для компиляции на хосте
+    bool begin(StorageTarget target, uint64_t usb_generation = 0) { (void)target; (void)usb_generation; return true; }
     bool begin(int storage) { (void)storage; return true; }
     bool isInitialized() const { return false; }
     void cleanup() {}
     void rollbackRegistered() {}
     void forgetRegistered() {}
+    StorageTarget target() const { return StorageTarget::SdCard; }
+    uint64_t usbGeneration() const { return 0; }
 #endif
 
 private:
@@ -97,6 +112,8 @@ private:
     NcmContentStorage    content_storage_ = {};
     NcmContentMetaDatabase meta_db_       = {};
     NcmStorageId         storage_id_      = NcmStorageId_SdCard;
+    StorageTarget        target_          = StorageTarget::SdCard;
+    uint64_t             usb_generation_  = 0;
     bool                 initialized_     = false;
     bool                 storage_opened_  = false;
     bool                 db_opened_       = false;
@@ -106,6 +123,7 @@ private:
     /// Contents registered by this install (for rollbackRegistered)
     std::vector<NcmContentId> registered_;
 #else
+    StorageTarget target_ = StorageTarget::SdCard;
     bool initialized_ = false;
 #endif
 };

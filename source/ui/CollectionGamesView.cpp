@@ -309,8 +309,8 @@ void CollectionGamesView::rebuildDisplay() {
         countStr = brls::getStr("app/collections/games_count", std::to_string(displayIdx_.size()));
     }
     statsHint->setText(ui::style::headerMeta(countStr, {
-        ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n),
-        ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n)
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n),
+        ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)
     }));
 
     if (recycler && recycler->getVisibility() == brls::Visibility::VISIBLE) {

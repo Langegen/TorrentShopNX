@@ -76,6 +76,33 @@ bool CustomEngineClient::probeFiles(const std::string& info_hash,
     // One probe at a time: the engine registry is not re-entrant, and both the
     // file-select view and the download progress thread can call in.
     std::lock_guard<std::mutex> lock(probe_mtx_);
+    {
+        std::lock_guard<std::mutex> keep(keep_mtx_);
+        probe_running_ = true;
+        release_after_probe_ = false;
+    }
+    struct ProbeRunGuard {
+        CustomEngineClient* self;
+        ~ProbeRunGuard() {
+            while (true) {
+                bool should_release = false;
+                {
+                    std::lock_guard<std::mutex> keep(self->keep_mtx_);
+                    if (self->release_after_probe_) {
+                        self->release_after_probe_ = false;
+                        should_release = true;
+                    } else {
+                        self->probe_running_ = false;
+                        break;
+                    }
+                }
+                if (should_release) {
+                    self->releaseKeptHashLocked();
+                }
+            }
+        }
+    } probe_guard{this};
+
     out_files.clear();
     last_error_.clear();
 
@@ -186,8 +213,7 @@ void CustomEngineClient::cancelProbe() {
     probe_cancel_.store(true);
 }
 
-void CustomEngineClient::releaseProbeTorrent() {
-    std::lock_guard<std::mutex> lock(probe_mtx_);
+void CustomEngineClient::releaseKeptHashLocked() {
     if (!engine_) return;
     std::lock_guard<std::mutex> keep(keep_mtx_);
     if (!kept_hash_.empty() &&
@@ -196,6 +222,22 @@ void CustomEngineClient::releaseProbeTorrent() {
         util::logLine("custom_engine: released probe torrent " + kept_hash_);
         kept_hash_.clear();
     }
+}
+
+void CustomEngineClient::releaseProbeTorrent() {
+    {
+        std::lock_guard<std::mutex> keep(keep_mtx_);
+        if (probe_running_) {
+            release_after_probe_ = true;
+            return;
+        }
+    }
+    std::unique_lock<std::mutex> lock(probe_mtx_, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        // Another probe just started and acquired probe_mtx_; leave it alone.
+        return;
+    }
+    releaseKeptHashLocked();
 }
 
 void CustomEngineClient::markInUse(const std::string& hash) {
