@@ -368,7 +368,8 @@ private:
 // -------------------------------------------------------------
 // Panel
 // -------------------------------------------------------------
-DashboardSummaryView::DashboardSummaryView() {
+DashboardSummaryView::DashboardSummaryView()
+    : engine_mode_("app/settings/mode_engine"_i18n) {
     imageToken_ = std::make_shared<bool>(true);
     this->setWidthPercentage(95.0f);
     this->setHeight(kPanelHeight);
@@ -1007,7 +1008,7 @@ void DashboardSummaryView::buildDownloadsSection() {
     cardsRow->addView(c2);
 
     auto& cfg = config::ConfigManager::instance();
-    const std::string engine = (cfg.getDataMode() == "local_client") ? "Custom Engine" : "TorrServer";
+    const std::string engine = (cfg.getDataMode() == "local_client") ? "app/settings/mode_engine"_i18n : "TorrServer";
     brls::Box* c3 = makeCard(kCardWidth, openDl);
     brls::Box* b3 = c3;
     addCaption(b3, "app/dashboard/downloads_net_title"_i18n + "  \u00B7  " + engine);

@@ -1,0 +1,14 @@
+{
+  "ok": "OK",
+  "cancel": "Mégse",
+  "back": "Vissza",
+  "exit": "Kilépés",
+  "exit_hint": "Kilépsz az alkalmazásból?",
+  "open": "Megnyitás",
+  "on": "Be",
+  "off": "Ki",
+  "delete": "Törlés",
+  "save": "Mentés",
+  "input": "Adj meg egy értéket…",
+  "submit": "Küldés"
+}
