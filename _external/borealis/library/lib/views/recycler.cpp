@@ -295,10 +295,10 @@ void RecyclerFrame::reloadData()
         }
 
         selectRowAt(defaultCellFocus, false);
-        if (hadFocus && !Application::getCurrentFocus())
+        if (hadFocus && (!Application::getCurrentFocus() || Application::getCurrentFocus() == this))
         {
             View* focusTarget = this->getDefaultFocus();
-            if (focusTarget)
+            if (focusTarget && focusTarget != Application::getCurrentFocus())
                 Application::giveFocus(focusTarget);
         }
     }

@@ -308,6 +308,7 @@ void triggerHapticFeedback(int style) {
 }
 
 bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_space) {
+#ifdef __SWITCH__
     int cache_idx = 0;
     if (storageId == 1) cache_idx = 1;
     else if (storageId == 2) cache_idx = 2;
@@ -322,6 +323,7 @@ bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_
             return true;
         }
     }
+#endif
 
     if (storageId == 2) {
 #ifdef __SWITCH__

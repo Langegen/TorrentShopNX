@@ -317,8 +317,8 @@ void PcCatalogView::filterCatalog() {
         }
         statsHint->setText(ui::style::headerMeta(countStr, {
             ui::style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT, "app/header_hint/jump_az"_i18n),
-            ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n),
-            ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n)
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)
         }));
     }
 

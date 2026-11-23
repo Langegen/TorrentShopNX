@@ -2227,6 +2227,9 @@ void FileSelectView::updateStorageChipsUi() {
 
     auto styleChip = [&](brls::Box* chip, brls::Label* lbl, bool active) {
         if (!chip || !lbl) return;
+        chip->setHideHighlightBackground(true);
+        chip->setHighlightPadding(1.5f);
+        chip->setHighlightCornerRadius(10.0f);
         chip->setBackgroundColor(active ? activeBg : inactiveBg);
         chip->setBorderColor(active ? (noInstall_ ? style::cardBorder() : accent) : style::cardBorder());
         chip->setBorderThickness(1.0f);

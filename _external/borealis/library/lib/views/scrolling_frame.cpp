@@ -580,7 +580,18 @@ bool ScrollingFrame::updateScrolling(bool animated)
     if (!this->contentView)
         return false;
 
-    View* focusedView = getDefaultFocus();
+    View* focusedView = Application::getCurrentFocus();
+    bool focusInsideContent = false;
+    for (View* p = focusedView; p != nullptr; p = p->getParent())
+    {
+        if (p == this->contentView)
+        {
+            focusInsideContent = true;
+            break;
+        }
+    }
+    if (!focusInsideContent)
+        focusedView = getDefaultFocus();
     float localY      = focusedView ? focusedView->getLocalY() : 0.0f;
     float itemHeight  = focusedView ? focusedView->getHeight() : 0.0f;
     View* parent      = focusedView ? focusedView->getParent() : nullptr;

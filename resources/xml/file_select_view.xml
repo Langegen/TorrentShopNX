@@ -309,7 +309,10 @@
                             alignItems="center"
                             justifyContent="center"
                             marginRight="6"
-                            focusable="true">
+                            focusable="true"
+                            hideHighlightBackground="true"
+                            highlightCornerRadius="10"
+                            highlightPadding="1.5">
                             <brls:Label
                                 id="chipAutoLabel"
                                 text="@i18n/app/fileselect/chip_auto"
@@ -328,7 +331,10 @@
                             alignItems="center"
                             justifyContent="center"
                             marginRight="6"
-                            focusable="true">
+                            focusable="true"
+                            hideHighlightBackground="true"
+                            highlightCornerRadius="10"
+                            highlightPadding="1.5">
                             <brls:Label
                                 id="chipSdLabel"
                                 text="SD"
@@ -346,7 +352,10 @@
                             cornerRadius="8"
                             alignItems="center"
                             justifyContent="center"
-                            focusable="true">
+                            focusable="true"
+                            hideHighlightBackground="true"
+                            highlightCornerRadius="10"
+                            highlightPadding="1.5">
                             <brls:Label
                                 id="chipNandLabel"
                                 text="NAND"
@@ -366,7 +375,10 @@
                             alignItems="center"
                             justifyContent="center"
                             marginLeft="6"
-                            focusable="true">
+                            focusable="true"
+                            hideHighlightBackground="true"
+                            highlightCornerRadius="10"
+                            highlightPadding="1.5">
                             <brls:Label
                                 id="chipUsbLabel"
                                 text="USB"
