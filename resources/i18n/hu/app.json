@@ -146,6 +146,7 @@
     "state_preparing": "A telepítés előkészítése",
     "state_installing": "Telepítés",
     "state_no_peers": "Telepítés: nincs partner",
+    "state_downloading_no_peers": "Letöltés: nincs partner",
     "state_completed": "Befejezve ",
     "state_cancelled": "Megszakítva",
     "state_failed": "Hiba",
@@ -227,6 +228,9 @@
     "err_no_space": "Nincs elég szabad hely. Szabadíts fel helyet az SD kártyán vagy konzol memórián, és próbáld újra.",
     "err_no_memory": "Kevés a memória. Az album helyett Title Override módban indítsd az alkalmazást: egy játék indításakor tartsd nyomva az R gombot.",
     "err_no_peers": "Nem sikerült adatot fogadni a partnerektől. Nincsenek elérhető partnerek, vagy túl lassúak. Próbáld újra később, vagy válassz másik kiadást.",
+    "err_meta_failed": "Egyetlen partner sem küldte el a torrent metaadatait. Próbáld újra később, vagy válassz másik kiadást.",
+    "err_add_torrent": "Nem sikerült elindítani a torrentet: a partnerek nem válaszoltak vagy a motor foglalt. Próbáld újra később.",
+    "err_engine_busy": "Túl sok aktív torrentfeladat fut a motorban. Várd meg az aktuális letöltés végét, és próbáld újra.",
     "err_bad_file": "A fájl sérült vagy nem támogatott. Próbálj másik kiadást."
   },
   "detail": {
