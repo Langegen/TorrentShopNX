@@ -157,7 +157,18 @@ bool NcmInstaller::begin(StorageTarget target, uint64_t usb_generation) {
         db_opened_ = true;
     } else {
         // Открыть ContentStorage для выбранного хранилища
-        rc = ncmOpenContentStorage(&content_storage_, storage_id_);
+        if (target_ == StorageTarget::SdCard && NexusUsbClient::instance().isSupported()) {
+            rc = NexusUsbClient::instance().openNativeSdContentStorage(&content_storage_);
+            if (R_FAILED(rc)) {
+                char rc_hex[16];
+                std::snprintf(rc_hex, sizeof(rc_hex), "0x%08X", static_cast<unsigned int>(rc));
+                util::logLine("ncm: openNativeSdContentStorage failed (" + std::string(rc_hex) +
+                              "), falling back to ncmOpenContentStorage");
+                rc = ncmOpenContentStorage(&content_storage_, storage_id_);
+            }
+        } else {
+            rc = ncmOpenContentStorage(&content_storage_, storage_id_);
+        }
         if (R_FAILED(rc)) {
             util::logLine("ncm: ncmOpenContentStorage failed, rc=" + std::to_string(rc));
             ncmExit();
@@ -278,18 +289,30 @@ bool NcmInstaller::finalizePlaceHolder(const NcmContentId& id) {
         registered_.push_back(id);
     }
 
-    if (target_ == StorageTarget::Usb) {
-        s64 content_size = 0;
-        if (R_SUCCEEDED(ncmContentStorageGetSizeFromContentId(&content_storage_, &content_size, &id)) && content_size > 0) {
-            NexusUsbClient::instance().ensureContentRegistered(usb_generation_, id, content_size);
-        }
-    }
-
     // Убираем из списка плейсхолдеров
     for (auto it = placeholders_.begin(); it != placeholders_.end(); ++it) {
         if (std::memcmp(&(*it), &id, sizeof(NcmContentId)) == 0) {
             placeholders_.erase(it);
             break;
+        }
+    }
+
+    if (target_ == StorageTarget::Usb) {
+        s64 content_size = 0;
+        Result size_rc = ncmContentStorageGetSizeFromContentId(&content_storage_, &content_size, &id);
+        if (R_FAILED(size_rc) || content_size <= 0) {
+            char rc_hex[16];
+            std::snprintf(rc_hex, sizeof(rc_hex), "0x%08X", static_cast<unsigned int>(size_rc));
+            util::logLine("ncm: USB get content size failed after register, rc=" + std::string(rc_hex) +
+                          " size=" + std::to_string(content_size));
+            return false;
+        }
+        Result reg_rc = NexusUsbClient::instance().ensureContentRegistered(usb_generation_, id, content_size);
+        if (R_FAILED(reg_rc)) {
+            char rc_hex[16];
+            std::snprintf(rc_hex, sizeof(rc_hex), "0x%08X", static_cast<unsigned int>(reg_rc));
+            util::logLine("ncm: USB ensureContentRegistered failed, rc=" + std::string(rc_hex));
+            return false;
         }
     }
 

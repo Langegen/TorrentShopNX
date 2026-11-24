@@ -340,6 +340,10 @@ bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_
             }
             return true;
         }
+        {
+            std::lock_guard<std::mutex> cache_lock(g_space_cache_mtx);
+            g_space_cache[2].valid = false;
+        }
         return false;
 #else
         out_total_space = 256ULL * 1024 * 1024 * 1024;
@@ -349,6 +353,33 @@ bool getStorageStats(int storageId, int64_t& out_free_space, int64_t& out_total_
     }
 
 #ifdef __SWITCH__
+    // On Nexus-Atmosphere, ncmOpenContentStorage(SdCard) can be routed to USB when
+    // install_route is active; query the physical SD card filesystem directly.
+    if (storageId == 1 && installer::NexusUsbClient::instance().isSupported()) {
+        FsFileSystem sd = {};
+        if (R_SUCCEEDED(fsOpenSdCardFileSystem(&sd))) {
+            char root[FS_MAX_PATH] = "/";
+            s64 free_space = 0;
+            s64 total_space = 0;
+            Result rc = fsFsGetFreeSpace(&sd, root, &free_space);
+            if (R_SUCCEEDED(rc)) {
+                rc = fsFsGetTotalSpace(&sd, root, &total_space);
+            }
+            fsFsClose(&sd);
+            if (R_SUCCEEDED(rc) && free_space >= 0 && total_space > 0 && free_space <= total_space) {
+                {
+                    std::lock_guard<std::mutex> cache_lock(g_space_cache_mtx);
+                    g_space_cache[1].free_space = free_space;
+                    g_space_cache[1].total_space = total_space;
+                    g_space_cache[1].last_query = std::chrono::steady_clock::now();
+                    g_space_cache[1].valid = true;
+                }
+                out_free_space = free_space;
+                out_total_space = total_space;
+                return true;
+            }
+        }
+    }
 
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
 

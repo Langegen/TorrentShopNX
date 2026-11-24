@@ -45,6 +45,10 @@ struct NexusCapabilities {
 };
 #pragma pack(pop)
 
+static_assert(sizeof(NexusUsbStatus) == 16);
+static_assert(sizeof(NexusUsbSpace) == 16);
+static_assert(sizeof(NexusCapabilities) == 24);
+
 class NexusUsbClient {
 public:
     static NexusUsbClient& instance();
@@ -65,6 +69,9 @@ public:
     bool isMutationAllowed();
 
 #ifdef __SWITCH__
+    /// Открыть нативный ContentStorage для физической SD-карты в обход USB-маршрутизации (команда 65030)
+    Result openNativeSdContentStorage(NcmContentStorage* out_storage);
+
     /// Открыть закрепленный ContentStorage для USB (команда 65031)
     Result openPinnedContentStorage(uint64_t generation, NcmContentStorage* out_storage);
 
@@ -88,6 +95,8 @@ private:
 
     Service usb_service_ = {};
     bool service_opened_ = false;
+    bool has_logged_status_ = false;
+    NexusUsbStatus last_logged_status_ = {};
 #endif
 
     bool capabilities_checked_ = false;
