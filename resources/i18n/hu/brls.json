@@ -1,0 +1,16 @@
+{
+  "hints": {
+    "ok": "OK",
+    "back": "Vissza",
+    "exit": "Kilépés",
+    "cancel": "Mégse",
+    "on": "Be",
+    "off": "Ki"
+  },
+  "crash_frame": {
+    "button": "OK"
+  },
+  "thumbnail_sidebar": {
+    "save": "Mentés"
+  }
+}

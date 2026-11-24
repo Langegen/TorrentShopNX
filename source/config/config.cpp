@@ -250,7 +250,7 @@ bool isValidLanguage(const std::string& lang) {
            lang == "pt-BR" || lang == "pt" ||
            lang == "zh-Hans" || lang == "zh-CN" || lang == "zh-Hant" || lang == "zh" ||
            lang == "ja" ||
-           lang == "ar";
+           lang == "ar" || lang == "hu";
 }
 
 } // namespace

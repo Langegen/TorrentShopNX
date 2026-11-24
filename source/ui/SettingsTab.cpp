@@ -375,7 +375,8 @@ brls::View* SettingsTab::buildGeneralTab() {
         "app/settings/lang_pt_br"_i18n,
         "app/settings/lang_zh_hans"_i18n,
         "app/settings/lang_ja"_i18n,
-        "app/settings/lang_ar"_i18n
+        "app/settings/lang_ar"_i18n,
+        "Magyar"
     };
     int initialLang = 0;
     std::string curLang = cfg.getLanguage();
@@ -389,6 +390,7 @@ brls::View* SettingsTab::buildGeneralTab() {
     else if (curLang == "zh-Hans" || curLang == "zh-CN" || curLang == "zh") initialLang = 8;
     else if (curLang == "ja") initialLang = 9;
     else if (curLang == "ar") initialLang = 10;
+    else if (curLang == "hu") initialLang = 11;
 
     auto* languageCell = new brls::SelectorCell();
     languageCell->init("app/settings/language"_i18n, languages, initialLang, [](int selected) {}, [&cfg](int selected) {
@@ -403,6 +405,7 @@ brls::View* SettingsTab::buildGeneralTab() {
         else if (selected == 8) newLang = "zh-Hans";
         else if (selected == 9) newLang = "ja";
         else if (selected == 10) newLang = "ar";
+        else if (selected == 11) newLang = "hu";
 
         if (newLang != cfg.getLanguage()) {
             cfg.setLanguage(newLang);
