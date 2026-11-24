@@ -710,6 +710,24 @@ void MainMenu::handleExitRequest() {
     dialog->open();
 }
 
+namespace {
+class AppUpdatePromptDialog : public brls::Dialog {
+public:
+    AppUpdatePromptDialog(std::string text, std::function<void()> onDismissedWithoutChoice)
+        : brls::Dialog(std::move(text)), onDismiss_(std::move(onDismissedWithoutChoice)) {}
+
+    ~AppUpdatePromptDialog() override {
+        if (onDismiss_ && !g_appExiting.load()) {
+            auto cb = std::move(onDismiss_);
+            brls::sync([cb]() { cb(); });
+        }
+    }
+
+private:
+    std::function<void()> onDismiss_;
+};
+} // namespace
+
 void MainMenu::onContentAvailable() {
     util::logLine("MainMenu: onContentAvailable start");
     refreshDashboardState();
@@ -721,23 +739,34 @@ void MainMenu::onContentAvailable() {
 
     registerMenuShortcuts(this, this, false);
 
-    // Trigger scheduled catalog update (48h full or 4h diff)
-    catalog::CatalogUpdater::instance().checkAndRunScheduledUpdate();
+    auto runScheduledCatalogUpdate = []() {
+        if (g_appExiting.load() || g_appUpdateRunning.load() || g_appUpdatePendingRestart.load()) {
+            return;
+        }
+        catalog::CatalogUpdater::instance().checkAndRunScheduledUpdate();
+    };
 
-    // Trigger asynchronous app update check if enabled and due
+    // Check for an app update BEFORE starting the scheduled catalog update:
+    // if the user downloads a new app version, there is no reason to update the
+    // catalog right now only to re-download it again after restarting into the
+    // new version.
     auto& cfg = config::ConfigManager::instance();
     if (cfg.getAutoAppUpdate() && cfg.shouldCheckAppUpdateToday()) {
         std::string app_update_url = cfg.getEffectiveAppUpdateUrl();
-        brls::async([app_update_url]() {
+        brls::async([app_update_url, runScheduledCatalogUpdate]() {
             util::logLine("main_menu: background app update check started from " + app_update_url);
             net::HttpClient http;
+            http.setTimeout(15);
+            http.setCancelFlag(&g_appExiting);
             auto res = http.httpGet(app_update_url);
+
+            bool hasUpdate = false;
+            std::string version;
+            std::string url;
+
             if (res.status_code == 200 && !res.body.empty()) {
                 try {
                     auto j = nlohmann::json::parse(res.body);
-                    std::string version;
-                    std::string url;
-                    
                     if (j.contains("tag_name")) {
                         version = j.value("tag_name", "");
                         if (j.contains("assets") && j["assets"].is_array()) {
@@ -753,23 +782,15 @@ void MainMenu::onContentAvailable() {
                         version = j.value("version", "");
                         url = j.value("url", "");
                     }
-                    
+
                     std::string currentVersion = config::ConfigManager::APP_VERSION;
                     std::string cleanVersion = version;
                     if (!cleanVersion.empty() && (cleanVersion[0] == 'v' || cleanVersion[0] == 'V')) cleanVersion = cleanVersion.substr(1);
                     std::string cleanCurrent = currentVersion;
                     if (!cleanCurrent.empty() && (cleanCurrent[0] == 'v' || cleanCurrent[0] == 'V')) cleanCurrent = cleanCurrent.substr(1);
-                    
+
                     if (!version.empty() && !url.empty() && util::compareSemver(cleanVersion, cleanCurrent) > 0) {
-                        brls::sync([url, version]() {
-                            std::string msg = brls::getStr("app/settings/app_update_prompt", version);
-                            brls::Dialog* dialog = new brls::Dialog(msg);
-                            dialog->addButton("app/common/yes"_i18n, [url, version]() {
-                                ui::downloadAndInstallAppUpdate(url, version);
-                            });
-                            dialog->addButton("app/common/no"_i18n, []() {});
-                            dialog->open();
-                        });
+                        hasUpdate = true;
                     }
                 } catch (const std::exception& e) {
                     util::logLine("main_menu: background app update parse error: " + std::string(e.what()));
@@ -777,12 +798,48 @@ void MainMenu::onContentAvailable() {
             } else {
                 util::logLine("main_menu: background app update failed, status=" + std::to_string(res.status_code));
             }
-            
-            brls::sync([]() {
+
+            if (g_appExiting.load()) {
+                return;
+            }
+
+            brls::sync([hasUpdate, url, version, runScheduledCatalogUpdate]() {
+                if (g_appExiting.load()) {
+                    return;
+                }
                 auto& main_cfg = config::ConfigManager::instance();
                 main_cfg.setLastAppUpdateCheckDate(config::ConfigManager::currentDateString());
+
+                if (hasUpdate && !g_appUpdateRunning.load() && !g_appUpdatePendingRestart.load()) {
+                    std::string msg = brls::getStr("app/settings/app_update_prompt", version);
+                    auto handled = std::make_shared<bool>(false);
+                    auto* dialog = new AppUpdatePromptDialog(msg, [handled, runScheduledCatalogUpdate]() {
+                        if (!*handled) {
+                            *handled = true;
+                            runScheduledCatalogUpdate();
+                        }
+                    });
+                    dialog->addButton("app/common/yes"_i18n, [handled, url, version, runScheduledCatalogUpdate]() {
+                        *handled = true;
+                        ui::downloadAndInstallAppUpdate(url, version, [runScheduledCatalogUpdate](bool updateSaved) {
+                            if (!updateSaved) {
+                                runScheduledCatalogUpdate();
+                            }
+                        });
+                    });
+                    dialog->addButton("app/common/no"_i18n, [handled, runScheduledCatalogUpdate]() {
+                        *handled = true;
+                        runScheduledCatalogUpdate();
+                    });
+                    dialog->open();
+                } else {
+                    runScheduledCatalogUpdate();
+                }
             });
         });
+    } else {
+        // Trigger scheduled catalog update (48h full or 4h diff)
+        runScheduledCatalogUpdate();
     }
 
     // Background cache cleanup (iterative folder deletion and stale cache sweep)

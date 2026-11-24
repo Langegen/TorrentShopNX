@@ -27,7 +27,12 @@ CatalogUpdater& CatalogUpdater::instance() {
     return inst;
 }
 
+static bool isCatalogUpdateAborted() {
+    return g_appExiting.load() || g_catalogUpdateCancel.load() || g_appUpdateRunning.load();
+}
+
 static void updateNewReleasesCollectionInBackground() {
+    if (isCatalogUpdateAborted()) return;
     std::string cachePath = std::string(TSNX_CACHE_COLLECTIONS) + "/new_release.json";
     std::string url = std::string(kCollectionsBaseUrl) + "new_release.json";
 
@@ -42,11 +47,11 @@ static void updateNewReleasesCollectionInBackground() {
 
     auto urls = catalog::getFallbackUrls(url);
     for (const auto& u : urls) {
-        if (g_appExiting.load()) break;
+        if (isCatalogUpdateAborted()) break;
         util::logLine("catalog_updater: updating new_release.json from " + u);
         net::HttpClient http;
         http.setTimeout(20);
-        http.setCancelFlag(&g_appExiting);
+        http.setCancelFlag(&g_catalogUpdateCancel);
         auto res = http.httpGet(u);
         if (res.status_code == 200 && !res.body.empty()) {
             writeTextFile(cachePath, res.body);
@@ -61,6 +66,7 @@ static void updateNewReleasesCollectionInBackground() {
 // Install recipes for homebrew ports (port_recipes.json next to the collections),
 // at most every 12 hours. Only a file that parses replaces the saved one.
 static void updatePortRecipesInBackground() {
+    if (isCatalogUpdateAborted()) return;
     const std::string path = installer::onlinePortRecipesPath();
     const std::string failStampPath = path + ".fail_stamp";
     const std::string url = std::string(kCollectionsBaseUrl) + "port_recipes.json";
@@ -77,10 +83,10 @@ static void updatePortRecipesInBackground() {
     bool updated = false;
     auto urls = catalog::getFallbackUrls(url);
     for (const auto& u : urls) {
-        if (g_appExiting.load()) break;
+        if (isCatalogUpdateAborted()) break;
         net::HttpClient http;
         http.setTimeout(20);
-        http.setCancelFlag(&g_appExiting);
+        http.setCancelFlag(&g_catalogUpdateCancel);
         auto res = http.httpGet(u);
         if (res.status_code != 200 || res.body.empty()) {
             util::logLine("catalog_updater: port_recipes.json not updated from " + u + ", status=" + std::to_string(res.status_code));
@@ -100,7 +106,7 @@ static void updatePortRecipesInBackground() {
         updated = true;
         break;
     }
-    if (!updated && !g_appExiting.load()) {
+    if (!updated && !isCatalogUpdateAborted()) {
         writeTextFile(failStampPath, std::to_string(static_cast<long long>(now)));
     }
 }
@@ -112,7 +118,7 @@ static void refreshHomebrewInBackground() {
         try {
             auto& hb = homebrew::Catalog::instance();
             if (!hb.loaded()) hb.loadCached();
-            if (g_appExiting.load()) return;
+            if (isCatalogUpdateAborted()) return;
             const homebrew::RefreshResult r = hb.refresh(false);
             if (r.attempted) {
                 const auto pkgs = hb.snapshot();
@@ -129,7 +135,7 @@ static void refreshHomebrewInBackground() {
         try {
             auto& modIndex = modcd::Index::instance();
             if (!modIndex.loaded()) modIndex.loadCached();
-            if (g_appExiting.load()) return;
+            if (isCatalogUpdateAborted()) return;
             const bool ok = modIndex.refresh(false);
             util::logLine("modcd: refresh " + std::string(ok ? "ok" : "failed") + ", " +
                           std::to_string(modIndex.size()) + " titles with mods");
@@ -144,6 +150,11 @@ bool CatalogUpdater::isUpdateRunning() const {
 }
 
 void CatalogUpdater::checkAndRunScheduledUpdate() {
+    if (g_appExiting.load() || g_appUpdateRunning.load() || g_appUpdatePendingRestart.load()) {
+        util::logLine("catalog_updater: skipping scheduled update (app update in progress or pending restart)");
+        return;
+    }
+
     refreshHomebrewInBackground();
 
     auto initialCatalog = getCatalogSnapshot();
@@ -182,6 +193,17 @@ void CatalogUpdater::checkAndRunScheduledUpdate() {
 void CatalogUpdater::startUpdate(CatalogUpdateMode mode,
                                  std::function<void(const CatalogUpdateResult&)> onDone,
                                  bool showNotification) {
+    if (g_appExiting.load() || g_appUpdateRunning.load()) {
+        util::logLine("catalog_updater: app update download is in progress, skipping catalog update");
+        if (onDone) {
+            CatalogUpdateResult res;
+            res.success = false;
+            res.message = "App update in progress";
+            onDone(res);
+        }
+        return;
+    }
+
     bool expected = false;
     if (!g_catalogUpdateRunning.compare_exchange_strong(expected, true)) {
         util::logLine("catalog_updater: update already running, skipping request");
@@ -193,6 +215,7 @@ void CatalogUpdater::startUpdate(CatalogUpdateMode mode,
         }
         return;
     }
+    g_catalogUpdateCancel.store(false);
 
     ui::CatalogProgressNotification* notif = nullptr;
     std::shared_ptr<bool> notifToken = nullptr;
@@ -224,26 +247,34 @@ void CatalogUpdater::startUpdate(CatalogUpdateMode mode,
             } else {
                 res = performDiffUpdate(diffUrl, langKey, notifToken, notif);
                 // If diff returned error (e.g. 404 on server), fallback to full update
-                if (!res.success && !res.already_up_to_date && !g_appExiting.load()) {
+                if (!res.success && !res.already_up_to_date && !isCatalogUpdateAborted()) {
                     util::logLine("catalog_updater: diff update failed, falling back to full catalog check");
                     res = performFullUpdate(fullUrl, notifToken, notif);
                 }
             }
         }
 
-        // Also refresh new_release.json collection if due (every 4 hours)
-        updateNewReleasesCollectionInBackground();
+        if (!isCatalogUpdateAborted()) {
+            // Also refresh new_release.json collection if due (every 4 hours)
+            updateNewReleasesCollectionInBackground();
 
-        // Port install recipes (every 12 hours)
-        updatePortRecipesInBackground();
+            // Port install recipes (every 12 hours)
+            updatePortRecipesInBackground();
 
-        // Refresh game stats (seeds, leeches, downloads, timestamps)
-        GameStatsManager::instance().updateStatsInBackground();
+            // Refresh game stats (seeds, leeches, downloads, timestamps)
+            GameStatsManager::instance().updateStatsInBackground();
+        }
+
+        const bool cancelledByAppUpdate = g_catalogUpdateCancel.load() || g_appUpdateRunning.load();
 
         // Update notification UI
         if (notifToken && *notifToken && notif) {
-            brls::sync([notif, notifToken, res]() {
+            brls::sync([notif, notifToken, res, cancelledByAppUpdate]() {
                 if (!notifToken || !*notifToken || !notif) return;
+                if (cancelledByAppUpdate || g_appExiting.load()) {
+                    notif->dismissNow();
+                    return;
+                }
                 if (res.already_up_to_date) {
                     notif->setCompleted("app/catalog/db_updated"_i18n);
                 } else if (res.success) {
@@ -416,14 +447,14 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     net::HttpClient::DownloadResult dl_res;
     auto diffCandidates = catalog::getFallbackUrls(diffUrl);
     for (const auto& u : diffCandidates) {
-        if (g_appExiting.load()) break;
+        if (isCatalogUpdateAborted()) break;
         util::logLine("catalog_updater: trying diff download from: " + u);
-        dl_res = http.downloadToFileEx(u, tempDiffPath, extra_headers, &g_appExiting, 60);
+        dl_res = http.downloadToFileEx(u, tempDiffPath, extra_headers, &g_catalogUpdateCancel, 60);
         if (dl_res.success || dl_res.not_modified) break;
         util::logLine("catalog_updater: diff download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
     }
 
-    if (dl_res.not_modified && !g_appExiting.load()) {
+    if (dl_res.not_modified && !isCatalogUpdateAborted()) {
         util::logLine("catalog_updater: diff HTTP 304 Not Modified - catalog is already up to date");
         res.success = true;
         res.already_up_to_date = true;
@@ -433,8 +464,8 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
         return res;
     }
 
-    if (!dl_res.success || g_appExiting.load()) {
-        util::logLine("catalog_updater: diff download failed with HTTP " + std::to_string(dl_res.http_code));
+    if (!dl_res.success || isCatalogUpdateAborted()) {
+        util::logLine("catalog_updater: diff download failed or aborted with HTTP " + std::to_string(dl_res.http_code));
         std::error_code ec;
         std::filesystem::remove(tempDiffPath, ec);
         res.success = false;
@@ -479,8 +510,8 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     int added = 0, updated = 0, deleted = 0;
-    if (!applyDiffToGames(gamesCopy, diffJson, langKey, added, updated, deleted)) {
-        util::logLine("catalog_updater: applyDiffToGames failed");
+    if (!applyDiffToGames(gamesCopy, diffJson, langKey, added, updated, deleted) || isCatalogUpdateAborted()) {
+        if (!isCatalogUpdateAborted()) util::logLine("catalog_updater: applyDiffToGames failed");
         std::error_code ec;
         std::filesystem::remove(tempDiffPath, ec);
         res.success = false;
@@ -489,8 +520,8 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
 
     // Save updated catalog to binary cache
     std::string tempBin = getCatalogBinPath() + ".tmp";
-    if (!saveGamesToBinaryFile(tempBin, gamesCopy)) {
-        util::logLine("catalog_updater: failed to save updated binary cache");
+    if (!saveGamesToBinaryFile(tempBin, gamesCopy) || isCatalogUpdateAborted()) {
+        if (!isCatalogUpdateAborted()) util::logLine("catalog_updater: failed to save updated binary cache");
         std::error_code ec;
         std::filesystem::remove(tempBin, ec);
         std::filesystem::remove(tempDiffPath, ec);
@@ -554,7 +585,7 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     auto lastProgressUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
 
     http.setProgressCallback([notif, aliveToken, lastProgressUpdate](int64_t dltotal, int64_t dlnow) {
-        if (g_appExiting.load()) return;
+        if (isCatalogUpdateAborted()) return;
         if (!aliveToken || !*aliveToken || !notif) return;
         if (dltotal <= 0) return;
 
@@ -597,14 +628,14 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     net::HttpClient::DownloadResult dl_res;
     auto catalogCandidates = catalog::getFallbackUrls(catalogUrl);
     for (const auto& u : catalogCandidates) {
-        if (g_appExiting.load()) break;
+        if (isCatalogUpdateAborted()) break;
         util::logLine("catalog_updater: trying full catalog download from: " + u);
-        dl_res = http.downloadToFileEx(u, tempJsonPath, extra_headers, &g_appExiting, 300);
+        dl_res = http.downloadToFileEx(u, tempJsonPath, extra_headers, &g_catalogUpdateCancel, 300);
         if (dl_res.success || dl_res.not_modified) break;
         util::logLine("catalog_updater: full catalog download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
     }
 
-    if (dl_res.not_modified && !g_appExiting.load()) {
+    if (dl_res.not_modified && !isCatalogUpdateAborted()) {
         util::logLine("catalog_updater: full catalog HTTP 304 Not Modified");
         res.success = true;
         res.already_up_to_date = true;
@@ -620,7 +651,7 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     std::vector<Game> online_games;
     bool updated = false;
 
-    if (dl_res.success && !g_appExiting.load()) {
+    if (dl_res.success && !isCatalogUpdateAborted()) {
         if (aliveToken && *aliveToken && notif) {
             brls::sync([notif, aliveToken]() {
                 if (aliveToken && *aliveToken && notif) {
@@ -630,14 +661,14 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         }
 
         online_games = parseGamesFromFileStream(tempJsonPath);
-        if (aliveToken && *aliveToken && notif) {
+        if (aliveToken && *aliveToken && notif && !isCatalogUpdateAborted()) {
             brls::sync([notif, aliveToken]() {
                 if (aliveToken && *aliveToken && notif) {
                     notif->updateProgress(92.0f, "app/catalog/processing"_i18n);
                 }
             });
         }
-        if (!online_games.empty() && !g_appExiting.load()) {
+        if (!online_games.empty() && !isCatalogUpdateAborted()) {
             util::logLine("catalog_updater: parsed " + std::to_string(online_games.size()) + " games from stream");
 
             std::string tempBinPath = getCatalogBinPath() + ".tmp";
@@ -647,9 +678,9 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
             bool jsonOk = false;
             bool binOk  = false;
 
-            if (!binSaved) {
-                // Write failed (e.g. SD card full). Keep old .bin intact — do NOT remove it.
-                util::logLine("catalog_updater: saveGamesToBinaryFile failed, keeping existing cache");
+            if (!binSaved || isCatalogUpdateAborted()) {
+                // Write failed (e.g. SD card full) or aborted. Keep old .bin intact — do NOT remove it.
+                if (!isCatalogUpdateAborted()) util::logLine("catalog_updater: saveGamesToBinaryFile failed, keeping existing cache");
                 std::filesystem::remove(tempBinPath, ec);
                 std::filesystem::remove(tempJsonPath, ec);
             } else {
@@ -671,10 +702,13 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
             std::error_code ec;
             std::filesystem::remove(tempJsonPath, ec);
         }
+    } else {
+        std::error_code ec;
+        std::filesystem::remove(tempJsonPath, ec);
     }
 
     // Fallback parser if online fetch failed and catalog was completely empty
-    if (was_empty && !updated && !g_appExiting.load()) {
+    if (was_empty && !updated && !isCatalogUpdateAborted()) {
         util::logLine("catalog_updater: running fallback sources parser");
         catalog::CatalogManager catalog_mgr;
         bool sources_loaded = catalog_mgr.loadSourcesWithFallback(TSNX_SOURCES_PATH, "romfs:/sources.json");

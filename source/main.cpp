@@ -781,10 +781,10 @@ int main(int argc, char** argv) {
     g_cleanupCancelled = true;
     datasource::CustomEngineClient::instance().cancelProbe();
 
-    // Wait for background tasks (cleanup and catalog update) to complete safely before deinitializing systems
+    // Wait for background tasks (cleanup, catalog update and app update) to complete safely before deinitializing systems
     util::logLine("main: waiting for background threads to exit...");
     int waitCount = 0;
-    while ((g_cleanupRunning.load() || g_catalogUpdateRunning.load()) && waitCount < 100) {
+    while ((g_cleanupRunning.load() || g_catalogUpdateRunning.load() || g_appUpdateRunning.load()) && waitCount < 100) {
         usleep(10000); // 10ms
         waitCount++;
     }

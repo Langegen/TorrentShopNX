@@ -104,6 +104,12 @@ public:
         });
     }
 
+    void dismissNow() {
+        if (this->hasParent()) {
+            this->getParent()->removeView(this);
+        }
+    }
+
 private:
     std::shared_ptr<bool> aliveToken_;
     brls::Label* headerLabel = nullptr;
