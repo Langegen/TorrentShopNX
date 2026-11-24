@@ -63,6 +63,10 @@ public:
     /* Aborts an in-flight probe's metadata fetch (does not stop the engine). */
     void cancelProbe();
 
+    /* Signals imminent process shutdown so queued/new probes bail out before
+     * resetting probe_cancel_ or locking probe_mtx_. */
+    void beginShutdown();
+
     /* Removes the kept probe torrent, unless a download has adopted it. */
     void releaseProbeTorrent();
 
@@ -97,6 +101,7 @@ private:
 
     mutable std::mutex probe_mtx_;
     std::atomic<bool> probe_cancel_{false};
+    std::atomic<bool> shutdown_requested_{false};
     bool probing_ = false;
 
     mutable std::mutex keep_mtx_;

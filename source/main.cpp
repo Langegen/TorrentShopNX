@@ -537,7 +537,7 @@ int main(int argc, char** argv) {
     brls::Application::getExitEvent()->subscribe([]() {
         g_appExiting.store(true);
         g_cleanupCancelled = true;
-        datasource::CustomEngineClient::instance().cancelProbe();
+        datasource::CustomEngineClient::instance().beginShutdown();
     });
 
     brls::Application::createWindow("TorrentShopNX");

@@ -2,6 +2,12 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <poll.h>
+#include <unistd.h>
+#include <switch.h>
 #include <mbedtls/sha1.h>
 
 #ifdef __MINGW32__
@@ -10,6 +16,7 @@
 #endif
 
 #include "torrent_meta.h"
+#include "magnet.h"
 
 static int tests_run = 0;
 static int tests_failed = 0;
@@ -146,13 +153,166 @@ TEST(tracker_mirrors_added_for_t_ru_announce) {
     torrent_unload(&t);
 }
 
+TEST(meta_cache_has_check) {
+    torrent_meta_cache_set_dir("pctest/meta_cache");
+    mkdir("pctest/meta_cache", 0755);
+
+    uint8_t ih[20];
+    for (int i = 0; i < 20; i++) ih[i] = (uint8_t)(0xA0 + i);
+    char hex[41];
+    static const char digits[] = "0123456789abcdef";
+    for (int i = 0; i < 20; i++) {
+        hex[i * 2]     = digits[ih[i] >> 4];
+        hex[i * 2 + 1] = digits[ih[i] & 0x0f];
+    }
+    hex[40] = '\0';
+
+    char path[320];
+    snprintf(path, sizeof(path), "pctest/meta_cache/%s.meta", hex);
+    remove(path);
+
+    ASSERT(!torrent_meta_cache_has(ih));
+    ASSERT(write_file(path, "d4:name1:ae") == 0);
+    ASSERT(torrent_meta_cache_has(ih));
+    remove(path);
+    ASSERT(!torrent_meta_cache_has(ih));
+}
+
+typedef struct {
+    int listener;
+    volatile int hits;
+    volatile bool stop;
+} loopback_http_ctx;
+
+static void loopback_http_tracker_fn(void *arg) {
+    loopback_http_ctx *ctx = (loopback_http_ctx *)arg;
+    const char *body = "d8:intervali60e5:peers0:e";
+    char resp[256];
+    int rlen = snprintf(resp, sizeof(resp),
+                        "HTTP/1.1 200 OK\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
+                        strlen(body), body);
+    while (!ctx->stop) {
+        struct pollfd pfd = { (SOCKET)ctx->listener, POLLIN, 0 };
+        int rc = poll(&pfd, 1, 30);
+        if (rc <= 0 || !(pfd.revents & POLLIN)) continue;
+        struct sockaddr_in sa;
+        socklen_t sl = sizeof(sa);
+        int cli = accept(ctx->listener, (struct sockaddr *)&sa, &sl);
+        if (cli < 0) continue;
+        char req[1024];
+        recv(cli, req, sizeof(req), 0);
+        ctx->hits++;
+        send(cli, resp, rlen, 0);
+        close(cli);
+    }
+}
+
+TEST(tracker_cooldown_and_blackout) {
+    torrent_tracker_reset_cooldowns();
+
+    // Local errors must never cool down a tracker.
+    const char *local_url = "http://local-err.example/ann";
+    for (int i = 0; i < 5; i++) torrent_tracker_record_status(local_url, false, true);
+    ASSERT(!torrent_tracker_is_cooled_down(local_url));
+
+    // Remote failures cool down after 3 hits; valid 0-peer transport_ok resets it.
+    const char *flaky = "http://flaky.example/ann";
+    torrent_tracker_record_status(flaky, false, false);
+    torrent_tracker_record_status(flaky, false, false);
+    ASSERT(!torrent_tracker_is_cooled_down(flaky));
+    torrent_tracker_record_status(flaky, false, false);
+    ASSERT(torrent_tracker_is_cooled_down(flaky));
+    torrent_tracker_record_status(flaky, true, false);
+    ASSERT(!torrent_tracker_is_cooled_down(flaky));
+
+    // Blackout guard + live HTTP 0-peer valid reply.
+    int lsock = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT(lsock >= 0);
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    sa.sin_port = 0;
+    ASSERT(bind(lsock, (struct sockaddr *)&sa, sizeof(sa)) == 0);
+    socklen_t sl = sizeof(sa);
+    ASSERT(getsockname(lsock, (struct sockaddr *)&sa, &sl) == 0);
+    ASSERT(listen(lsock, 4) == 0);
+    uint16_t port = ntohs(sa.sin_port);
+
+    loopback_http_ctx hctx = { lsock, 0, false };
+    Thread th;
+    ASSERT(threadCreate(&th, loopback_http_tracker_fn, &hctx, NULL, 0x4000, 0x2C, -2) == 0);
+    threadStart(&th);
+
+    char url_ok[128];
+    snprintf(url_ok, sizeof(url_ok), "http://127.0.0.1:%u/ann", (unsigned)port);
+    const char *url_dead = "http://127.0.0.1:1/ann";
+
+    // Pre-cool EVERY tracker so blackout guard must override the cooldown.
+    for (int i = 0; i < 3; i++) {
+        torrent_tracker_record_status(url_ok, false, false);
+        torrent_tracker_record_status(url_dead, false, false);
+    }
+    ASSERT(torrent_tracker_is_cooled_down(url_ok));
+    ASSERT(torrent_tracker_is_cooled_down(url_dead));
+
+    torrent_meta stub;
+    memset(&stub, 0, sizeof(stub));
+    for (int i = 0; i < 20; i++) stub.info_hash[i] = (uint8_t)(i + 1);
+    stub.trackers[0] = (char *)url_ok;
+    stub.trackers[1] = (char *)url_dead;
+    stub.tracker_count = 2;
+
+    peer_addr peers[16];
+    char err[128] = {0};
+    torrent_announce(&stub, peers, 16, NULL, err, sizeof(err));
+
+    hctx.stop = true;
+    close(lsock);
+    threadWaitForExit(&th);
+    threadClose(&th);
+
+    ASSERT(hctx.hits >= 1);
+    ASSERT(!torrent_tracker_is_cooled_down(url_ok));
+    torrent_tracker_reset_cooldowns();
+}
+
+TEST(magnet_t_ru_mirrors) {
+    magnet_info m;
+    char err[128] = {0};
+    int rc = magnet_parse(
+        "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+        "&tr=http%3A%2F%2Fbt.t-ru.org%2Fann%3Fmagnet",
+        &m, err, sizeof(err));
+    ASSERT(rc == 0);
+
+    const char *expected[4] = {
+        "http://bt.t-ru.org/ann?magnet",
+        "http://bt2.t-ru.org/ann?magnet",
+        "http://bt3.t-ru.org/ann?magnet",
+        "http://bt4.t-ru.org/ann?magnet",
+    };
+    for (int k = 0; k < 4; k++) {
+        int found = 0;
+        for (int i = 0; i < m.tracker_count; i++) {
+            if (strcmp(m.trackers[i], expected[k]) == 0) { found = 1; break; }
+        }
+        ASSERT(found);
+    }
+    magnet_free(&m);
+}
+
 int main(void) {
+    torrent_announce_mutex_init();
     printf("Running torrent_meta unit tests:\n");
     RUN(load_torrent_file);
     RUN(piece_len_last);
     RUN(meta_cache_hit);
     RUN(tracker_mirrors_only_from_announce_url);
     RUN(tracker_mirrors_added_for_t_ru_announce);
+    RUN(meta_cache_has_check);
+    RUN(tracker_cooldown_and_blackout);
+    RUN(magnet_t_ru_mirrors);
     printf("\n%d tests run, %d failed\n", tests_run, tests_failed);
     return tests_failed ? 1 : 0;
 }

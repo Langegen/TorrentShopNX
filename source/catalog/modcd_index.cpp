@@ -22,12 +22,23 @@ using json = nlohmann::json;
 
 constexpr const char* kFile = "modcd.json";
 constexpr const char* kStampFile = "modcd_last_check";
+constexpr const char* kFailStampFile = "modcd_last_fail";
+constexpr long long kFailCooldownSec = 12 * 3600;
 
 std::string trimmed(std::string s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
     size_t b = 0;
     while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
     return s.substr(b);
+}
+
+long long readStampFile(const std::string& path) {
+    std::string text;
+    if (!readFile(path, text)) return 0;
+    text = trimmed(text);
+    char* end = nullptr;
+    const long long v = std::strtoll(text.c_str(), &end, 10);
+    return (end && end != text.c_str()) ? v : 0;
 }
 
 // 16 hex digits -> application ID; 0 for anything else.
@@ -130,6 +141,14 @@ bool Index::refresh(bool force) {
     const long long last = lastCheck();
     if (!force && loaded_.load() && last > 0 && now >= last && now - last < interval_) return true;
 
+    const std::string fail_stamp_path = join(cache_dir_, kFailStampFile);
+    if (!force && !loaded_.load()) {
+        const long long last_fail = readStampFile(fail_stamp_path);
+        if (last_fail > 0 && now >= last_fail && now - last_fail < kFailCooldownSec) {
+            return false;
+        }
+    }
+
     ensureDir(cache_dir_);
     const std::string path = join(cache_dir_, kFile);
     const std::string etag_path = path + ".etag";
@@ -149,7 +168,12 @@ bool Index::refresh(bool force) {
         }
     }
     if (!loaded_.load()) loadCached();
-    if (ok) util::atomicWriteFile(join(cache_dir_, kStampFile), std::to_string(now));
+    if (ok) {
+        std::remove(fail_stamp_path.c_str());
+        util::atomicWriteFile(join(cache_dir_, kStampFile), std::to_string(now));
+    } else if (now > 0) {
+        util::atomicWriteFile(fail_stamp_path, std::to_string(now));
+    }
     return loaded_.load();
 }
 
@@ -174,12 +198,7 @@ size_t Index::size() const {
 }
 
 long long Index::lastCheck() const {
-    std::string text;
-    if (!readFile(join(cache_dir_, kStampFile), text)) return 0;
-    text = trimmed(text);
-    char* end = nullptr;
-    const long long v = std::strtoll(text.c_str(), &end, 10);
-    return (end && end != text.c_str()) ? v : 0;
+    return readStampFile(join(cache_dir_, kStampFile));
 }
 
 }  // namespace modcd

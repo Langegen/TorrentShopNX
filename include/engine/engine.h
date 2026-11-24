@@ -44,6 +44,7 @@ typedef struct {
     float       download_kbps;
     int64_t     loaded_size;
     int64_t     total_size;
+    int64_t     bytes_received;
     int         seeds;
     int         peers;
     int         known_peers;

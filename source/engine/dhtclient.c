@@ -198,7 +198,7 @@ static const char *BOOTSTRAP[] = {
 };
 #define BOOTSTRAP_PORT "6881"
 
-#define DHT_MAX_TARGETS 4
+#define DHT_MAX_TARGETS 16
 
 typedef struct {
     bool active;
@@ -246,6 +246,8 @@ static bool s_dht_dead = false;
 // starving for peers, so searches run on a short interval instead of the
 // normal 15 s one, and the first hungry search fires immediately.
 static volatile int s_bg_hungry = 0;
+static bool s_tfs_hungry = false;
+static int s_meta_hungry_refs = 0;
 
 // DHT nodes other threads learned about (a peer's BEP 5 PORT message). Only
 // the DHT thread may call into jech/dht, so they queue here (under s_bg_mtx)
@@ -299,18 +301,42 @@ static void bg_ping_pending(void) {
     }
 }
 
-void dht_bg_set_hungry(int v) {
-    v = v ? 1 : 0;
-    if (v == s_bg_hungry) return;
-    if (v) {
+static void dht_bg_ensure_init(void);
+
+static void bg_update_hungry_locked(void) {
+    int want = (s_tfs_hungry || s_meta_hungry_refs > 0) ? 1 : 0;
+    if (want == s_bg_hungry) return;
+    if (want) {
         // Hunger just started: don't wait out the next 15 s interval -- make
         // the first search happen on the very next loop iteration.
-        mutexLock(&s_bg_mtx);
         for (int i = 0; i < DHT_MAX_TARGETS; i++)
             if (s_targets[i].active) s_targets[i].last_search = 0;
-        mutexUnlock(&s_bg_mtx);
     }
-    s_bg_hungry = v;
+    s_bg_hungry = want;
+}
+
+void dht_bg_set_hungry(int v) {
+    dht_bg_ensure_init();
+    mutexLock(&s_bg_mtx);
+    s_tfs_hungry = (v != 0);
+    bg_update_hungry_locked();
+    mutexUnlock(&s_bg_mtx);
+}
+
+void dht_bg_hungry_push(void) {
+    dht_bg_ensure_init();
+    mutexLock(&s_bg_mtx);
+    s_meta_hungry_refs++;
+    bg_update_hungry_locked();
+    mutexUnlock(&s_bg_mtx);
+}
+
+void dht_bg_hungry_pop(void) {
+    if (!s_bg_init) return;
+    mutexLock(&s_bg_mtx);
+    if (s_meta_hungry_refs > 0) s_meta_hungry_refs--;
+    bg_update_hungry_locked();
+    mutexUnlock(&s_bg_mtx);
 }
 
 int dht_bg_hungry(void) {
@@ -417,35 +443,36 @@ static int bg_restart(void) {
 }
 
 // jech delivers DHT_EVENT_VALUES for the search registered with this closure;
-// route the compact peer list to the matching target.
+// route the compact peer list to every matching active target.
 static void bg_on_event(void *closure, int event,
                         const unsigned char *info_hash,
                         const void *data, size_t data_len) {
     (void)closure;
     if (event != DHT_EVENT_VALUES || !info_hash || data_len < 6) return;
 
-    dht_target *target = NULL;
+    int n = (int)(data_len / 6);
+    if (n <= 0) return;
+
+    dht_target *targets[DHT_MAX_TARGETS];
+    dht_peer_cb cbs[DHT_MAX_TARGETS];
+    void *ctxs[DHT_MAX_TARGETS];
+    int match_count = 0;
+
     mutexLock(&s_bg_mtx);
     for (int i = 0; i < DHT_MAX_TARGETS; i++) {
         if (s_targets[i].active &&
-            memcmp(s_targets[i].info_hash, info_hash, 20) == 0) {
-            target = &s_targets[i];
-            break;
+            memcmp(s_targets[i].info_hash, info_hash, 20) == 0 &&
+            s_targets[i].cb != NULL) {
+            targets[match_count] = &s_targets[i];
+            cbs[match_count] = s_targets[i].cb;
+            ctxs[match_count] = s_targets[i].ctx;
+            match_count++;
         }
     }
-    dht_peer_cb cb = target ? target->cb : NULL;
-    void *ctx = target ? target->ctx : NULL;
-    if (cb) s_cb_inflight++;   // dht_background_remove waits for this to drain
+    if (match_count > 0) s_cb_inflight++;   // wait-for-drain barrier on target removal
     mutexUnlock(&s_bg_mtx);
-    if (!cb) return;
+    if (match_count == 0) return;
 
-    int n = (int)(data_len / 6);
-    if (n <= 0) {
-        mutexLock(&s_bg_mtx);
-        s_cb_inflight--;
-        mutexUnlock(&s_bg_mtx);
-        return;
-    }
     peer_addr peers[128];
     int np = 0;
     const uint8_t *b = data;
@@ -457,10 +484,15 @@ static void bg_on_event(void *closure, int event,
     }
     if (np > 0) {
         mutexLock(&s_bg_mtx);
-        if (target->active) target->delivered += np;
+        for (int k = 0; k < match_count; k++) {
+            if (targets[k]->active && targets[k]->cb == cbs[k] && targets[k]->ctx == ctxs[k])
+                targets[k]->delivered += np;
+        }
         s_last_peers_found += np;
         mutexUnlock(&s_bg_mtx);
-        cb(ctx, peers, np);
+        for (int k = 0; k < match_count; k++) {
+            cbs[k](ctxs[k], peers, np);
+        }
     }
     mutexLock(&s_bg_mtx);
     s_cb_inflight--;
@@ -660,7 +692,13 @@ static void dht_bg_main(void *arg) {
                 dht_target *tg = &s_targets[i];
                 if (!tg->active) continue;
                 if (now - tg->last_search > search_iv) {
-                    tg->last_search = now;
+                    // Mark all active subscribers for this same info_hash so we do not emit duplicate queries.
+                    for (int j = 0; j < DHT_MAX_TARGETS; j++) {
+                        if (s_targets[j].active &&
+                            memcmp(s_targets[j].info_hash, tg->info_hash, 20) == 0) {
+                            s_targets[j].last_search = now;
+                        }
+                    }
                     dht_search(tg->info_hash, my_port, AF_INET, bg_on_event, tg);
                 }
             }
@@ -766,7 +804,7 @@ static void dht_bg_main(void *arg) {
 
 static void dht_bg_ensure_init(void);
 
-static int dht_bg_start(void) {
+int dht_bg_start(void) {
     dht_bg_ensure_init();
     mutexLock(&s_bg_mtx);
     if (s_bg_thread_started) {
@@ -812,6 +850,14 @@ void dht_stop(void) {
     }
 }
 
+static void dht_wait_inflight_locked(void) {
+    while (s_cb_inflight > 0) {
+        mutexUnlock(&s_bg_mtx);
+        svcSleepThread(1000000ULL);   // 1 ms
+        mutexLock(&s_bg_mtx);
+    }
+}
+
 int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
                    dht_peer_cb cb, void *ctx, const volatile bool *cancel,
                    char *err, size_t errlen) {
@@ -841,6 +887,7 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
     tg->last_search = 0;
     mutexUnlock(&s_bg_mtx);
 
+    dht_bg_hungry_push();
     dlog("DHT lookup attached (%d nodes)", s_last_good + s_last_dubious);
 
     u64 freq = armGetSystemTickFreq();
@@ -869,19 +916,17 @@ int dht_find_peers(const uint8_t info_hash[20], int target_peers, int budget_ms,
     tg->active = false;
     tg->cb = NULL;
     tg->ctx = NULL;
+    dht_wait_inflight_locked();
     mutexUnlock(&s_bg_mtx);
 
+    dht_bg_hungry_pop();
     dlog("DHT fin: %d peers", delivered);
-    // NB: s_last_peers_found is deliberately NOT reset here. It is a
-    // session-cumulative diagnostic: a value that stops growing means the
-    // DHT stopped delivering peers entirely (usually a decayed routing
-    // table), which is exactly what the log should show.
     return delivered;
 }
 
 // Register a persistent target: the background thread keeps searching it and
-// delivers peers through cb until removed. Used by torrentfs for continuous
-// peer discovery while a torrent is open.
+// delivers peers through cb until removed. Multiple independent subscribers may
+// share an info_hash when their (cb, ctx) pairs differ.
 void dht_background_add(const uint8_t info_hash[20],
                         dht_peer_cb cb, void *ctx) {
     dht_bg_start();
@@ -889,9 +934,10 @@ void dht_background_add(const uint8_t info_hash[20],
     mutexLock(&s_bg_mtx);
     for (int i = 0; i < DHT_MAX_TARGETS; i++) {
         if (s_targets[i].active &&
-            memcmp(s_targets[i].info_hash, info_hash, 20) == 0) {
-            s_targets[i].cb = cb;
-            s_targets[i].ctx = ctx;
+            memcmp(s_targets[i].info_hash, info_hash, 20) == 0 &&
+            s_targets[i].cb == cb &&
+            s_targets[i].ctx == ctx) {
+            s_targets[i].last_search = 0;
             mutexUnlock(&s_bg_mtx);
             return;
         }
@@ -911,6 +957,25 @@ void dht_background_add(const uint8_t info_hash[20],
     mutexUnlock(&s_bg_mtx);
 }
 
+void dht_background_remove_ctx(const uint8_t info_hash[20],
+                               dht_peer_cb cb, void *ctx) {
+    if (!s_bg_init) return;
+    mutexLock(&s_bg_mtx);
+    for (int i = 0; i < DHT_MAX_TARGETS; i++) {
+        if (s_targets[i].active &&
+            memcmp(s_targets[i].info_hash, info_hash, 20) == 0 &&
+            s_targets[i].cb == cb &&
+            s_targets[i].ctx == ctx) {
+            s_targets[i].active = false;
+            s_targets[i].cb = NULL;
+            s_targets[i].ctx = NULL;
+            break;
+        }
+    }
+    dht_wait_inflight_locked();
+    mutexUnlock(&s_bg_mtx);
+}
+
 void dht_background_remove(const uint8_t info_hash[20]) {
     if (!s_bg_init) return;
     mutexLock(&s_bg_mtx);
@@ -920,16 +985,11 @@ void dht_background_remove(const uint8_t info_hash[20]) {
             s_targets[i].active = false;
             s_targets[i].cb = NULL;
             s_targets[i].ctx = NULL;
-            break;
         }
     }
     // A callback that already took cb/ctx runs outside the lock: the caller is
     // about to free ctx (torrentfs_close), so wait until none is in flight.
-    while (s_cb_inflight > 0) {
-        mutexUnlock(&s_bg_mtx);
-        svcSleepThread(1000000ULL);   // 1 ms
-        mutexLock(&s_bg_mtx);
-    }
+    dht_wait_inflight_locked();
     mutexUnlock(&s_bg_mtx);
     // The thread itself keeps running: the routing table stays warm for the
     // next lookup and is saved on engine shutdown (dht_stop).

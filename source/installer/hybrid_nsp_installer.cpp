@@ -4,6 +4,7 @@
 #include "nexus_usb_client.h"
 #include "ncz_parser.h"
 #include "write_behind.h"
+#include "ns_ext.h"
 #include "../buffer/ring_buffer.h"
 #include "../utils/log.h"
 #include "../utils/switch_utils.h"
@@ -675,42 +676,6 @@ void HybridNspInstaller::collectorThreadFunc() {
 // =============================================================================
 // Thread B: Installer — RingBuffer → NCM
 // =============================================================================
-
-#ifdef __SWITCH__
-// =========================================================================
-// Custom IPC wrappers for Push/List/Delete ApplicationRecord
-// =========================================================================
-
-struct ContentStorageRecord {
-    NcmContentMetaKey key;
-    u64 storage_id;
-};
-static_assert(sizeof(ContentStorageRecord) == 24, "ContentStorageRecord must be exactly 24 bytes");
-
-static Result nsPushApplicationRecordCustom(u64 application_id, u8 record_type, const ContentStorageRecord* records, s32 count) {
-    Service app_manager;
-    Result rc = nsGetApplicationManagerInterface(&app_manager);
-    if (R_FAILED(rc)) return rc;
-
-    struct {
-        u8 record_type;
-        u8 pad[7];
-        u64 application_id;
-    } in;
-    in.record_type = record_type;
-    in.pad[0] = 0; in.pad[1] = 0; in.pad[2] = 0; in.pad[3] = 0; in.pad[4] = 0; in.pad[5] = 0; in.pad[6] = 0;
-    in.application_id = application_id;
-
-    rc = serviceDispatchIn(&app_manager, 16, in,
-        .buffer_attrs = { SfBufferAttr_In | SfBufferAttr_HipcMapAlias },
-        .buffers = { { records, static_cast<size_t>(count * sizeof(ContentStorageRecord)) } }
-    );
-    serviceClose(&app_manager);
-    return rc;
-}
-
-static constexpr u8 NsApplicationRecordType_Installed = 0x3;
-#endif
 
 // =============================================================================
 void HybridNspInstaller::installerThreadFunc() {
@@ -1606,6 +1571,7 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     // =========================================================================
     // Шаг 5в-2: Очистка устаревших версий обновлений (Patch 0x81)
     // =========================================================================
+    bool removed_newer = false;
     if (cnmt.meta_type == 0x81) {
         util::logLine("hybrid: patch installed (v" + std::to_string(key.version) +
                       "), checking for obsolete patch versions to clean up");
@@ -1671,20 +1637,25 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                     const auto& old_k = keys[static_cast<size_t>(i)];
                     if (old_k.id != key.id) continue;
 
-                    // Clean up strictly older versions on the same storage,
-                    // or older/duplicate versions on the alternate storage.
+                    // Clean up any other patch version on the same storage (covers downgrades),
+                    // or any version of this patch on the alternate storage.
                     bool should_remove = (st_id == config_.storage)
-                                       ? (old_k.version < key.version)
-                                       : (old_k.version <= key.version);
+                                       ? (old_k.version != key.version)
+                                       : true;
                     if (!should_remove) continue;
+                    if (old_k.version > key.version) removed_newer = true;
 
                     util::logLine("hybrid: cleaning up obsolete patch v" + std::to_string(old_k.version) +
                                   " on storage " + std::to_string(static_cast<int>(st_id)));
 
-                    std::vector<NcmContentInfo> old_cis(64);
-                    s32 old_entries = 0;
-                    if (R_SUCCEEDED(ncmContentMetaDatabaseListContentInfo(&db, &old_entries, old_cis.data(),
-                                                                         static_cast<s32>(old_cis.size()), &old_k, 0))) {
+                    s32 old_start = 0;
+                    for (;;) {
+                        NcmContentInfo old_cis[32] = {};
+                        s32 old_entries = 0;
+                        if (R_FAILED(ncmContentMetaDatabaseListContentInfo(&db, &old_entries, old_cis, 32, &old_k, old_start)) ||
+                            old_entries <= 0) {
+                            break;
+                        }
                         if (!cs_opened) {
                             if (R_SUCCEEDED(ncmOpenContentStorage(&cs, st_id))) {
                                 cs_opened = true;
@@ -1692,13 +1663,15 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                         }
                         if (cs_opened) {
                             for (s32 j = 0; j < old_entries; ++j) {
-                                if (!isNewContentId(old_cis[static_cast<size_t>(j)].content_id)) {
-                                    ncmContentStorageDelete(&cs, &old_cis[static_cast<size_t>(j)].content_id);
+                                if (!isNewContentId(old_cis[j].content_id)) {
+                                    ncmContentStorageDelete(&cs, &old_cis[j].content_id);
                                 } else {
                                     util::logLine("hybrid: preserving shared NCA between patch versions");
                                 }
                             }
                         }
+                        old_start += old_entries;
+                        if (old_entries < 32) break;
                     }
 
                     if (R_SUCCEEDED(ncmContentMetaDatabaseRemove(&db, &old_k))) {
@@ -1759,6 +1732,10 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                                + std::string(base_hex));
             } else {
                 util::logLine("hybrid: nsPushApplicationRecord FAILED, rc=" + std::to_string(ns_rc));
+            }
+
+            if (cnmt.meta_type == 0x81 && removed_newer) {
+                nsSyncLaunchVersion(base_tid, key.version);
             }
 
             nsDeleteRedundantApplicationEntity();

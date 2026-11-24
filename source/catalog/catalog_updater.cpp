@@ -42,9 +42,11 @@ static void updateNewReleasesCollectionInBackground() {
 
     auto urls = catalog::getFallbackUrls(url);
     for (const auto& u : urls) {
+        if (g_appExiting.load()) break;
         util::logLine("catalog_updater: updating new_release.json from " + u);
         net::HttpClient http;
         http.setTimeout(20);
+        http.setCancelFlag(&g_appExiting);
         auto res = http.httpGet(u);
         if (res.status_code == 200 && !res.body.empty()) {
             writeTextFile(cachePath, res.body);
@@ -60,18 +62,25 @@ static void updateNewReleasesCollectionInBackground() {
 // at most every 12 hours. Only a file that parses replaces the saved one.
 static void updatePortRecipesInBackground() {
     const std::string path = installer::onlinePortRecipesPath();
+    const std::string failStampPath = path + ".fail_stamp";
     const std::string url = std::string(kCollectionsBaseUrl) + "port_recipes.json";
 
     struct stat st;
+    const std::time_t now = std::time(nullptr);
     if (stat(path.c_str(), &st) == 0) {
-        std::time_t now = std::time(nullptr);
+        if (now > 0 && (now - st.st_mtime) < (12 * 3600)) return;
+    }
+    if (stat(failStampPath.c_str(), &st) == 0) {
         if (now > 0 && (now - st.st_mtime) < (12 * 3600)) return;
     }
 
+    bool updated = false;
     auto urls = catalog::getFallbackUrls(url);
     for (const auto& u : urls) {
+        if (g_appExiting.load()) break;
         net::HttpClient http;
         http.setTimeout(20);
+        http.setCancelFlag(&g_appExiting);
         auto res = http.httpGet(u);
         if (res.status_code != 200 || res.body.empty()) {
             util::logLine("catalog_updater: port_recipes.json not updated from " + u + ", status=" + std::to_string(res.status_code));
@@ -84,9 +93,15 @@ static void updatePortRecipesInBackground() {
             continue;
         }
         writeTextFile(path, res.body);
+        std::error_code ec;
+        std::filesystem::remove(failStampPath, ec);
         installer::PortRecipeStore::instance().reload();
         util::logLine("catalog_updater: port_recipes.json updated from " + u + ", " + std::to_string(recipes.size()) + " recipes");
+        updated = true;
         break;
+    }
+    if (!updated && !g_appExiting.load()) {
+        writeTextFile(failStampPath, std::to_string(static_cast<long long>(now)));
     }
 }
 
@@ -584,7 +599,7 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     for (const auto& u : catalogCandidates) {
         if (g_appExiting.load()) break;
         util::logLine("catalog_updater: trying full catalog download from: " + u);
-        dl_res = http.downloadToFileEx(u, tempJsonPath, extra_headers, &g_appExiting, 180);
+        dl_res = http.downloadToFileEx(u, tempJsonPath, extra_headers, &g_appExiting, 300);
         if (dl_res.success || dl_res.not_modified) break;
         util::logLine("catalog_updater: full catalog download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
     }

@@ -12,6 +12,7 @@
 
 #include "torrentfs.h"
 #include "torrent_meta.h"
+#include "meta_fetch.h"
 #include "dhtclient.h"
 #include "utp_nb.h"
 #include "listen.h"
@@ -133,6 +134,17 @@ static void unhold(tsnx_torrent *t, bool used_fs) {
 static torrentfs *detach_fs_locked(tsnx_torrent *t) {
     torrentfs *fs = t->fs;
     t->fs = NULL;
+    if (g_engine) {
+        bool active = false;
+        for (int i = 0; i < MAX_TORRENTS; i++) {
+            if (g_engine->torrents[i].used && !g_engine->torrents[i].removing &&
+                g_engine->torrents[i].fs) {
+                active = true;
+                break;
+            }
+        }
+        meta_fetch_set_low_concurrency(active);
+    }
     if (fs) {
         torrentfs_cancel(fs);
         while (t->fs_users > 0) reg_wait();
@@ -245,6 +257,11 @@ static bool slot_open_fs(tsnx_torrent *t, const char *source, int file_index,
     for (int i = 0; t->wanted_files && i < t->wanted_files_count; i++)
         if (!t->wanted_files[i]) torrentfs_set_file_wanted(nfs, i, false);
     REG_UNLOCK();
+
+    peer_addr cached[64];
+    int cn = torrent_meta_get_cached_peers(t->meta.info_hash, cached, 64);
+    if (cn > 0) torrentfs_add_peers(nfs, cached, cn);
+    meta_fetch_set_low_concurrency(true);
     return true;
 }
 
@@ -292,6 +309,9 @@ static bool engine_route_incoming(const uint8_t info_hash[20], int fd,
         ok = true;
     }
     REG_UNLOCK();
+    if (!ok) {
+        ok = meta_fetch_route_incoming(info_hash, fd, hs68);
+    }
     return ok;
 }
 
@@ -308,6 +328,9 @@ static bool engine_route_incoming_utp(const uint8_t info_hash[20], void *utp,
     if (t && t->fs)
         ok = torrentfs_incoming_push_utp(t->fs, utp, hs68, ip_net, port_host);
     REG_UNLOCK();
+    if (!ok) {
+        ok = meta_fetch_route_incoming_utp(info_hash, utp, hs68, ip_net, port_host);
+    }
     return ok;
 }
 
@@ -378,7 +401,9 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
     // the first announce/DHT thread can touch them (PC compat shim lazy-init
     // would otherwise race on first use).
     torrent_announce_mutex_init();
+    meta_fetch_init_early();
     dht_bg_init_early();
+    dht_bg_start();
     torrentfs_set_ram_stream(1);
     g_engine = eng;
 
@@ -398,6 +423,7 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
     // either transport, and one router mapping covers both.
     utp_nb_init(bound_port > 0 ? bound_port : listen_port);
     torrentfs_set_utp_router(engine_route_incoming_utp);
+    meta_fetch_set_utp_router(engine_route_incoming_utp);
     if (bound_port > 0) upnp_start(bound_port);
 #ifndef __SWITCH__
     g_wd_stop = false;
@@ -552,8 +578,12 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
         return false;
 
     // Fast-path: check if this magnet hash is already registered in the engine
+    bool has_parsed = false;
+    uint8_t parsed_ih[20] = {0};
     magnet_info minfo;
     if (magnet_parse(magnet_uri, &minfo, err, sizeof(err)) == 0) {
+        has_parsed = true;
+        memcpy(parsed_ih, minfo.info_hash, 20);
         char parsed_hex[TSNX_MAX_HASH_LEN + 1];
         bin_to_hex(minfo.info_hash, parsed_hex, 40);
         magnet_free(&minfo);
@@ -563,28 +593,43 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
         if (found) return ok;
     }
 
+    bool meta_cached = has_parsed && torrent_meta_cache_has(parsed_ih);
+
     REG_LOCK();
-    tsnx_torrent *slot = reserve_slot_locked(eng);
-    if (slot) {
-        // Briefly pause new peer dials on active downloads to give network &
-        // socket headroom for the new torrent's announces and metadata fetch.
-        for (int i = 0; i < MAX_TORRENTS; i++) {
-            tsnx_torrent *t = &eng->torrents[i];
-            if (t->used && !t->removing && t->fs) torrentfs_pause_dials(t->fs, 5);
+    bool has_active_fs = false;
+    for (int i = 0; i < MAX_TORRENTS; i++) {
+        tsnx_torrent *t = &eng->torrents[i];
+        if (t->used && !t->removing && t->fs) {
+            has_active_fs = true;
+            if (!meta_cached) {
+                int live = 0;
+                torrentfs_live_peers(t->fs, &live, NULL, NULL);
+                if (live >= 6) torrentfs_pause_dials(t->fs, 2);
+            }
         }
     }
+    tsnx_torrent *slot = reserve_slot_locked(eng);
     REG_UNLOCK();
     if (!slot) {
         snprintf(s_last_err, sizeof(s_last_err), "no free torrent slots");
         return false;
     }
 
+    meta_fetch_set_low_concurrency(has_active_fs);
+
+    peer_addr fetched_peers[64];
+    int fetched_n = 0;
+
     // The slot is reserved: invisible to lookups while the metadata arrives.
-    if (torrent_load_magnet_cancel(&slot->meta, magnet_uri, cancel,
-                                   err, sizeof(err)) != 0) {
+    if (torrent_load_magnet_peers_cancel(&slot->meta, magnet_uri,
+                                         fetched_peers, 64, &fetched_n,
+                                         cancel, err, sizeof(err)) != 0) {
         snprintf(s_last_err, sizeof(s_last_err), "%s", err[0] ? err : "metadata fetch failed");
         unreserve(slot);
         return false;
+    }
+    if (fetched_n == 0) {
+        fetched_n = torrent_meta_get_cached_peers(slot->meta.info_hash, fetched_peers, 64);
     }
     char hex[TSNX_MAX_HASH_LEN + 1];
     bin_to_hex(slot->meta.info_hash, hex, 40);
@@ -612,6 +657,10 @@ bool tsnx_engine_add_magnet_ex(tsnx_engine *eng, const char *magnet_uri,
             unreserve(slot);
             return false;
         }
+        if (fetched_n > 0) {
+            torrentfs_add_peers(fs, fetched_peers, fetched_n);
+        }
+        meta_fetch_set_low_concurrency(true);
     }
 
     REG_LOCK();
@@ -667,13 +716,15 @@ bool tsnx_engine_pause_torrent(tsnx_engine *eng, const char *hash) {
     eng = active_engine(eng);
     REG_LOCK();
     tsnx_torrent *t = find_locked(eng, hash);
-    if (t) {
+    bool changed = false;
+    if (t && !t->paused) {
         t->paused = true;
         if (t->fs) torrentfs_pause(t->fs, 1);
+        changed = true;
     }
     REG_UNLOCK();
     if (!t) return false;
-    engine_log(ENGINE_LOG_INFO, "[engine] pause torrent %s", hash);
+    if (changed) engine_log(ENGINE_LOG_INFO, "[engine] pause torrent %s", hash);
     return true;
 }
 
@@ -681,13 +732,15 @@ bool tsnx_engine_resume_torrent(tsnx_engine *eng, const char *hash) {
     eng = active_engine(eng);
     REG_LOCK();
     tsnx_torrent *t = find_locked(eng, hash);
-    if (t) {
+    bool changed = false;
+    if (t && t->paused) {
         t->paused = false;
         if (t->fs) torrentfs_pause(t->fs, 0);
+        changed = true;
     }
     REG_UNLOCK();
     if (!t) return false;
-    engine_log(ENGINE_LOG_INFO, "[engine] resume torrent %s", hash);
+    if (changed) engine_log(ENGINE_LOG_INFO, "[engine] resume torrent %s", hash);
     return true;
 }
 
@@ -742,6 +795,7 @@ static void fill_item_locked(tsnx_torrent *t, tsnx_torrent_item *it) {
     int64_t useful_now = (int64_t)bytes_recv -
                          (fs ? (int64_t)torrentfs_dup_bytes(fs) : 0);
     if (useful_now < 0) useful_now = 0;
+    it->bytes_received = useful_now;
     if (t->last_speed_time_ms == 0) {
         t->last_speed_time_ms = now;
         t->last_bytes_recv = (uint64_t)useful_now;

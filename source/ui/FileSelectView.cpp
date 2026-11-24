@@ -21,6 +21,7 @@
 #include "../catalog/game_version.hpp"
 #include "GameDetailView.hpp"
 #include "ReleaseChooser.hpp"
+#include "switch_file_select.hpp"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -38,9 +39,13 @@ namespace ui {
 // Custom NanoVG Widgets (VectorCheckboxView, ToggleSwitchView, StorageBarView)
 // ─────────────────────────────────────────────────────────────────────────────
 
+static float srgbToLin(float c) {
+    return (c <= 0.04045f) ? (c / 12.92f) : std::pow((c + 0.055f) / 1.055f, 2.4f);
+}
+
 static NVGcolor contrastTextOn(NVGcolor bg) {
-    const float lum = 0.299f * bg.r + 0.587f * bg.g + 0.114f * bg.b;
-    return lum > 0.62f ? nvgRGB(24, 26, 32) : nvgRGB(255, 255, 255);
+    const float L = 0.2126f * srgbToLin(bg.r) + 0.7152f * srgbToLin(bg.g) + 0.0722f * srgbToLin(bg.b);
+    return L > 0.25f ? nvgRGB(20, 24, 34) : nvgRGB(255, 255, 255);
 }
 
 static NVGcolor chipInactiveBg() {
@@ -1077,23 +1082,22 @@ void FileSelectView::startProbe() {
                 } else {
                     SwitchServiceGuard guard;
                     const bool isFat = util::isSdCardFat32();
-                    bool anySelected = false;
+                    std::vector<SwitchFileCandidate> candidates(files_.size());
                     for (size_t i = 0; i < files_.size(); ++i) {
                         uint64_t tid = resolveFileTitleId(files_[i].name, game_.title_id);
                         uint32_t ver = util::parseVersionFromFileName(files_[i].name);
                         bool isGame = isSwitchGameFile(files_[i].name);
-                        bool installed = isTitleIdInstalled(tid, guard, ver);
                         bool tooLarge = noInstall_ && isFat && (static_cast<uint64_t>(files_[i].size) > util::kFat32MaxFileSize);
-                        if (isGame && !tooLarge) {
-                            if (!noInstall_ && !installed) {
-                                selected_[i] = true;
-                                anySelected = true;
-                            } else if (noInstall_) {
-                                selected_[i] = true;
-                                anySelected = true;
-                            }
-                        }
+                        candidates[i].tid = tid;
+                        candidates[i].version = ver;
+                        candidates[i].is_game = isGame;
+                        candidates[i].too_large = tooLarge;
+                        candidates[i].installed = (isGame && !tooLarge && !noInstall_)
+                            ? isTitleIdInstalled(tid, guard, ver)
+                            : false;
                     }
+                    selected_ = selectLatestSwitchFiles(candidates, noInstall_);
+                    bool anySelected = std::any_of(selected_.begin(), selected_.end(), [](bool v) { return v; });
                     if (noInstall_ && !anySelected && isFat) {
                         brls::Application::notify("app/fileselect/fat32_all_files_too_large"_i18n);
                     }
@@ -1120,8 +1124,11 @@ void FileSelectView::startProbe() {
                 }
             } else {
                 setLeftState(LeftState::Error);
+                const std::string displayErr = err.empty()
+                    ? "app/fileselect/timeout_error"_i18n
+                    : DownloadsView::friendlyInstallError(err);
                 if (errorMessage) {
-                    errorMessage->setText(err.empty() ? "app/fileselect/timeout_error"_i18n : err);
+                    errorMessage->setText(displayErr);
                 }
                 updateHeaderMeta();
                 updateSummaryUi();
@@ -1129,8 +1136,7 @@ void FileSelectView::startProbe() {
                 if (btnRetry) {
                     brls::Application::giveFocus(btnRetry);
                 }
-                brls::Application::notify("app/common/error"_i18n + ": " +
-                    (err.empty() ? "app/fileselect/timeout_error"_i18n : err));
+                brls::Application::notify("app/common/error"_i18n + ": " + displayErr);
                 util::logLine("FileSelectView: probe error: " + err);
             }
         });

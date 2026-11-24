@@ -174,6 +174,7 @@
         "state_queued": "排队中",
         "state_preparing": "准备中...",
         "state_no_peers": "正在搜寻节点",
+        "state_downloading_no_peers": "下载中：无节点",
         "state_cancelled": "已取消",
         "state_failed": "失败",
         "eta_h_m": "剩余时间: {0}小时 {1}分",
@@ -227,6 +228,9 @@
         "err_no_space": "可用空间不足。请释放 SD 卡或主机存储空间后重试。",
         "err_no_memory": "内存不足。请通过游戏覆盖模式启动（启动游戏时按住 R），而不是从相册启动。",
         "err_no_peers": "无法从种群获取数据：没有节点或速度过慢。请稍后重试或选择其他发布版本。",
+        "err_meta_failed": "没有节点提供种子元数据。请稍后重试或选择其他发布版本。",
+        "err_add_torrent": "无法启动种子任务：节点无响应或引擎繁忙。请稍后重试。",
+        "err_engine_busy": "引擎活动任务过多。请等待当前下载完成后重试。",
         "err_bad_file": "文件已损坏或不受支持。请尝试其他发布版本。"
     },
     "detail": {

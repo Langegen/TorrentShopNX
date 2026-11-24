@@ -102,6 +102,13 @@ void CustomEngineHealth::executeRecovery() {
         if (restart_cb_) restart_cb_();
         recovery_stage_ = 3;
         last_stage_time_ = now;
+        return;
+    }
+
+    if (recovery_stage_ >= 3 && since_stage >= 60) {
+        util::logLine("health: cycling recovery back to stage0");
+        recovery_stage_ = 0;
+        last_stage_time_ = now;
     }
 }
 

@@ -22,7 +22,7 @@ try {
             Select-String "OK -> |error:" | ForEach-Object { $_.Line }
         if ($LASTEXITCODE -ne 0) { Write-Host "build failed" -ForegroundColor Red; exit 100 }
     }
-    $need = @("test_bencode", "test_magnet", "test_torrent_meta", "test_pool", "test_mechanisms",
+    $need = @("test_bencode", "test_magnet", "test_torrent_meta", "test_meta_fetch", "test_pool", "test_mechanisms",
               "test_registry", "test_swarm_sched", "test_rotation", "test_engine_perf",
               "test_ext_msgs", "test_holepunch")
     $missing = $need | Where-Object { -not (Test-Path ".\pctest\$_.exe") }
@@ -32,7 +32,7 @@ try {
     }
 
     $fail = 0
-    foreach ($t in @("test_bencode", "test_magnet", "test_torrent_meta", "test_pool", "test_ext_msgs")) {
+    foreach ($t in @("test_bencode", "test_magnet", "test_torrent_meta", "test_meta_fetch", "test_pool", "test_ext_msgs")) {
         $out = & ".\pctest\$t.exe" 2>&1 | Select-Object -Last 1
         if ($LASTEXITCODE -ne 0) { $fail++ }
         "{0,-28} code={1} {2}" -f $t, $LASTEXITCODE, $out

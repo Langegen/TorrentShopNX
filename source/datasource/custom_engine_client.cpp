@@ -37,8 +37,13 @@ tsnx_engine* CustomEngineClient::sharedEngine() {
     return engine_;
 }
 
-void CustomEngineClient::shutdown() {
+void CustomEngineClient::beginShutdown() {
+    shutdown_requested_.store(true);
     probe_cancel_.store(true);
+}
+
+void CustomEngineClient::shutdown() {
+    beginShutdown();
     std::lock_guard<std::mutex> probe_lock(probe_mtx_);
     {
         std::lock_guard<std::mutex> keep_lock(keep_mtx_);
@@ -73,9 +78,18 @@ bool CustomEngineClient::probeFiles(const std::string& info_hash,
                                     const std::string& torrent_file_path,
                                     std::vector<CustomEngineFileInfo>& out_files,
                                     std::string* err) {
+    if (shutdown_requested_.load()) {
+        if (err) *err = "shutting down";
+        return false;
+    }
+
     // One probe at a time: the engine registry is not re-entrant, and both the
     // file-select view and the download progress thread can call in.
     std::lock_guard<std::mutex> lock(probe_mtx_);
+    if (shutdown_requested_.load()) {
+        if (err) *err = "shutting down";
+        return false;
+    }
     {
         std::lock_guard<std::mutex> keep(keep_mtx_);
         probe_running_ = true;

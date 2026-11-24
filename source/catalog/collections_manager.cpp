@@ -139,10 +139,13 @@ bool CollectionsManager::loadCollection(const CollectionInfo& info,
 
     const int maxAge = (info.id == "new_release") ? (4 * 3600) : 86400;
     if (!readWholeFileLocal(cache_path, body) || !isCacheFresh(cache_path, maxAge)) {
+        if (g_appExiting.load()) return false;
         auto urls = catalog::getFallbackUrls(url);
         net::HttpClient http;
         http.setTimeout(30);
+        http.setCancelFlag(&g_appExiting);
         for (const auto& u : urls) {
+            if (g_appExiting.load()) return false;
             util::logLine("collections: fetching " + info.id + " from " + u);
             auto res = http.httpGet(u);
             if (res.status_code == 200 && !res.body.empty()) {
@@ -159,7 +162,7 @@ bool CollectionsManager::loadCollection(const CollectionInfo& info,
         }
     }
 
-    if (body.empty()) {
+    if (g_appExiting.load() || body.empty()) {
         util::logLine("collections: no data for " + info.id);
         return false;
     }

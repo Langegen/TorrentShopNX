@@ -146,6 +146,7 @@
         "state_preparing": "Preparing install",
         "state_installing": "Installing",
         "state_no_peers": "Installing: no peers",
+        "state_downloading_no_peers": "Downloading: no peers",
         "state_completed": "Completed ",
         "state_cancelled": "Cancelled",
         "state_failed": "Error",
@@ -227,6 +228,9 @@
         "err_no_space": "Not enough free space. Free up space on the SD card or console memory and try again.",
         "err_no_memory": "Not enough memory. Launch the app via title override (hold R while starting a game) instead of the album.",
         "err_no_peers": "Couldn't get data from the swarm: no peers or they are too slow. Try again later or pick another release.",
+        "err_meta_failed": "No peer provided the torrent metadata. Try again later or pick another release.",
+        "err_add_torrent": "Couldn't start the torrent: peers didn't respond or the engine is busy. Try again later.",
+        "err_engine_busy": "Too many active torrent tasks. Wait for the current download to finish and try again.",
         "err_bad_file": "The file is damaged or not supported. Try another release."
     },
     "detail": {
