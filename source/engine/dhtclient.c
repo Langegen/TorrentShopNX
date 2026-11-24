@@ -190,13 +190,15 @@ static const char *BOOTSTRAP[] = {
     "router.bittorrent.com",
     "router.utorrent.com",
     "dht.transmissionbt.com",
-    "bootstrap.dht.transmissionbt.com",
     "dht.libtorrent.org",
     "dht.aelitis.com",
-    "dht2.opentracker.is",
-    "router.bitcomet.com",
 };
 #define BOOTSTRAP_PORT "6881"
+
+#define BOOT_ADDRS_MAX 16
+static struct sockaddr_in s_boot_addrs[BOOT_ADDRS_MAX];
+static int s_boot_addrs_n = 0;
+static bool s_boot_addrs_valid = false;
 
 #define DHT_MAX_TARGETS 16
 
@@ -345,18 +347,41 @@ int dht_bg_hungry(void) {
 
 static int bg_bootstrap(int s) {
     (void)s;
-    int booted = 0;
-    for (size_t i = 0; i < sizeof(BOOTSTRAP) / sizeof(*BOOTSTRAP) && !s_bg_stop; i++) {
-        struct addrinfo hints = {0}, *res = NULL, *r;
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        if (getaddrinfo(BOOTSTRAP[i], BOOTSTRAP_PORT, &hints, &res) != 0 || !res)
-            continue;
-        for (r = res; r && !s_bg_stop; r = r->ai_next) {
-            dht_ping_node(r->ai_addr, r->ai_addrlen);
-            booted++;
+    if (!s_boot_addrs_valid) {
+        int n = 0;
+        for (size_t i = 0; i < sizeof(BOOTSTRAP) / sizeof(*BOOTSTRAP) && !s_bg_stop; i++) {
+            struct addrinfo hints = {0}, *res = NULL, *r;
+            hints.ai_family = AF_INET;
+            hints.ai_socktype = SOCK_DGRAM;
+            if (getaddrinfo(BOOTSTRAP[i], BOOTSTRAP_PORT, &hints, &res) != 0 || !res)
+                continue;
+            for (r = res; r && !s_bg_stop; r = r->ai_next) {
+                if (r->ai_addrlen < (socklen_t)sizeof(struct sockaddr_in)) continue;
+                const struct sockaddr_in *sin = (const struct sockaddr_in *)r->ai_addr;
+                bool dup = false;
+                for (int j = 0; j < n; j++) {
+                    if (s_boot_addrs[j].sin_addr.s_addr == sin->sin_addr.s_addr &&
+                        s_boot_addrs[j].sin_port == sin->sin_port) {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (!dup && n < BOOT_ADDRS_MAX) {
+                    s_boot_addrs[n++] = *sin;
+                }
+            }
+            freeaddrinfo(res);
         }
-        freeaddrinfo(res);
+        if (n == 0) return 0;
+        if (!s_bg_stop) {
+            s_boot_addrs_n = n;
+            s_boot_addrs_valid = true;
+        }
+    }
+    int booted = 0;
+    for (int i = 0; i < s_boot_addrs_n && !s_bg_stop; i++) {
+        dht_ping_node((struct sockaddr *)&s_boot_addrs[i], sizeof(s_boot_addrs[i]));
+        booted++;
     }
     return booted;
 }
@@ -439,6 +464,7 @@ static int bg_restart(void) {
 #endif
 
     s_bg_bootstrapped = false;
+    s_boot_addrs_valid = false;
     return 0;
 }
 
@@ -581,8 +607,11 @@ static void dht_bg_main(void *arg) {
         engine_log(ENGINE_LOG_INFO, "[dht] cache: pinged %d nodes", cached_count);
 
     s_bg_bootstrapped = false;
+    u64 start_tick = armGetSystemTick();
     u64 last_bootstrap = 0;
     u64 last_log = 0;
+    u64 last_count = 0;
+    u64 last_cache_save = 0;
     time_t tosleep = 0;
 
     while (!s_bg_stop) {
@@ -610,7 +639,6 @@ static void dht_bg_main(void *arg) {
 
         // Counting nodes walks the whole routing table: once a second is
         // plenty for the bootstrap decisions below (it ran per packet).
-        static u64 last_count = 0;
         if (last_count == 0 || now - last_count >= freq) {
             int g = 0, d = 0;
             dht_nodes(AF_INET, &g, &d, NULL, NULL);
@@ -623,12 +651,17 @@ static void dht_bg_main(void *arg) {
 
         int boot_count = 0;
         if (!s_bg_bootstrapped) {
-            boot_count = bg_bootstrap(s_bg_sock);
-            if (boot_count > 0) {
+            if (cached_count >= 16 && good >= 16) {
                 s_bg_bootstrapped = true;
                 last_bootstrap = now;
-                engine_log(ENGINE_LOG_INFO,
-                           "[dht] background bootstrap: %d routers", boot_count);
+            } else if (cached_count < 16 || now - start_tick >= (u64)2 * freq) {
+                boot_count = bg_bootstrap(s_bg_sock);
+                if (boot_count > 0) {
+                    s_bg_bootstrapped = true;
+                    last_bootstrap = now;
+                    engine_log(ENGINE_LOG_INFO,
+                               "[dht] background bootstrap: %d routers", boot_count);
+                }
             }
         } else if (good < 32 &&
                    now - last_bootstrap > (u64)(good == 0 ? 15 : 60) * freq) {
@@ -680,7 +713,7 @@ static void dht_bg_main(void *arg) {
         }
         if (good > 0) s_restarts = 0;   // network recovered: reset the backoff
 
-        if (s_bg_bootstrapped && (good + dubious) >= 1) {
+        if ((s_bg_bootstrapped || cached_count > 0) && (good + dubious) >= 1) {
             // Search every active target every ~15 s (5 s while the torrent is
             // starving for peers). The port is ours, so the nodes we query
             // store OUR address as a peer of the infohash and other clients
@@ -764,7 +797,6 @@ static void dht_bg_main(void *arg) {
 
             // Periodically persist known good nodes every 60s so a crash/shutdown
             // does not lose warm DHT routing table.
-            static u64 last_cache_save = 0;
             if (good >= 10 && (last_cache_save == 0 || now - last_cache_save > (u64)60 * freq)) {
                 last_cache_save = now;
                 struct sockaddr_in sins_p[DHT_CACHE_MAX_NODES];
@@ -782,11 +814,11 @@ static void dht_bg_main(void *arg) {
         }
     }
 
-    /* Persist good nodes for the next warm start. */
+    /* Persist good nodes for the next warm start, without overwriting a warm cache with <16 nodes. */
     struct sockaddr_in sins[DHT_CACHE_MAX_NODES];
     int num = DHT_CACHE_MAX_NODES, num6 = 0;
     dht_get_nodes(sins, &num, NULL, &num6);
-    if (num > 0) {
+    if (num > 0 && (num >= 16 || num >= cached_count)) {
         uint8_t nodes[DHT_CACHE_MAX_NODES][6];
         for (int i = 0; i < num; i++) {
             memcpy(nodes[i], &sins[i].sin_addr, 4);

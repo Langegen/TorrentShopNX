@@ -101,6 +101,7 @@ private:
 
     mutable std::mutex probe_mtx_;
     std::atomic<bool> probe_cancel_{false};
+    std::atomic<uint64_t> probe_cancel_seq_{0};
     std::atomic<bool> shutdown_requested_{false};
     bool probing_ = false;
 

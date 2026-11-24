@@ -271,6 +271,7 @@ void startPortInstallFlow(const Game& game) {
     ui->dialog->addButton("app/common/cancel"_i18n, [ui]() {
         ui->cancelled.store(true);
         datasource::CustomEngineClient::instance().cancelProbe();
+        datasource::CustomEngineClient::instance().releaseProbeTorrent();
         util::logLine("PortInstallFlow: analysis cancelled by the user");
     });
     ui->dialog->open();
@@ -304,7 +305,12 @@ void startPortInstallFlow(const Game& game) {
     brls::async([gameCopy, ui]() {
         std::vector<torrent::TorrentFileInfo> files;
         std::string err;
-        bool ok = ui::DownloadManager::instance().getImpl().probeTorrentFiles(gameCopy.magnet, files, &err);
+        bool ok = false;
+        if (!ui->cancelled.load()) {
+            ok = ui::DownloadManager::instance().getImpl().probeTorrentFiles(gameCopy.magnet, files, &err);
+        } else {
+            err = "metadata fetch cancelled";
+        }
         std::shared_ptr<installer::PortInstallPlan> plan;
         if (ok && !files.empty() && !ui->cancelled.load()) {
             // "auto" in settings means the system language the UI runs in.

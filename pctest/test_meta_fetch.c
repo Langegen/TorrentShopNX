@@ -838,6 +838,158 @@ TEST(fast_cancel) {
     ASSERT(dt < 250);
 }
 
+typedef struct {
+    int           fds[40];
+    int           nfds;
+    volatile bool stop;
+} silent_multi_cfg;
+
+static void silent_multi_fn(void *arg) {
+    silent_multi_cfg *cfg = (silent_multi_cfg *)arg;
+    int clis[128];
+    int ncli = 0;
+    struct pollfd pfds[40];
+    while (!cfg->stop) {
+        for (int i = 0; i < cfg->nfds; i++) {
+            pfds[i].fd = (SOCKET)cfg->fds[i];
+            pfds[i].events = POLLIN;
+            pfds[i].revents = 0;
+        }
+        int pr = poll(pfds, (nfds_t)cfg->nfds, 30);
+        if (pr <= 0) continue;
+        for (int i = 0; i < cfg->nfds; i++) {
+            if (!(pfds[i].revents & POLLIN)) continue;
+            struct sockaddr_in sa;
+            socklen_t sl = sizeof(sa);
+            int c = accept(cfg->fds[i], (struct sockaddr *)&sa, &sl);
+            if (c >= 0) {
+                if (ncli < 128) clis[ncli++] = c;
+                else close(c);
+            }
+        }
+    }
+    for (int i = 0; i < ncli; i++) close(clis[i]);
+}
+
+TEST(silent_peer_handshake_timeout) {
+    uint8_t ih[20];
+    for (int i = 0; i < 20; i++) ih[i] = (uint8_t)(0x77 + i);
+
+    uint16_t port = 0;
+    int lfd = bind_loopback_listener(&port);
+    ASSERT(lfd >= 0);
+
+    silent_multi_cfg scfg;
+    memset(&scfg, 0, sizeof(scfg));
+    scfg.fds[0] = lfd;
+    scfg.nfds = 1;
+
+    Thread th;
+    ASSERT(threadCreate(&th, silent_multi_fn, &scfg, NULL, 0x8000, 0x2C, -2) == 0);
+    threadStart(&th);
+
+    uint8_t pid[20];
+    memcpy(pid, "-TS9999-testsilent01", 20);
+    peer_addr pa = { htonl(INADDR_LOOPBACK), port };
+
+    uint64_t t0 = now_ms();
+    uint8_t *out = NULL;
+    size_t out_len = 0;
+    char err[128] = {0};
+    int rc = meta_fetch_single_peer(pa, ih, pid, NULL, &out, &out_len, err, sizeof(err));
+    uint64_t dt = now_ms() - t0;
+
+    scfg.stop = true;
+    close(lfd);
+    threadWaitForExit(&th);
+    threadClose(&th);
+
+    ASSERT(rc != 0);
+    ASSERT(out == NULL);
+    ASSERT_MSG(strstr(err, "handshake timeout") != NULL, err);
+    /* Plain pre-hs timeout (3.5s) + single MSE retry (3.5s) exits well before 10s idle / 12s budget. */
+    ASSERT(dt >= 6000 && dt < 9000);
+}
+
+TEST(active_close_mse_priority_over_untried) {
+    uint8_t ih[20];
+    size_t mlen = 0;
+    uint8_t *meta = build_test_info(200, ih, &mlen);
+    ASSERT(meta != NULL);
+
+    silent_multi_cfg scfg;
+    memset(&scfg, 0, sizeof(scfg));
+    scfg.nfds = 32;
+    uint16_t sports[32];
+    for (int i = 0; i < 32; i++) {
+        scfg.fds[i] = bind_loopback_listener(&sports[i]);
+        ASSERT(scfg.fds[i] >= 0);
+    }
+
+    uint16_t mse_port = 0;
+    int mse_lfd = bind_loopback_listener(&mse_port);
+    ASSERT(mse_lfd >= 0);
+
+    mock_peer_cfg mcfg;
+    memset(&mcfg, 0, sizeof(mcfg));
+    mcfg.listen_fd = mse_lfd;
+    mcfg.info_hash = ih;
+    mcfg.meta = meta;
+    mcfg.meta_len = mlen;
+    mcfg.mse_only = true;
+
+    Thread sth, mth;
+    ASSERT(threadCreate(&sth, silent_multi_fn, &scfg, NULL, 0x8000, 0x2C, -2) == 0);
+    ASSERT(threadCreate(&mth, mock_mse_listener_fn, &mcfg, NULL, 0x8000, 0x2C, -2) == 0);
+    threadStart(&sth);
+    threadStart(&mth);
+
+    peer_addr pas[33];
+    for (int i = 0; i < 12; i++) {
+        pas[i].ip = htonl(INADDR_LOOPBACK);
+        pas[i].port = sports[i];
+    }
+    pas[12].ip = htonl(INADDR_LOOPBACK);
+    pas[12].port = mse_port;
+    for (int i = 0; i < 20; i++) {
+        pas[13 + i].ip = htonl(INADDR_LOOPBACK);
+        pas[13 + i].port = sports[12 + i];
+    }
+
+    uint8_t pid[20];
+    memcpy(pid, "-TS9999-testmseprio1", 20);
+    meta_fetch_opts opts = {0};
+    opts.info_hash = ih;
+    opts.peer_id = pid;
+    opts.seed_peers = pas;
+    opts.seed_count = 33;
+    opts.budget_ms = 10000;
+
+    uint64_t t0 = now_ms();
+    uint8_t *out = NULL;
+    size_t out_len = 0;
+    char err[128] = {0};
+    int rc = meta_fetch_run(&opts, &out, &out_len, NULL, 0, NULL, err, sizeof(err));
+    uint64_t dt = now_ms() - t0;
+
+    scfg.stop = true;
+    mcfg.stop = true;
+    for (int i = 0; i < 32; i++) close(scfg.fds[i]);
+    close(mse_lfd);
+    threadWaitForExit(&sth);
+    threadWaitForExit(&mth);
+    threadClose(&sth);
+    threadClose(&mth);
+
+    ASSERT_MSG(rc == 0, err);
+    ASSERT(out != NULL && out_len == mlen);
+    ASSERT(memcmp(out, meta, mlen) == 0);
+    ASSERT(mcfg.plain_drops >= 1);
+    ASSERT(dt < 3000);
+    free(out);
+    free(meta);
+}
+
 int main(void) {
     meta_fetch_init_early();
     printf("Running meta_fetch unit tests:\n");
@@ -847,6 +999,8 @@ int main(void) {
     RUN(ut_pex_discovery);
     RUN(incoming_routing);
     RUN(fast_cancel);
+    RUN(silent_peer_handshake_timeout);
+    RUN(active_close_mse_priority_over_untried);
     printf("\n%d tests run, %d failed\n", tests_run, tests_failed);
     return tests_failed ? 1 : 0;
 }

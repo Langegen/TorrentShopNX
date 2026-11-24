@@ -352,8 +352,12 @@ static void watchdog_main(void *arg) {
         "dht", "disc", "listen", "upnp", "net", "writer", "reader", "wd"
     };
     u64 freq = armGetSystemTickFreq();
+    tsnx_engine_wd_tick(7);
     while (!g_wd_stop) {
-        svcSleepThread(5000000000ULL);  // 5 s
+        for (int i = 0; i < 25 && !g_wd_stop; i++) {
+            svcSleepThread(200000000ULL);  // 200 ms steps = 5 s
+        }
+        if (g_wd_stop) break;
         tsnx_engine_wd_tick(7);
         u64 now = armGetSystemTick();
         fprintf(f, "t=%llu", (unsigned long long)(now / freq));
@@ -393,7 +397,7 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
 
     eng->port = listen_port;
     eng->running = true;
-    engine_log_init("sdmc:/switch/TorrentShopNX/engine.log");
+    engine_log_init(TSNX_ENGINE_LOG_PATH);
     engine_log(ENGINE_LOG_INFO, "engine start port=%d", listen_port);
     dht_set_log(dht_log_cb);
     torrent_set_log(torrent_log_cb);

@@ -25,18 +25,25 @@
 #define META_MAX_SIZE         (4 * 1024 * 1024)
 #define META_RX_CAP           (64 * 1024)
 #define META_MAX_PEERS        256
+#ifdef __SWITCH__
 #define META_HARD_MAX_SESS    16
 #define META_DEFAULT_SESS     16
+#define META_UTP_MAX_DIAL     4
+#else
+#define META_HARD_MAX_SESS    32
+#define META_DEFAULT_SESS     32
+#define META_UTP_MAX_DIAL     6
+#endif
 #define META_SINGLE_BUDGET_MS 12000
 #define META_DEFAULT_BUDGET_MS 50000
 #define META_EXTRA_PROGRESS_MS 15000
 #define META_TCP_CONN_MS      3000
+#define META_HS_WAIT_MS       3500
 #define META_UTP_CONN_MS      5000
 #define META_EXT_HS_WAIT_MS   6000
 #define META_PEX_LINGER_MS    4000
 #define META_PIECE_REQ_MS     6000
 #define META_REQ_WINDOW       4
-#define META_UTP_MAX_DIAL     4
 #define META_INC_QUEUE_MAX    8
 #define META_ACTIVE_REG_MAX   4
 
@@ -68,6 +75,7 @@ typedef struct {
     bool      bad;
     bool      counted_tried;
     bool      served_meta;
+    uint8_t   mse_prio;    /* 0=none, 1=pre-hs timeout, 2=active close/RST */
     uint64_t  next_try_ms;
 } meta_pool_entry;
 
@@ -82,10 +90,12 @@ typedef struct {
     bool      ext_received;
     bool      contributed;
     bool      meta_rejected;
+    bool      pre_hs_timeout;
     int       pidx;
     peer_addr addr;
     peer_nb   nb;
     uint64_t  started_ms;
+    uint64_t  connected_ms;
     uint64_t  conn_deadline_ms;
     uint64_t  ext_hs_deadline_ms;
     uint64_t  pex_until_ms;
@@ -140,6 +150,15 @@ typedef struct {
     torrent_meta        *announce_stub;
     Thread               disc_thread;
     bool                 disc_started;
+
+    /* Scheduling & diagnostic stats */
+    uint32_t             dial_seq;
+    int                  stat_dial[3];
+    int                  stat_tcp_ok;
+    int                  stat_bt_hs;
+    int                  stat_ext_ok;
+    int                  stat_hs_to;
+    int                  stat_no_hs;
 } meta_ctx;
 
 /* Registry of active metadata fetches so incoming TCP/uTP connections can route to them */
@@ -316,10 +335,17 @@ static void dht_peer_handler(void *vctx, const peer_addr *peers, int n) {
 static void tracker_disc_main(void *arg) {
     meta_ctx *ctx = (meta_ctx *)arg;
     char e[128];
-    for (int round = 0; round < 2 && !ctx->done && !ctx->stop_disc && !mf_cancelled(ctx); round++) {
+    for (int round = 0; round < 3 && !ctx->done && !ctx->stop_disc && !mf_cancelled(ctx); round++) {
         if (round > 0) {
-            for (int k = 0; k < 80 && !ctx->done && !ctx->stop_disc && !mf_cancelled(ctx); k++)
-                svcSleepThread(50000000ULL);  /* 4 s pause in 50 ms steps */
+            int steps = (round == 1) ? 80 : 280;  /* 4 s before round 2, 14 s before round 3 */
+            for (int k = 0; k < steps && !ctx->done && !ctx->stop_disc && !mf_cancelled(ctx); k++)
+                svcSleepThread(50000000ULL);
+        }
+        if (round == 2) {
+            mutexLock(&ctx->mu);
+            bool skip_round = ctx->asm_init || ctx->pool_count >= META_MAX_PEERS;
+            mutexUnlock(&ctx->mu);
+            if (skip_round) break;
         }
         if (ctx->done || ctx->stop_disc || mf_cancelled(ctx)) break;
         torrent_announce_cb(ctx->announce_stub, tracker_peer_handler, ctx,
@@ -393,6 +419,12 @@ static void sess_close(meta_ctx *ctx, meta_sess *s, uint64_t now_ms, const char 
     bool tcp_up    = s->tcp_connected;
     bool was_mse   = s->use_mse;
     bool was_utp   = s->use_utp;
+    bool pre_hs_to = s->pre_hs_timeout;
+
+    if (!ctx->done && why != NULL && !had_bt_hs && tcp_up) {
+        if (pre_hs_to) ctx->stat_hs_to++;
+        else ctx->stat_no_hs++;
+    }
 
     if (s->nb.sock >= 0 || s->nb.utp != NULL) {
         peer_nb_free(&s->nb);
@@ -414,10 +446,18 @@ static void sess_close(meta_ctx *ctx, meta_sess *s, uint64_t now_ms, const char 
                 if (!was_mse && !p->tried_mse) {
                     /* Likely peer requiring MSE/PE encryption */
                     p->need_mse = true;
+                    uint8_t pr = pre_hs_to ? 1 : 2;
+                    if (pr > p->mse_prio) p->mse_prio = pr;
                     p->next_try_ms = now_ms;
                 } else if (was_mse && !p->tried_plain) {
                     /* Peer rejected MSE / sent plaintext BT handshake (or timed out) */
                     p->need_plain = true;
+                    p->next_try_ms = now_ms;
+                }
+                /* Also schedule uTP fallback behind TUN/VPN or after TCP MSE failure */
+                if (!was_utp && !p->tried_utp && utp_nb_fd() >= 0 &&
+                    (pre_hs_to || was_mse || p->tried_mse)) {
+                    p->need_utp = true;
                     p->next_try_ms = now_ms;
                 }
             }
@@ -556,6 +596,7 @@ static void handle_ext_msg(meta_ctx *ctx, meta_sess *s, const uint8_t *pl,
             return;
         }
         s->ext_received = true;
+        ctx->stat_ext_ok++;
         s->pex_id = ei.pex_id;
         if (ei.meta_id > 0 && ei.meta_size > 0 && ei.meta_size <= META_MAX_SIZE) {
             s->meta_id = ei.meta_id;
@@ -626,16 +667,16 @@ static void handle_ext_msg(meta_ctx *ctx, meta_sess *s, const uint8_t *pl,
     }
 }
 
-static void sess_process_rx(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
+static ssize_t sess_process_rx(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
     ssize_t got = peer_nb_pump_rx(&s->nb);
     if (got == -2) {
         s->nb.mse_failed = true;
         sess_close(ctx, s, now_ms, "mse fallback");
-        return;
+        return -1;
     }
     if (got < 0) {
         sess_close(ctx, s, now_ms, s->nb.handshaked ? "peer closed" : "no handshake");
-        return;
+        return -1;
     }
     if (got > 0) s->last_rx_ms = now_ms;
 
@@ -643,23 +684,26 @@ static void sess_process_rx(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
         if (s->nb.mse_want && !s->nb.mse_active) {
             if (peer_nb_tx_pending(&s->nb) && peer_nb_flush(&s->nb) != 0) {
                 sess_close(ctx, s, now_ms, "mse tx fail");
+                return -1;
             }
-            return;
+            return got;
         }
         int hs = peer_nb_recv_handshake(&s->nb, ctx->info_hash);
         if (hs < 0) {
             sess_close(ctx, s, now_ms, "info_hash mismatch");
-            return;
+            return -1;
         }
         if (hs == 0) {
             if (peer_nb_tx_pending(&s->nb) && peer_nb_flush(&s->nb) != 0) {
                 sess_close(ctx, s, now_ms, "hs tx fail");
+                return -1;
             }
-            return;
+            return got;
         }
+        ctx->stat_bt_hs++;
         if (!s->nb.ext_ok) {
             sess_close(ctx, s, now_ms, "peer without extensions");
-            return;
+            return -1;
         }
         sess_queue_initial_msgs(ctx, s);
     }
@@ -671,7 +715,7 @@ static void sess_process_rx(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
         int r = peer_nb_next(&s->nb, &id, &pl, &plen);
         if (r < 0) {
             sess_close(ctx, s, now_ms, "bad framing");
-            return;
+            return -1;
         }
         if (r == 0) break;
 
@@ -680,8 +724,10 @@ static void sess_process_rx(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
             dht_bg_add_node(s->addr.ip, dport);
         } else if (id == MSG_EXTENDED) {
             handle_ext_msg(ctx, s, pl, plen, now_ms);
+            if (!s->active) return -1;
         }
     }
+    return got;
 }
 
 static void attach_incoming_item(meta_ctx *ctx, const meta_inc_item *it, uint64_t now_ms) {
@@ -728,11 +774,14 @@ static void attach_incoming_item(meta_ctx *ctx, const meta_inc_item *it, uint64_
     s->addr.ip = rip;
     s->addr.port = rport;
     s->started_ms = now_ms;
+    s->connected_ms = now_ms;
     s->last_rx_ms = now_ms;
 
     s->nb.handshaked = true;
     s->nb.ext_ok = (it->hs[25] & 0x10) != 0;
     s->nb.dht_ok = (it->hs[27] & 0x01) != 0;
+    ctx->stat_tcp_ok++;
+    ctx->stat_bt_hs++;
 
     if (!s->nb.ext_ok) {
         sess_close(ctx, s, now_ms, "incoming peer without extensions");
@@ -785,32 +834,59 @@ static void drain_incoming(meta_ctx *ctx, uint64_t now_ms) {
     }
 }
 
-static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int utp_dialing,
+static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int active_mse, int utp_dialing,
                           int *out_mode, peer_addr *out_addr) {
     int pick = -1;
     int pick_mode = DIAL_PLAIN;
+    int mse_cap = ctx->max_sess / 2 > 0 ? ctx->max_sess / 2 : 1;
 
     mutexLock(&ctx->mu);
-    /* Pass 1: completely untried peer with highest priority */
-    int best_prio = -1;
-    for (int i = 0; i < ctx->pool_count; i++) {
+    /* Pass 0a: high-priority MSE retry for peers that actively closed/RST plaintext */
+    for (int i = 0; i < ctx->pool_count && active_mse < mse_cap; i++) {
         meta_pool_entry *e = &ctx->pool[i];
-        if (e->busy || e->bad || e->tried_plain || e->tried_mse || e->tried_utp) continue;
-        if ((int)e->prio > best_prio) {
-            best_prio = (int)e->prio;
+        if (e->busy || e->bad || !e->need_mse || e->tried_mse || e->mse_prio < 2) continue;
+        if (e->next_try_ms <= now_ms) {
             pick = i;
-            pick_mode = (e->flags & PEXF_ENCRYPT) ? DIAL_MSE : DIAL_PLAIN;
+            pick_mode = DIAL_MSE;
+            break;
         }
     }
-    /* Pass 2: immediate MSE fallback after TCP closed pre-handshake */
+    /* Pass 0b: interleaved uTP retry so NAT/TUN fallbacks don't wait behind all TCP */
+    if (pick < 0 && utp_nb_fd() >= 0 && utp_dialing < META_UTP_MAX_DIAL &&
+        (ctx->dial_seq & 3) == 3) {
+        for (int i = 0; i < ctx->pool_count; i++) {
+            meta_pool_entry *e = &ctx->pool[i];
+            if (e->busy || e->bad || !e->need_utp || e->tried_utp) continue;
+            if (e->next_try_ms <= now_ms) {
+                pick = i;
+                pick_mode = DIAL_UTP;
+                break;
+            }
+        }
+    }
+    /* Pass 1: completely untried peer with highest priority */
     if (pick < 0) {
+        int best_prio = -1;
+        for (int i = 0; i < ctx->pool_count; i++) {
+            meta_pool_entry *e = &ctx->pool[i];
+            if (e->busy || e->bad || e->tried_plain || e->tried_mse || e->tried_utp) continue;
+            if ((int)e->prio > best_prio) {
+                best_prio = (int)e->prio;
+                pick = i;
+                pick_mode = (e->flags & PEXF_ENCRYPT) ? DIAL_MSE : DIAL_PLAIN;
+            }
+        }
+    }
+    /* Pass 2: remaining MSE fallback (prefer active close over silent timeout) */
+    if (pick < 0) {
+        int best_mse_prio = -1;
         for (int i = 0; i < ctx->pool_count; i++) {
             meta_pool_entry *e = &ctx->pool[i];
             if (e->busy || e->bad || !e->need_mse || e->tried_mse) continue;
-            if (e->next_try_ms <= now_ms) {
+            if (e->next_try_ms <= now_ms && (int)e->mse_prio > best_mse_prio) {
+                best_mse_prio = (int)e->mse_prio;
                 pick = i;
                 pick_mode = DIAL_MSE;
-                break;
             }
         }
     }
@@ -856,6 +932,8 @@ static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int utp_dialing,
             e->tried_utp = true;
             e->need_utp = false;
         }
+        ctx->dial_seq++;
+        ctx->stat_dial[pick_mode]++;
         *out_addr = e->addr;
         *out_mode = pick_mode;
     }
@@ -964,6 +1042,8 @@ static bool dial_peer(meta_ctx *ctx, int sid, int pidx, peer_addr pa, int mode, 
         }
         s->connecting = false;
         s->tcp_connected = true;
+        s->connected_ms = now_ms;
+        ctx->stat_tcp_ok++;
         s->nb.mse_want = s->use_mse;
         torrent_meta_connected++;
         peer_nb_send_handshake(&s->nb, ctx->info_hash, ctx->peer_id);
@@ -976,6 +1056,14 @@ static void tcp_connected(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
     int soerr = 0;
     socklen_t sl = sizeof(soerr);
     if (getsockopt(s->nb.sock, SOL_SOCKET, SO_ERROR, &soerr, &sl) != 0 || soerr != 0) {
+        if (soerr == ECONNRESET || soerr == ECONNABORTED
+#ifdef _WIN32
+            || soerr == WSAECONNRESET || soerr == WSAECONNABORTED
+#endif
+        ) {
+            s->tcp_connected = true;
+            s->connected_ms = now_ms;
+        }
         mf_note_err(ctx, "connection refused", false);
         sess_close(ctx, s, now_ms, "connection refused");
         return;
@@ -989,7 +1077,9 @@ static void tcp_connected(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
     }
     s->connecting = false;
     s->tcp_connected = true;
+    s->connected_ms = now_ms;
     s->last_rx_ms = now_ms;
+    ctx->stat_tcp_ok++;
     s->nb.mse_want = s->use_mse;
     torrent_meta_connected++;
     peer_nb_send_handshake(&s->nb, ctx->info_hash, ctx->peer_id);
@@ -1074,10 +1164,12 @@ int meta_fetch_run(const meta_fetch_opts *opts,
 
         /* Dial available pool entries up to max_sess */
         int active_cnt = 0;
+        int active_mse = 0;
         int utp_dialing = 0;
         for (int i = 0; i < ctx->max_sess; i++) {
             if (!ctx->S[i].active) continue;
             active_cnt++;
+            if (ctx->S[i].use_mse) active_mse++;
             if (ctx->S[i].connecting && ctx->S[i].use_utp) utp_dialing++;
         }
 
@@ -1090,7 +1182,7 @@ int meta_fetch_run(const meta_fetch_opts *opts,
 
             int mode = DIAL_PLAIN;
             peer_addr pa = {0, 0};
-            int pidx = take_next_peer(ctx, now_ms, utp_dialing, &mode, &pa);
+            int pidx = take_next_peer(ctx, now_ms, active_mse, utp_dialing, &mode, &pa);
             if (pidx < 0) break;
 
             if (!dial_peer(ctx, sid, pidx, pa, mode, now_ms)) {
@@ -1099,7 +1191,12 @@ int meta_fetch_run(const meta_fetch_opts *opts,
                 continue;
             }
             active_cnt++;
+            if (mode == DIAL_MSE) active_mse++;
             if (mode == DIAL_UTP) utp_dialing++;
+        }
+        if (mf_cancelled(ctx)) {
+            ctx->stop_disc = true;
+            break;
         }
 
         /* Re-expire stalled inflight piece requests & feed idle peers */
@@ -1195,7 +1292,11 @@ int meta_fetch_run(const meta_fetch_opts *opts,
                         }
                     }
                     if (pfd[k].revents & (POLLIN | POLLERR | POLLHUP)) {
-                        sess_process_rx(ctx, s, now_ms);
+                        ssize_t rx_n = sess_process_rx(ctx, s, now_ms);
+                        if (s->active && rx_n == 0 && (pfd[k].revents & (POLLERR | POLLHUP))) {
+                            sess_close(ctx, s, now_ms,
+                                       (pfd[k].revents & POLLERR) ? "pollerr" : "pollhup");
+                        }
                     }
                 }
             }
@@ -1217,7 +1318,9 @@ int meta_fetch_run(const meta_fetch_opts *opts,
                     if (st == 1) {
                         s->connecting = false;
                         s->tcp_connected = true;
+                        s->connected_ms = now_ms;
                         s->last_rx_ms = now_ms;
+                        ctx->stat_tcp_ok++;
                         s->nb.mse_want = s->use_mse;
                         torrent_meta_connected++;
                         peer_nb_send_handshake(&s->nb, ctx->info_hash, ctx->peer_id);
@@ -1241,6 +1344,10 @@ int meta_fetch_run(const meta_fetch_opts *opts,
             if (!s->active) continue;
             if (s->connecting && now_ms >= s->conn_deadline_ms) {
                 sess_close(ctx, s, now_ms, "connect timeout");
+            } else if (!s->connecting && !s->nb.handshaked &&
+                       now_ms - s->connected_ms >= META_HS_WAIT_MS) {
+                s->pre_hs_timeout = true;
+                sess_close(ctx, s, now_ms, "handshake timeout");
             } else if (!s->connecting && s->ext_sent && !s->ext_received &&
                        now_ms >= s->ext_hs_deadline_ms) {
                 sess_close(ctx, s, now_ms, "ext handshake timeout");
@@ -1274,6 +1381,16 @@ int meta_fetch_run(const meta_fetch_opts *opts,
         else if (ctx->inc[i].fd >= 0) close(ctx->inc[i].fd);
     }
     ctx->inc_n = 0;
+
+    engine_log(ENGINE_LOG_INFO,
+               "[meta_fetch] done=%d cancel=%d %.1fs pool=%d dial=%d/%d/%d "
+               "tcp=%d hs=%d ext=%d to=%d nohs=%d pieces=%d/%d",
+               ctx->done ? 1 : 0, mf_cancelled(ctx) ? 1 : 0,
+               (double)(end_ms - start_ms) / 1000.0,
+               ctx->pool_count, ctx->stat_dial[0], ctx->stat_dial[1], ctx->stat_dial[2],
+               ctx->stat_tcp_ok, ctx->stat_bt_hs, ctx->stat_ext_ok,
+               ctx->stat_hs_to, ctx->stat_no_hs,
+               ctx->done_pieces, ctx->npieces);
 
     int rc = -1;
     if (ctx->done && ctx->asm_buf && ctx->asm_size > 0) {
