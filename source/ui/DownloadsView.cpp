@@ -484,7 +484,7 @@ static std::string componentDisplayName(const download::DownloadItem& itm) {
 }
 
 // Raw installer/stream errors are English developer text (kept in the log); show users a localized cause + hint instead.
-static std::string friendlyInstallError(const std::string& raw) {
+std::string DownloadsView::friendlyInstallError(const std::string& raw) {
     const std::string s = util::toLowerCopy(raw);
     auto has = [&s](std::initializer_list<const char*> needles) {
         for (const char* n : needles) if (s.find(n) != std::string::npos) return true;
@@ -493,6 +493,12 @@ static std::string friendlyInstallError(const std::string& raw) {
     if (has({"cancel"})) return "app/downloads/state_cancelled"_i18n;
     if (has({"free space", "no space", "create placeholder"})) return "app/downloads/err_no_space"_i18n;
     if (has({"out of memory", "bad_alloc", "thread, rc="})) return "app/downloads/err_no_memory"_i18n;
+    if (has({"no peer provided the metadata", "metadata fetch failed"}))
+        return "app/downloads/err_meta_failed"_i18n;
+    if (has({"failed to add torrent"}))
+        return "app/downloads/err_add_torrent"_i18n;
+    if (has({"no free torrent slots"}))
+        return "app/downloads/err_engine_busy"_i18n;
     if (has({"open stream", "stream open", "metadata timeout", "collector stopped early", "data source", "failed to read"}))
         return "app/downloads/err_no_peers"_i18n;
     if (has({"invalid", "parse", "corrupt", "magic", "unexpected eof", "decompress"}))
@@ -1284,14 +1290,19 @@ void DownloadsView::updateCell(DownloadCell* cell, const DownloadGroup& group, c
     if (group.state == download::DownloadState::Queued) {
         statusStr = queuedStatusString(group.slow_skipped);
     }
-    if (group.state == download::DownloadState::Failed && !group.failed_name.empty()) {
+    if (group.state == download::DownloadState::Failed && group.total_count > 1 && !group.failed_name.empty()) {
         statusStr = brls::getStr("app/downloads/state_failed") + " (" + group.failed_name + ")";
     }
-    // A stream install stalled on an empty swarm otherwise just sits at "Installing".
-    const bool noPeers = group.state == download::DownloadState::StreamInstalling &&
-                         group.peers <= 0 && group.dl_speed_kbps <= 0.0f &&
-                         group.dl_written < group.dl_total;
-    if (noPeers) statusStr = "app/downloads/state_no_peers"_i18n;
+    // A stream install or download stalled on an empty swarm otherwise just sits at "Installing"/"Downloading".
+    const bool dlNoPeers = (group.state == download::DownloadState::Downloading) &&
+                           group.peers <= 0 && group.dl_speed_kbps <= 0.0f &&
+                           (group.dl_total == 0 || group.dl_written < group.dl_total);
+    const bool instNoPeers = (group.state == download::DownloadState::StreamInstalling) &&
+                             group.peers <= 0 && group.dl_speed_kbps <= 0.0f &&
+                             group.dl_written < group.dl_total;
+    const bool noPeers = dlNoPeers || instNoPeers;
+    if (dlNoPeers) statusStr = "app/downloads/state_downloading_no_peers"_i18n;
+    else if (instNoPeers) statusStr = "app/downloads/state_no_peers"_i18n;
     cell->statusText->setText(statusStr);
     cell->statusText->setTextColor(noPeers ? (isLight ? nvgRGB(216, 100, 0) : nvgRGB(255, 152, 0))
                                            : getDownloadStateColor(group.state, isLight));

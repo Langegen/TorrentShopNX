@@ -60,17 +60,27 @@ static uint32_t get32(const uint8_t *p) {
 // Sends one datagram and waits for a reply, retrying on timeout. UDP is lossy,
 // so BEP 15 mandates retransmission; we retry a few times to survive packet
 // loss on congested links, then give up to stay responsive.
+static bool is_local_sock_err(int e) {
+    return e == ENOBUFS || e == ENOMEM || e == EAGAIN || e == EWOULDBLOCK
+#ifdef __SWITCH__
+        || e == 105
+#endif
+    ;
+}
+
 static int request_reply(int sock, const uint8_t *req, size_t reqlen,
                          uint8_t *resp, size_t respcap, ssize_t *resplen,
                          uint32_t expect_txid, uint8_t expect_action,
                          const volatile bool *cancel) {
     for (int attempt = 0; attempt < 3; attempt++) {
-        if (cancel && *cancel) return -1;  // teardown: don't wait out the recv
-        if (send(sock, req, reqlen, 0) < 0) return -1;
+        if (cancel && *cancel) return -3;  // teardown: don't wait out the recv
+        if (send(sock, req, reqlen, 0) < 0) {
+            return is_local_sock_err(errno) ? -3 : -1;
+        }
 
         // Poll up to 6 * 500ms = 3s per attempt so cancel wakes within 500ms.
         for (int wait_slice = 0; wait_slice < 6; wait_slice++) {
-            if (cancel && *cancel) return -1;
+            if (cancel && *cancel) return -3;
             ssize_t n = recv(sock, resp, respcap, 0);
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
@@ -98,7 +108,7 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
                  const volatile bool *cancel, char *err, size_t errlen) {
     if (cancel && *cancel) {
         set_err(err, errlen, "cancelled");
-        return -1;
+        return -2;
     }
     char host[256], portstr[16];
     if (parse_udp_url(url, host, sizeof(host), portstr, sizeof(portstr)) != 0) {
@@ -116,7 +126,7 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     if (cancel && *cancel) {
         freeaddrinfo(res);
         set_err(err, errlen, "cancelled");
-        return -1;
+        return -2;
     }
 
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -127,11 +137,12 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     }
 #endif
     if (sock < 0) {
+        int e = errno;
         freeaddrinfo(res);
         char ebuf[64];
-        snprintf(ebuf, sizeof(ebuf), "UDP socket failed (errno=%d)", errno);
+        snprintf(ebuf, sizeof(ebuf), "UDP socket failed (errno=%d)", e);
         set_err(err, errlen, ebuf);
-        return -1;
+        return is_local_sock_err(e) ? -2 : -1;
     }
 #ifdef __SWITCH__
     int rcvbuf = 16 * 1024;
@@ -143,10 +154,11 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {
+        int e = errno;
         freeaddrinfo(res);
         close(sock);
         set_err(err, errlen, "UDP connect failed");
-        return -1;
+        return is_local_sock_err(e) ? -2 : -1;
     }
     freeaddrinfo(res);
 
@@ -165,8 +177,9 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
                            ctxid, ACTION_CONNECT, cancel);
     if (rc != 0) {
         close(sock);
-        set_err(err, errlen, rc == -2 ? "tracker: connect error" : "no connect reply");
-        return -1;
+        set_err(err, errlen, rc == -2 ? "tracker: connect error" :
+                             (rc == -3 ? "cancelled/local socket error" : "no connect reply"));
+        return rc == -3 ? -2 : -1;
     }
     uint64_t connection_id = ((uint64_t)get32(cresp + 8) << 32) | get32(cresp + 12);
 
@@ -195,8 +208,9 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
                        atxid, ACTION_ANNOUNCE, cancel);
     close(sock);
     if (rc != 0) {
-        set_err(err, errlen, rc == -2 ? "tracker: announce error" : "no announce reply");
-        return -1;
+        set_err(err, errlen, rc == -2 ? "tracker: announce error" :
+                             (rc == -3 ? "cancelled/local socket error" : "no announce reply"));
+        return rc == -3 ? -2 : -1;
     }
 
     int count = 0;
@@ -204,10 +218,6 @@ int udp_announce(const char *url, const uint8_t info_hash[20],
         memcpy(&peers[count].ip, aresp + off, 4);
         peers[count].port = (uint16_t)((aresp[off + 4] << 8) | aresp[off + 5]);
         if (peers[count].port) count++;
-    }
-    if (count == 0) {
-        set_err(err, errlen, "tracker UDP OK mais 0 peer");
-        return -1;
     }
     return count;
 }

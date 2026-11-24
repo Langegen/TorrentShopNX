@@ -3,6 +3,7 @@
 #include "../utils/log.h"
 #include <filesystem>
 #include <algorithm>
+#include <cmath>
 
 namespace ui {
 
@@ -535,10 +536,20 @@ void ThemeManager::unsubscribe(int id) {
     }
 }
 
+static float themeSrgbToLin(float c) {
+    return (c <= 0.04045f) ? (c / 12.92f) : std::pow((c + 0.055f) / 1.055f, 2.4f);
+}
+
+static NVGcolor buttonContrastTextOn(NVGcolor bg) {
+    const float L = 0.2126f * themeSrgbToLin(bg.r) + 0.7152f * themeSrgbToLin(bg.g) + 0.0722f * themeSrgbToLin(bg.b);
+    return L > 0.25f ? nvgRGB(20, 24, 34) : nvgRGB(255, 255, 255);
+}
+
 void ThemeManager::applyThemeToBorealis() {
     NVGcolor primary = getAccentColor();
     NVGcolor secondary = getSecondaryColor();
     NVGcolor pulse = themes_[currentThemeIdx_].primaryGlow;
+    NVGcolor primaryBtnText = buttonContrastTextOn(primary);
     bool isLight = themes_[currentThemeIdx_].isLight;
 
     if (brls::Application::getPlatform()) {
@@ -552,6 +563,7 @@ void ThemeManager::applyThemeToBorealis() {
     darkTheme.addColor("brls/click_pulse", pulse);
     darkTheme.addColor("brls/sidebar/active_item", primary);
     darkTheme.addColor("brls/button/primary_enabled_background", primary);
+    darkTheme.addColor("brls/button/primary_enabled_text", primaryBtnText);
     darkTheme.addColor("brls/list/listItem_value_color", primary);
     darkTheme.addColor("brls/slider/line_filled", primary);
     darkTheme.addColor("brls/text", nvgRGBA(250, 252, 255, 255));
@@ -569,6 +581,7 @@ void ThemeManager::applyThemeToBorealis() {
     lightTheme.addColor("brls/click_pulse", pulse);
     lightTheme.addColor("brls/sidebar/active_item", primary);
     lightTheme.addColor("brls/button/primary_enabled_background", primary);
+    lightTheme.addColor("brls/button/primary_enabled_text", primaryBtnText);
     lightTheme.addColor("brls/list/listItem_value_color", primary);
     lightTheme.addColor("brls/slider/line_filled", primary);
     lightTheme.addColor("brls/text", nvgRGB(36, 42, 54));

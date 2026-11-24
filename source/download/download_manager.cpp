@@ -33,6 +33,10 @@
 
 #include <engine/engine.h>
 
+#ifdef __SWITCH__
+extern std::recursive_mutex g_switch_service_mutex;
+#endif
+
 namespace ui {
     extern std::atomic<bool> g_file_select_view_active;
 }
@@ -96,6 +100,8 @@ void customEngineGetTorrentList(std::vector<torrent::TorrentInfo>& out) {
         ti.download_speed_kbps = items[i].download_kbps;
         ti.loaded_size = items[i].loaded_size;
         ti.torrent_size = items[i].total_size;
+        ti.bytes_received = items[i].bytes_received > 0
+            ? static_cast<unsigned long long>(items[i].bytes_received) : 0ULL;
         ti.seeds = items[i].seeds;
         ti.peers = items[i].peers;
         ti.known_peers = items[i].known_peers;
@@ -536,8 +542,9 @@ static void fileCopyWorker(datasource::IDataSource* source,
         if (!tsnx_engine_add_magnet_ex(eng, magnet.c_str(), -1, true,
                                        reinterpret_cast<const volatile bool*>(cancel.get()),
                                        out_hash, sizeof(out_hash))) {
+            const char* eng_err = tsnx_engine_get_last_error(eng);
             st->failed = true;
-            st->error = "failed to add torrent";
+            st->error = (eng_err && eng_err[0]) ? std::string(eng_err) : std::string("failed to add torrent");
             return;
         }
     }
@@ -3488,6 +3495,9 @@ bool DownloadManager::startDownload(size_t index) {
     item.elapsed_seconds = 0;
     item.error_message.clear();
     item.torrent_hash.clear();
+    item.stream_prep_eng_init = false;
+    item.stream_prep_last_eng_bytes = 0;
+    item.stream_raw_bytes = 0;
 
     item.file_dl_dispatched = false;
     item.file_dl_worker.reset();
@@ -3623,6 +3633,51 @@ void DownloadManager::trackProgressLocked(bool list_refreshed) {
         }
 
         if (isTransferActive(item.state)) {
+            for (const auto& t : list) {
+                bool match = false;
+                if (item.torrent_id >= 0 && t.id == item.torrent_id) match = true;
+                else if (!item.torrent_hash.empty() && !t.hash.empty() &&
+                         equalsIgnoreCase(item.torrent_hash, t.hash)) match = true;
+                else if (item.torrent_id < 0 && !item.title.empty() && t.name == item.title) match = true;
+                if (!match) continue;
+
+                item.seeds = t.seeds;
+                item.peers = t.peers;
+                item.known_peers = t.known_peers;
+                item.dht = t.dht;
+
+                if (item.state == DownloadState::StreamPreparing &&
+                    (refreshed_torrent_list || item.speed_sample_at.time_since_epoch().count() == 0)) {
+                    item.download_speed_kbps = smoothDownloadSpeedKbps(item.download_speed_kbps,
+                                                                       t.download_speed_kbps,
+                                                                       item.speed_sample_at,
+                                                                       now);
+                    item.speed_sample_at = now;
+                }
+
+                if (item.state == DownloadState::StreamPreparing ||
+                    item.state == DownloadState::StreamInstalling) {
+                    if (!item.stream_prep_eng_init ||
+                        t.bytes_received < item.stream_prep_last_eng_bytes) {
+                        item.stream_prep_eng_init = true;
+                        item.stream_prep_last_eng_bytes = t.bytes_received;
+                    } else if (t.bytes_received > item.stream_prep_last_eng_bytes) {
+                        item.stream_raw_bytes += (t.bytes_received - item.stream_prep_last_eng_bytes);
+                        item.stream_prep_last_eng_bytes = t.bytes_received;
+                    }
+                    unsigned long long raw_clamped = item.stream_raw_bytes;
+                    if (item.download_total_bytes > 0 && raw_clamped > item.download_total_bytes) {
+                        raw_clamped = item.download_total_bytes;
+                    }
+                    unsigned long long hyb_bytes = item.hybrid_installer
+                        ? item.hybrid_installer->bytesDownloaded() : 0ULL;
+                    unsigned long long best = std::max(hyb_bytes, raw_clamped);
+                    if (best > item.bytes_downloaded) {
+                        item.bytes_downloaded = best;
+                    }
+                }
+                break;
+            }
             checkSlowDownload(i, now);
             if (item.state == DownloadState::Queued) continue;   // moved to the end of the queue
         }
@@ -3643,7 +3698,7 @@ void DownloadManager::trackProgressLocked(bool list_refreshed) {
             item.install_total = item.hybrid_installer->totalBytes();
             uint64_t cur_dl_bytes = item.hybrid_installer->bytesDownloaded();
             uint64_t cur_dl_total = item.hybrid_installer->downloadTotalBytes();
-            if (cur_dl_bytes > 0) item.bytes_downloaded = cur_dl_bytes;
+            if (cur_dl_bytes > item.bytes_downloaded) item.bytes_downloaded = cur_dl_bytes;
             if (cur_dl_total > 0) item.download_total_bytes = cur_dl_total;
 
             if (item.hybrid_installer->hasSdkMismatch()) {
@@ -4366,6 +4421,8 @@ bool DownloadManager::startHybridInstall(size_t index) {
 
         item.hybrid_installer = std::make_unique<installer::HybridNspInstaller>();
 
+        const uint64_t hint_tid = parseTitleIdFromFileName(install_stream_name);
+
         installer::InstallConfig config;
         config.buffer_size = 64 * 1024 * 1024;
         config.chunk_size = 8 * 1024 * 1024;
@@ -4392,21 +4449,51 @@ bool DownloadManager::startHybridInstall(size_t index) {
             uint64_t needed = source->totalSize();
             util::getStorageFreeSpace(1, sdFree);
             util::getStorageFreeSpace(0, nandFree);
-            if (static_cast<s64>(needed) <= sdFree) {
-                config.storage_target = installer::StorageTarget::SdCard;
-                config.storage = NcmStorageId_SdCard;
-            } else if (static_cast<s64>(needed) <= nandFree) {
-                config.storage_target = installer::StorageTarget::Nand;
-                config.storage = NcmStorageId_BuiltInUser;
-            } else {
-                config.storage_target = installer::StorageTarget::SdCard;
-                config.storage = NcmStorageId_SdCard; // Default fallback
+
+            bool picked = false;
+            if (hint_tid != 0 && (hint_tid & 0xFFFULL) != 0) {
+                // Patch (0x800) or DLC: prefer the storage holding the base game if space allows
+                const uint64_t base_tid = hint_tid & ~0x1FFFULL;
+                std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+                if (R_SUCCEEDED(ncmInitialize())) {
+                    auto hasBaseOn = [&](NcmStorageId stId) -> bool {
+                        NcmContentMetaDatabase db = {};
+                        if (R_FAILED(ncmOpenContentMetaDatabase(&db, stId))) return false;
+                        NcmContentMetaKey key = {};
+                        bool found = R_SUCCEEDED(ncmContentMetaDatabaseGetLatestContentMetaKey(&db, &key, base_tid)) &&
+                                     key.type == NcmContentMetaType_Application;
+                        ncmContentMetaDatabaseClose(&db);
+                        return found;
+                    };
+                    if (hasBaseOn(NcmStorageId_BuiltInUser) && static_cast<s64>(needed) <= nandFree) {
+                        config.storage_target = installer::StorageTarget::Nand;
+                        config.storage = NcmStorageId_BuiltInUser;
+                        picked = true;
+                    } else if (hasBaseOn(NcmStorageId_SdCard) && static_cast<s64>(needed) <= sdFree) {
+                        config.storage_target = installer::StorageTarget::SdCard;
+                        config.storage = NcmStorageId_SdCard;
+                        picked = true;
+                    }
+                    ncmExit();
+                }
+            }
+            if (!picked) {
+                if (static_cast<s64>(needed) <= sdFree) {
+                    config.storage_target = installer::StorageTarget::SdCard;
+                    config.storage = NcmStorageId_SdCard;
+                } else if (static_cast<s64>(needed) <= nandFree) {
+                    config.storage_target = installer::StorageTarget::Nand;
+                    config.storage = NcmStorageId_BuiltInUser;
+                } else {
+                    config.storage_target = installer::StorageTarget::SdCard;
+                    config.storage = NcmStorageId_SdCard; // Default fallback
+                }
             }
         }
 #endif
 
         item.hybrid_installer->setSourceFileNameHint(install_stream_name);
-        item.hybrid_installer->setHintTitleId(parseTitleIdFromFileName(install_stream_name));
+        item.hybrid_installer->setHintTitleId(hint_tid);
 
         // Run start() off the progress thread: the header read blocks until the
         // engine delivers the first pieces, and the progress thread must keep
@@ -4475,6 +4562,13 @@ bool DownloadManager::cancelDownload(size_t index) {
 
     if (item.start_future) {
         item.start_future.reset();
+    }
+
+    if (item.probe_job) {
+        if (!item.probe_job->done.load(std::memory_order_acquire) && isLocalBackend()) {
+            datasource::CustomEngineClient::instance().cancelProbe();
+        }
+        item.probe_job.reset();
     }
 
     // The file-copy worker polls file_dl_cancel and is unblocked by the
@@ -4559,6 +4653,13 @@ void DownloadManager::resetItemForQueue(DownloadItem& item) {
     if (item.start_future) {
         item.start_future.reset();
     }
+
+    if (item.probe_job) {
+        if (!item.probe_job->done.load(std::memory_order_acquire) && isLocalBackend()) {
+            datasource::CustomEngineClient::instance().cancelProbe();
+        }
+        item.probe_job.reset();
+    }
     if (item.file_dl_worker) {
         item.file_dl_worker.reset();
     }
@@ -4577,6 +4678,9 @@ void DownloadManager::resetItemForQueue(DownloadItem& item) {
     item.download_speed_kbps = 0.0f;
     item.speed_sample_at = std::chrono::steady_clock::time_point{};
     item.bytes_downloaded = 0;
+    item.stream_prep_eng_init = false;
+    item.stream_prep_last_eng_bytes = 0;
+    item.stream_raw_bytes = 0;
     item.install_written = 0;
     item.install_total = 0;
     item.start_time = std::chrono::steady_clock::now();

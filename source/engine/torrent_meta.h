@@ -92,6 +92,20 @@ extern volatile int torrent_meta_peers_total;
 // The directory defaults to a platform-appropriate location; override for tests.
 void torrent_meta_cache_set_dir(const char *dir);
 
+// Fast disk-cache existence check (stat() only; no read, no SHA-1, no network).
+bool torrent_meta_cache_has(const uint8_t info_hash[20]);
+
+// In-memory cache of recently verified peers per info-hash so a download
+// starting after a file-list probe inherits live peers immediately even on a
+// disk-cache metadata hit.
+void torrent_meta_cache_peers(const uint8_t info_hash[20], const peer_addr *peers, int n);
+int  torrent_meta_get_cached_peers(const uint8_t info_hash[20], peer_addr *out, int max);
+
+// Tracker cooldown inspection / control (exposed primarily for tests).
+void torrent_tracker_reset_cooldowns(void);
+bool torrent_tracker_is_cooled_down(const char *url);
+void torrent_tracker_record_status(const char *url, bool transport_ok, bool local_err);
+
 // Coarse phase of the magnet metadata fetch, so the debug overlay can say which
 // step is stuck (the tracker announce in particular is otherwise invisible: it
 // runs before the peer count is even known). Written by the loader thread, read

@@ -1,5 +1,6 @@
 #include "image_downloader.h"
 #include "http_client.h"
+#include "http_body_summary.hpp"
 #include "../config/config.h"
 #include "../utils/log.h"
 #include "../utils/perf_stats.h"
@@ -748,8 +749,10 @@ void ImageDownloader::processTask(const ImageTask& task, net::HttpClient& http) 
             }
         });
     } else {
+        const std::string bodySummary = util::summarizeHttpErrorBody(res.body);
         util::logLine("ImageDownloader: HTTP fetch failed, code=" + std::to_string(res.status_code) +
-                      " (" + res.body + ") url=" + task.url);
+                      (bodySummary.empty() ? std::string() : (" (" + bodySummary + ")")) +
+                      " url=" + task.url);
         if (res.status_code == 0 && !host.empty()) {
             markHostFailed(host);
         }

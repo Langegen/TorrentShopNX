@@ -1155,6 +1155,9 @@ inline std::atomic<bool> g_appExiting{false};
 inline std::atomic<bool> g_cleanupCancelled{false};
 inline std::atomic<bool> g_cleanupRunning{false};
 inline std::atomic<bool> g_catalogUpdateRunning{false};
+inline std::atomic<bool> g_appUpdateRunning{false};
+inline std::atomic<bool> g_appUpdatePendingRestart{false};
+inline std::atomic<bool> g_catalogUpdateCancel{false};
 
 inline void deleteDirectoryIterative(const std::filesystem::path& path) {
     std::error_code ec;

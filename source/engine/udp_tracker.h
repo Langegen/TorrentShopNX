@@ -8,9 +8,10 @@
 #include "torrent_meta.h"
 
 // Announce to a udp:// tracker (BEP 15). Fills peers (up to max_peers) and
-// returns the count, or -1 on failure. peer_id must be 20 bytes. `first` sends
-// event=started (2); later rounds send no event (0). `port` is the listen
-// port we advertise (what other peers will dial back).
+// returns the count (0 when the tracker answered cleanly with an empty list),
+// -1 on tracker/network failure, or -2 on local socket/resource exhaustion or
+// cancellation. peer_id must be 20 bytes. `first` sends event=started (2);
+// later rounds send no event (0). `port` is the listen port we advertise.
 // `cancel` (may be NULL) is polled between retransmits so a teardown aborts the
 // announce instead of waiting out the recv timeouts.
 int udp_announce(const char *url, const uint8_t info_hash[20],

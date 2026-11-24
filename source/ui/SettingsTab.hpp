@@ -1,10 +1,12 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <functional>
 
 namespace ui {
 
-void downloadAndInstallAppUpdate(const std::string& url, const std::string& version);
+void downloadAndInstallAppUpdate(const std::string& url, const std::string& version,
+                                 std::function<void(bool)> onFinished = nullptr);
 
 class SettingsTab : public brls::Activity {
 public:

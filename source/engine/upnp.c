@@ -208,7 +208,8 @@ static int ssdp_discover(char *location, size_t loclen, uint32_t gw) {
             }
         }
         // Collect replies for a beat; the first LOCATION wins.
-        for (;;) {
+        u64 wait_until = armGetSystemTick() + (u64)SSDP_WAIT_MS * armGetSystemTickFreq() / 1000ULL;
+        while (!s_stop && armGetSystemTick() < wait_until) {
             char resp[2048];
             ssize_t n = recv(sock, resp, sizeof(resp) - 1, 0);
             if (n <= 0) break;

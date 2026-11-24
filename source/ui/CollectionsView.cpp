@@ -90,6 +90,7 @@ void CollectionsView::onContentAvailable() {
         std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
         catalog::CollectionInfo cInfo = info;
         brls::async([this, flag, cInfo]() {
+            if (g_appExiting.load() || !flag->load()) return;
             std::vector<catalog::CollectionEntry> entries;
             bool from_cache = true;
             bool ok = catalog::CollectionsManager::instance().loadCollection(cInfo, entries, from_cache);

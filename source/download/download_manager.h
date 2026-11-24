@@ -127,6 +127,9 @@ struct DownloadItem {
     // Сохранение точных размеров загрузки и установки
     unsigned long long download_total_bytes = 0;
     unsigned long long bytes_downloaded = 0;
+    bool stream_prep_eng_init = false;
+    unsigned long long stream_prep_last_eng_bytes = 0;
+    unsigned long long stream_raw_bytes = 0;
 
     // Гибридный инсталлятор (новый режим)
     std::shared_ptr<installer::HybridNspInstaller> hybrid_installer;

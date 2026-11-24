@@ -34,19 +34,28 @@ typedef u32 Result;
 #define R_FAILED(res)      ((res) != 0)
 
 //-----------------------------------------------------------------------------
-// Mutex
+// Mutex (0 = uninit, 1 = initializing, 2 = ready)
 //-----------------------------------------------------------------------------
 typedef struct { pthread_mutex_t m; int init; } Mutex;
 
 static inline void mutexInit(Mutex *mtx) {
     if (!mtx) return;
-    pthread_mutex_init(&mtx->m, NULL);
-    mtx->init = 1;
+    while (__atomic_load_n(&mtx->init, __ATOMIC_ACQUIRE) != 2) {
+        int expected = 0;
+        if (__atomic_compare_exchange_n(&mtx->init, &expected, 1, false,
+                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+            pthread_mutex_init(&mtx->m, NULL);
+            __atomic_store_n(&mtx->init, 2, __ATOMIC_RELEASE);
+            return;
+        }
+        struct timespec ts = { 0, 100000 };
+        nanosleep(&ts, NULL);
+    }
 }
 
 static inline void mutexLock(Mutex *mtx) {
     if (!mtx) return;
-    if (!mtx->init) mutexInit(mtx);
+    if (__atomic_load_n(&mtx->init, __ATOMIC_ACQUIRE) != 2) mutexInit(mtx);
     pthread_mutex_lock(&mtx->m);
 }
 
@@ -56,31 +65,41 @@ static inline void mutexUnlock(Mutex *mtx) {
 }
 
 //-----------------------------------------------------------------------------
-// Condition variable
+// Condition variable (0 = uninit, 1 = initializing, 2 = ready)
 //-----------------------------------------------------------------------------
 typedef struct { pthread_cond_t c; int init; } CondVar;
 
 static inline void condvarInit(CondVar *cv) {
     if (!cv) return;
-    pthread_cond_init(&cv->c, NULL);
-    cv->init = 1;
+    while (__atomic_load_n(&cv->init, __ATOMIC_ACQUIRE) != 2) {
+        int expected = 0;
+        if (__atomic_compare_exchange_n(&cv->init, &expected, 1, false,
+                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+            pthread_cond_init(&cv->c, NULL);
+            __atomic_store_n(&cv->init, 2, __ATOMIC_RELEASE);
+            return;
+        }
+        struct timespec ts = { 0, 100000 };
+        nanosleep(&ts, NULL);
+    }
 }
 
 static inline void condvarWakeAll(CondVar *cv) {
     if (!cv) return;
-    if (!cv->init) condvarInit(cv);
+    if (__atomic_load_n(&cv->init, __ATOMIC_ACQUIRE) != 2) condvarInit(cv);
     pthread_cond_broadcast(&cv->c);
 }
 
 static inline void condvarWakeOne(CondVar *cv) {
     if (!cv) return;
-    if (!cv->init) condvarInit(cv);
+    if (__atomic_load_n(&cv->init, __ATOMIC_ACQUIRE) != 2) condvarInit(cv);
     pthread_cond_signal(&cv->c);
 }
 
 static inline Result condvarWaitTimeout(CondVar *cv, Mutex *mtx, u64 timeout_ns) {
     if (!cv || !mtx) return 0;
-    if (!cv->init) condvarInit(cv);
+    if (__atomic_load_n(&cv->init, __ATOMIC_ACQUIRE) != 2) condvarInit(cv);
+    if (__atomic_load_n(&mtx->init, __ATOMIC_ACQUIRE) != 2) mutexInit(mtx);
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec  += (time_t)(timeout_ns / 1000000000ULL);

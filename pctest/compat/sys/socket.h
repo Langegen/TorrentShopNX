@@ -242,11 +242,10 @@ static inline int tsnx_fcntl(int fd, int cmd, unsigned long arg) {
         return 0;
     }
     if (cmd == F_GETFL) {
-        u_long nb = 0;
-        if (ioctlsocket((SOCKET)fd, FIONBIO, &nb) != 0) {
-            errno = tsnx_ws_errno(WSAGetLastError()); return -1;
-        }
-        return nb ? O_NONBLOCK : 0;
+        /* Winsock has no FIONBIO getter; calling FIONBIO with &0 would reset
+           the socket back to blocking mode. */
+        (void)fd;
+        return 0;
     }
     errno = EINVAL;
     return -1;

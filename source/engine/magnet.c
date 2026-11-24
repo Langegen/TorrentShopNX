@@ -74,10 +74,11 @@ static void add_tracker_single(magnet_info *m, const char *url) {
 
 static void add_tracker(magnet_info *m, const char *url) {
     add_tracker_single(m, url);
-    if (strstr(url, "t-ru.org/ann") != NULL || strstr(url, "bt.t-ru.org") != NULL || strstr(url, "bt2.t-ru.org") != NULL) {
+    if (strstr(url, "t-ru.org") != NULL) {
         static const char *RU_MIRRORS[] = {
             "http://bt.t-ru.org/ann?magnet",
             "http://bt2.t-ru.org/ann?magnet",
+            "http://bt3.t-ru.org/ann?magnet",
             "http://bt4.t-ru.org/ann?magnet"
         };
         for (size_t i = 0; i < sizeof(RU_MIRRORS)/sizeof(RU_MIRRORS[0]); i++) {

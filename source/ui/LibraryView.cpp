@@ -19,6 +19,7 @@
 #include "../catalog/game_version.hpp"
 #include "../catalog/release_finder.h"
 #include "../installer/installed_ports.h"
+#include "../installer/ns_ext.h"
 #include <borealis/extern/nlohmann/json.hpp>
 #include <cstdlib>
 #include "../installer/ncz_parser.h"
@@ -327,6 +328,8 @@ static void applyCatalogVersion(LibraryItem& item) {
 #ifdef __SWITCH__
 static bool deleteNcmComponent(uint8_t storageId, const NcmContentMetaKey& metaKey) {
     std::lock_guard<std::recursive_mutex> service_lock(g_switch_service_mutex);
+    const u64 base_tid = metaKey.id & ~0x1FFFULL;
+
     Result rc = ncmInitialize();
     if (R_FAILED(rc)) return false;
 
@@ -340,36 +343,157 @@ static bool deleteNcmComponent(uint8_t storageId, const NcmContentMetaKey& metaK
             return false;
         }
 
-        s32 entriesWritten = 0;
-        NcmContentInfo contentInfos[32] = {};
-        if (R_SUCCEEDED(ncmContentMetaDatabaseListContentInfo(&db, &entriesWritten, contentInfos, 32, &metaKey, 0))) {
+        // 1. Read every NcmContentInfo for this meta key (no fixed [32] cap).
+        std::vector<NcmContentInfo> contentInfos;
+        s32 startIdx = 0;
+        for (;;) {
+            NcmContentInfo chunk[32] = {};
+            s32 entriesWritten = 0;
+            Result listRc = ncmContentMetaDatabaseListContentInfo(
+                &db, &entriesWritten, chunk, 32, &metaKey, startIdx);
+            if (R_FAILED(listRc) || entriesWritten <= 0) break;
+            contentInfos.insert(contentInfos.end(), chunk, chunk + entriesWritten);
+            startIdx += entriesWritten;
+            if (entriesWritten < 32) break;
+        }
+
+        // 2. Remove the meta key FIRST so LookupOrphanContent sees what remains referenced.
+        Result remRc = ncmContentMetaDatabaseRemove(&db, &metaKey);
+        if (R_FAILED(remRc)) {
+            ncmContentMetaDatabaseClose(&db);
+            return false;
+        }
+        ncmContentMetaDatabaseCommit(&db);
+
+        // 3. Delete only orphaned NCAs so shared NCAs with base/patch are preserved.
+        if (!contentInfos.empty()) {
+            std::vector<NcmContentId> cids;
+            cids.reserve(contentInfos.size());
+            for (const auto& ci : contentInfos) cids.push_back(ci.content_id);
+            std::vector<uint8_t> orphaned(cids.size(), 0);
+            Result orphRc = ncmContentMetaDatabaseLookupOrphanContent(
+                &db, reinterpret_cast<bool*>(orphaned.data()),
+                cids.data(), static_cast<s32>(cids.size()));
+            if (R_FAILED(orphRc)) {
+                std::fill(orphaned.begin(), orphaned.end(), 1);
+                std::vector<NcmContentMetaKey> remKeys(64);
+                s32 total = 0, written = 0;
+                Result lrc = ncmContentMetaDatabaseList(
+                    &db, &total, &written, remKeys.data(), static_cast<s32>(remKeys.size()),
+                    static_cast<NcmContentMetaType>(0), 0,
+                    base_tid, base_tid + 0x1FFFULL, static_cast<NcmContentInstallType>(0));
+                if (R_SUCCEEDED(lrc) && total > written) {
+                    remKeys.resize(static_cast<size_t>(total));
+                    lrc = ncmContentMetaDatabaseList(
+                        &db, &total, &written, remKeys.data(), static_cast<s32>(remKeys.size()),
+                        static_cast<NcmContentMetaType>(0), 0,
+                        base_tid, base_tid + 0x1FFFULL, static_cast<NcmContentInstallType>(0));
+                }
+                if (R_SUCCEEDED(lrc) && written > 0) {
+                    for (s32 k = 0; k < written; ++k) {
+                        for (size_t idx = 0; idx < cids.size(); ++idx) {
+                            if (!orphaned[idx]) continue;
+                            bool has = false;
+                            if (R_SUCCEEDED(ncmContentMetaDatabaseHasContent(
+                                    &db, &has, &remKeys[static_cast<size_t>(k)], &cids[idx])) && has) {
+                                orphaned[idx] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
             NcmContentStorage cs = {};
             if (R_SUCCEEDED(ncmOpenContentStorage(&cs, stId))) {
-                for (s32 i = 0; i < entriesWritten; ++i) {
-                    ncmContentStorageDelete(&cs, &contentInfos[i].content_id);
+                for (size_t idx = 0; idx < cids.size(); ++idx) {
+                    if (orphaned[idx]) {
+                        ncmContentStorageDelete(&cs, &cids[idx]);
+                    }
                 }
                 ncmContentStorageClose(&cs);
             }
         }
 
-        Result remRc = ncmContentMetaDatabaseRemove(&db, &metaKey);
-        if (R_SUCCEEDED(remRc)) {
-            ncmContentMetaDatabaseCommit(&db);
-        }
         ncmContentMetaDatabaseClose(&db);
-        return R_SUCCEEDED(remRc);
+        return true;
     };
 
     bool ok = tryDeleteFromDb(static_cast<NcmStorageId>(storageId));
     if (!ok) {
-        // Fallback to alternate storage
-        NcmStorageId altStorage = (storageId == NcmStorageId_SdCard) ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
+        NcmStorageId altStorage = (storageId == NcmStorageId_SdCard)
+            ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
         ok = tryDeleteFromDb(altStorage);
+    }
+
+    // Collect remaining NCM records for base_tid in case NS listing needs a fallback
+    std::vector<installer::ContentStorageRecord> ncmFallback;
+    if (ok) {
+        const NcmStorageId storages[] = {
+            NcmStorageId_SdCard,
+            NcmStorageId_BuiltInUser,
+            NcmStorageId_GameCard
+        };
+        for (NcmStorageId sid : storages) {
+            NcmContentMetaDatabase db = {};
+            if (R_FAILED(ncmOpenContentMetaDatabase(&db, sid))) continue;
+            std::vector<NcmContentMetaKey> keys(64);
+            s32 total = 0, written = 0;
+            Result lrc = ncmContentMetaDatabaseList(
+                &db, &total, &written, keys.data(), static_cast<s32>(keys.size()),
+                static_cast<NcmContentMetaType>(0), 0,
+                base_tid, base_tid + 0x1FFFULL, static_cast<NcmContentInstallType>(0));
+            if (R_SUCCEEDED(lrc) && total > written) {
+                keys.resize(static_cast<size_t>(total));
+                lrc = ncmContentMetaDatabaseList(
+                    &db, &total, &written, keys.data(), static_cast<s32>(keys.size()),
+                    static_cast<NcmContentMetaType>(0), 0,
+                    base_tid, base_tid + 0x1FFFULL, static_cast<NcmContentInstallType>(0));
+            }
+            if (R_SUCCEEDED(lrc) && written > 0) {
+                for (s32 i = 0; i < written; ++i) {
+                    installer::ContentStorageRecord rec = {};
+                    rec.key = keys[static_cast<size_t>(i)];
+                    rec.storage_id = static_cast<u64>(sid);
+                    ncmFallback.push_back(rec);
+                }
+            }
+            ncmContentMetaDatabaseClose(&db);
+        }
+        ncmInvalidateRightsIdCache(); // FW 9.0.0+, safely ignored on older FW
     }
     ncmExit();
 
-    Result nsRc = nsInitialize();
-    if (R_SUCCEEDED(nsRc)) {
+    if (ok && R_SUCCEEDED(nsInitialize())) {
+        std::vector<installer::ContentStorageRecord> records;
+        Result listRc = installer::nsListApplicationRecordContentMetaCustom(base_tid, records);
+        if (R_FAILED(listRc) || records.empty()) {
+            records = std::move(ncmFallback);
+        }
+        std::vector<installer::ContentStorageRecord> filtered;
+        filtered.reserve(records.size());
+        for (const auto& rec : records) {
+            if (rec.key.id == metaKey.id &&
+                rec.key.version == metaKey.version &&
+                rec.key.type == metaKey.type) {
+                continue;
+            }
+            filtered.push_back(rec);
+        }
+        installer::nsDeleteApplicationRecordCustom(base_tid);
+        if (!filtered.empty()) {
+            installer::nsPushApplicationRecordCustom(
+                base_tid, installer::NsApplicationRecordType_Installed,
+                filtered.data(), static_cast<s32>(filtered.size()));
+        }
+        if (metaKey.type == NcmContentMetaType_Patch) {
+            u32 maxPatchVer = 0;
+            for (const auto& rec : filtered) {
+                if (rec.key.type == NcmContentMetaType_Patch && rec.key.version > maxPatchVer) {
+                    maxPatchVer = rec.key.version;
+                }
+            }
+            installer::nsSyncLaunchVersion(base_tid, maxPatchVer);
+        }
         nsDeleteRedundantApplicationEntity();
         nsExit();
     }
@@ -2074,19 +2198,31 @@ void LibraryView::showComponentManager(const LibraryItem& item, int currentSecti
                         if (ok) {
                             for (auto& itm : rawItems_) {
                                 if (itm.titleId == currentItem.titleId) {
-                                    itm.hasPatch = false;
-                                    itm.installedPatchVersion = 0;
                                     // The NACP version was the update's; the base
                                     // game's is read on the next scan.
                                     itm.installedDisplayVersion.clear();
-                                    if (itm.totalSizeBytes >= itm.patchSizeBytes) itm.totalSizeBytes -= itm.patchSizeBytes;
-                                    itm.patchSizeBytes = 0;
                                     for (auto it = itm.components.begin(); it != itm.components.end(); ++it) {
-                                        if (it->type == InstalledComponent::Type::Patch) {
+                                        if (it->type == InstalledComponent::Type::Patch &&
+                                            it->titleId == comp.titleId &&
+                                            it->version == comp.version) {
                                             itm.components.erase(it);
                                             break;
                                         }
                                     }
+                                    itm.hasPatch = false;
+                                    itm.installedPatchVersion = 0;
+                                    itm.patchSizeBytes = 0;
+                                    for (const auto& c : itm.components) {
+                                        if (c.type == InstalledComponent::Type::Patch) {
+                                            itm.hasPatch = true;
+                                            if (c.version > itm.installedPatchVersion) {
+                                                itm.installedPatchVersion = c.version;
+                                            }
+                                            itm.patchSizeBytes += c.sizeBytes;
+                                        }
+                                    }
+                                    if (itm.totalSizeBytes >= comp.sizeBytes) itm.totalSizeBytes -= comp.sizeBytes;
+                                    else itm.totalSizeBytes = itm.appSizeBytes + itm.patchSizeBytes + itm.dlcSizeBytes + itm.modsSizeBytes;
                                     applyCatalogVersion(itm);
                                     break;
                                 }

@@ -25,6 +25,7 @@ $CXXFLAGS = @(
 $COMMON_SOURCES = @(
     "source\engine\bencode.c",
     "source\engine\torrent_meta.c",
+    "source\engine\meta_fetch.c",
     "source\engine\udp_tracker.c",
     "source\engine\bt_peer.c",
     "source\engine\torrentfs.c",
@@ -54,7 +55,7 @@ $CPP_OBJ = @(
 
 $LIBS = @(
     "-lmbedcrypto", "-lmbedtls", "-lmbedx509",
-    "-lcurl", "-lz", "-lws2_32", "-liphlpapi", "-lpthread"
+    "-lcurl", "-lz", "-lws2_32", "-liphlpapi", "-lstdc++", "-lpthread"
 )
 
 function Build-CppObjects {
@@ -258,6 +259,7 @@ Build-CppObjects
 Build-Test "test_bencode"
 Build-Test "test_magnet"
 Build-Test "test_torrent_meta"
+Build-Test "test_meta_fetch"
 Build-Test "test_engine"
 Build-Test "streamtest"
 Build-Test "diagtest"

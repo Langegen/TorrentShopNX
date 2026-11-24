@@ -37,8 +37,14 @@ tsnx_engine* CustomEngineClient::sharedEngine() {
     return engine_;
 }
 
-void CustomEngineClient::shutdown() {
+void CustomEngineClient::beginShutdown() {
+    probe_cancel_seq_.fetch_add(1);
+    shutdown_requested_.store(true);
     probe_cancel_.store(true);
+}
+
+void CustomEngineClient::shutdown() {
+    beginShutdown();
     std::lock_guard<std::mutex> probe_lock(probe_mtx_);
     {
         std::lock_guard<std::mutex> keep_lock(keep_mtx_);
@@ -73,9 +79,19 @@ bool CustomEngineClient::probeFiles(const std::string& info_hash,
                                     const std::string& torrent_file_path,
                                     std::vector<CustomEngineFileInfo>& out_files,
                                     std::string* err) {
+    const uint64_t start_seq = probe_cancel_seq_.load();
+    if (shutdown_requested_.load()) {
+        if (err) *err = "shutting down";
+        return false;
+    }
+
     // One probe at a time: the engine registry is not re-entrant, and both the
     // file-select view and the download progress thread can call in.
     std::lock_guard<std::mutex> lock(probe_mtx_);
+    if (shutdown_requested_.load() || probe_cancel_seq_.load() != start_seq) {
+        if (err) *err = shutdown_requested_.load() ? "shutting down" : "metadata fetch cancelled";
+        return false;
+    }
     {
         std::lock_guard<std::mutex> keep(keep_mtx_);
         probe_running_ = true;
@@ -121,8 +137,16 @@ bool CustomEngineClient::probeFiles(const std::string& info_hash,
         // Already registered (kept probe slot or an active download).
         snprintf(hash, sizeof(hash), "%s", reuse_hash.c_str());
     } else {
+        if (probe_cancel_seq_.load() != start_seq || shutdown_requested_.load()) {
+            last_error_ = shutdown_requested_.load() ? "shutting down" : "metadata fetch cancelled";
+            if (err) *err = last_error_;
+            return false;
+        }
         probing_ = true;
         probe_cancel_.store(false);
+        if (probe_cancel_seq_.load() != start_seq) {
+            probe_cancel_.store(true);
+        }
         bool added = false;
         if (!torrent_file_path.empty()) {
             added = tsnx_engine_add_torrent_file(eng, torrent_file_path.c_str(),
@@ -210,6 +234,7 @@ CustomEngineProbeStatus CustomEngineClient::probeStatus() const {
 }
 
 void CustomEngineClient::cancelProbe() {
+    probe_cancel_seq_.fetch_add(1);
     probe_cancel_.store(true);
 }
 

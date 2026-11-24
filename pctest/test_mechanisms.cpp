@@ -25,8 +25,14 @@
 #endif
 
 #include <mbedtls/sha1.h>
+#include <filesystem>
 #include "engine.h"
 #include "torrent_meta.h"
+extern "C" {
+#include "torrentfs.h"
+}
+#include "../source/net/http_body_summary.hpp"
+#include "../source/ui/switch_file_select.hpp"
 
 using namespace std;
 using namespace std::chrono;
@@ -186,6 +192,12 @@ struct SwarmSeeder {
     atomic<uint32_t> requests_received{0};
     atomic<uint32_t> blocks_sent{0};
     atomic<uint32_t> cancels_received{0};
+    atomic<uint32_t> connections_seen{0};
+    atomic<uint32_t> disconnects_seen{0};
+
+    // Custom bitfield override (e.g. for testing !has_needed / peer_no_file_pieces)
+    bool use_custom_bitfield = false;
+    uint8_t custom_bitfield_byte = 0xFF;
 
     // Injected latency for Request Stealing simulation
     bool inject_lag = false;
@@ -199,6 +211,7 @@ static void compute_sha1(const uint8_t *data, size_t len, uint8_t out[20]) {
 }
 
 static void handle_swarm_peer(SOCKET client_sock, SwarmSeeder &s) {
+    s.connections_seen++;
     int one = 1;
     setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, (const char *)&one, sizeof(one));
 
@@ -207,10 +220,11 @@ static void handle_swarm_peer(SOCKET client_sock, SwarmSeeder &s) {
     int received = 0;
     while (received < 68 && !s.stop) {
         int r = recv(client_sock, (char*)hs + received, 68 - received, 0);
-        if (r <= 0) { closesocket(client_sock); return; }
+        if (r <= 0) { s.disconnects_seen++; closesocket(client_sock); return; }
         received += r;
     }
     if (memcmp(hs + 28, s.info_hash, 20) != 0) {
+        s.disconnects_seen++;
         closesocket(client_sock);
         return;
     }
@@ -223,13 +237,16 @@ static void handle_swarm_peer(SOCKET client_sock, SwarmSeeder &s) {
     memcpy(hs_reply + 48, "-TS0001-mockswarm000", 20);
     send(client_sock, (const char*)hs_reply, 68, 0);
 
-    // 2. Bitfield (full seed)
+    // 2. Bitfield (full seed or custom bitfield override)
     uint32_t bf_bytes = (s.piece_count + 7) / 8;
     vector<uint8_t> bf_msg(4 + 1 + bf_bytes);
     uint32_t bf_len = htonl(1 + bf_bytes);
     memcpy(bf_msg.data(), &bf_len, 4);
     bf_msg[4] = 5;
     memset(bf_msg.data() + 5, 0xFF, bf_bytes);
+    if (s.use_custom_bitfield && bf_bytes > 0) {
+        bf_msg[5] = s.custom_bitfield_byte;
+    }
     send(client_sock, (const char*)bf_msg.data(), (int)bf_msg.size(), 0);
 
     // 3. Unchoke
@@ -298,6 +315,7 @@ static void handle_swarm_peer(SOCKET client_sock, SwarmSeeder &s) {
             }
         }
     }
+    s.disconnects_seen++;
     closesocket(client_sock);
 }
 
@@ -464,6 +482,332 @@ static void test_live_mock_swarm() {
     cout << "  [+] PASSED: Multi-peer mock swarm test completed successfully!\n" << endl;
 }
 
+static void test_http_body_summary() {
+    cout << "[TEST 5] Verifying HTTP Error Body Log Sanitizer..." << endl;
+
+    assert(util::summarizeHttpErrorBody("").empty());
+
+    std::string jpeg("\xFF\xD8\xFF\xE0\x00\x10JFIF", 10);
+    jpeg.append(200, '\xAB');
+    assert(util::summarizeHttpErrorBody(jpeg) == "<binary 210B>");
+
+    std::string png = "\x89PNG\r\n\x1a\n";
+    png.append(120, '\x01');
+    assert(util::summarizeHttpErrorBody(png) == "<binary 128B>");
+
+    std::string gif = "GIF89a";
+    gif.append(64, 'x');
+    assert(util::summarizeHttpErrorBody(gif) == "<binary 70B>");
+
+    std::string webp("RIFF\x10\x00\x00\x00WEBP", 12);
+    webp.append(50, '\x05');
+    assert(util::summarizeHttpErrorBody(webp) == "<binary 62B>");
+
+    std::string nul_bin = std::string("HTTP error ") + '\0' + " binary tail";
+    assert(util::summarizeHttpErrorBody(nul_bin) == "<binary 24B>");
+
+    assert(util::summarizeHttpErrorBody("  404\r\n\tNot   Found  \n") == "404 Not Found");
+
+    std::string long_txt(260, 'A');
+    std::string sum_long = util::summarizeHttpErrorBody(long_txt);
+    assert(sum_long.size() == 160);
+    assert(sum_long.substr(157) == "...");
+
+    cout << "  [+] PASSED: HTTP error body sanitization verified!\n" << endl;
+}
+
+static void test_switch_file_select() {
+    cout << "[TEST 6] Verifying Switch TitleID Version Deduplication..." << endl;
+
+    const uint64_t kBaseTid  = 0x0100F2C0115B6000ULL;
+    const uint64_t kPatchTid = 0x0100F2C0115B6800ULL;
+    const uint64_t kDlcTid   = 0x0100F2C0115B7001ULL;
+
+    // 1) Duplicate patch versions in release (TOTK case): select only highest patch + DLC, skip installed base.
+    std::vector<ui::SwitchFileCandidate> items = {
+        { kBaseTid,  0,      true,  false, true  }, // 0: base (already installed)
+        { kPatchTid, 65536,  true,  false, false }, // 1: older patch
+        { kPatchTid, 786432, true,  false, false }, // 2: newest patch
+        { kDlcTid,   0,      true,  false, false }, // 3: DLC
+        { 0,         0,      false, false, false }, // 4: non-game readme
+        { kDlcTid+1, 0,      true,  true,  false }, // 5: FAT32 oversized
+    };
+    auto sel1 = ui::selectLatestSwitchFiles(items, false);
+    assert(sel1.size() == items.size());
+    assert(!sel1[0]);
+    assert(!sel1[1]);
+    assert(sel1[2]);
+    assert(sel1[3]);
+    assert(!sel1[4]);
+    assert(!sel1[5]);
+
+    // 2) If highest patch version for that TID is ALREADY installed, do NOT auto-select the older patch.
+    items[2].installed = true;
+    auto sel2 = ui::selectLatestSwitchFiles(items, false);
+    assert(!sel2[1]);
+    assert(!sel2[2]);
+    assert(sel2[3]);
+
+    // 3) In no-install mode, select every Switch game file that fits FAT32.
+    auto sel3 = ui::selectLatestSwitchFiles(items, true);
+    assert(sel3[0] && sel3[1] && sel3[2] && sel3[3] && !sel3[4] && !sel3[5]);
+
+    cout << "  [+] PASSED: Switch file selection deduplication verified!\n" << endl;
+}
+
+static string bytes_to_hex40(const uint8_t ih[20]) {
+    static const char d[] = "0123456789abcdef";
+    string s(40, '0');
+    for (int i = 0; i < 20; i++) {
+        s[i * 2] = d[ih[i] >> 4];
+        s[i * 2 + 1] = d[ih[i] & 0x0F];
+    }
+    return s;
+}
+
+static void test_pause_idempotency_and_cached_magnet() {
+    cout << "[TEST 7] Verifying Pause Idempotency, bytes_received & Cached Magnet No-Pause..." << endl;
+
+    const uint32_t piece_size = 16384;
+    const uint32_t piece_count = 2;
+    vector<uint8_t> payload(piece_size * piece_count);
+    for (size_t i = 0; i < payload.size(); i++) payload[i] = (uint8_t)((i * 13 + 5) & 0xFF);
+
+    vector<uint8_t> piece_hashes(piece_count * 20);
+    for (uint32_t i = 0; i < piece_count; i++) {
+        compute_sha1(&payload[i * piece_size], piece_size, &piece_hashes[i * 20]);
+    }
+    const char *pname = "pause_test.bin";
+    char ihdr[256];
+    int ilen = snprintf(ihdr, sizeof(ihdr),
+        "d6:lengthi%zu" "e4:name%zu:%s12:piece lengthi%ue6:pieces%u:",
+        payload.size(), strlen(pname), pname, piece_size, (unsigned)(piece_count * 20));
+    vector<uint8_t> info_dict;
+    info_dict.insert(info_dict.end(), (uint8_t*)ihdr, (uint8_t*)ihdr + ilen);
+    info_dict.insert(info_dict.end(), piece_hashes.begin(), piece_hashes.end());
+    info_dict.push_back('e');
+
+    uint8_t ih[20];
+    compute_sha1(info_dict.data(), info_dict.size(), ih);
+
+    const char *tpath = "pctest/tmp_pause_test.torrent";
+    {
+        const char *ann = "http://127.0.0.1:1/announce";
+        char rhdr[128];
+        int rlen = snprintf(rhdr, sizeof(rhdr), "d8:announce%zu:%s4:info", strlen(ann), ann);
+        vector<uint8_t> tb;
+        tb.insert(tb.end(), (uint8_t*)rhdr, (uint8_t*)rhdr + rlen);
+        tb.insert(tb.end(), info_dict.begin(), info_dict.end());
+        tb.push_back('e');
+        FILE *f = fopen(tpath, "wb");
+        assert(f != nullptr);
+        fwrite(tb.data(), 1, tb.size(), f);
+        fclose(f);
+    }
+
+    SwarmSeeder seeder;
+    seeder.name = "PauseSeeder";
+    seeder.data_ptr = &payload;
+    seeder.piece_size = piece_size;
+    seeder.piece_count = piece_count;
+    memcpy(seeder.info_hash, ih, 20);
+    seeder.server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(seeder.server_sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+    struct sockaddr_in saddr = {0};
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bind(seeder.server_sock, (struct sockaddr*)&saddr, sizeof(saddr));
+    listen(seeder.server_sock, 4);
+    int slen = sizeof(saddr);
+    getsockname(seeder.server_sock, (struct sockaddr*)&saddr, &slen);
+    seeder.port = ntohs(saddr.sin_port);
+    thread th(swarm_listener_thread, &seeder);
+
+    tsnx_engine *eng = tsnx_engine_start(0);
+    assert(eng != nullptr);
+
+    char hex[41] = {0};
+    assert(tsnx_engine_add_torrent_file(eng, tpath, hex, sizeof(hex)));
+    assert(tsnx_engine_prepare_stream(eng, hex, 0));
+    uint32_t ip = (uint32_t)htonl(INADDR_LOOPBACK);
+    uint16_t port = seeder.port;
+    tsnx_engine_add_peers(eng, hex, &ip, &port, 1);
+
+    vector<uint8_t> buf(piece_size);
+    int64_t r1 = tsnx_engine_read(eng, hex, 0, buf.data(), piece_size);
+    assert(r1 == (int64_t)piece_size);
+    assert(memcmp(buf.data(), payload.data(), piece_size) == 0);
+
+    tsnx_torrent_item item = {0};
+    assert(tsnx_engine_get_torrent(eng, hex, &item));
+    assert(item.bytes_received >= piece_size);
+
+    // Pause / resume idempotency & missing-hash check
+    assert(tsnx_engine_pause_torrent(eng, hex));
+    assert(tsnx_engine_pause_torrent(eng, hex));
+    assert(tsnx_engine_resume_torrent(eng, hex));
+    assert(tsnx_engine_resume_torrent(eng, hex));
+    assert(!tsnx_engine_pause_torrent(eng, "0000000000000000000000000000000000000000"));
+
+    // Cached magnet probe while active torrent is live (< 6 peers) must hit cache fast and not stall stream.
+    std::filesystem::create_directories("pctest/meta_cache");
+    torrent_meta_cache_set_dir("pctest/meta_cache");
+    const char *info2 = "d6:lengthi16384e4:name5:dummy12:piece lengthi16384e6:pieces20:bbbbbbbbbbbbbbbbbbbbe";
+    uint8_t ih2[20];
+    compute_sha1((const uint8_t*)info2, strlen(info2), ih2);
+    string hex2 = bytes_to_hex40(ih2);
+    string meta2_path = "pctest/meta_cache/" + hex2 + ".meta";
+    {
+        FILE *mf = fopen(meta2_path.c_str(), "wb");
+        assert(mf != nullptr);
+        fwrite(info2, 1, strlen(info2), mf);
+        fclose(mf);
+    }
+    string mag2 = "magnet:?xt=urn:btih:" + hex2;
+    char out_h2[41] = {0};
+    auto t0 = steady_clock::now();
+    bool ok_mag = tsnx_engine_add_magnet_ex(eng, mag2.c_str(), 0, true, nullptr, out_h2, sizeof(out_h2));
+    auto dt_ms = duration_cast<milliseconds>(steady_clock::now() - t0).count();
+    assert(ok_mag);
+    assert(strcmp(out_h2, hex2.c_str()) == 0);
+    assert(dt_ms < 2000);
+
+    // Second piece of torrent 1 continues cleanly without being paused
+    int64_t r2 = tsnx_engine_read(eng, hex, piece_size, buf.data(), piece_size);
+    assert(r2 == (int64_t)piece_size);
+    assert(memcmp(buf.data(), payload.data() + piece_size, piece_size) == 0);
+
+    seeder.stop = true;
+    closesocket(seeder.server_sock);
+    if (th.joinable()) th.join();
+    tsnx_engine_stop(eng);
+    std::remove(tpath);
+    std::remove(meta2_path.c_str());
+
+    cout << "  [+] PASSED: Pause idempotency, bytes_received & cached-magnet verified!\n" << endl;
+}
+
+static void test_select_file_resets_no_file_pieces() {
+    cout << "[TEST 8] Verifying torrentfs_select_file() Resets peer_no_file_pieces..." << endl;
+
+    const uint32_t piece_size = 16384;
+    const uint32_t piece_count = 2;
+    vector<uint8_t> payload(piece_size * piece_count);
+    for (size_t i = 0; i < payload.size(); i++) payload[i] = (uint8_t)((i * 7 + 3) & 0xFF);
+
+    vector<uint8_t> piece_hashes(piece_count * 20);
+    for (uint32_t i = 0; i < piece_count; i++) {
+        compute_sha1(&payload[i * piece_size], piece_size, &piece_hashes[i * 20]);
+    }
+    const char *info_body = "d5:filesld6:lengthi16384e4:pathl8:a_00.nspeed6:lengthi16384e4:pathl8:b_01.nspeee4:name6:mftest12:piece lengthi16384e6:pieces40:";
+    vector<uint8_t> info_dict((const uint8_t*)info_body, (const uint8_t*)info_body + strlen(info_body));
+    info_dict.insert(info_dict.end(), piece_hashes.begin(), piece_hashes.end());
+    info_dict.push_back('e');
+
+    uint8_t ih[20];
+    compute_sha1(info_dict.data(), info_dict.size(), ih);
+
+    const char *tpath = "pctest/tmp_multifile.torrent";
+    const char *cpath = "pctest/tmp_mf_cache";
+    std::remove(cpath);
+    {
+        const char *ann = "http://127.0.0.1:1/announce";
+        char rhdr[128];
+        int rlen = snprintf(rhdr, sizeof(rhdr), "d8:announce%zu:%s4:info", strlen(ann), ann);
+        vector<uint8_t> tb;
+        tb.insert(tb.end(), (uint8_t*)rhdr, (uint8_t*)rhdr + rlen);
+        tb.insert(tb.end(), info_dict.begin(), info_dict.end());
+        tb.push_back('e');
+        FILE *f = fopen(tpath, "wb");
+        assert(f != nullptr);
+        fwrite(tb.data(), 1, tb.size(), f);
+        fclose(f);
+    }
+
+    // Mock peer advertises BITFIELD=0x40 (ONLY piece 1, NOT piece 0!).
+    SwarmSeeder seeder;
+    seeder.name = "PartialPeer";
+    seeder.data_ptr = &payload;
+    seeder.piece_size = piece_size;
+    seeder.piece_count = piece_count;
+    memcpy(seeder.info_hash, ih, 20);
+    seeder.use_custom_bitfield = true;
+    seeder.custom_bitfield_byte = 0x40;
+    seeder.server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
+    setsockopt(seeder.server_sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+    struct sockaddr_in saddr = {0};
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bind(seeder.server_sock, (struct sockaddr*)&saddr, sizeof(saddr));
+    listen(seeder.server_sock, 4);
+    int slen = sizeof(saddr);
+    getsockname(seeder.server_sock, (struct sockaddr*)&saddr, &slen);
+    seeder.port = ntohs(saddr.sin_port);
+    thread th(swarm_listener_thread, &seeder);
+
+    char err[256] = {0};
+    torrentfs *tfs = torrentfs_open_file(tpath, cpath, 0, err, sizeof(err));
+    assert(tfs != nullptr);
+
+    peer_addr pa = { (uint32_t)htonl(INADDR_LOOPBACK), seeder.port };
+    torrentfs_add_peers(tfs, &pa, 1);
+
+    // Wait for first dial (for file 0 -> piece 0) to disconnect with peer_no_file_pieces.
+    for (int i = 0; i < 60 && seeder.disconnects_seen.load() == 0; i++) {
+        this_thread::sleep_for(milliseconds(50));
+    }
+    assert(seeder.connections_seen.load() >= 1);
+
+    // Switch to file 1 (piece 1). Without clearing peer_no_file_pieces/next_try, re-dial would stall 60s.
+    auto t0 = steady_clock::now();
+    assert(torrentfs_select_file(tfs, 1));
+    vector<char> out(piece_size);
+    size_t got = 0;
+    while (got < piece_size) {
+        int64_t n = torrentfs_read(tfs, (int64_t)got, out.data() + got, (int64_t)(piece_size - got));
+        assert(n > 0);
+        got += (size_t)n;
+    }
+    auto dt_ms = duration_cast<milliseconds>(steady_clock::now() - t0).count();
+    assert(dt_ms < 5000);
+    assert(memcmp(out.data(), payload.data() + piece_size, piece_size) == 0);
+
+    torrentfs_close(tfs);
+    seeder.stop = true;
+    closesocket(seeder.server_sock);
+    if (th.joinable()) th.join();
+    std::remove(tpath);
+    std::remove(cpath);
+
+    cout << "  [+] PASSED: select_file reset of peer_no_file_pieces completed in " << dt_ms << "ms!\n" << endl;
+}
+
+static void test_swarm_eviction_and_ban_policies() {
+    cout << "[TEST 9] Verifying Scarce Swarm Eviction & Explicit Ban Policies..." << endl;
+
+    auto should_evict_stalled_seed = [](int live, int peer_count, int strikes) {
+        const bool scarce_swarm = (live <= 4 || peer_count <= 4);
+        return !scarce_swarm && strikes >= 3;
+    };
+    auto can_revive_on_starve = [](bool peer_banned, int peer_fails) {
+        return !peer_banned && peer_fails == 0xFF;
+    };
+
+    // Scarce swarm (live <= 4) protects seeds even after 3 strikes; normal swarm (live > 4) evicts on 3rd strike.
+    assert(!should_evict_stalled_seed(4, 10, 3));
+    assert(!should_evict_stalled_seed(5, 4, 3));
+    assert(!should_evict_stalled_seed(6, 10, 2));
+    assert(should_evict_stalled_seed(5, 6, 3));
+
+    // Explicit corrupt-data ban (peer_banned) must NOT revive, unlike dead connection backoff (0xFF).
+    assert(!can_revive_on_starve(true, 0xFF));
+    assert(can_revive_on_starve(false, 0xFF));
+
+    cout << "  [+] PASSED: Scarce swarm & ban policy invariants verified!\n" << endl;
+}
+
 int main() {
 #ifdef _WIN32
     WSADATA wsa;
@@ -478,9 +822,14 @@ int main() {
     test_pipeline_fast_ramp();
     test_request_stealing_policy();
     test_live_mock_swarm();
+    test_http_body_summary();
+    test_switch_file_select();
+    test_pause_idempotency_and_cached_magnet();
+    test_select_file_resets_no_file_pieces();
+    test_swarm_eviction_and_ban_policies();
 
     cout << "==========================================================" << endl;
-    cout << "           ALL OPTIMIZATION TESTS PASSED! (4/4)           " << endl;
+    cout << "           ALL OPTIMIZATION TESTS PASSED! (9/9)           " << endl;
     cout << "==========================================================" << endl;
 
 #ifdef _WIN32

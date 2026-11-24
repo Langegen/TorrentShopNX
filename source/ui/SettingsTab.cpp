@@ -52,7 +52,7 @@ static size_t curlWriteCallback(void* ptr, size_t size, size_t nmemb, void* user
 
 static int curlProgressCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
     auto* prog = static_cast<AppDownloadProgress*>(clientp);
-    if (prog->aborted.load()) {
+    if (prog->aborted.load() || g_appExiting.load()) {
         return -1; // abort the transfer
     }
     prog->total = dltotal;
@@ -105,7 +105,18 @@ static bool copyFileOverwrite(const std::string& src, const std::string& dst) {
     return (copied >= 100 * 1024);
 }
 
-void downloadAndInstallAppUpdate(const std::string& url, const std::string& version) {
+void downloadAndInstallAppUpdate(const std::string& url, const std::string& version,
+                                 std::function<void(bool)> onFinished) {
+    bool expected = false;
+    if (!g_appUpdateRunning.compare_exchange_strong(expected, true)) {
+        util::logLine("downloadAndInstallAppUpdate: already running, ignoring duplicate request");
+        if (onFinished) onFinished(false);
+        return;
+    }
+    // Abort any in-flight background catalog update so it does not compete with
+    // or finish right before installing a new app version.
+    g_catalogUpdateCancel.store(true);
+
     brls::Box* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setPadding(20);
@@ -155,7 +166,7 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
     
     std::string tmpPath = g_nroPath + ".tmp";
     
-    brls::async([url, tmpPath, progressObj, progressDialog, timer, version, dialogClosed]() {
+    brls::async([url, tmpPath, progressObj, progressDialog, timer, version, dialogClosed, onFinished]() {
         CURL* curl = curl_easy_init();
         CURLcode res = CURLE_FAILED_INIT;
         long http_code = 0;
@@ -196,20 +207,31 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
         
         bool userCancelled = progressObj->aborted.load();
         progressObj->aborted.store(true);
+
+        if (g_appExiting.load()) {
+            std::error_code ec;
+            std::filesystem::remove(tmpPath, ec);
+            g_appUpdateRunning.store(false);
+            return;
+        }
         
-        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled, dialogClosed]() {
+        brls::sync([res, http_code, tmpPath, progressDialog, timer, userCancelled, dialogClosed, onFinished]() {
             timer->stop();
             if (dialogClosed->load()) {
                 std::error_code ec;
                 std::filesystem::remove(tmpPath, ec);
                 util::logLine("downloadAndInstallAppUpdate: cancelled by user");
+                g_appUpdateRunning.store(false);
+                if (onFinished) onFinished(false);
                 return;
             }
-            progressDialog->close([res, http_code, tmpPath, userCancelled]() {
+            progressDialog->close([res, http_code, tmpPath, userCancelled, onFinished]() {
                 if (userCancelled) {
                     std::error_code ec;
                     std::filesystem::remove(tmpPath, ec);
                     util::logLine("downloadAndInstallAppUpdate: cancelled by user");
+                    g_appUpdateRunning.store(false);
+                    if (onFinished) onFinished(false);
                     return;
                 }
                 
@@ -242,6 +264,9 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                             fsdevCommitDevice("sdmc");
 #endif
                             util::updateJournal("download: saved " + updatePath);
+                            g_appUpdatePendingRestart.store(true);
+                            g_appUpdateRunning.store(false);
+                            if (onFinished) onFinished(true);
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
                             pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
                                 // Normal exit to HOME: the NRO is replaced during shutdown
@@ -254,11 +279,15 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
                             pendingDialog->open();
                         } else {
+                            g_appUpdateRunning.store(false);
+                            if (onFinished) onFinished(false);
                             brls::Dialog* errDialog = new brls::Dialog("app/settings/update_save_error"_i18n);
                             errDialog->addButton("app/common/ok"_i18n, []() {});
                             errDialog->open();
                         }
                     } catch (const std::exception& e) {
+                        g_appUpdateRunning.store(false);
+                        if (onFinished) onFinished(false);
                         brls::Dialog* errDialog = new brls::Dialog(brls::getStr("app/settings/update_replace_exception", std::string(e.what())));
                         errDialog->addButton("app/common/ok"_i18n, []() {});
                         errDialog->open();
@@ -273,8 +302,10 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                     } else if (http_code != 200) {
                         errMsg += brls::getStr("app/settings/update_http_status", std::to_string(http_code));
                     } else if (!validDownloadedFile) {
-                        errMsg += brls::getStr("app/settings/update_file_corrupted", (stat(tmpPath.c_str(), &st) == 0 ? std::to_string(st.st_size) : "0"));
+                        errMsg += brls::getStr("app/settings/update_file_corrupted", (haveFile ? std::to_string(st.st_size) : "0"));
                     }
+                    g_appUpdateRunning.store(false);
+                    if (onFinished) onFinished(false);
                     brls::Dialog* errDialog = new brls::Dialog(errMsg);
                     errDialog->addButton("app/common/ok"_i18n, []() {});
                     errDialog->open();
@@ -376,7 +407,7 @@ brls::View* SettingsTab::buildGeneralTab() {
         "app/settings/lang_zh_hans"_i18n,
         "app/settings/lang_ja"_i18n,
         "app/settings/lang_ar"_i18n,
-        "Magyar"
+        "app/settings/lang_hu"_i18n
     };
     int initialLang = 0;
     std::string curLang = cfg.getLanguage();
@@ -659,6 +690,9 @@ brls::View* SettingsTab::buildUpdatesTab() {
     };
     updateCatalogStatusDisplay();
     catalogUpdateCell->registerClickAction([updateCatalogStatusDisplay, alive = aliveToken_](brls::View* view) {
+        if (g_appUpdateRunning.load()) {
+            return true;
+        }
         if (catalog::CatalogUpdater::instance().isUpdateRunning()) {
             brls::Application::notify("app/catalog/updating_db"_i18n);
             return true;

@@ -14,7 +14,8 @@ LANGUAGES = {
     'PT-BR': 'resources/i18n/pt-BR/app.json',
     'ZH-HANS': 'resources/i18n/zh-Hans/app.json',
     'JA': 'resources/i18n/ja/app.json',
-    'AR': 'resources/i18n/ar/app.json'
+    'AR': 'resources/i18n/ar/app.json',
+    'HU': 'resources/i18n/hu/app.json'
 }
 
 def get_all_keys(d, prefix='app'):
@@ -51,7 +52,9 @@ for code, keys in loaded_keys.items():
         parity_errors += len(diff_extra)
 
 if parity_errors == 0:
-    print("SUCCESS: 100% key parity across all 9 languages!")
+    print(f"SUCCESS: 100% key parity across all {len(LANGUAGES)} languages!")
+else:
+    sys.exit(1)
 
 # Check Cyrillic literals in source/ui
 ui_files = glob.glob('source/ui/**/*.cpp', recursive=True) + \

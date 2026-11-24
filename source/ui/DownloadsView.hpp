@@ -106,6 +106,8 @@ public:
     std::vector<std::string> lastOrder_;
     int focusedRow_ = 0;
 
+    static std::string friendlyInstallError(const std::string& raw);
+
 private:
     void toggleBacklight();
     void setEmpty(bool empty);

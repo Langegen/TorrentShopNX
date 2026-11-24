@@ -28,6 +28,7 @@ enum {
 enum {
     EXT_ID_PEX = 1,        // ut_pex (BEP 11)
     EXT_ID_HOLEPUNCH = 2,  // ut_holepunch (BEP 55)
+    EXT_ID_METADATA = 3,   // ut_metadata (BEP 9)
 };
 
 // Blocks are the unit of transfer within a piece (16 KiB is the de-facto standard).
@@ -73,8 +74,10 @@ typedef struct {
     void *utp;          // non-blocking µTP session, or NULL for TCP
 
     uint8_t *rx;        // accumulated inbound bytes (partial messages included)
+    size_t rx_cap;      // allocated capacity of rx
     size_t rx_off;      // bytes at the front already handed out to the caller
     size_t rx_len;      // total bytes held, rx_off included
+    uint32_t rx_skip;   // remaining bytes of an ignored oversized frame to skip
     bool rx_more;       // last pump stopped on a full buffer: more may be waiting
 
     uint8_t *tx;        // queued outbound bytes, drained as the socket allows
@@ -107,11 +110,13 @@ typedef struct {
 // Set `sock` non-blocking and attach buffers. Takes ownership of sock.
 // Returns 0, or -1 on allocation failure (sock untouched).
 int peer_nb_init(peer_nb *p, int sock, int64_t piece_count);
+int peer_nb_init_cap(peer_nb *p, int sock, int64_t piece_count, size_t rx_cap);
 // Queue a 4-byte keep-alive through the tx queue (so uTP sessions get it
 // too, and it is never interleaved with a partly sent message).
 int peer_nb_queue_keepalive(peer_nb *p);
 // Same, but uses a µTP session instead of a TCP socket.
 int peer_nb_init_utp(peer_nb *p, void *utp, int64_t piece_count);
+int peer_nb_init_utp_cap(peer_nb *p, void *utp, int64_t piece_count, size_t rx_cap);
 // Post-handshake socket buffers. Returns the receive buffer that was set, in
 // KB (0 for uTP sessions / no socket).
 int peer_nb_apply_speed_opts(peer_nb *p);
@@ -162,17 +167,25 @@ int peer_nb_queue_ext(peer_nb *p, uint8_t ext_id, const void *payload,
 //   yourip  the peer's address as we see it (omitted when peer_ip_net == 0)
 size_t peer_build_ext_handshake(char *out, size_t cap, int listen_port,
                                 uint32_t peer_ip_net, bool holepunch);
+size_t peer_build_ext_handshake_ex(char *out, size_t cap, int listen_port,
+                                   uint32_t peer_ip_net, bool holepunch,
+                                   bool metadata);
 
 // Queue OUR extended handshake (ext_id 0), see peer_build_ext_handshake.
 // Only meaningful if the peer's handshake showed the extension bit.
 int peer_nb_queue_ext_handshake(peer_nb *p, int listen_port,
                                 uint32_t peer_ip_net, bool holepunch);
+int peer_nb_queue_ext_handshake_ex(peer_nb *p, int listen_port,
+                                   uint32_t peer_ip_net, bool holepunch,
+                                   bool metadata);
 
 // What the peer told us in ITS extended handshake. Fields it did not send
 // stay 0. Never trusts lengths: every value is range-checked.
 typedef struct {
     uint8_t  pex_id;       // m.ut_pex
     uint8_t  hp_id;        // m.ut_holepunch
+    uint8_t  meta_id;      // m.ut_metadata
+    int64_t  meta_size;    // metadata_size (bytes)
     int      reqq;         // requests the peer queues for us (0 = not stated)
     int      port;         // p: the peer's listen port (0 = not stated)
     bool     upload_only;
@@ -229,5 +242,11 @@ int peer_recv(peer_conn *p, uint8_t *payload, uint32_t bufcap, uint32_t *plen);
 int peer_fetch_metadata(peer_addr addr, const uint8_t info_hash[20],
                         const uint8_t peer_id[20], uint8_t **out, size_t *out_len,
                         char *err, size_t errlen);
+
+int peer_fetch_metadata_cancel(peer_addr addr, const uint8_t info_hash[20],
+                               const uint8_t peer_id[20],
+                               const volatile bool *cancel,
+                               uint8_t **out, size_t *out_len,
+                               char *err, size_t errlen);
 
 #endif

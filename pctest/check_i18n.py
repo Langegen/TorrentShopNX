@@ -13,7 +13,8 @@ LANGUAGES = {
     'PT-BR': 'resources/i18n/pt-BR/app.json',
     'ZH-HANS': 'resources/i18n/zh-Hans/app.json',
     'JA': 'resources/i18n/ja/app.json',
-    'AR': 'resources/i18n/ar/app.json'
+    'AR': 'resources/i18n/ar/app.json',
+    'HU': 'resources/i18n/hu/app.json'
 }
 
 loaded_langs = {}
