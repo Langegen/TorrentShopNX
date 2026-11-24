@@ -481,7 +481,7 @@ void MainMenu::onTileFocused(int index) {
             }
         } else if (index == 4) {
             auto& cfg = config::ConfigManager::instance();
-            std::string modeStr = (cfg.getDataMode() == "local_client") ? "Custom Engine" : "TorrServer";
+            std::string modeStr = (cfg.getDataMode() == "local_client") ? "app/settings/mode_engine"_i18n : "TorrServer";
 
             // Instantly display cached total cache size (0ms, 60 FPS, no freezing)
             summaryView_->setSettingsStats(modeStr, s_totalCacheSize, s_totalLeftoverSize);

@@ -112,14 +112,14 @@ extern "C" {
             // engine held 15-20 peers out of hundreds known, UDP trackers failed with
             // errno 105 and image fetches failed mid-download.
             //
-            // 8 * (1.5 MB + 64 KB + 16 KB + 32 KB) ~= 12.9 MB: room for ~64 peers,
-            // dials in flight, trackers, DHT and HTTP. sb_efficiency stays within the
-            // documented 1..8; the size comes from rx_max, which is only the autotune
-            // ceiling of one socket (the engine sets SO_RCVBUF explicitly anyway).
+            // 8 * (1536 + 64 + 16 + 128) KiB = 13,952 KiB for peers, dials in
+            // flight, trackers, DHT and HTTP. Use a larger initial TCP receive
+            // buffer to help HTTP transfers ramp up while keeping the autotune
+            // ceiling and shared pool size steady.
             cfg.num_bsd_sessions = 16;
             cfg.sb_efficiency = 8;
             cfg.tcp_tx_buf_size = 0x4000;        // 16 KB initial
-            cfg.tcp_rx_buf_size = 0x8000;        // 32 KB initial
+            cfg.tcp_rx_buf_size = 0x40000;       // 256 KiB initial
             cfg.tcp_tx_buf_max_size = 0x10000;   // 64 KB max (we also upload pieces)
             cfg.tcp_rx_buf_max_size = 0x180000;  // 1.5 MB max
             // 128 KB: the one uTP socket carries every uTP peer's packets
@@ -129,7 +129,8 @@ extern "C" {
         }
         g_socket_init_result = socketInitialize(&cfg);
         if (R_FAILED(g_socket_init_result) && !is_applet) {
-            // Smaller pool (~6.4 MB) if the service refused the big one.
+            // Retry with the original receive buffer and a smaller pool.
+            cfg.tcp_rx_buf_size = 0x8000;
             cfg.sb_efficiency = 4;
             g_socket_init_result = socketInitialize(&cfg);
         }
@@ -504,6 +505,8 @@ int main(int argc, char** argv) {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_JA;
     } else if (userLang == "ar") {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AR;
+    } else if (userLang == "hu") {
+        brls::Platform::APP_LOCALE_DEFAULT = "hu";
     } else {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     }
