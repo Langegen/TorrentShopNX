@@ -1343,6 +1343,24 @@ void FileManagerView::showInstallDialog(const util::FileItem& item) {
         });
         prog->startInstallation();
     });
+
+    int64_t usbFree = 0, usbTotal = 0;
+    if (util::getUsbStorageStats(usbFree, usbTotal) && usbTotal > 0) {
+        std::string usbSpaceInfo = "app/file_manager/free_prefix"_i18n +
+                                   util::formatFileSize(static_cast<unsigned long long>(std::max<int64_t>(0, usbFree)));
+        addOption("\uE1E0", nvgRGB(38, 198, 218), "app/file_manager/install_to_usb"_i18n, usbSpaceInfo, [this, item]() {
+            auto* prog = new InstallProgressDialog(item.path, 2, [this, item](bool ok, const std::string& err) {
+                if (ok) {
+                    brls::Application::notify("app/file_manager/install_success"_i18n);
+                    promptDeleteSourceFile(item.path, item.name);
+                } else {
+                    brls::Application::notify(err.empty() ? "app/file_manager/install_error"_i18n : err);
+                    refresh(activePanel_);
+                }
+            });
+            prog->startInstallation();
+        });
+    }
 #endif
 
     addOption("\uE5CD", nvgRGB(239, 83, 80), "hints/cancel"_i18n, "", nullptr);

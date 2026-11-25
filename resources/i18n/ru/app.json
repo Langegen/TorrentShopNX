@@ -896,6 +896,7 @@
         "free_prefix": "Свободно: ",
         "install_to_sd": "Установить на SD-карту",
         "install_to_nand": "Установить в память консоли (NAND)",
+        "install_to_usb": "Установить на USB-накопитель",
         "install_error": "Ошибка установки",
         "install_success": "Установка завершена!",
         "free_space_prompt": "Освободить место на накопителе?",

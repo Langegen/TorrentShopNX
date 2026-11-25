@@ -891,6 +891,7 @@
         "free_prefix": "空き容量: ",
         "install_to_sd": "SDカードにインストール",
         "install_to_nand": "本体保存メモリ (NAND) にインストール",
+        "install_to_usb": "USBドライブにインストール",
         "install_error": "インストールエラー",
         "install_success": "インストール完了！",
         "free_space_prompt": "空き容量を確保しますか？",

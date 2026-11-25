@@ -896,6 +896,7 @@
         "free_prefix": "Free: ",
         "install_to_sd": "Install to SD card",
         "install_to_nand": "Install to console storage (NAND)",
+        "install_to_usb": "Install to USB drive",
         "install_error": "Installation error",
         "install_success": "Installation complete!",
         "free_space_prompt": "Free up storage space?",
