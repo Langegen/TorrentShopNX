@@ -891,6 +891,7 @@
         "free_prefix": "Livre: ",
         "install_to_sd": "Instalar no cartão SD",
         "install_to_nand": "Instalar na memória do console (NAND)",
+        "install_to_usb": "Instalar no dispositivo USB",
         "install_error": "Erro de instalação",
         "install_success": "Instalação concluída!",
         "free_space_prompt": "Liberar espaço no armazenamento?",

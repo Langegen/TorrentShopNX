@@ -891,6 +891,7 @@
         "free_prefix": "剩余空间: ",
         "install_to_sd": "安装到 SD 卡",
         "install_to_nand": "安装到主机内存 (NAND)",
+        "install_to_usb": "安装到 USB 存储设备",
         "install_error": "安装错误",
         "install_success": "安装完成！",
         "free_space_prompt": "是否释放存储空间？",

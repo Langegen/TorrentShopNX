@@ -896,6 +896,7 @@
     "free_prefix": "Szabad: ",
     "install_to_sd": "Telepítés az SD-kártyára",
     "install_to_nand": "Telepítés a konzolmemóriába (NAND)",
+    "install_to_usb": "Telepítés USB-meghajtóra",
     "install_error": "Telepítési hiba",
     "install_success": "Telepítés kész",
     "free_space_prompt": "Felszabadítasz tárhelyet?",

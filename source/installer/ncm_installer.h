@@ -78,6 +78,12 @@ public:
     /// Это тот же путь, который используют полноценные инсталлеры вроде Awoo.
     bool readCnmtFromContentMetaFs(const NcmContentId& id, std::vector<uint8_t>& out_buf);
 
+    /// Получить фактический размер зарегистрированного контента по ID
+    bool getContentSize(const NcmContentId& id, uint64_t& out_size);
+
+    /// Удалить зарегистрированный контент по ID из текущего ContentStorage
+    bool deleteContent(const NcmContentId& id);
+
     /// Получить ссылку на открытый ContentStorage (для прямого использования)
     NcmContentStorage& contentStorage() { return content_storage_; }
 
@@ -106,6 +112,7 @@ public:
     StorageTarget target() const { return StorageTarget::SdCard; }
     uint64_t usbGeneration() const { return 0; }
 #endif
+    const std::string& lastError() const { return last_error_; }
 
 private:
 #ifdef __SWITCH__
@@ -126,6 +133,7 @@ private:
     StorageTarget target_ = StorageTarget::SdCard;
     bool initialized_ = false;
 #endif
+    std::string last_error_;
 };
 
 } // namespace installer

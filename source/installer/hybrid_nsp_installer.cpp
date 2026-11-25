@@ -420,7 +420,7 @@ bool HybridNspInstaller::createPlaceHoldersPhase() {
         target = StorageTarget::Nand;
     }
     if (!ncm_.begin(target, config_.usb_generation)) {
-        setError("Failed to initialize NCM");
+        setError(ncm_.lastError().empty() ? "Failed to initialize NCM" : ncm_.lastError());
         return false;
     }
 
@@ -1451,9 +1451,11 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         const NspFileEntry* e = is_xci_ ? xci_header_.findByType(NspEntryType::CnmtNca)
                                         : nsp_header_.findByType(NspEntryType::CnmtNca);
         if (e) {
+            uint64_t cnmt_size = e->size;
+            ncm_.getContentSize(e->content_id, cnmt_size);
             NcmContentInfo cnmt_ci = {};
             cnmt_ci.content_id = e->content_id;
-            ncmU64ToContentInfoSize(e->size, &cnmt_ci);
+            ncmU64ToContentInfoSize(cnmt_size, &cnmt_ci);
             cnmt_ci.content_type = NcmContentType_Meta;
             cnmt_ci.id_offset = 0;
             content_infos.push_back(cnmt_ci);
@@ -1500,16 +1502,27 @@ bool HybridNspInstaller::registerContentMetaPhase() {
         patch_ext_data_size = patch_hdr->extended_data_size;
     }
 
-    // Буфер: NcmContentMetaHeader + ExtendedHeader + NcmContentInfo[] + [patch_ext_data]
+    const size_t raw_tail_off = 0x20u + static_cast<size_t>(cnmt.extended_header_size) +
+                                static_cast<size_t>(cnmt.content_count) * 0x38u;
+    uint16_t out_meta_count = cnmt.content_meta_count;
+    size_t meta_infos_size = static_cast<size_t>(out_meta_count) * sizeof(NcmContentMetaInfo);
+    if (cnmt.raw_data.size() < raw_tail_off ||
+        (cnmt.raw_data.size() - raw_tail_off) < meta_infos_size) {
+        out_meta_count = 0;
+        meta_infos_size = 0;
+    }
+
+    // Буфер: NcmContentMetaHeader + ExtendedHeader + NcmContentInfo[] + NcmContentMetaInfo[] + [patch_ext_data]
     size_t buf_size = sizeof(NcmContentMetaHeader)
                     + ext_hdr_size
                     + content_infos.size() * sizeof(NcmContentInfo)
+                    + meta_infos_size
                     + patch_ext_data_size;
     std::vector<uint8_t> meta_buf(buf_size, 0);
     auto* hdr = reinterpret_cast<NcmContentMetaHeader*>(meta_buf.data());
     hdr->extended_header_size = ext_hdr_size;
     hdr->content_count      = static_cast<uint16_t>(content_infos.size());
-    hdr->content_meta_count = cnmt.content_meta_count;
+    hdr->content_meta_count = out_meta_count;
     hdr->attributes         = cnmt.attributes;
     hdr->storage_id         = 0; // В HOS базе ContentMetaHeader::storage_id ВСЕГДА 0 (None)
 
@@ -1537,6 +1550,21 @@ bool HybridNspInstaller::registerContentMetaPhase() {
     std::memcpy(meta_buf.data() + write_off,
                 content_infos.data(),
                 content_infos.size() * sizeof(NcmContentInfo));
+    write_off += content_infos.size() * sizeof(NcmContentInfo);
+
+    if (meta_infos_size > 0) {
+        std::memcpy(meta_buf.data() + write_off,
+                    cnmt.raw_data.data() + raw_tail_off,
+                    meta_infos_size);
+        write_off += meta_infos_size;
+    }
+
+    if (patch_ext_data_size > 0 &&
+        cnmt.raw_data.size() >= raw_tail_off + meta_infos_size + patch_ext_data_size) {
+        std::memcpy(meta_buf.data() + write_off,
+                    cnmt.raw_data.data() + raw_tail_off + meta_infos_size,
+                    patch_ext_data_size);
+    }
 
     // =========================================================================
     // Шаг 5в: Записываем в ContentMetaDatabase
@@ -1657,17 +1685,29 @@ bool HybridNspInstaller::registerContentMetaPhase() {
                             break;
                         }
                         if (!cs_opened) {
-                            if (R_SUCCEEDED(ncmOpenContentStorage(&cs, st_id))) {
+                            Result cs_rc = 0;
+                            if (st_id == NcmStorageId_SdCard && NexusUsbClient::instance().isSupported()) {
+                                cs_rc = NexusUsbClient::instance().openNativeSdContentStorage(&cs);
+                                if (R_FAILED(cs_rc)) {
+                                    cs_rc = ncmOpenContentStorage(&cs, st_id);
+                                }
+                            } else {
+                                cs_rc = ncmOpenContentStorage(&cs, st_id);
+                            }
+                            if (R_SUCCEEDED(cs_rc)) {
                                 cs_opened = true;
                             }
                         }
-                        if (cs_opened) {
-                            for (s32 j = 0; j < old_entries; ++j) {
-                                if (!isNewContentId(old_cis[j].content_id)) {
-                                    ncmContentStorageDelete(&cs, &old_cis[j].content_id);
-                                } else {
-                                    util::logLine("hybrid: preserving shared NCA between patch versions");
+                        for (s32 j = 0; j < old_entries; ++j) {
+                            if (!isNewContentId(old_cis[j].content_id)) {
+                                if (config_.storage_target == StorageTarget::Usb && st_id == NcmStorageId_SdCard) {
+                                    ncm_.deleteContent(old_cis[j].content_id);
                                 }
+                                if (cs_opened) {
+                                    ncmContentStorageDelete(&cs, &old_cis[j].content_id);
+                                }
+                            } else {
+                                util::logLine("hybrid: preserving shared NCA between patch versions");
                             }
                         }
                         old_start += old_entries;

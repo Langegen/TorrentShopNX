@@ -896,6 +896,7 @@
         "free_prefix": "متوفر: ",
         "install_to_sd": "تثبيت إلى بطاقة SD",
         "install_to_nand": "تثبيت إلى ذاكرة الجهاز (NAND)",
+        "install_to_usb": "تثبيت إلى وحدة تخزين USB",
         "install_error": "خطأ في التثبيت",
         "install_success": "اكتمل التثبيت!",
         "free_space_prompt": "تحرير مساحة التخزين؟",
