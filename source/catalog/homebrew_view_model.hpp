@@ -41,8 +41,8 @@ std::string displayDescription(const Package& pkg, const std::string& locale);
 // "12.3 MB" with the given unit names {B, KB, MB, GB}; "" for 0 or less.
 std::string formatSize(int64_t bytes, const std::array<std::string, 4>& units);
 
-// "2026-11-09" -> "09.11.2026"; other strings unchanged.
-std::string displayDate(const std::string& iso);
+// Format dates using the UI locale; default retains the old Russian format.
+std::string displayDate(const std::string& iso, const std::string& locale = "ru");
 
 // Release notes from GitHub are Markdown: headings, **bold**, `code`, list
 // marks and [links](url) become plain text ("• " for list items).

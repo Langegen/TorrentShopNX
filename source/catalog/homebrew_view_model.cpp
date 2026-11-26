@@ -1,4 +1,5 @@
 #include "homebrew_view_model.hpp"
+#include "../utils/metadata_locale.h"
 
 #include <algorithm>
 #include <cctype>
@@ -106,13 +107,7 @@ std::array<int, kCategoryCount> countByCategory(const PackageList& pkgs, const I
 }
 
 std::string displayDescription(const Package& pkg, const std::string& locale) {
-    auto it = pkg.description_i18n.find(locale);
-    if (it == pkg.description_i18n.end()) {
-        const std::string lang = locale.substr(0, locale.find('-'));
-        it = pkg.description_i18n.find(lang);
-    }
-    if (it != pkg.description_i18n.end() && !it->second.empty()) return it->second;
-    return pkg.description;
+    return util::localizedMetadataText(pkg.description_i18n, locale, pkg.description);
 }
 
 std::string formatSize(int64_t bytes, const std::array<std::string, 4>& units) {
@@ -191,10 +186,8 @@ bool isKnownLicense(const std::string& license) {
     return !l.empty() && l != "n/a" && l != "na" && l != "none" && l != "unknown" && l != "noassertion";
 }
 
-std::string displayDate(const std::string& iso) {
-    if (iso.size() >= 10 && iso[4] == '-' && iso[7] == '-')
-        return iso.substr(8, 2) + "." + iso.substr(5, 2) + "." + iso.substr(0, 4);
-    return iso;
+std::string displayDate(const std::string& iso, const std::string& locale) {
+    return util::formatMetadataDate(util::metadataDateFromTimestamp(iso), locale);
 }
 
 }  // namespace homebrew

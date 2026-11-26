@@ -1348,6 +1348,7 @@
         "open": "Apri"
     },
     "detail_meta": {
+        "interface": "Lingua dell’interfaccia e dei testi",
         "developer": "Sviluppatore",
         "publisher": "Editore",
         "release": "Data di uscita",

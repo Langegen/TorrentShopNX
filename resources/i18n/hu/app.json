@@ -1348,6 +1348,7 @@
     "open": "Megnyitás"
   },
   "detail_meta": {
+    "interface": "Felület és szöveg nyelve",
     "developer": "Fejlesztő",
     "publisher": "Kiadó",
     "release": "Megjelenés dátuma",

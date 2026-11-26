@@ -1348,6 +1348,7 @@
         "open": "Öffnen"
     },
     "detail_meta": {
+        "interface": "Oberflächen- und Textsprache",
         "developer": "Entwickler",
         "publisher": "Publisher",
         "release": "Veröffentlichungsdatum",

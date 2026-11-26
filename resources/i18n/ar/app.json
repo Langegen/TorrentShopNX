@@ -1348,6 +1348,7 @@
         "open": "فتح"
     },
     "detail_meta": {
+        "interface": "لغة الواجهة والنص",
         "developer": "المطور",
         "publisher": "الناشر",
         "release": "تاريخ الإصدار",

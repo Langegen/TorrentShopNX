@@ -2,6 +2,7 @@
 #include "CompanionInstallDialog.hpp"
 #include "style/UiTokens.hpp"
 #include "../utils/string_utils.h"
+#include "../utils/metadata_locale.h"
 #include "ThemeManager.hpp"
 #include "FileSelectView.hpp"
 #include "DownloadUiManager.hpp"
@@ -194,6 +195,7 @@ void GameDetailView::onContentAvailable() {
     imageToken = std::make_shared<bool>(true);
     alive_ = std::make_shared<bool>(true);
     // Fill text and images
+    const std::string locale = brls::Application::getLocale();
     title->setText(cleanTitle(game_.title));
     setImageFromHTTPS(cover, game_.cover, imageToken, "romfs:/img/cover_blank.png", false, "", -1, -1, 2000000, true);
     
@@ -206,7 +208,7 @@ void GameDetailView::onContentAvailable() {
     };
     addMeta("app/detail_meta/developer", game_.developer);
     addMeta("app/detail_meta/publisher", game_.publisher);
-    addMeta("app/detail_meta/release", game_.year);
+    addMeta("app/detail_meta/release", util::formatMetadataDate(game_.year, locale));
     addMeta("app/detail_meta/voice", game_.voice_lang);
 
     const auto statsData = catalog::GameStatsManager::instance().getAnyStats(game_.topic_id);
@@ -216,14 +218,12 @@ void GameDetailView::onContentAvailable() {
                              std::to_string(std::max(0, statsData->seeds)),
                              std::to_string(std::max(0, statsData->leeches)),
                              std::to_string(std::max<int64_t>(0, statsData->downloads))));
-        // "2021-06-11 19:34:29" -> "11.06.2021"
-        std::string added = statsData->registered_at;
-        if (added.size() >= 10 && added[4] == '-' && added[7] == '-') {
-            added = added.substr(8, 2) + "." + added.substr(5, 2) + "." + added.substr(0, 4);
-        }
-        addMeta("app/detail_meta/added", added);
+        addMeta("app/detail_meta/added", util::formatMetadataDate(
+            util::metadataDateFromTimestamp(statsData->registered_at), locale));
     }
     addMeta("app/detail_meta/version", catalog::versionLabel(game_.version, game_.update_version));
+    // Keep complete interface/text language and any catalog-provided notes visible.
+    addMeta("app/detail_meta/interface", game_.interface_lang, true);
     // Last; only a still long value gets a row of its own
     const std::string format = compactImageFormat(game_.image_format);
     addMeta("app/detail_meta/format", format, utf8Length(format) > 40);
@@ -267,7 +267,7 @@ void GameDetailView::onContentAvailable() {
                 val->setFontSize(style::kFontBody + 1.0f);
                 val->setTextColor(style::textPrimary());
                 val->setMarginTop(3.0f);
-                val->setMaxLines(2);
+                val->setMaxLines(meta[i].wide ? 0 : 2);
                 val->setAutoAnimate(false);
                 cell->addView(val);
                 row->addView(cell);

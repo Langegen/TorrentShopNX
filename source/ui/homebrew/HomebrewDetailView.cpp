@@ -178,7 +178,7 @@ void HomebrewDetailView::fillTexts() {
     factsBox->clearViews();
     const auto units = sizeUnits();
     addFact(factsBox, "app/homebrew/fact_version"_i18n, pkg_.version);
-    addFact(factsBox, "app/homebrew/fact_updated"_i18n, homebrew::displayDate(pkg_.updated));
+    addFact(factsBox, "app/homebrew/fact_updated"_i18n, homebrew::displayDate(pkg_.updated, brls::Application::getLocale()));
     addFact(factsBox, "app/homebrew/fact_size"_i18n, homebrew::formatSize(pkg_.download_bytes, units));
     addFact(factsBox, "app/homebrew/fact_unpacked"_i18n, homebrew::formatSize(pkg_.extracted_bytes, units));
     addFact(factsBox, "app/homebrew/fact_source"_i18n,
