@@ -9,6 +9,7 @@
 #include <cctype>
 #include <borealis.hpp>
 #include "../GameData.hpp"
+#include "localized_genre_aliases.hpp"
 
 namespace catalog {
 
@@ -335,15 +336,19 @@ inline std::vector<std::string> mapRawTokenToCanonical(const std::string& raw) {
     };
 
     auto it = kTagMap.find(token);
-    if (it != kTagMap.end()) {
-        return it->second;
-    }
-    return {};
+    if (it != kTagMap.end()) return it->second;
+    const auto& canonicalIds = getAllCanonicalGenreIds();
+    if (std::find(canonicalIds.begin(), canonicalIds.end(), token) != canonicalIds.end()) return {token};
+    const auto& aliases = localizedGenreAliases();
+    auto alias = aliases.find(token);
+    return alias != aliases.end() ? alias->second : std::vector<std::string>{};
 }
 
 // Extract unique canonical genre IDs from game's raw genre string
 inline std::vector<std::string> extractGameCanonicalGenres(const std::string& rawGenre) {
     if (rawGenre.empty()) return {};
+    auto whole = mapRawTokenToCanonical(rawGenre);
+    if (!whole.empty()) return whole;
 
     std::vector<std::string> result;
     std::unordered_set<std::string> seen;
@@ -358,7 +363,7 @@ inline std::vector<std::string> extractGameCanonicalGenres(const std::string& ra
         }
     };
 
-    for (char c : rawGenre) {
+    for (char c : normalizeGenreSeparators(rawGenre)) {
         if (c == ',' || c == '/' || c == ';' || c == '|') {
             addToken(cur);
             cur.clear();
@@ -487,7 +492,11 @@ inline std::vector<std::string> getDisplayGenreBadges(const std::string& rawGenr
         }
     };
 
-    for (char c : rawGenre) {
+    if (!mapRawTokenToCanonical(rawGenre).empty()) {
+        processToken(rawGenre);
+        return badges;
+    }
+    for (char c : normalizeGenreSeparators(rawGenre)) {
         if (c == ',' || c == '/' || c == ';' || c == '|') {
             processToken(cur);
             cur.clear();
