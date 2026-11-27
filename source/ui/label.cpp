@@ -558,6 +558,8 @@ void Label::setMaxLines(int maxLines)
 void Label::setSingleLine(bool singleLine)
 {
     this->singleLine = singleLine;
+    if (singleLine)
+        this->isWrapping = false;
 
     this->invalidate();
 }

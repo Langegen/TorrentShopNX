@@ -127,7 +127,10 @@
         "item_stealth_name": "Hành động lén lút",
         "item_survival_craft_desc": "Thu thập tài nguyên, xây căn cứ và sinh tồn",
         "item_survival_craft_name": "Sinh tồn & Chế tạo",
-        "badge_collection": "Bộ sưu tập"
+        "badge_collection": "Bộ sưu tập",
+        "open_all": "Mở tất cả",
+        "preview_heading": "Trò chơi trong mục này",
+        "section_genres_short": "THEO THỂ LOẠI"
     },
     "favorites": {
         "title": "Yêu thích",

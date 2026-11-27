@@ -127,7 +127,10 @@
         "item_stealth_name": "Stealth",
         "item_survival_craft_desc": "Resource gathering, base building and survival",
         "item_survival_craft_name": "Survival & Craft",
-        "badge_collection": "Collection"
+        "badge_collection": "Collection",
+        "open_all": "Open all",
+        "preview_heading": "Games in this section",
+        "section_genres_short": "GENRE COLLECTIONS"
     },
     "favorites": {
         "title": "Favorites",

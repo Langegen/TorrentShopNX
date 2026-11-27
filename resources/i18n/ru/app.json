@@ -127,7 +127,10 @@
         "item_stealth_name": "Стелс",
         "item_survival_craft_desc": "Добыча ресурсов, строительство и выживание",
         "item_survival_craft_name": "Выживание и крафт",
-        "badge_collection": "Подборка"
+        "badge_collection": "Подборка",
+        "open_all": "Открыть все",
+        "preview_heading": "Игры в разделе",
+        "section_genres_short": "ПОДБОРКИ ПО ЖАНРАМ"
     },
     "favorites": {
         "title": "Избранное",

@@ -127,7 +127,10 @@
         "item_stealth_name": "تسلل وتخفي",
         "item_survival_craft_desc": "جمع موارد، بناء قواعد والنجاة في البرية",
         "item_survival_craft_name": "بقاء وبناء",
-        "badge_collection": "مجموعة"
+        "badge_collection": "مجموعة",
+        "open_all": "فتح الكل",
+        "preview_heading": "ألعاب في هذا القسم",
+        "section_genres_short": "حسب النوع"
     },
     "favorites": {
         "title": "المفضلة",

@@ -127,7 +127,10 @@
         "section_genres": "COLLECTIONS PAR GENRE ET THÉMATIQUES",
         "new_releases_count": "nouveautés",
         "fresh_games": "Nouveaux jeux",
-        "badge_collection": "Collection"
+        "badge_collection": "Collection",
+        "open_all": "Tout ouvrir",
+        "preview_heading": "Jeux de cette section",
+        "section_genres_short": "PAR GENRE"
     },
     "favorites": {
         "title": "Favoris",

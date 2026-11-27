@@ -127,7 +127,10 @@
         "section_genres": "ジャンル＆テーマ別コレクション",
         "new_releases_count": "本（新作）",
         "fresh_games": "最新ゲーム",
-        "badge_collection": "コレクション"
+        "badge_collection": "コレクション",
+        "open_all": "すべて開く",
+        "preview_heading": "このセクションのゲーム",
+        "section_genres_short": "ジャンル別"
     },
     "favorites": {
         "title": "お気に入り",

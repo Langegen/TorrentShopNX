@@ -6,22 +6,73 @@
     paddingTop="20"
     paddingRight="32"
     paddingBottom="12"
-    paddingLeft="32">
+    paddingLeft="32"
+    grow="1.0">
 
-    <!-- Topbar -->
-    <brls:Box width="auto" height="56px" axis="row" alignItems="center" marginBottom="8">
-        <brls:Label text="@i18n/app/collections/title" fontSize="28" />
+    <!-- Unified Topbar (56 px) -->
+    <brls:Box
+        width="auto"
+        height="56px"
+        axis="row"
+        alignItems="center"
+        justifyContent="spaceBetween"
+        marginBottom="10">
+        <brls:Label
+            id="headerTitle"
+            text="@i18n/app/collections/title"
+            fontSize="28"
+            singleLine="true" />
+        <brls:Label
+            id="statsHint"
+            text=""
+            fontSize="15"
+            singleLine="true"
+            textColor="@theme/brls/header/subtitle" />
     </brls:Box>
 
-    <!-- Collection list -->
-    <brls:ScrollingFrame
-        id="scroll"
+    <!-- Master-Detail Body (1216 px wide x ~549 px high at 1280x720) -->
+    <brls:Box
         width="auto"
         height="auto"
+        axis="row"
         grow="1.0"
-        marginBottom="10">
-        <brls:Box id="listBox" width="auto" height="auto" axis="column" paddingLeft="14" paddingRight="24" />
-    </brls:ScrollingFrame>
+        alignItems="stretch">
+
+        <!-- Left Sidebar (348 px) -->
+        <brls:Box
+            id="leftPanel"
+            width="348px"
+            shrink="0.0"
+            axis="column"
+            marginRight="20"
+            cornerRadius="14">
+            <brls:ScrollingFrame
+                id="sidebarScroll"
+                width="auto"
+                height="auto"
+                grow="1.0">
+                <brls:Box
+                    id="sidebarList"
+                    width="auto"
+                    height="auto"
+                    axis="column"
+                    paddingTop="8"
+                    paddingRight="16"
+                    paddingBottom="12"
+                    paddingLeft="8" />
+            </brls:ScrollingFrame>
+        </brls:Box>
+
+        <!-- Right Live Preview Pane (848 px) -->
+        <brls:Box
+            id="rightPanel"
+            width="auto"
+            height="auto"
+            grow="1.0"
+            shrink="1.0"
+            axis="column" />
+
+    </brls:Box>
 
 </brls:Box>
 </brls:AppletFrame>

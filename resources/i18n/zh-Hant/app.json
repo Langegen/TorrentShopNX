@@ -127,7 +127,10 @@
         "section_genres": "類型與精選題材合集",
         "new_releases_count": "款新作",
         "fresh_games": "最新遊戲",
-        "badge_collection": "合集"
+        "badge_collection": "合集",
+        "open_all": "查看全部",
+        "preview_heading": "本分類遊戲",
+        "section_genres_short": "分類精選"
     },
     "favorites": {
         "title": "我的收藏",
