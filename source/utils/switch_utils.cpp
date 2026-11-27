@@ -225,17 +225,21 @@ struct HapticPulse {
 std::mutex s_haptic_mutex;
 std::condition_variable s_haptic_cv;
 HapticPulse s_haptic_pending{};
+Thread s_haptic_thread{};
 bool s_haptic_has_pending = false;
 bool s_haptic_thread_started = false;
 bool s_haptic_thread_ok = false;
+bool s_haptic_stopping = false;
 
 static void hapticThreadMain() {
     const HidVibrationValue zero_val = {0.0f, 160.0f, 0.0f, 320.0f};
     std::unique_lock<std::mutex> lock(s_haptic_mutex);
-    while (!g_appExiting.load()) {
-        s_haptic_cv.wait_for(lock, std::chrono::milliseconds(500), [] { return s_haptic_has_pending || g_appExiting.load(); });
+    while (!s_haptic_stopping && !g_appExiting.load()) {
+        s_haptic_cv.wait_for(lock, std::chrono::milliseconds(500), [] {
+            return s_haptic_has_pending || s_haptic_stopping || g_appExiting.load();
+        });
+        if (s_haptic_stopping || g_appExiting.load()) break;
         if (!s_haptic_has_pending) continue;
-        if (g_appExiting.load()) break;
 
         HapticPulse pulse = s_haptic_pending;
         s_haptic_has_pending = false;
@@ -245,8 +249,11 @@ static void hapticThreadMain() {
         lock.lock();
 
         // Hold the pulse; a newer one replaces it without a stop in between
-        s_haptic_cv.wait_for(lock, std::chrono::milliseconds(pulse.duration_ms), [] { return s_haptic_has_pending || g_appExiting.load(); });
-        if (s_haptic_has_pending || g_appExiting.load()) continue;
+        s_haptic_cv.wait_for(lock, std::chrono::milliseconds(pulse.duration_ms), [] {
+            return s_haptic_has_pending || s_haptic_stopping || g_appExiting.load();
+        });
+        if (s_haptic_stopping || g_appExiting.load()) break;
+        if (s_haptic_has_pending) continue;
 
         lock.unlock();
         sendVibrationValue(zero_val);
@@ -258,16 +265,21 @@ static void sendNativeVibration(float amp_low, float freq_low, float amp_high, f
     if (g_appExiting.load()) return;
 
     std::lock_guard<std::mutex> lock(s_haptic_mutex);
+    if (s_haptic_stopping || g_appExiting.load()) return;
     if (!s_haptic_thread_started) {
         // A native libnx thread, not std::thread: std::thread::detach() can
         // throw here, and the joinable temporary then calls std::terminate.
-        static Thread s_haptic_thread;
         s_haptic_thread_started = true;   // one attempt only
         if (R_FAILED(threadCreate(&s_haptic_thread, [](void*) { hapticThreadMain(); }, nullptr, nullptr, 0x4000,
-                                  TSNX_THREAD_ARGS(TSNX_CORE_WORK, 0x2C))) ||
-            R_FAILED(threadStart(&s_haptic_thread))) {
+                                  TSNX_THREAD_ARGS(TSNX_CORE_WORK, 0x2C)))) {
             s_haptic_thread_ok = false;
             util::logLine("switch_utils: haptic thread create failed, rumble disabled");
+            return;
+        }
+        if (R_FAILED(threadStart(&s_haptic_thread))) {
+            threadClose(&s_haptic_thread);
+            s_haptic_thread_ok = false;
+            util::logLine("switch_utils: haptic thread start failed, rumble disabled");
             return;
         }
         s_haptic_thread_ok = true;
@@ -283,6 +295,25 @@ static void sendNativeVibration(float amp_low, float freq_low, float amp_high, f
 }
 } // namespace
 #endif
+
+void shutdownHaptic() {
+#ifdef __SWITCH__
+    bool should_join = false;
+    {
+        std::lock_guard<std::mutex> lock(s_haptic_mutex);
+        s_haptic_stopping = true;
+        s_haptic_has_pending = false;
+        should_join = s_haptic_thread_ok;
+        s_haptic_thread_ok = false;
+    }
+    s_haptic_cv.notify_all();
+    if (should_join) {
+        threadWaitForExit(&s_haptic_thread);
+        threadClose(&s_haptic_thread);
+        util::logLine("switch_utils: haptic thread stopped");
+    }
+#endif
+}
 
 void triggerHapticFeedback(int style) {
 #ifdef __SWITCH__

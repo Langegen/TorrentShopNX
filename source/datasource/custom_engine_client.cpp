@@ -43,7 +43,7 @@ void CustomEngineClient::beginShutdown() {
     probe_cancel_.store(true);
 }
 
-void CustomEngineClient::shutdown() {
+bool CustomEngineClient::shutdown() {
     beginShutdown();
     std::lock_guard<std::mutex> probe_lock(probe_mtx_);
     {
@@ -54,8 +54,9 @@ void CustomEngineClient::shutdown() {
     if (engine_) {
         tsnx_engine* eng = engine_;
         engine_ = nullptr;
-        tsnx_engine_stop(eng);
+        clean_shutdown_ = tsnx_engine_stop(eng);
     }
+    return clean_shutdown_;
 }
 
 // Best-effort lowercase btih extraction so a probe can reuse an existing slot

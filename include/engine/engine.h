@@ -51,9 +51,11 @@ typedef struct {
     int         dht_nodes;
 } tsnx_torrent_item;
 
-/* Global engine state. Created by tsnx_engine_start(), destroyed by stop(). */
+/* Global engine state. Created by tsnx_engine_start(), destroyed by stop().
+ * tsnx_engine_stop() returns true if all engine threads and in-flight
+ * operations stopped cleanly, or false if an operation remained busy past timeout. */
 tsnx_engine *tsnx_engine_start(int listen_port);
-void         tsnx_engine_stop(tsnx_engine *eng);
+bool         tsnx_engine_stop(tsnx_engine *eng);
 bool         tsnx_engine_running(const tsnx_engine *eng);
 
 /* Add a torrent from a magnet URI or a local .torrent file. */

@@ -253,6 +253,36 @@ bool isValidLanguage(const std::string& lang) {
            lang == "ar" || lang == "hu" || lang == "vi";
 }
 
+std::string normalizeCatalogLanguage(const std::string& lang) {
+    if (lang.empty() || lang == "auto") return "auto";
+    if (lang == "ru") return "ru";
+    if (lang == "en" || lang == "en-US") return "en";
+    if (lang == "es") return "es";
+    if (lang == "fr") return "fr";
+    if (lang == "de") return "de";
+    if (lang == "it") return "it";
+    if (lang == "pt-BR" || lang == "pt" || lang == "pt_br") return "pt-BR";
+    if (lang == "zh-Hans" || lang == "zh-CN" || lang == "zh_hans" || lang == "zh") return "zh-Hans";
+    return "auto";
+}
+
+bool isDefaultCatalogUrl(const std::string& url) {
+    return url.empty() ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_RU ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_EN ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_ES ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_FR ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_DE ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_IT ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_PT_BR ||
+           url == ConfigManager::DEFAULT_CATALOG_URL_ZH_HANS ||
+           url == ConfigManager::LEGACY_CATALOG_URL ||
+           url.rfind("https://raw.githubusercontent.com/Langegen/switch-game-collection/", 0) == 0 ||
+           url.rfind("https://github.com/Langegen/switch-game-collection/", 0) == 0 ||
+           url.rfind("https://raw.githubusercontent.com/Langegen/switch-games/", 0) == 0 ||
+           url.rfind("https://github.com/Langegen/switch-games/", 0) == 0;
+}
+
 } // namespace
 
 ConfigManager& ConfigManager::instance() {
@@ -287,6 +317,7 @@ ConfigManager::ConfigManager() {
     last_app_update_check_date_.clear();
     last_emulator_manifest_check_date_.clear();
     language_ = "auto";
+    catalog_language_ = "auto";
     retro_roms_mode_ = "auto";
     retro_custom_path_.clear();
     theme_ = "light";
@@ -317,6 +348,8 @@ void ConfigManager::load() {
         readRawKey(body, "torrserver_password", torrserver_password_);
         readRawKey(body, "report_contact", report_contact_);
         readRawKey(body, "homebrew_section", homebrew_section_);
+        readRawKey(body, "catalog_language", catalog_language_);
+        catalog_language_ = normalizeCatalogLanguage(catalog_language_);
         {
             std::string raw;
             readRawKey(body, "slow_skip_hours", raw);
@@ -420,6 +453,7 @@ void ConfigManager::save() {
         out << "last_app_update_check_date=" << last_app_update_check_date_ << "\n";
         out << "last_emulator_manifest_check_date=" << last_emulator_manifest_check_date_ << "\n";
         out << "language=" << language_ << "\n";
+        out << "catalog_language=" << catalog_language_ << "\n";
         out << "retro_roms_mode=" << retro_roms_mode_ << "\n";
         out << "retro_custom_path=" << retro_custom_path_ << "\n";
         out << "theme=" << theme_ << "\n";
@@ -513,27 +547,14 @@ std::string ConfigManager::getEffectiveCatalogSourceUrl() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string url = normalizeCatalogUrl(catalog_source_url_);
 
-    bool isDefault = url.empty() ||
-                     url == DEFAULT_CATALOG_URL_RU ||
-                     url == DEFAULT_CATALOG_URL_EN ||
-                     url == DEFAULT_CATALOG_URL_ES ||
-                     url == DEFAULT_CATALOG_URL_FR ||
-                     url == DEFAULT_CATALOG_URL_DE ||
-                     url == DEFAULT_CATALOG_URL_IT ||
-                     url == DEFAULT_CATALOG_URL_PT_BR ||
-                     url == DEFAULT_CATALOG_URL_ZH_HANS ||
-                     url == LEGACY_CATALOG_URL ||
-                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-game-collection/", 0) == 0 ||
-                     url.rfind("https://github.com/Langegen/switch-game-collection/", 0) == 0 ||
-                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-games/", 0) == 0 ||
-                     url.rfind("https://github.com/Langegen/switch-games/", 0) == 0;
-
-    if (!isDefault) {
+    if (!isDefaultCatalogUrl(url)) {
         return url;
     }
 
-    // Determine default catalog based on active / configured language
-    std::string lang = language_;
+    // Determine default catalog based on catalog_language_ (or active / configured UI language if "auto")
+    std::string lang = (!catalog_language_.empty() && catalog_language_ != "auto")
+                           ? catalog_language_
+                           : language_;
     if (lang.empty() || lang == "auto") {
 #ifdef __SWITCH__
         uint64_t languageCode = 0;
@@ -573,6 +594,11 @@ void ConfigManager::setCatalogSourceUrl(const std::string& url) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     catalog_source_url_ = normalizeCatalogUrl(url);
     save();
+}
+
+bool ConfigManager::hasCustomCatalogSourceUrl() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return !isDefaultCatalogUrl(normalizeCatalogUrl(catalog_source_url_));
 }
 
 std::string ConfigManager::getDataMode() const {
@@ -742,22 +768,7 @@ std::string ConfigManager::getActiveCatalogLangKey() const {
 std::string ConfigManager::getEffectiveCatalogDiffUrl() const {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::string url = normalizeCatalogUrl(catalog_source_url_);
-    bool isDefault = url.empty() ||
-                     url == DEFAULT_CATALOG_URL_RU ||
-                     url == DEFAULT_CATALOG_URL_EN ||
-                     url == DEFAULT_CATALOG_URL_ES ||
-                     url == DEFAULT_CATALOG_URL_FR ||
-                     url == DEFAULT_CATALOG_URL_DE ||
-                     url == DEFAULT_CATALOG_URL_IT ||
-                     url == DEFAULT_CATALOG_URL_PT_BR ||
-                     url == DEFAULT_CATALOG_URL_ZH_HANS ||
-                     url == LEGACY_CATALOG_URL ||
-                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-game-collection/", 0) == 0 ||
-                     url.rfind("https://github.com/Langegen/switch-game-collection/", 0) == 0 ||
-                     url.rfind("https://raw.githubusercontent.com/Langegen/switch-games/", 0) == 0 ||
-                     url.rfind("https://github.com/Langegen/switch-games/", 0) == 0;
-
-    if (isDefault) {
+    if (isDefaultCatalogUrl(url)) {
         return DEFAULT_CATALOG_DIFF_URL;
     }
 
@@ -868,6 +879,17 @@ void ConfigManager::setLanguage(const std::string& lang) {
     } else {
         language_ = lang;
     }
+    save();
+}
+
+std::string ConfigManager::getCatalogLanguage() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return catalog_language_;
+}
+
+void ConfigManager::setCatalogLanguage(const std::string& lang) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    catalog_language_ = normalizeCatalogLanguage(lang);
     save();
 }
 

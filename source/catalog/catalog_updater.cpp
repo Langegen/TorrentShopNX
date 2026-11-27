@@ -299,6 +299,73 @@ void CatalogUpdater::startUpdate(CatalogUpdateMode mode,
         }
 
         g_catalogUpdateRunning = false;
+        if (pending_reload_.exchange(false) && !g_appExiting.load() && !g_appUpdateRunning.load()) {
+            brls::sync([this]() {
+                reloadForActiveLanguage();
+            });
+        }
+    });
+}
+
+void CatalogUpdater::reloadForActiveLanguage() {
+    if (g_appExiting.load() || g_appUpdateRunning.load() || g_appUpdatePendingRestart.load()) {
+        return;
+    }
+
+    auto& cfg = config::ConfigManager::instance();
+    cfg.setLastCatalogUpdateDate("");
+    cfg.setLastCatalogDiffTime(0);
+    cfg.setLastCatalogFullTime(0);
+
+    const std::string targetUrl = cfg.getEffectiveCatalogSourceUrl();
+    const std::string jsonPath = getCatalogPath();
+    const std::string binPath = getCatalogBinPath();
+
+    if (g_catalogUpdateRunning.load()) {
+        pending_reload_.store(true);
+        g_catalogUpdateCancel.store(true);
+    }
+
+    brls::async([this, targetUrl, jsonPath, binPath]() {
+        if (g_appExiting.load() || config::ConfigManager::instance().getEffectiveCatalogSourceUrl() != targetUrl) {
+            return;
+        }
+
+        auto cached = loadGamesCached(jsonPath, binPath);
+        if (!cached.empty() && !g_appExiting.load() &&
+            config::ConfigManager::instance().getEffectiveCatalogSourceUrl() == targetUrl) {
+            auto snap = std::make_shared<const std::vector<Game>>(std::move(cached));
+            catalog::FavoritesManager::instance().syncLegacyFavorites(*snap);
+            auto viewToken = ui::g_catalogViewAliveToken;
+            brls::sync([snap, viewToken, targetUrl]() {
+                if (g_appExiting.load() ||
+                    config::ConfigManager::instance().getEffectiveCatalogSourceUrl() != targetUrl) {
+                    return;
+                }
+                setCatalogSnapshot(snap);
+                if (viewToken && *viewToken && ui::g_activeCatalogView) {
+                    const auto& stack = brls::Application::getActivitiesStack();
+                    if (!stack.empty() && stack.back() == ui::g_activeCatalogView) {
+                        ui::g_activeCatalogView->filterCatalog();
+                    }
+                }
+            });
+        }
+
+        brls::sync([this, targetUrl]() {
+            if (g_appExiting.load() || g_appUpdateRunning.load() || g_appUpdatePendingRestart.load()) {
+                return;
+            }
+            if (config::ConfigManager::instance().getEffectiveCatalogSourceUrl() != targetUrl) {
+                return;
+            }
+            if (g_catalogUpdateRunning.load()) {
+                pending_reload_.store(true);
+                g_catalogUpdateCancel.store(true);
+            } else {
+                startUpdate(CatalogUpdateMode::ForceFull, nullptr, true);
+            }
+        });
     });
 }
 
@@ -420,6 +487,14 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     CatalogUpdateResult res;
     res.was_full = false;
 
+    const std::string targetUrl = config::ConfigManager::instance().getEffectiveCatalogSourceUrl();
+    const std::string catalogJsonPath = getCatalogPath();
+    const std::string catalogBinPath = getCatalogBinPath();
+    const std::string catalogDiffEtagPath = getCatalogDiffEtagPath();
+    auto isTargetStillActive = [&targetUrl]() {
+        return config::ConfigManager::instance().getEffectiveCatalogSourceUrl() == targetUrl;
+    };
+
     util::logLine("catalog_updater: starting diff update from " + diffUrl + " for lang " + langKey);
     if (aliveToken && *aliveToken && notif) {
         brls::sync([notif, aliveToken]() {
@@ -430,8 +505,8 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     std::string savedEtag;
-    if (std::filesystem::exists(getCatalogBinPath())) {
-        savedEtag = readTextFile(getCatalogDiffEtagPath());
+    if (std::filesystem::exists(catalogBinPath)) {
+        savedEtag = readTextFile(catalogDiffEtagPath);
         while (!savedEtag.empty() && (savedEtag.back() == '\r' || savedEtag.back() == '\n' || savedEtag.back() == ' '))
             savedEtag.pop_back();
     }
@@ -443,18 +518,18 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     net::HttpClient http;
-    std::string tempDiffPath = getCatalogPath() + ".diff.tmp";
+    std::string tempDiffPath = catalogJsonPath + ".diff.tmp";
     net::HttpClient::DownloadResult dl_res;
     auto diffCandidates = catalog::getFallbackUrls(diffUrl);
     for (const auto& u : diffCandidates) {
-        if (isCatalogUpdateAborted()) break;
+        if (isCatalogUpdateAborted() || !isTargetStillActive()) break;
         util::logLine("catalog_updater: trying diff download from: " + u);
         dl_res = http.downloadToFileEx(u, tempDiffPath, extra_headers, &g_catalogUpdateCancel, 60);
         if (dl_res.success || dl_res.not_modified) break;
         util::logLine("catalog_updater: diff download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
     }
 
-    if (dl_res.not_modified && !isCatalogUpdateAborted()) {
+    if (dl_res.not_modified && !isCatalogUpdateAborted() && isTargetStillActive()) {
         util::logLine("catalog_updater: diff HTTP 304 Not Modified - catalog is already up to date");
         res.success = true;
         res.already_up_to_date = true;
@@ -464,7 +539,7 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
         return res;
     }
 
-    if (!dl_res.success || isCatalogUpdateAborted()) {
+    if (!dl_res.success || isCatalogUpdateAborted() || !isTargetStillActive()) {
         util::logLine("catalog_updater: diff download failed or aborted with HTTP " + std::to_string(dl_res.http_code));
         std::error_code ec;
         std::filesystem::remove(tempDiffPath, ec);
@@ -510,7 +585,8 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     int added = 0, updated = 0, deleted = 0;
-    if (!applyDiffToGames(gamesCopy, diffJson, langKey, added, updated, deleted) || isCatalogUpdateAborted()) {
+    if (!applyDiffToGames(gamesCopy, diffJson, langKey, added, updated, deleted) ||
+        isCatalogUpdateAborted() || !isTargetStillActive()) {
         if (!isCatalogUpdateAborted()) util::logLine("catalog_updater: applyDiffToGames failed");
         std::error_code ec;
         std::filesystem::remove(tempDiffPath, ec);
@@ -519,8 +595,9 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     // Save updated catalog to binary cache
-    std::string tempBin = getCatalogBinPath() + ".tmp";
-    if (!saveGamesToBinaryFile(tempBin, gamesCopy) || isCatalogUpdateAborted()) {
+    std::string tempBin = catalogBinPath + ".tmp";
+    if (!saveGamesToBinaryFile(tempBin, gamesCopy) ||
+        isCatalogUpdateAborted() || !isTargetStillActive()) {
         if (!isCatalogUpdateAborted()) util::logLine("catalog_updater: failed to save updated binary cache");
         std::error_code ec;
         std::filesystem::remove(tempBin, ec);
@@ -530,7 +607,7 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     std::error_code ec;
-    if (!util::atomicReplaceFile(tempBin, getCatalogBinPath())) {
+    if (!util::atomicReplaceFile(tempBin, catalogBinPath)) {
         util::logLine("catalog_updater: rename bin failed");
         std::filesystem::remove(tempDiffPath, ec);
         res.success = false;
@@ -538,7 +615,7 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     }
 
     if (!dl_res.etag.empty()) {
-        writeTextFile(getCatalogDiffEtagPath(), dl_res.etag);
+        writeTextFile(catalogDiffEtagPath, dl_res.etag);
     }
     std::filesystem::remove(tempDiffPath, ec);
 
@@ -549,7 +626,10 @@ CatalogUpdateResult CatalogUpdater::performDiffUpdate(const std::string& diffUrl
     auto newSnapshot = std::make_shared<const std::vector<Game>>(std::move(gamesCopy));
     catalog::FavoritesManager::instance().syncLegacyFavorites(*newSnapshot);
     auto viewToken = ui::g_catalogViewAliveToken;
-    brls::sync([newSnapshot, viewToken]() {
+    brls::sync([newSnapshot, viewToken, targetUrl]() {
+        if (config::ConfigManager::instance().getEffectiveCatalogSourceUrl() != targetUrl) {
+            return;
+        }
         setCatalogSnapshot(newSnapshot);
         if (viewToken && *viewToken && ui::g_activeCatalogView) {
             const auto& stack = brls::Application::getActivitiesStack();
@@ -576,12 +656,20 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     CatalogUpdateResult res;
     res.was_full = true;
 
+    const std::string targetUrl = catalogUrl;
+    const std::string catalogJsonPath = getCatalogPath();
+    const std::string catalogBinPath = getCatalogBinPath();
+    const std::string catalogEtagPath = getCatalogEtagPath();
+    auto isTargetStillActive = [&targetUrl]() {
+        return config::ConfigManager::instance().getEffectiveCatalogSourceUrl() == targetUrl;
+    };
+
     auto initialCatalog = getCatalogSnapshot();
     bool was_empty = !initialCatalog || initialCatalog->empty();
 
     util::logLine("catalog_updater: starting full catalog download from " + catalogUrl);
     net::HttpClient http;
-    std::string tempJsonPath = getCatalogPath() + ".tmp";
+    std::string tempJsonPath = catalogJsonPath + ".tmp";
     auto lastProgressUpdate = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
 
     http.setProgressCallback([notif, aliveToken, lastProgressUpdate](int64_t dltotal, int64_t dlnow) {
@@ -613,8 +701,8 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     });
 
     std::string savedEtag;
-    if (!was_empty && std::filesystem::exists(getCatalogBinPath())) {
-        savedEtag = readTextFile(getCatalogEtagPath());
+    if (!was_empty && std::filesystem::exists(catalogBinPath)) {
+        savedEtag = readTextFile(catalogEtagPath);
         while (!savedEtag.empty() && (savedEtag.back() == '\r' || savedEtag.back() == '\n' || savedEtag.back() == ' '))
             savedEtag.pop_back();
     }
@@ -628,14 +716,14 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     net::HttpClient::DownloadResult dl_res;
     auto catalogCandidates = catalog::getFallbackUrls(catalogUrl);
     for (const auto& u : catalogCandidates) {
-        if (isCatalogUpdateAborted()) break;
+        if (isCatalogUpdateAborted() || !isTargetStillActive()) break;
         util::logLine("catalog_updater: trying full catalog download from: " + u);
         dl_res = http.downloadToFileEx(u, tempJsonPath, extra_headers, &g_catalogUpdateCancel, 300);
         if (dl_res.success || dl_res.not_modified) break;
         util::logLine("catalog_updater: full catalog download failed from " + u + " with HTTP " + std::to_string(dl_res.http_code));
     }
 
-    if (dl_res.not_modified && !isCatalogUpdateAborted()) {
+    if (dl_res.not_modified && !isCatalogUpdateAborted() && isTargetStillActive()) {
         util::logLine("catalog_updater: full catalog HTTP 304 Not Modified");
         res.success = true;
         res.already_up_to_date = true;
@@ -651,7 +739,7 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     std::vector<Game> online_games;
     bool updated = false;
 
-    if (dl_res.success && !isCatalogUpdateAborted()) {
+    if (dl_res.success && !isCatalogUpdateAborted() && isTargetStillActive()) {
         if (aliveToken && *aliveToken && notif) {
             brls::sync([notif, aliveToken]() {
                 if (aliveToken && *aliveToken && notif) {
@@ -661,24 +749,24 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         }
 
         online_games = parseGamesFromFileStream(tempJsonPath);
-        if (aliveToken && *aliveToken && notif && !isCatalogUpdateAborted()) {
+        if (aliveToken && *aliveToken && notif && !isCatalogUpdateAborted() && isTargetStillActive()) {
             brls::sync([notif, aliveToken]() {
                 if (aliveToken && *aliveToken && notif) {
                     notif->updateProgress(92.0f, "app/catalog/processing"_i18n);
                 }
             });
         }
-        if (!online_games.empty() && !isCatalogUpdateAborted()) {
+        if (!online_games.empty() && !isCatalogUpdateAborted() && isTargetStillActive()) {
             util::logLine("catalog_updater: parsed " + std::to_string(online_games.size()) + " games from stream");
 
-            std::string tempBinPath = getCatalogBinPath() + ".tmp";
+            std::string tempBinPath = catalogBinPath + ".tmp";
             bool binSaved = saveGamesToBinaryFile(tempBinPath, online_games);
 
             std::error_code ec;
             bool jsonOk = false;
             bool binOk  = false;
 
-            if (!binSaved || isCatalogUpdateAborted()) {
+            if (!binSaved || isCatalogUpdateAborted() || !isTargetStillActive()) {
                 // Write failed (e.g. SD card full) or aborted. Keep old .bin intact — do NOT remove it.
                 if (!isCatalogUpdateAborted()) util::logLine("catalog_updater: saveGamesToBinaryFile failed, keeping existing cache");
                 std::filesystem::remove(tempBinPath, ec);
@@ -686,17 +774,17 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
             } else {
                 // Old files go to .bak first: a crash between remove and
                 // rename used to leave no catalog at all.
-                binOk = util::atomicReplaceFile(tempBinPath, getCatalogBinPath());
+                binOk = util::atomicReplaceFile(tempBinPath, catalogBinPath);
                 if (!binOk) {
                     util::logLine("catalog_updater: rename bin failed");
                 }
 
-                jsonOk = util::atomicReplaceFile(tempJsonPath, getCatalogPath());
+                jsonOk = util::atomicReplaceFile(tempJsonPath, catalogJsonPath);
             }
 
             updated = jsonOk && binOk;
             if (updated && !dl_res.etag.empty()) {
-                writeTextFile(getCatalogEtagPath(), dl_res.etag);
+                writeTextFile(catalogEtagPath, dl_res.etag);
             }
         } else {
             std::error_code ec;
@@ -708,7 +796,7 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
     }
 
     // Fallback parser if online fetch failed and catalog was completely empty
-    if (was_empty && !updated && !isCatalogUpdateAborted()) {
+    if (was_empty && !updated && !isCatalogUpdateAborted() && isTargetStillActive()) {
         util::logLine("catalog_updater: running fallback sources parser");
         catalog::CatalogManager catalog_mgr;
         bool sources_loaded = catalog_mgr.loadSourcesWithFallback(TSNX_SOURCES_PATH, "romfs:/sources.json");
@@ -727,10 +815,10 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
                 online_games.push_back(g);
             }
 
-            if (!online_games.empty()) {
+            if (!online_games.empty() && !isCatalogUpdateAborted() && isTargetStillActive()) {
                 nlohmann::json jg = online_games;
-                bool jsonSaved = writeTextFile(getCatalogPath(), jg.dump(2));
-                bool binSaved = saveGamesToBinaryFile(getCatalogBinPath(), online_games);
+                bool jsonSaved = writeTextFile(catalogJsonPath, jg.dump(2));
+                bool binSaved = saveGamesToBinaryFile(catalogBinPath, online_games);
                 updated = jsonSaved && binSaved;
                 if (!updated) {
                     util::logLine("catalog_updater: failed to save fallback catalog");
@@ -739,7 +827,7 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         }
     }
 
-    if (updated && !online_games.empty()) {
+    if (updated && !online_games.empty() && !isCatalogUpdateAborted() && isTargetStillActive()) {
         auto& cfg = config::ConfigManager::instance();
         std::time_t now = std::time(nullptr);
         cfg.setLastCatalogFullTime(now);
@@ -751,7 +839,10 @@ CatalogUpdateResult CatalogUpdater::performFullUpdate(const std::string& catalog
         catalog::FavoritesManager::instance().syncLegacyFavorites(*newSnapshot);
         // Capture viewToken in the background thread before scheduling on main thread.
         auto viewToken = ui::g_catalogViewAliveToken;
-        brls::sync([newSnapshot, viewToken]() {
+        brls::sync([newSnapshot, viewToken, targetUrl]() {
+            if (config::ConfigManager::instance().getEffectiveCatalogSourceUrl() != targetUrl) {
+                return;
+            }
             setCatalogSnapshot(newSnapshot);
             if (viewToken && *viewToken && ui::g_activeCatalogView) {
                 const auto& stack = brls::Application::getActivitiesStack();

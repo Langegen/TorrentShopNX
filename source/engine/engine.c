@@ -438,9 +438,9 @@ tsnx_engine *tsnx_engine_start(int listen_port) {
     return eng;
 }
 
-void tsnx_engine_stop(tsnx_engine *eng) {
+bool tsnx_engine_stop(tsnx_engine *eng) {
     eng = active_engine(eng);
-    if (!eng) return;
+    if (!eng) return true;
     // Stop listener first so incoming connections cannot race with torrentfs_close.
     torrent_listener_stop();
 
@@ -478,10 +478,11 @@ void tsnx_engine_stop(tsnx_engine *eng) {
     if (busy) {
         engine_log(ENGINE_LOG_WARN, "[engine] stop: an add is still running, engine state leaked");
         engine_log_close();
-        return;
+        return false;
     }
     engine_log_close();
     free(eng);
+    return true;
 }
 
 bool tsnx_engine_running(const tsnx_engine *eng) {

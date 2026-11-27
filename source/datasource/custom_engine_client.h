@@ -84,8 +84,9 @@ public:
     /* Cancels an in-flight read on the torrent stream. */
     void cancelRead(const std::string& hash);
 
-    /* Stops the shared engine and joins all background engine threads. */
-    void shutdown();
+    /* Stops the shared engine and joins all background engine threads.
+     * Returns true if the engine stopped cleanly (or was never started). */
+    bool shutdown();
 
 private:
     CustomEngineClient() = default;
@@ -97,6 +98,7 @@ private:
     void releaseKeptHashLocked();
 
     tsnx_engine* engine_ = nullptr;
+    bool clean_shutdown_ = true;
     std::string last_error_;
 
     mutable std::mutex probe_mtx_;

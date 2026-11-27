@@ -170,6 +170,7 @@ bool writeInfo(const std::string& dst, const std::string& user_message) {
     out << "previous_launch: " << prevSessionName(previousSession()) << "\n";
     out << "language: " << cfg.getLanguage() << "\n";
     out << "catalog: " << cfg.getActiveCatalogLangKey() << "\n";
+    out << "catalog_language: " << cfg.getCatalogLanguage() << "\n";
     out << "data_mode: " << cfg.getDataMode() << "\n";
     out << "install_location: " << cfg.getInstallLocation() << "\n";
     out << "theme: " << cfg.getTheme() << "\n";

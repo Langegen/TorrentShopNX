@@ -44,6 +44,10 @@ public:
                      std::function<void(const CatalogUpdateResult&)> onDone = nullptr,
                      bool showNotification = true);
 
+    // Reloads local cache (if available) and triggers a refresh for the currently
+    // active catalog language / URL. Safe to call even while an update is running.
+    void reloadForActiveLanguage();
+
     // Applies diff payload (from catalog_diff.json) to in-memory games vector
     static bool applyDiffToGames(std::vector<Game>& currentGames,
                                  const nlohmann::json& diffJson,
@@ -64,6 +68,8 @@ private:
     CatalogUpdateResult performFullUpdate(const std::string& catalogUrl,
                                           const std::shared_ptr<bool>& aliveToken,
                                           ui::CatalogProgressNotification* notif);
+
+    std::atomic<bool> pending_reload_{false};
 };
 
 } // namespace catalog

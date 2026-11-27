@@ -26,5 +26,7 @@ void startSend();
 void startShare();
 // Build and tell where the ZIP is on the SD card.
 void startSave();
+// Stops the local report HTTP share server if running.
+void shutdownShareServer();
 
 } // namespace ui::bugreport

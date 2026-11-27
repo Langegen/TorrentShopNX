@@ -44,6 +44,7 @@ public:
     std::string getCatalogSourceUrl() const;
     std::string getEffectiveCatalogSourceUrl() const;
     void setCatalogSourceUrl(const std::string& url);
+    bool hasCustomCatalogSourceUrl() const;
 
     std::string getDataMode() const;
     void setDataMode(const std::string& mode);
@@ -118,6 +119,9 @@ public:
     std::string getLanguage() const;
     void setLanguage(const std::string& lang);
 
+    std::string getCatalogLanguage() const;
+    void setCatalogLanguage(const std::string& lang);
+
     // Retro Games settings
     // "auto" (default): Tico folders, Vita3K and Cemu folders; "custom": <custom path>/<console>/.
     // Older values (prompt, tico, retroarch, downloads) are read as "auto".
@@ -184,6 +188,7 @@ private:
     std::string last_app_update_check_date_;
     std::string last_emulator_manifest_check_date_;
     std::string language_;
+    std::string catalog_language_;
     std::string retro_roms_mode_;
     std::string retro_custom_path_;
     std::string theme_;

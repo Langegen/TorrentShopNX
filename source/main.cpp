@@ -51,6 +51,8 @@
 #include "engine/engine_log.h"
 #include "utils/switch_utils.h"
 #include "utils/screen_sleep_manager.h"
+#include "utils/thread_utils.h"
+#include "ui/BugReportFlow.hpp"
 #include "net/http_client.h"
 #include "net/image_downloader.h"
 #include "datasource/custom_engine_client.h"
@@ -306,24 +308,28 @@ extern "C" u32 __nx_applet_exit_mode;
 #endif
 
 // How the process leaves after an update was applied.
-//   relaunch=true  (start of main, nothing but the main thread is running):
-//                  hand the new NRO to hbloader via envSetNextLoad.
-//   relaunch=false (end of a normal session): only replace the file and keep
-//                  the normal exit to the HOME menu. Returning to hbloader from
-//                  a full session is unsafe: engine/curl/image threads may still
-//                  be alive in the shared process, and once hbloader maps the
-//                  next NRO over their code they crash the whole title.
+//   relaunch=true  (at start of main, or after clean shutdown with all worker
+//                  threads joined): verify the updated NRO and hand it to
+//                  hbloader via envSetNextLoad.
+//   relaunch=false (normal exit, or fallback when shutdown was not clean):
+//                  replace the file only and exit to the HOME menu.
 static void prepareExitAfterUpdate(const std::string& nroPath, bool relaunch) {
     if (relaunch && envHasNextLoad()) {
-        std::string quotedArg = "\"" + nroPath + "\"";
-        envSetNextLoad(nroPath.c_str(), quotedArg.c_str());
-        __nx_applet_exit_mode = 0;
-        util::updateJournal("relaunching updated NRO via envSetNextLoad: " + nroPath);
-    } else {
-        __nx_applet_exit_mode = 1; // straight to the HOME menu, process is torn down
-        util::updateJournal(relaunch ? "loader has no next-load support, exiting to HOME"
-                                     : "update applied at exit, closing to HOME");
+        if (util::isValidNroFile(nroPath)) {
+            std::string quotedArg = "\"" + nroPath + "\"";
+            envSetNextLoad(nroPath.c_str(), quotedArg.c_str());
+            __nx_applet_exit_mode = 0;
+            util::updateJournal("relaunching updated NRO via envSetNextLoad: " + nroPath);
+            return;
+        }
+        envSetNextLoad("", "");
+        __nx_applet_exit_mode = 1;
+        util::updateJournal("updated NRO failed NRO0 check (" + nroPath + "), exiting to HOME");
+        return;
     }
+    __nx_applet_exit_mode = 1; // straight to the HOME menu, process is torn down
+    util::updateJournal(relaunch ? "loader has no next-load support, exiting to HOME"
+                                 : "update applied at exit, closing to HOME");
 }
 
 static bool checkAndApplyPendingUpdate(bool relaunch) {
@@ -339,7 +345,7 @@ static bool checkAndApplyPendingUpdate(bool relaunch) {
         util::updateJournal(std::string("replace result=") + (ok ? "ok" : "FAILED"));
 
         std::remove(g_nroPath.c_str());
-        prepareExitAfterUpdate(mainNroPath, relaunch);
+        prepareExitAfterUpdate(mainNroPath, relaunch && ok);
         return true;
     }
 
@@ -777,8 +783,10 @@ int main(int argc, char** argv) {
     }
 
     util::logLine("main: mainLoop exited, starting shutdown sequence");
+    bool cleanShutdown = true;
     uiwd::stop();
     util::ScreenSleepManager::instance().shutdown();
+    ui::bugreport::shutdownShareServer();
 
     // Signal background tasks and network transfers to cancel immediately
     g_appExiting.store(true);
@@ -792,7 +800,12 @@ int main(int argc, char** argv) {
         usleep(10000); // 10ms
         waitCount++;
     }
-    util::logLine("main: background threads exited after " + std::to_string(waitCount * 10) + "ms, proceeding with shutdown");
+    if (g_cleanupRunning.load() || g_catalogUpdateRunning.load() || g_appUpdateRunning.load()) {
+        cleanShutdown = false;
+        util::logLine("main: background task flags still active after 1000ms wait");
+    } else {
+        util::logLine("main: background threads exited after " + std::to_string(waitCount * 10) + "ms, proceeding with shutdown");
+    }
 
     // Stop threads (Title Mode only)
     if (!checkAppletMode()) {
@@ -800,12 +813,24 @@ int main(int argc, char** argv) {
         ui::DownloadManager::instance().shutdown();
 
         util::logLine("main: calling CustomEngineClient::shutdown");
-        datasource::CustomEngineClient::instance().shutdown();
+        if (!datasource::CustomEngineClient::instance().shutdown()) {
+            util::logLine("main: CustomEngineClient did not stop cleanly");
+            cleanShutdown = false;
+        }
 
         util::logLine("main: calling ImageDownloader::stop");
         net::ImageDownloader::instance().stop();
-        
+
         util::logLine("main: all threads requested to stop");
+    }
+
+    if (!util::joinBackgroundThreads(5000)) {
+        util::logLine("main: background threads did not finish within 5s");
+        cleanShutdown = false;
+    }
+    util::shutdownHaptic();
+    if (!cleanShutdown) {
+        util::logLine("main: shutdown was not fully clean");
     }
 
 #ifdef __SWITCH__
@@ -814,9 +839,13 @@ int main(int argc, char** argv) {
     util::unmountRomfs();
 
     // Apply pending update if one was downloaded during this session.
-    // Only the file is replaced here; the process still exits to HOME (see
-    // prepareExitAfterUpdate), the next launch runs the new version.
-    if (checkAndApplyPendingUpdate(/*relaunch=*/false)) {
+    // Relaunch directly via hbloader only when the user pressed Restart and
+    // every worker thread stopped cleanly; otherwise replace the file and exit to HOME.
+    const bool wantRelaunch = g_relaunchAfterUpdate.load() && cleanShutdown;
+    if (g_relaunchAfterUpdate.load() && !cleanShutdown) {
+        util::updateJournal("relaunch skipped: shutdown was not clean, exiting to HOME");
+    }
+    if (checkAndApplyPendingUpdate(/*relaunch=*/wantRelaunch)) {
         util::logLine("main: pending update applied during shutdown");
     }
 #endif
@@ -830,7 +859,7 @@ int main(int argc, char** argv) {
     //     (or chainloads via envSetNextLoad when __nx_applet_exit_mode == 0 for updates).
 #ifdef __SWITCH__
     util::logLine("main: closing log and exiting via _exit(0). Goodbye!");
-    engine_log_flush();  // applet mode skips the engine shutdown: drain its log ring
+    engine_log_close();  // ensures engine log writer thread is joined even in applet mode
     util::logClose();    // drains the async log writer; before __appExit calls fsExit
     fsdevCommitDevice("sdmc");
     _exit(0);

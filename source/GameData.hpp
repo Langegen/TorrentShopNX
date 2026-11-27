@@ -1092,6 +1092,7 @@ inline std::atomic<bool> g_cleanupRunning{false};
 inline std::atomic<bool> g_catalogUpdateRunning{false};
 inline std::atomic<bool> g_appUpdateRunning{false};
 inline std::atomic<bool> g_appUpdatePendingRestart{false};
+inline std::atomic<bool> g_relaunchAfterUpdate{false};
 inline std::atomic<bool> g_catalogUpdateCancel{false};
 
 inline void deleteDirectoryIterative(const std::filesystem::path& path) {

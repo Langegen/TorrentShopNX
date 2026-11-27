@@ -276,4 +276,8 @@ void startSave() {
     });
 }
 
+void shutdownShareServer() {
+    ShareServer::instance().stop();
+}
+
 } // namespace ui::bugreport

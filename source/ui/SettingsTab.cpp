@@ -269,11 +269,8 @@ void downloadAndInstallAppUpdate(const std::string& url, const std::string& vers
                             if (onFinished) onFinished(true);
                             brls::Dialog* pendingDialog = new brls::Dialog("app/settings/update_downloaded_restart"_i18n);
                             pendingDialog->addButton("app/settings/restart_btn"_i18n, []() {
-                                // Normal exit to HOME: the NRO is replaced during shutdown
-                                // and the next launch runs the new version. Going back to
-                                // hbloader from a live session (exitToHomeMode(false)) crashed
-                                // the title because engine/curl threads were still running.
-                                util::updateJournal("user chose close-and-update");
+                                util::updateJournal("user chose restart-and-update");
+                                g_relaunchAfterUpdate.store(true);
                                 brls::Application::quit();
                             });
                             pendingDialog->addButton("app/settings/later_btn"_i18n, []() {});
@@ -445,12 +442,15 @@ brls::View* SettingsTab::buildGeneralTab() {
         else if (selected == 13) newLang = "vi";
 
         if (newLang != cfg.getLanguage()) {
+            const std::string prevCatalogUrl = cfg.getEffectiveCatalogSourceUrl();
             cfg.setLanguage(newLang);
-            cfg.setLastCatalogUpdateDate(""); // Force catalog refresh for new language
-            cfg.save();
 
             // Switch locale in Borealis engine immediately
             brls::Application::setLocale(newLang);
+
+            if (cfg.getEffectiveCatalogSourceUrl() != prevCatalogUrl) {
+                catalog::CatalogUpdater::instance().reloadForActiveLanguage();
+            }
 
             // Instantly recreate SettingsTab in the new locale
             brls::Application::popActivity(brls::TransitionAnimation::NONE, []() {
@@ -459,6 +459,47 @@ brls::View* SettingsTab::buildGeneralTab() {
         }
     });
     box->addView(languageCell);
+
+    // Язык каталога игр Switch
+    std::vector<std::string> catalogLanguages = {
+        "app/settings/catalog_lang_auto"_i18n,
+        "app/settings/lang_ru"_i18n,
+        "app/settings/lang_en"_i18n,
+        "app/settings/lang_es"_i18n,
+        "app/settings/lang_fr"_i18n,
+        "app/settings/lang_de"_i18n,
+        "app/settings/lang_it"_i18n,
+        "app/settings/lang_pt_br"_i18n,
+        "app/settings/lang_zh_hans"_i18n
+    };
+    int initialCatalogLang = 0;
+    std::string curCatLang = cfg.getCatalogLanguage();
+    if (curCatLang == "ru") initialCatalogLang = 1;
+    else if (curCatLang == "en") initialCatalogLang = 2;
+    else if (curCatLang == "es") initialCatalogLang = 3;
+    else if (curCatLang == "fr") initialCatalogLang = 4;
+    else if (curCatLang == "de") initialCatalogLang = 5;
+    else if (curCatLang == "it") initialCatalogLang = 6;
+    else if (curCatLang == "pt-BR") initialCatalogLang = 7;
+    else if (curCatLang == "zh-Hans") initialCatalogLang = 8;
+
+    auto* catalogLangCell = new brls::SelectorCell();
+    catalogLangCell->init("app/settings/catalog_language"_i18n, catalogLanguages, initialCatalogLang, [](int) {}, [&cfg](int selected) {
+        static const char* const kCodes[] = {
+            "auto", "ru", "en", "es", "fr", "de", "it", "pt-BR", "zh-Hans"
+        };
+        std::string newCatLang = (selected >= 0 && selected < 9) ? kCodes[selected] : "auto";
+        if (newCatLang != cfg.getCatalogLanguage()) {
+            const std::string prevUrl = cfg.getEffectiveCatalogSourceUrl();
+            cfg.setCatalogLanguage(newCatLang);
+            if (cfg.hasCustomCatalogSourceUrl()) {
+                brls::Application::notify("app/settings/catalog_lang_custom_url_note"_i18n);
+            } else if (cfg.getEffectiveCatalogSourceUrl() != prevUrl) {
+                catalog::CatalogUpdater::instance().reloadForActiveLanguage();
+            }
+        }
+    });
+    box->addView(catalogLangCell);
 
     // ── Секция Управление и отклик ──────────────────────────────────
     addSettingsSectionHeader(box, "app/settings/sec_feedback"_i18n);

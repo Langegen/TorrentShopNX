@@ -859,11 +859,19 @@ void MainMenu::onContentAvailable() {
         } catch (...) {
             util::logLine("MainMenu: unknown exception in background cleanup");
         }
+        g_cleanupRunning = false;
         // Sweep stale caches 15 s later, when the first screens and covers
         // have loaded. The wait is a main-thread timer: sleeping here held one
         // of the 2-3 pool threads that cover decoding needs.
         brls::sync([]() {
+            if (g_cleanupCancelled.load() || g_appExiting.load()) {
+                return;
+            }
             brls::delay(15000, []() {
+                if (g_cleanupCancelled.load() || g_appExiting.load()) {
+                    return;
+                }
+                g_cleanupRunning = true;
                 brls::async([]() {
                     try {
                         if (!g_cleanupCancelled.load()) {
