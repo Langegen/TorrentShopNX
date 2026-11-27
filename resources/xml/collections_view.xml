@@ -57,9 +57,9 @@
                     height="auto"
                     axis="column"
                     paddingTop="8"
-                    paddingRight="16"
+                    paddingRight="26"
                     paddingBottom="12"
-                    paddingLeft="8" />
+                    paddingLeft="10" />
             </brls:ScrollingFrame>
         </brls:Box>
 

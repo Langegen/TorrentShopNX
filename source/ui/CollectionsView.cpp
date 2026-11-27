@@ -113,6 +113,17 @@ BannerPalette bannerPaletteFor(const std::string& id, NVGcolor genreColor) {
     };
 }
 
+bool hasStaticBannerArt(const std::string& id) {
+    static const std::unordered_set<std::string> kKnownIds = {
+        "all_catalog", "favorites", "new_release", "top_100",
+        "action_adventure", "arcade", "horror", "metroidvania",
+        "party_multiplayer", "platformers", "puzzles", "racing",
+        "roguelike_roguelite", "rpg_jrpg", "shooters", "simulation_cozy",
+        "sports", "strategy_tactics", "visual_novels", "ports_homebrew"
+    };
+    return kKnownIds.count(id) > 0;
+}
+
 // Draws clean vector glyphs centered at (cx, cy) inside a ~40x40 logical space.
 void drawSectionGlyph(NVGcontext* vg, const std::string& id, float cx, float cy, float scale, NVGcolor color) {
     nvgSave(vg);
@@ -883,46 +894,46 @@ public:
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override {
         if (hasHeroArt_) {
-            // Smooth horizontal blend from 100% opaque banner color across the image's left edge
-            float fadeStart = std::max(width * 0.48f, width - 426.0f);
+            // Smooth horizontal blend from 100% opaque banner color across the artwork's left edge
+            float fadeStart = std::max(width * 0.39f, width - 468.0f);
+            float fadeEnd = width * 0.78f;
             nvgBeginPath(vg);
             nvgRoundedRect(vg, x, y, width, height, 18.0f);
             nvgFillPaint(vg, this->a(nvgLinearGradient(
-                vg, x + fadeStart, y, x + width, y,
+                vg, x + fadeStart, y, x + fadeEnd, y,
                 withAlpha(pal_.startCol, 255),
-                withAlpha(pal_.endCol, 108))));
+                withAlpha(pal_.endCol, 24))));
             nvgFill(vg);
 
             // Subtle dark bottom vignette for crisp readability
             nvgBeginPath(vg);
             nvgRoundedRect(vg, x, y, width, height, 18.0f);
             nvgFillPaint(vg, this->a(nvgLinearGradient(
-                vg, x, y + height * 0.4f, x, y + height,
-                nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 62))));
+                vg, x, y + height * 0.45f, x, y + height,
+                nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 48))));
             nvgFill(vg);
         } else {
-            // Atmospheric radial spotlight + subtle decorative rings when no cover art is present
+            // Atmospheric radial spotlight + decorative glyph watermark when no static artwork is present
             nvgBeginPath(vg);
             nvgRoundedRect(vg, x, y, width, height, 18.0f);
             nvgFillPaint(vg, this->a(nvgRadialGradient(
                 vg, x + width * 0.68f, y + height * 0.45f, 20.0f, width * 0.55f,
                 nvgRGBA(255, 255, 255, 38), nvgRGBA(255, 255, 255, 0))));
             nvgFill(vg);
-        }
 
-        // Translucent decorative glyph watermark
-        nvgSave(vg);
-        nvgIntersectScissor(vg, x, y, width, height);
-        drawSectionGlyph(vg, id_, x + width * 0.63f, y + height * 0.52f, 2.5f,
-                         this->a(nvgRGBA(255, 255, 255, hasHeroArt_ ? 18 : 28)));
-        nvgRestore(vg);
+            nvgSave(vg);
+            nvgIntersectScissor(vg, x, y, width, height);
+            drawSectionGlyph(vg, id_, x + width * 0.63f, y + height * 0.52f, 2.5f,
+                             this->a(nvgRGBA(255, 255, 255, 28)));
+            nvgRestore(vg);
+        }
 
         // Top glass sheen
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x + 1.0f, y + 1.0f, width - 2.0f, height * 0.42f, 17.0f);
         nvgFillPaint(vg, this->a(nvgLinearGradient(
             vg, x, y, x, y + height * 0.42f,
-            nvgRGBA(255, 255, 255, 40), nvgRGBA(255, 255, 255, 0))));
+            nvgRGBA(255, 255, 255, hasHeroArt_ ? 30 : 40), nvgRGBA(255, 255, 255, 0))));
         nvgFill(vg);
 
         // Subtle inner light rim
@@ -949,8 +960,6 @@ public:
                             const std::string& desc,
                             const std::string& countText,
                             int maxMetacritic,
-                            const std::string& heroCoverUrl,
-                            const std::shared_ptr<bool>& imageToken,
                             NVGcolor genreColor,
                             std::function<void()> onOpenAll,
                             std::function<void()> onBackToSidebar)
@@ -962,18 +971,17 @@ public:
         this->setAxis(brls::Axis::COLUMN);
         this->setMarginBottom(16.0f);
 
-        const bool hasHeroArt = !heroCoverUrl.empty();
+        const bool hasHeroArt = hasStaticBannerArt(id);
         if (hasHeroArt) {
             brls::Image* heroImg = new brls::Image();
             heroImg->setPositionType(brls::PositionType::ABSOLUTE);
             heroImg->setPositionTop(0.0f);
             heroImg->setPositionRight(0.0f);
-            heroImg->setWidth(430.0f);
+            heroImg->setWidth(470.0f);
             heroImg->setHeight(178.0f);
             heroImg->setCornerRadius(18.0f);
             heroImg->setScalingType(brls::ImageScalingType::FILL);
-            setImageFromHTTPS(heroImg, heroCoverUrl, imageToken, "romfs:/img/cover_blank.png",
-                              false, "", 0, 10, 110000);
+            heroImg->setImageFromRes("img/collections/" + id + ".jpg");
             this->addView(heroImg);
         }
 
@@ -985,11 +993,11 @@ public:
         scrim->setHeightPercentage(100.0f);
         this->addView(scrim);
 
-        // Foreground content row
+        // Foreground content row (explicit 178 px height so Yoga does not resolve 100% against rightPanel)
         brls::Box* fgRow = new brls::Box();
         fgRow->setFocusable(false);
         fgRow->setWidthPercentage(100.0f);
-        fgRow->setHeightPercentage(100.0f);
+        fgRow->setHeight(178.0f);
         fgRow->setPadding(22.0f, 26.0f, 22.0f, 26.0f);
         fgRow->setAxis(brls::Axis::ROW);
         fgRow->setAlignItems(brls::AlignItems::CENTER);
@@ -1692,11 +1700,6 @@ void CollectionsView::rebuildPreviewPanel(bool animateFade) {
         }
     }
 
-    std::string heroCoverUrl;
-    if (!data.topGames.empty() && !data.topGames[0].game.cover.empty()) {
-        heroCoverUrl = data.topGames[0].game.cover;
-    }
-
     NVGcolor genreColor = ThemeManager::instance().getGenreColor(meta->id);
     NVGcolor accentColor = sidebarIconColor(meta->id, genreColor);
 
@@ -1711,8 +1714,6 @@ void CollectionsView::rebuildPreviewPanel(bool animateFade) {
         meta->description,
         countText,
         maxMeta,
-        heroCoverUrl,
-        previewImageToken_,
         genreColor,
         [this, id = meta->id]() { openSection(id); },
         [this]() { returnFocusToSidebar(); }
@@ -1754,18 +1755,6 @@ void CollectionsView::rebuildPreviewPanel(bool animateFade) {
     headingLeft->addView(headingLbl);
 
     headingRow->addView(headingLeft);
-
-    if (!data.topGames.empty()) {
-        brls::Label* favHint = new brls::Label();
-        favHint->setFontSize(style::kFontCaption);
-        favHint->setSingleLine(true);
-        favHint->setIsWrapping(false);
-        favHint->setMaxLines(1);
-        favHint->setAutoAnimate(false);
-        favHint->setTextColor(style::textSecondary());
-        favHint->setText(brls::Hint::getKeyIcon(brls::ControllerButton::BUTTON_Y) + " " + "app/detail/favorite"_i18n);
-        headingRow->addView(favHint);
-    }
 
     previewRoot_->addView(headingRow);
 
