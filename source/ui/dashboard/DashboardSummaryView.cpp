@@ -11,6 +11,7 @@
 #include "../../config/config.h"
 #include "../../catalog/retro_catalog_manager.h"
 #include "../../catalog/homebrew_catalog.hpp"
+#include "../../catalog/genre_taxonomy.hpp"
 #include "../../utils/log.h"
 #include "../../utils/i18n_plural.h"
 #include "../../net/image_downloader.h"
@@ -248,7 +249,14 @@ public:
         infoCol->addView(meta);
 
         if (!util::isPlaceholderValue(game.genre)) {
-            brls::Label* genre = makeLabel(game.genre, kSubFont, style::textSecondary());
+            std::string genreText;
+            for (const auto& badge : catalog::getDisplayGenreBadges(game.genre)) {
+                if (util::isPlaceholderValue(badge)) continue;
+                if (!genreText.empty()) genreText += ", ";
+                genreText += badge;
+            }
+            if (genreText.empty()) genreText = game.genre;
+            brls::Label* genre = makeLabel(genreText, kSubFont, style::textSecondary());
             genre->setWidth(infoW);
             genre->setMarginTop(4.0f);
             infoCol->addView(genre);

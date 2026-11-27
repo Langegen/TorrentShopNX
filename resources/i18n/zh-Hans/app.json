@@ -1348,6 +1348,7 @@
         "open": "打开"
     },
     "detail_meta": {
+        "interface": "界面及文本语言",
         "developer": "开发商",
         "publisher": "发行商",
         "release": "发售日期",

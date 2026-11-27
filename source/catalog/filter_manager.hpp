@@ -181,7 +181,11 @@ inline int parseYear(const std::string& yearStr) {
 inline int parseMaxPlayers(const std::string& multiplayer) {
     if (multiplayer.empty()) return 1;
     std::string s = toLowerUtf8(multiplayer);
-    if (s == "нет" || s == "no" || s == "1") return 1;
+    if (s == "нет" || s == "no" || s == "1" || s == "non" || s == "nein" || s == "não" || s == "ninguno" ||
+        s == "无" || s == "否" || s == "不支持" || s == "单人" || s == "单人游戏" ||
+        s == "無" || s == "不支援" || s == "單人" || s == "單人遊戲") return 1;
+    if (s == "支持" || s == "是" || s == "多人" || s == "双人" || s == "支持多人" || s == "多人游戏" || s == "联机" || s == "合作" ||
+        s == "支援" || s == "雙人" || s == "支援多人" || s == "多人遊戲" || s == "連線") return 2;
 
     int maxPlayers = 0;
     int currentNum = 0;
@@ -239,42 +243,34 @@ inline std::vector<std::string> extractYears(const std::vector<Game>& games) {
     return result;
 }
 
-inline bool checkLanguageMatch(const std::string& lowerLang, LanguageFilter lang) {
+inline bool checkLanguageMask(util::LanguageMask mask, LanguageFilter lang) {
     switch (lang) {
-        case LanguageFilter::RUSSIAN_ONLY:
-            return (lowerLang.find("rus") != std::string::npos || lowerLang.find("рус") != std::string::npos);
-        case LanguageFilter::ENGLISH_ONLY:
-            return (lowerLang.find("eng") != std::string::npos || lowerLang.find("англ") != std::string::npos);
-        case LanguageFilter::SPANISH_ONLY:
-            return (lowerLang.find("spa") != std::string::npos || lowerLang.find("esp") != std::string::npos ||
-                    lowerLang.find("исп") != std::string::npos || lowerLang.find("castellano") != std::string::npos);
-        case LanguageFilter::FRENCH_ONLY:
-            return (lowerLang.find("fra") != std::string::npos || lowerLang.find("fre") != std::string::npos ||
-                    lowerLang.find("фран") != std::string::npos || lowerLang.find("french") != std::string::npos);
-        case LanguageFilter::GERMAN_ONLY:
-            return (lowerLang.find("ger") != std::string::npos || lowerLang.find("deu") != std::string::npos ||
-                    lowerLang.find("нем") != std::string::npos || lowerLang.find("deutsch") != std::string::npos ||
-                    lowerLang.find("german") != std::string::npos);
-        case LanguageFilter::ITALIAN_ONLY:
-            return (lowerLang.find("ita") != std::string::npos || lowerLang.find("ита") != std::string::npos ||
-                    lowerLang.find("italiano") != std::string::npos || lowerLang.find("italian") != std::string::npos);
-        case LanguageFilter::JAPANESE_ONLY:
-            return (lowerLang.find("jpn") != std::string::npos || lowerLang.find("jap") != std::string::npos ||
-                    lowerLang.find("япон") != std::string::npos || lowerLang.find("japanese") != std::string::npos);
-        case LanguageFilter::CHINESE_ONLY:
-            return (lowerLang.find("chi") != std::string::npos || lowerLang.find("zho") != std::string::npos ||
-                    lowerLang.find("кит") != std::string::npos || lowerLang.find("chinese") != std::string::npos);
-        case LanguageFilter::PORTUGUESE_ONLY:
-            return (lowerLang.find("por") != std::string::npos || lowerLang.find("порт") != std::string::npos ||
-                    lowerLang.find("portug") != std::string::npos);
-        case LanguageFilter::ARABIC_ONLY:
-            return (lowerLang.find("ara") != std::string::npos || lowerLang.find("arb") != std::string::npos ||
-                    lowerLang.find("араб") != std::string::npos || lowerLang.find("arabic") != std::string::npos);
-        case LanguageFilter::MULTI_ONLY:
-            return (lowerLang.find("multi") != std::string::npos || lowerLang.find("мульти") != std::string::npos);
-        default:
-            return true;
+        case LanguageFilter::RUSSIAN_ONLY: return (mask & util::LangRus) != 0;
+        case LanguageFilter::ENGLISH_ONLY: return (mask & util::LangEng) != 0;
+        case LanguageFilter::SPANISH_ONLY: return (mask & util::LangSpa) != 0;
+        case LanguageFilter::FRENCH_ONLY: return (mask & util::LangFra) != 0;
+        case LanguageFilter::GERMAN_ONLY: return (mask & util::LangGer) != 0;
+        case LanguageFilter::ITALIAN_ONLY: return (mask & util::LangIta) != 0;
+        case LanguageFilter::JAPANESE_ONLY: return (mask & util::LangJpn) != 0;
+        case LanguageFilter::CHINESE_ONLY: return (mask & util::LangChinese) != 0;
+        case LanguageFilter::PORTUGUESE_ONLY: return (mask & util::LangPor) != 0;
+        case LanguageFilter::ARABIC_ONLY: return (mask & util::LangAra) != 0;
+        case LanguageFilter::MULTI_ONLY: return util::metadataIsMulti(mask);
+        default: return true;
     }
+}
+
+inline bool checkLanguageMatch(const std::string& lowerLang, LanguageFilter lang) {
+    return checkLanguageMask(util::metadataLanguageMask(lowerLang), lang);
+}
+
+inline util::LanguageMask gameLanguageMask(const Game& game) {
+    auto mask = util::metadataLanguageMask(toLowerUtf8(game.interface_lang))
+              | util::metadataLanguageMask(toLowerUtf8(game.voice_lang));
+    // Only explicit bracketed tags are a fallback, never arbitrary title words.
+    if (!mask && util::isPlaceholderValue(game.interface_lang) && util::isPlaceholderValue(game.voice_lang))
+        mask = util::titleLanguageTags(toLowerUtf8(game.title));
+    return mask;
 }
 
 inline bool checkPlayersMatch(int maxP, PlayersFilter pf) {
@@ -358,18 +354,18 @@ inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bo
 
     // 3. Language filter (Multi-select OR logic)
     if (!state.langs.empty()) {
-        std::string lowerLang = toLowerUtf8(game.interface_lang + " " + game.voice_lang + " " + game.title);
+        const auto languageMask = gameLanguageMask(game);
         bool matchAny = false;
         for (auto lf : state.langs) {
-            if (lf == LanguageFilter::ALL || checkLanguageMatch(lowerLang, lf)) {
+            if (lf == LanguageFilter::ALL || checkLanguageMask(languageMask, lf)) {
                 matchAny = true;
                 break;
             }
         }
         if (!matchAny) return false;
     } else if (state.lang != LanguageFilter::ALL) {
-        std::string lowerLang = toLowerUtf8(game.interface_lang + " " + game.voice_lang + " " + game.title);
-        if (!checkLanguageMatch(lowerLang, state.lang)) {
+        const auto languageMask = gameLanguageMask(game);
+        if (!checkLanguageMask(languageMask, state.lang)) {
             return false;
         }
     }

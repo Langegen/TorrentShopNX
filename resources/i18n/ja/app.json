@@ -1348,6 +1348,7 @@
         "open": "開く"
     },
     "detail_meta": {
+        "interface": "インターフェース・テキスト言語",
         "developer": "開発元",
         "publisher": "発売元",
         "release": "発売日",

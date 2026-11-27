@@ -12,7 +12,7 @@ static const char* pluralCategory(const std::string& locale, long long n) {
         if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "few";
         return "many";
     }
-    if (locale.rfind("ja", 0) == 0 || locale.rfind("zh", 0) == 0) return "other";
+    if (locale.rfind("ja", 0) == 0 || locale.rfind("zh", 0) == 0 || locale.rfind("vi", 0) == 0) return "other";
     if (locale.rfind("fr", 0) == 0 || locale.rfind("pt", 0) == 0) return (n <= 1) ? "one" : "other";
     return (n == 1) ? "one" : "other";
 }

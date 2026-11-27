@@ -1,0 +1,16 @@
+{
+    "hints": {
+        "ok": "Đồng ý",
+        "back": "Quay lại",
+        "exit": "Thoát",
+        "cancel": "Hủy",
+        "on": "Bật",
+        "off": "Tắt"
+    },
+    "crash_frame": {
+        "button": "Đồng ý"
+    },
+    "thumbnail_sidebar": {
+        "save": "Lưu"
+    }
+}

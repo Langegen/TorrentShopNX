@@ -36,6 +36,10 @@ bool startsWith(const std::string& s, const std::string& p) {
     return s.size() >= p.size() && s.compare(0, p.size(), p) == 0;
 }
 
+bool isGitlabSource(const std::string& repo, const std::string& url) {
+    return startsWith(toLower(repo), "gitlab:") || toLower(url).find("gitlab.com/") != std::string::npos;
+}
+
 bool endsWith(const std::string& s, const std::string& p) {
     return s.size() >= p.size() && s.compare(s.size() - p.size(), p.size(), p) == 0;
 }
@@ -540,7 +544,7 @@ bool parseOwnIndex(const std::string& text, std::vector<Package>& out, IndexExtr
         pkg.sha256 = toLower(str(p, "sha256"));
         pkg.icon_url = str(p, "icon_url");
         pkg.screen_url = str(p, "screen_url");
-        pkg.source = Source::Github;
+        pkg.source = isGitlabSource(pkg.repo, pkg.url) ? Source::Gitlab : Source::Github;
         pkg.kinds = fa.kinds;
         pkg.depends = strList(p, "depends");
         pkg.description_i18n = strMap(p, "description_i18n");
@@ -623,7 +627,7 @@ std::vector<Package> mergeSources(const std::vector<Package>& fortheusers,
             p.zip_root = o.zip_root;
             p.manifest_url.clear();
             if (o.kinds) p.kinds = o.kinds;
-            p.source = Source::Github;
+            p.source = o.source;
         }
     }
 
@@ -689,7 +693,8 @@ std::string makeInfoJson(const Package& pkg) {
     j["author"] = pkg.author;
     j["url"] = pkg.url;
     j["installed_by"] = "TorrentShopNX";
-    j["source"] = pkg.source == Source::Github ? "github" : "fortheusers";
+    j["source"] = pkg.source == Source::Gitlab ? "gitlab"
+                  : (pkg.source == Source::Github ? "github" : "fortheusers");
     return j.dump();
 }
 

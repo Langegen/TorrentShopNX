@@ -96,7 +96,7 @@ std::string normalizeDate(const std::string& date);
 int daysBetween(const std::string& a, const std::string& b);
 
 // ---------------------------------------------------------------------------
-enum class Source { Fortheusers, Github };
+enum class Source { Fortheusers, Github, Gitlab };
 enum class DownloadType { Zip, File };  // File: a single .nro/.ovl written to files[0]
 
 struct Package {

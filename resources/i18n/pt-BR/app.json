@@ -1348,6 +1348,7 @@
         "open": "Abrir"
     },
     "detail_meta": {
+        "interface": "Idioma da interface e dos textos",
         "developer": "Desenvolvedor",
         "publisher": "Distribuidora",
         "release": "Data de lançamento",

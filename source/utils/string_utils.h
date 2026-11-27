@@ -79,6 +79,16 @@ namespace util {
                     out.push_back(s[i + 1]);
                 }
                 i += 2;
+            } else if (c == 0xC3 && i + 1 < s.size()) {
+                unsigned char c2 = static_cast<unsigned char>(s[i + 1]);
+                if ((c2 >= 0x80 && c2 <= 0x96) || (c2 >= 0x98 && c2 <= 0x9E)) { // À..Ö, Ø..Þ -> à..ö, ø..þ
+                    out.push_back(static_cast<char>(0xC3));
+                    out.push_back(static_cast<char>(c2 + 0x20));
+                } else {
+                    out.push_back(s[i]);
+                    out.push_back(s[i + 1]);
+                }
+                i += 2;
             } else if (c == 0xD1 && i + 1 < s.size()) {
                 out.push_back(s[i]);
                 out.push_back(s[i + 1]);

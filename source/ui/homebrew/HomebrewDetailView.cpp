@@ -178,11 +178,12 @@ void HomebrewDetailView::fillTexts() {
     factsBox->clearViews();
     const auto units = sizeUnits();
     addFact(factsBox, "app/homebrew/fact_version"_i18n, pkg_.version);
-    addFact(factsBox, "app/homebrew/fact_updated"_i18n, homebrew::displayDate(pkg_.updated));
+    addFact(factsBox, "app/homebrew/fact_updated"_i18n, homebrew::displayDate(pkg_.updated, brls::Application::getLocale()));
     addFact(factsBox, "app/homebrew/fact_size"_i18n, homebrew::formatSize(pkg_.download_bytes, units));
     addFact(factsBox, "app/homebrew/fact_unpacked"_i18n, homebrew::formatSize(pkg_.extracted_bytes, units));
     addFact(factsBox, "app/homebrew/fact_source"_i18n,
-            pkg_.source == homebrew::Source::Github ? "GitHub" : "Homebrew App Store");
+            pkg_.source == homebrew::Source::Gitlab ? "GitLab"
+            : (pkg_.source == homebrew::Source::Github ? "GitHub" : "Homebrew App Store"));
     if (pkg_.downloads > 0) addFact(factsBox, "app/homebrew/fact_downloads"_i18n, std::to_string(pkg_.downloads));
     if (homebrew::isKnownLicense(pkg_.license)) addFact(factsBox, "app/homebrew/fact_license"_i18n, pkg_.license);
     if (!pkg_.depends.empty()) {

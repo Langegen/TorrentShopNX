@@ -501,12 +501,16 @@ int main(int argc, char** argv) {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_PT_BR;
     } else if (userLang == "zh-Hans" || userLang == "zh-CN" || userLang == "zh") {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_ZH_HANS;
+    } else if (userLang == "zh-Hant" || userLang == "zh-TW" || userLang == "zh-HK") {
+        brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_ZH_HANT;
     } else if (userLang == "ja") {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_JA;
     } else if (userLang == "ar") {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AR;
     } else if (userLang == "hu") {
         brls::Platform::APP_LOCALE_DEFAULT = "hu";
+    } else if (userLang == "vi") {
+        brls::Platform::APP_LOCALE_DEFAULT = "vi";
     } else {
         brls::Platform::APP_LOCALE_DEFAULT = brls::LOCALE_AUTO;
     }

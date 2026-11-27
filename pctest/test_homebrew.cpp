@@ -378,6 +378,34 @@ static void testStatusAndRegistry() {
     CHECK_EQ(parseInfoVersion("garbage"), std::string(""));
     p.title = "X \"quoted\"";
     CHECK_EQ(parseInfoVersion(makeInfoJson(p)), std::string("1.2.0"));
+
+    // GitLab own-index source parsing and info.json serialization.
+    {
+        const std::string gitlabJson = R"({
+            "packages": [{
+                "name": "hacbrewpacklz",
+                "title": "hacBrewPackLZ",
+                "version": "1.5.4",
+                "repo": "gitlab:ismaellozanoperezserrano/hacbrewpacklz",
+                "url": "https://gitlab.com/ismaellozanoperezserrano/hacbrewpacklz",
+                "download_type": "file",
+                "download_url": "https://gitlab.com/-/project/88310088/uploads/abc/hacBrewPackLZ.nro",
+                "files": ["U: switch/hacbrewpacklz.nro"]
+            }]
+        })";
+        std::vector<Package> glOwn;
+        IndexExtras glExtras;
+        std::string glErr;
+        CHECK(parseOwnIndex(gitlabJson, glOwn, glExtras, glErr));
+        CHECK_EQ(glOwn.size(), size_t(1));
+        if (glOwn.size() == 1) {
+            CHECK(glOwn[0].source == Source::Gitlab);
+            CHECK(makeInfoJson(glOwn[0]).find("\"source\":\"gitlab\"") != std::string::npos);
+            const std::vector<Package> merged = mergeSources({}, glOwn, glExtras);
+            CHECK_EQ(merged.size(), size_t(1));
+            if (merged.size() == 1) CHECK(merged[0].source == Source::Gitlab);
+        }
+    }
 }
 
 static void testPlans() {

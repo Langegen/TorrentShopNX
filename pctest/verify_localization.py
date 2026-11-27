@@ -13,9 +13,11 @@ LANGUAGES = {
     'IT': 'resources/i18n/it/app.json',
     'PT-BR': 'resources/i18n/pt-BR/app.json',
     'ZH-HANS': 'resources/i18n/zh-Hans/app.json',
+    'ZH-HANT': 'resources/i18n/zh-Hant/app.json',
     'JA': 'resources/i18n/ja/app.json',
     'AR': 'resources/i18n/ar/app.json',
-    'HU': 'resources/i18n/hu/app.json'
+    'HU': 'resources/i18n/hu/app.json',
+    'VI': 'resources/i18n/vi/app.json'
 }
 
 def get_all_keys(d, prefix='app'):
