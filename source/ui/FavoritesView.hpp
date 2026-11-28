@@ -1,6 +1,8 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <atomic>
+#include <memory>
 #include "../GameData.hpp"
 #include "../catalog/filter_manager.hpp"
 
@@ -11,6 +13,7 @@ public:
     CONTENT_FROM_XML_RES("favorites_view.xml");
 
     FavoritesView();
+    ~FavoritesView() override { if (alive_) *alive_ = false; }
     void onContentAvailable() override;
     void willAppear(bool resetState = false) override;
     void willDisappear(bool resetState = false) override;
@@ -26,6 +29,7 @@ private:
     catalog::FilterSortState filterState_;
     std::vector<Game> allFavorites_;
     std::vector<Game> filteredFavorites_;
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 
     class FavoritesDataSource : public brls::RecyclerDataSource {
     public:

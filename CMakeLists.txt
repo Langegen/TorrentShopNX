@@ -122,6 +122,7 @@ set(HB_UI_SOURCES
     pctest/homebrew_ui/main.cpp
     pctest/homebrew_ui/harness_backend.cpp
     source/ui/SectionTabBar.cpp
+    source/ui/VirtualKeyboard.cpp
     source/ui/homebrew/HomebrewView.cpp
     source/ui/homebrew/HomebrewDetailView.cpp
     source/ui/homebrew/SysmodulesView.cpp

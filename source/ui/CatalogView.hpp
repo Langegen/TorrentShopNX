@@ -1,6 +1,8 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <atomic>
+#include <memory>
 #include "../GameData.hpp"
 #include "../catalog/filter_manager.hpp"
 
@@ -85,6 +87,7 @@ public:
     
     CatalogView(const std::string& searchQuery = "");
     CatalogView(const catalog::FilterSortState& initialFilter, const std::string& filterBadgeLabel = "");
+    ~CatalogView() override { if (alive_) *alive_ = false; }
     void onContentAvailable() override;
     void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
@@ -109,6 +112,7 @@ private:
     std::vector<const Game*> filteredGames_;
     int focusedRow_ = 0;
     int focusedCol_ = 0;
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 
     // Inner DataSource class
     class CatalogDataSource : public brls::RecyclerDataSource {

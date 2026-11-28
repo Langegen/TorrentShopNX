@@ -832,7 +832,9 @@
         "sec_catalog_update": "دليل الألعاب",
         "sound_effects_desc": "أصوات الأزرار والتنقل والتنبيهات",
         "retro_folder_auto": "تلقائي (Tico و Vita3K و Cemu)",
-        "retro_folder_hint": "تلقائي: تُحفظ الألعاب في مجلدات Tico (sdmc:/tico/roms/<الجهاز>)، وألعاب PS Vita في Vita3K، وألعاب Wii U في Cemu. مجلد مخصص: <المجلد>/<الجهاز>/ — أضفه في Tico من الإعدادات › عام › مجلدات الألعاب."
+        "retro_folder_hint": "تلقائي: تُحفظ الألعاب في مجلدات Tico (sdmc:/tico/roms/<الجهاز>)، وألعاب PS Vita في Vita3K، وألعاب Wii U في Cemu. مجلد مخصص: <المجلد>/<الجهاز>/ — أضفه في Tico من الإعدادات › عام › مجلدات الألعاب.",
+        "use_builtin_keyboard": "لوحة المفاتيح المدمجة",
+        "use_builtin_keyboard_hint": "استخدام لوحة المفاتيح المدمجة على الشاشة بدلاً من لوحة مفاتيح نظام Nintendo Switch (مفيد في الأنظمة التي يعيد فيها استدعاء لوحة النظام تشغيل الجهاز)."
     },
     "applet": {
         "title": "وضع التطبيق المصغر غير مدعوم",
@@ -1601,5 +1603,19 @@
         "badge_portable": "نسخة محمولة",
         "stats_hint": "الكتالوج: {} لعبة",
         "stats_hint_update": "[-] تحديث"
+    },
+    "keyboard": {
+        "space": "مسافة",
+        "clear": "مسح",
+        "ok": "تم",
+        "cancel": "إلغاء",
+        "hint_type": "كتابة",
+        "hint_delete": "حذف",
+        "hint_space": "مسافة",
+        "hint_shift": "تكبير",
+        "hint_layout": "اللغة",
+        "hint_done": "تم",
+        "hint_cancel": "إلغاء",
+        "placeholder": "أدخل النص..."
     }
 }

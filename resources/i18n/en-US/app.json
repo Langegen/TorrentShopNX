@@ -832,7 +832,9 @@
         "sec_catalog_update": "Game Catalog",
         "sound_effects_desc": "Button clicks, navigation sounds and alerts",
         "retro_folder_auto": "Automatic (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Automatic: games go to Tico folders (sdmc:/tico/roms/<console>), PS Vita to Vita3K, Wii U to Cemu. Custom folder: <folder>/<console>/ — add it in Tico under Settings › General › Game folders."
+        "retro_folder_hint": "Automatic: games go to Tico folders (sdmc:/tico/roms/<console>), PS Vita to Vita3K, Wii U to Cemu. Custom folder: <folder>/<console>/ — add it in Tico under Settings › General › Game folders.",
+        "use_builtin_keyboard": "Built-in Keyboard",
+        "use_builtin_keyboard_hint": "Use the built-in on-screen keyboard instead of the Nintendo Switch system keyboard (helps on firmwares where the system keyboard reboots the console)."
     },
     "applet": {
         "title": "Applet Mode Not Supported",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Portable",
         "stats_hint": "Catalog: {} games",
         "stats_hint_update": "[-] Update"
+    },
+    "keyboard": {
+        "space": "Space",
+        "clear": "Clear",
+        "ok": "Done",
+        "cancel": "Cancel",
+        "hint_type": "Type",
+        "hint_delete": "Delete",
+        "hint_space": "Space",
+        "hint_shift": "Shift",
+        "hint_layout": "Layout",
+        "hint_done": "Done",
+        "hint_cancel": "Cancel",
+        "placeholder": "Enter text..."
     }
 }

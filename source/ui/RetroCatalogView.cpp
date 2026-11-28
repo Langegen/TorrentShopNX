@@ -1,5 +1,6 @@
 #include "RetroCatalogView.hpp"
 #include "style/HeaderHints.hpp"
+#include "VirtualKeyboard.hpp"
 #include "../utils/string_utils.h"
 #include "../utils/i18n_plural.h"
 #include "ui/ThemeManager.hpp"
@@ -16,29 +17,6 @@
 #include <algorithm>
 
 namespace ui {
-
-namespace {
-
-#ifdef __SWITCH__
-#include <switch.h>
-static std::string showRetroKeyboard(const std::string& hint) {
-    SwkbdConfig kbd;
-    swkbdCreate(&kbd, 0);
-    swkbdConfigMakePresetDefault(&kbd);
-    swkbdConfigSetGuideText(&kbd, hint.c_str());
-    char out[256] = {0};
-    Result rc = swkbdShow(&kbd, out, sizeof(out));
-    swkbdClose(&kbd);
-    if (R_FAILED(rc)) return "";
-    return std::string(out);
-}
-#else
-static std::string showRetroKeyboard(const std::string& hint) {
-    return "";
-}
-#endif
-
-} // namespace
 
 int RetroGridRowCell::s_lastFocusedColumn = 0;
 
@@ -262,11 +240,14 @@ void RetroCatalogView::onContentAvailable() {
     if (titleLabel) {
         updateHeaderTitle();
         titleLabel->addGestureRecognizer(new brls::TapGestureRecognizer(titleLabel, [this]() {
-            std::string query = showRetroKeyboard("app/retro/search_by_title"_i18n);
-            filterState_.searchQuery = query;
-            filterBadgeLabel_.clear();
-            updateHeaderTitle();
-            filterCatalog();
+            auto alive = alive_flag_;
+            ui::openTextInput([this, alive](std::string query) {
+                if (!alive->load()) return;
+                filterState_.searchQuery = query;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
+                filterCatalog();
+            }, "app/actions/search"_i18n, "app/retro/search_by_title"_i18n, 64, filterState_.searchQuery);
         }));
     }
     if (statsHint) {
@@ -285,11 +266,14 @@ void RetroCatalogView::onContentAvailable() {
 
     // Register search/filter action keys
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        std::string query = showRetroKeyboard("app/retro/search_by_title"_i18n);
-        filterState_.searchQuery = query;
-        filterBadgeLabel_.clear();
-        updateHeaderTitle();
-        filterCatalog();
+        auto alive = alive_flag_;
+        ui::openTextInput([this, alive](std::string query) {
+            if (!alive->load()) return;
+            filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
+            filterCatalog();
+        }, "app/actions/search"_i18n, "app/retro/search_by_title"_i18n, 64, filterState_.searchQuery);
         return true;
     });
 

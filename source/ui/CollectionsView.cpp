@@ -7,6 +7,7 @@
 #include "FavoritesView.hpp"
 #include "GameDetailView.hpp"
 #include "ThemeManager.hpp"
+#include "VirtualKeyboard.hpp"
 #include "style/UiTokens.hpp"
 #include "../catalog/game_stats_manager.h"
 #include "../utils/i18n_plural.h"
@@ -1910,10 +1911,8 @@ void CollectionsView::refreshFavoritesPreview(bool rebuildIfSelected) {
 }
 
 void CollectionsView::openQuickSearch() {
-    auto* ime = brls::Application::getImeManager();
-    if (!ime) return;
     auto flag = alive_flag_;
-    ime->openForText([flag](std::string query) {
+    ui::openTextInput([flag](std::string query) {
         if (!flag->load()) return;
         std::string trimmed = trimCopy(query);
         if (trimmed.empty()) return;

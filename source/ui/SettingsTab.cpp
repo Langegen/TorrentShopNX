@@ -8,6 +8,7 @@
 #include "QrCodeView.hpp"
 #include "RetroUpdateDialog.hpp"
 #include "BugReportFlow.hpp"
+#include "VirtualKeyboard.hpp"
 #include "../utils/bug_report.h"
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/catalog_updater.h"
@@ -515,6 +516,23 @@ brls::View* SettingsTab::buildGeneralTab() {
     });
     box->addView(rumbleCell);
 
+    // Встроенная экранная клавиатура (обход системной клавиатуры на проблемных прошивках)
+    auto* builtinKbdCell = new brls::BooleanCell();
+    builtinKbdCell->init("app/settings/use_builtin_keyboard"_i18n, cfg.getUseBuiltinKeyboard(), [&cfg](bool value) {
+        cfg.setUseBuiltinKeyboard(value);
+    });
+    box->addView(builtinKbdCell);
+
+    auto* builtinKbdHint = new brls::Label();
+    builtinKbdHint->setText("app/settings/use_builtin_keyboard_hint"_i18n);
+    builtinKbdHint->setFontSize(14.0f);
+    builtinKbdHint->setTextColor(ThemeManager::instance().getTextSecondaryColor());
+    builtinKbdHint->setMarginTop(6.0f);
+    builtinKbdHint->setMarginBottom(14.0f);
+    builtinKbdHint->setMarginLeft(16.0f);
+    builtinKbdHint->setMarginRight(16.0f);
+    box->addView(builtinKbdHint);
+
     return scroll;
 }
 
@@ -701,7 +719,7 @@ brls::View* SettingsTab::buildUpdatesTab() {
     };
     updateCatalogUrlDisplay();
     catalogUrlCell->registerClickAction([updateCatalogUrlDisplay, &cfg, alive = aliveToken_](brls::View* view) {
-        brls::Application::getImeManager()->openForText(
+        ui::openTextInput(
             [updateCatalogUrlDisplay, &cfg, alive](std::string text) {
                 if (!alive || !*alive) return;
                 if (!text.empty()) {
@@ -1044,9 +1062,10 @@ brls::View* SettingsTab::buildDownloadsTab() {
     auto applyServerAuth = [&cfg]() {
         net::setServerAuth(cfg.getTorrServerUrl(), cfg.getTorrServerLogin(), cfg.getTorrServerPassword());
     };
-    remoteUrlCell->registerClickAction([remoteUrlCell, updateRemoteUrlDisplay, applyServerAuth, &cfg, &dm](brls::View* view) {
-        brls::Application::getImeManager()->openForText(
-            [updateRemoteUrlDisplay, applyServerAuth, &cfg, &dm](std::string text) {
+    remoteUrlCell->registerClickAction([remoteUrlCell, updateRemoteUrlDisplay, applyServerAuth, &cfg, &dm, alive = aliveToken_](brls::View* view) {
+        ui::openTextInput(
+            [updateRemoteUrlDisplay, applyServerAuth, &cfg, &dm, alive](std::string text) {
+                if (!alive || !*alive) return;
                 if (!text.empty()) {
                     cfg.setTorrServerUrl(text);
                     applyServerAuth();
@@ -1081,9 +1100,10 @@ brls::View* SettingsTab::buildDownloadsTab() {
         passwordCell->setDetailText(n == 0 ? "app/settings/server_login_none"_i18n : dots);
     };
     updateLoginDisplay();
-    loginCell->registerClickAction([updateLoginDisplay, applyServerAuth, &cfg](brls::View*) {
-        brls::Application::getImeManager()->openForText(
-            [updateLoginDisplay, applyServerAuth, &cfg](std::string text) {
+    loginCell->registerClickAction([updateLoginDisplay, applyServerAuth, &cfg, alive = aliveToken_](brls::View*) {
+        ui::openTextInput(
+            [updateLoginDisplay, applyServerAuth, &cfg, alive](std::string text) {
+                if (!alive || !*alive) return;
                 // Empty login turns the login off (the password goes with it)
                 cfg.setTorrServerCredentials(text, cfg.getTorrServerPassword());
                 applyServerAuth();
@@ -1097,14 +1117,15 @@ brls::View* SettingsTab::buildDownloadsTab() {
             0);
         return true;
     });
-    passwordCell->registerClickAction([updateLoginDisplay, applyServerAuth, &cfg](brls::View*) {
+    passwordCell->registerClickAction([updateLoginDisplay, applyServerAuth, &cfg, alive = aliveToken_](brls::View*) {
         if (cfg.getTorrServerLogin().empty()) {
             brls::Application::notify("app/settings/server_password_need_login"_i18n);
             return true;
         }
         // Starts empty: the saved password is never put on screen
-        brls::Application::getImeManager()->openForText(
-            [updateLoginDisplay, applyServerAuth, &cfg](std::string text) {
+        ui::openTextInput(
+            [updateLoginDisplay, applyServerAuth, &cfg, alive](std::string text) {
+                if (!alive || !*alive) return;
                 cfg.setTorrServerCredentials(cfg.getTorrServerLogin(), text);
                 applyServerAuth();
                 brls::Application::notify("app/settings/server_login_updated"_i18n);
@@ -1171,9 +1192,10 @@ brls::View* SettingsTab::buildRetroTab() {
     };
     updateCustomFolderDisplay();
 
-    customFolderCell->registerClickAction([customFolderCell, updateCustomFolderDisplay, &cfg](brls::View* view) {
-        brls::Application::getImeManager()->openForText(
-            [updateCustomFolderDisplay, &cfg](std::string text) {
+    customFolderCell->registerClickAction([customFolderCell, updateCustomFolderDisplay, &cfg, alive = aliveToken_](brls::View* view) {
+        ui::openTextInput(
+            [updateCustomFolderDisplay, &cfg, alive](std::string text) {
+                if (!alive || !*alive) return;
                 if (!text.empty()) {
                     cfg.setRetroCustomPath(text);
                     cfg.save();
@@ -1276,9 +1298,10 @@ brls::View* SettingsTab::buildReportTab() {
         messageCell->setDetailText(text);
     };
     showMessage();
-    messageCell->registerClickAction([showMessage](brls::View*) {
-        brls::Application::getImeManager()->openForText(
-            [showMessage](std::string text) {
+    messageCell->registerClickAction([showMessage, alive = aliveToken_](brls::View*) {
+        ui::openTextInput(
+            [showMessage, alive](std::string text) {
+                if (!alive || !*alive) return;
                 bugreport::setMessage(text);
                 showMessage();
             },
@@ -1301,9 +1324,10 @@ brls::View* SettingsTab::buildReportTab() {
         contactCell->setDetailText(contact.empty() ? "app/report/contact_empty"_i18n : contact);
     };
     showContact();
-    contactCell->registerClickAction([showContact](brls::View*) {
-        brls::Application::getImeManager()->openForText(
-            [showContact](std::string text) {
+    contactCell->registerClickAction([showContact, alive = aliveToken_](brls::View*) {
+        ui::openTextInput(
+            [showContact, alive](std::string text) {
+                if (!alive || !*alive) return;
                 auto& cfg = config::ConfigManager::instance();
                 if (text.empty()) {
                     cfg.setReportContact("");

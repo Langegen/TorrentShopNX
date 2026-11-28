@@ -4,31 +4,13 @@
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
 #include "style/HeaderHints.hpp"
+#include "VirtualKeyboard.hpp"
 #include "../catalog/filter_manager.hpp"
 #include "../utils/log.h"
 #include "../installer/installed_ports.h"
 
 #include <cstdio>
 #include <algorithm>
-
-#ifdef __SWITCH__
-#include <switch.h>
-static std::string showCollectionKeyboard(const char* hint) {
-    SwkbdConfig kbd;
-    swkbdCreate(&kbd, 0);
-    swkbdConfigMakePresetDefault(&kbd);
-    swkbdConfigSetGuideText(&kbd, hint);
-    char out[256] = {0};
-    Result rc = swkbdShow(&kbd, out, sizeof(out));
-    swkbdClose(&kbd);
-    if (R_FAILED(rc)) return "";
-    return std::string(out);
-}
-#else
-static std::string showCollectionKeyboard(const char* hint) {
-    return "";
-}
-#endif
 
 extern std::vector<Game> g_games;
 
@@ -126,11 +108,14 @@ void CollectionGamesView::onContentAvailable() {
 
     if (headerTitle) {
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
-            std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
-            filterState_.searchQuery = query;
-            filterBadgeLabel_.clear();
-            updateHeaderTitle();
-            rebuildDisplay();
+            auto alive = alive_flag_;
+            ui::openTextInput([this, alive](std::string query) {
+                if (!alive->load()) return;
+                filterState_.searchQuery = query;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
+                rebuildDisplay();
+            }, "app/actions/search"_i18n, "app/collections/search_hint"_i18n, 64, filterState_.searchQuery);
         }));
     }
 
@@ -149,11 +134,14 @@ void CollectionGamesView::onContentAvailable() {
     }
 
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
-        filterState_.searchQuery = query;
-        filterBadgeLabel_.clear();
-        updateHeaderTitle();
-        rebuildDisplay();
+        auto alive = alive_flag_;
+        ui::openTextInput([this, alive](std::string query) {
+            if (!alive->load()) return;
+            filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
+            rebuildDisplay();
+        }, "app/actions/search"_i18n, "app/collections/search_hint"_i18n, 64, filterState_.searchQuery);
         return true;
     });
 

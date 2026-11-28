@@ -807,7 +807,9 @@
         "sec_catalog_update": "Catálogo de jogos",
         "sound_effects_desc": "Sons de botões, navegação e alertas",
         "retro_folder_auto": "Automático (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Automático: os jogos vão para as pastas do Tico (sdmc:/tico/roms/<console>), PS Vita para o Vita3K, Wii U para o Cemu. Pasta personalizada: <pasta>/<console>/ — adicione-a no Tico em Configurações › Geral › Pastas de jogos."
+        "retro_folder_hint": "Automático: os jogos vão para as pastas do Tico (sdmc:/tico/roms/<console>), PS Vita para o Vita3K, Wii U para o Cemu. Pasta personalizada: <pasta>/<console>/ — adicione-a no Tico em Configurações › Geral › Pastas de jogos.",
+        "use_builtin_keyboard": "Teclado integrado",
+        "use_builtin_keyboard_hint": "Usar o teclado virtual integrado em vez do teclado do sistema Nintendo Switch (ajuda em firmwares onde o teclado do sistema reinicia o console)."
     },
     "applet": {
         "title": "Modo Applet detectado",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Portable",
         "stats_hint": "Catálogo: {} jogos",
         "stats_hint_update": "[-] Atualizar"
+    },
+    "keyboard": {
+        "space": "Espaço",
+        "clear": "Limpar",
+        "ok": "Concluir",
+        "cancel": "Cancelar",
+        "hint_type": "Digitar",
+        "hint_delete": "Apagar",
+        "hint_space": "Espaço",
+        "hint_shift": "Shift",
+        "hint_layout": "Idioma",
+        "hint_done": "Concluir",
+        "hint_cancel": "Cancelar",
+        "placeholder": "Digite o texto..."
     }
 }

@@ -6,6 +6,7 @@
 #include "../EmptyState.hpp"
 #include "../SectionTabBar.hpp"
 #include "../ThemeManager.hpp"
+#include "../VirtualKeyboard.hpp"
 #include "../style/HeaderHints.hpp"
 #include "../style/UiTokens.hpp"
 
@@ -294,7 +295,7 @@ void HomebrewView::onContentAvailable() {
 
     registerAction("app/homebrew/hint_search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View*) {
         auto alive = alive_;
-        brls::Application::getImeManager()->openForText(
+        ui::openTextInput(
             [this, alive](std::string text) {
                 if (!alive->load()) return;
                 query_ = text;

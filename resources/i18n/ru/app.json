@@ -832,7 +832,9 @@
         "sec_catalog_update": "Каталог игр",
         "sound_effects_desc": "Звуки кнопок, навигации по меню и уведомлений",
         "retro_folder_auto": "Автоматически (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Автоматически: игры ложатся в папки Tico (sdmc:/tico/roms/<консоль>), PS Vita — в Vita3K, Wii U — в Cemu. Своя папка: <папка>/<консоль>/ — добавьте её в Tico: Настройки › Общие › Папки с играми."
+        "retro_folder_hint": "Автоматически: игры ложатся в папки Tico (sdmc:/tico/roms/<консоль>), PS Vita — в Vita3K, Wii U — в Cemu. Своя папка: <папка>/<консоль>/ — добавьте её в Tico: Настройки › Общие › Папки с играми.",
+        "use_builtin_keyboard": "Встроенная клавиатура",
+        "use_builtin_keyboard_hint": "Использовать встроенную экранную клавиатуру вместо стандартной клавиатуры Nintendo Switch (помогает на прошивках, где системная клавиатура вызывает перезагрузку консоли)."
     },
     "applet": {
         "title": "Режим апплета не поддерживается",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Portable",
         "stats_hint": "База: {} игр",
         "stats_hint_update": "[-] Обновить"
+    },
+    "keyboard": {
+        "space": "Пробел",
+        "clear": "Очистить",
+        "ok": "Готово",
+        "cancel": "Отмена",
+        "hint_type": "Ввод",
+        "hint_delete": "Удалить",
+        "hint_space": "Пробел",
+        "hint_shift": "Регистр",
+        "hint_layout": "Раскладка",
+        "hint_done": "Готово",
+        "hint_cancel": "Отмена",
+        "placeholder": "Введите текст..."
     }
 }

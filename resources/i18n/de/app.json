@@ -807,7 +807,9 @@
         "sec_catalog_update": "Spielekatalog",
         "sound_effects_desc": "Tastentöne, Navigationsgeräusche und Hinweise",
         "retro_folder_auto": "Automatisch (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Automatisch: Spiele landen in den Tico-Ordnern (sdmc:/tico/roms/<Konsole>), PS Vita in Vita3K, Wii U in Cemu. Eigener Ordner: <Ordner>/<Konsole>/ — in Tico unter Einstellungen › Allgemein › Spielordner hinzufügen."
+        "retro_folder_hint": "Automatisch: Spiele landen in den Tico-Ordnern (sdmc:/tico/roms/<Konsole>), PS Vita in Vita3K, Wii U in Cemu. Eigener Ordner: <Ordner>/<Konsole>/ — in Tico unter Einstellungen › Allgemein › Spielordner hinzufügen.",
+        "use_builtin_keyboard": "Integrierte Tastatur",
+        "use_builtin_keyboard_hint": "Integrierte Bildschirmtastatur anstelle der Nintendo Switch-Systemtastatur verwenden (hilft bei Firmwares, auf denen die Systemtastatur die Konsole neu startet)."
     },
     "applet": {
         "title": "Applet-Modus erkannt",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Portable",
         "stats_hint": "Katalog: {} Spiele",
         "stats_hint_update": "[-] Aktualisieren"
+    },
+    "keyboard": {
+        "space": "Leertaste",
+        "clear": "Leeren",
+        "ok": "Fertig",
+        "cancel": "Abbrechen",
+        "hint_type": "Eingeben",
+        "hint_delete": "Löschen",
+        "hint_space": "Leer",
+        "hint_shift": "Umschalt",
+        "hint_layout": "Belegung",
+        "hint_done": "Fertig",
+        "hint_cancel": "Abbrechen",
+        "placeholder": "Text eingeben..."
     }
 }

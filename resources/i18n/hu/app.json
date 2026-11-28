@@ -832,7 +832,9 @@
         "sec_catalog_update": "Játékkatalógus",
         "sound_effects_desc": "Gombkattintás, navigációs hangok és figyelmeztető jelzések",
         "retro_folder_auto": "Automatikus (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Automatikus: a játékok a Tico mappáiba (sdmc:/tico/roms/<console>) kerülnek, a PS Vita-játékok a Vita3K-ba, a Wii U-játékok a Cemu-ba. Egyéni mappa: <folder>/<console>/ — a Ticóban add hozzá a Beállítások › Általános › Játékmappák alatt."
+        "retro_folder_hint": "Automatikus: a játékok a Tico mappáiba (sdmc:/tico/roms/<console>) kerülnek, a PS Vita-játékok a Vita3K-ba, a Wii U-játékok a Cemu-ba. Egyéni mappa: <folder>/<console>/ — a Ticóban add hozzá a Beállítások › Általános › Játékmappák alatt.",
+        "use_builtin_keyboard": "Beépített billentyűzet",
+        "use_builtin_keyboard_hint": "A beépített képernyő-billentyűzet használata a Nintendo Switch rendszerbillentyűzete helyett (segít azokon a firmware-eken, ahol a rendszerbillentyűzet újraindítja a konzolt)."
     },
     "applet": {
         "title": "Az Applet mód nem támogatott",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Hordozható",
         "stats_hint": "Katalógus: {} játék",
         "stats_hint_update": "[-] Frissítés"
+    },
+    "keyboard": {
+        "space": "Szóköz",
+        "clear": "Törlés",
+        "ok": "Kész",
+        "cancel": "Mégse",
+        "hint_type": "Bevitel",
+        "hint_delete": "Vissza",
+        "hint_space": "Szóköz",
+        "hint_shift": "Shift",
+        "hint_layout": "Kiosztás",
+        "hint_done": "Kész",
+        "hint_cancel": "Mégse",
+        "placeholder": "Szöveg megadása..."
     }
 }

@@ -807,7 +807,9 @@
         "sec_catalog_update": "ゲームカタログ",
         "sound_effects_desc": "ボタン、メニュー操作および通知の効果音",
         "retro_folder_auto": "自動（Tico、Vita3K、Cemu）",
-        "retro_folder_hint": "自動：ゲームは Tico のフォルダ（sdmc:/tico/roms/<機種>）に、PS Vita は Vita3K に、Wii U は Cemu に保存されます。カスタムフォルダ：<フォルダ>/<機種>/ — Tico の 設定 › 一般 › ゲームフォルダ で追加してください。"
+        "retro_folder_hint": "自動：ゲームは Tico のフォルダ（sdmc:/tico/roms/<機種>）に、PS Vita は Vita3K に、Wii U は Cemu に保存されます。カスタムフォルダ：<フォルダ>/<機種>/ — Tico の 設定 › 一般 › ゲームフォルダ で追加してください。",
+        "use_builtin_keyboard": "内蔵キーボード",
+        "use_builtin_keyboard_hint": "Nintendo Switchのシステムキーボードの代わりにアプリ内蔵のオンスクリーンキーボードを使用します（システムキーボードで本体が再起動するファームウェア対策）。"
     },
     "applet": {
         "title": "アプレットモードを検出しました",
@@ -1601,5 +1603,19 @@
         "badge_portable": "ポータブル",
         "stats_hint": "カタログ：{} 本",
         "stats_hint_update": "[-] 更新"
+    },
+    "keyboard": {
+        "space": "スペース",
+        "clear": "クリア",
+        "ok": "完了",
+        "cancel": "キャンセル",
+        "hint_type": "入力",
+        "hint_delete": "削除",
+        "hint_space": "スペース",
+        "hint_shift": "大文字",
+        "hint_layout": "配列切替",
+        "hint_done": "完了",
+        "hint_cancel": "キャンセル",
+        "placeholder": "テキストを入力..."
     }
 }

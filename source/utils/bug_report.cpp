@@ -174,6 +174,7 @@ bool writeInfo(const std::string& dst, const std::string& user_message) {
     out << "data_mode: " << cfg.getDataMode() << "\n";
     out << "install_location: " << cfg.getInstallLocation() << "\n";
     out << "theme: " << cfg.getTheme() << "\n";
+    out << "builtin_keyboard: " << (cfg.getUseBuiltinKeyboard() ? "true" : "false") << "\n";
     const std::string contact = cfg.getReportContact();
     out << "telegram: " << (contact.empty() ? "(not given)" : contact) << "\n";
     out << "sd_card: " << storageLine(1) << "\n";

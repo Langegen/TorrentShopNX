@@ -1,6 +1,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <atomic>
 #include <vector>
 #include <string>
 #include <memory>
@@ -46,6 +47,7 @@ private:
     std::vector<const Game*> allGames_;
     catalog::FilterSortState filterState_;
     std::string filterBadgeLabel_;
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
 };
 
 } // namespace ui

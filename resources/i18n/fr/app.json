@@ -807,7 +807,9 @@
         "sec_catalog_update": "Catalogue de jeux",
         "sound_effects_desc": "Sons des boutons, navigation et alertes",
         "retro_folder_auto": "Automatique (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Automatique : les jeux vont dans les dossiers de Tico (sdmc:/tico/roms/<console>), PS Vita dans Vita3K, Wii U dans Cemu. Dossier personnalisé : <dossier>/<console>/ — ajoutez-le dans Tico sous Paramètres › Général › Dossiers de jeux."
+        "retro_folder_hint": "Automatique : les jeux vont dans les dossiers de Tico (sdmc:/tico/roms/<console>), PS Vita dans Vita3K, Wii U dans Cemu. Dossier personnalisé : <dossier>/<console>/ — ajoutez-le dans Tico sous Paramètres › Général › Dossiers de jeux.",
+        "use_builtin_keyboard": "Clavier intégré",
+        "use_builtin_keyboard_hint": "Utiliser le clavier virtuel intégré au lieu du clavier système de la Nintendo Switch (utile sur les firmwares où le clavier système fait redémarrer la console)."
     },
     "applet": {
         "title": "Mode Applet détecté",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Portable",
         "stats_hint": "Catalogue : {} jeux",
         "stats_hint_update": "[-] Mettre à jour"
+    },
+    "keyboard": {
+        "space": "Espace",
+        "clear": "Effacer",
+        "ok": "Valider",
+        "cancel": "Annuler",
+        "hint_type": "Saisir",
+        "hint_delete": "Suppr.",
+        "hint_space": "Espace",
+        "hint_shift": "Maj",
+        "hint_layout": "Disposition",
+        "hint_done": "Valider",
+        "hint_cancel": "Annuler",
+        "placeholder": "Saisir du texte..."
     }
 }

@@ -71,6 +71,7 @@ bool parseConfigBody(const std::string& body,
                      int& font_scale,
                      bool& sound_effects_enabled,
                      bool& rumble_enabled,
+                     bool& use_builtin_keyboard,
                      std::string& catalog_app_version) {
     bool parsed_known_keys = false;
     std::string legacy_single_value;
@@ -177,6 +178,9 @@ bool parseConfigBody(const std::string& body,
                     parsed_known_keys = true;
                 } else if (key == "joycon_rumble") {
                     rumble_enabled = parseBool(val, rumble_enabled);
+                    parsed_known_keys = true;
+                } else if (key == "use_builtin_keyboard") {
+                    use_builtin_keyboard = parseBool(val, use_builtin_keyboard);
                     parsed_known_keys = true;
                 } else if (key == "catalog_app_version") {
                     catalog_app_version = val;
@@ -325,6 +329,7 @@ ConfigManager::ConfigManager() {
     custom_background_path_.clear();
     show_bottom_dashboard_ = true;
     font_scale_ = 0;
+    use_builtin_keyboard_ = false;
     load();
     font_scale_fast_.store(font_scale_, std::memory_order_relaxed);
 }
@@ -343,6 +348,7 @@ void ConfigManager::load() {
                         background_blur_, background_dim_,
                         show_bottom_dashboard_, font_scale_,
                         sound_effects_enabled_, rumble_enabled_,
+                        use_builtin_keyboard_,
                         catalog_app_version_);
         readRawKey(body, "torrserver_login", torrserver_login_);
         readRawKey(body, "torrserver_password", torrserver_password_);
@@ -390,6 +396,7 @@ void ConfigManager::load() {
                         background_blur_, background_dim_,
                         show_bottom_dashboard_, font_scale_,
                         sound_effects_enabled_, rumble_enabled_,
+                        use_builtin_keyboard_,
                         catalog_app_version_);
         if (data_mode_ != "torrserver" && data_mode_ != "local_client") data_mode_ = "local_client";
         if (install_location_ != "sd" && install_location_ != "nand" && install_location_ != "usb") install_location_ = "auto";
@@ -465,6 +472,7 @@ void ConfigManager::save() {
         out << "font_scale=" << font_scale_ << "\n";
         out << "sound_effects=" << (sound_effects_enabled_ ? "true" : "false") << "\n";
         out << "joycon_rumble=" << (rumble_enabled_ ? "true" : "false") << "\n";
+        out << "use_builtin_keyboard=" << (use_builtin_keyboard_ ? "true" : "false") << "\n";
         out << "report_contact=" << report_contact_ << "\n";
         if (!homebrew_section_.empty()) out << "homebrew_section=" << homebrew_section_ << "\n";
     }
@@ -1039,6 +1047,19 @@ void ConfigManager::setRumbleEnabled(bool enabled) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (rumble_enabled_ != enabled) {
         rumble_enabled_ = enabled;
+        save();
+    }
+}
+
+bool ConfigManager::getUseBuiltinKeyboard() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return use_builtin_keyboard_;
+}
+
+void ConfigManager::setUseBuiltinKeyboard(bool enabled) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (use_builtin_keyboard_ != enabled) {
+        use_builtin_keyboard_ = enabled;
         save();
     }
 }

@@ -6,6 +6,7 @@
 #include "FavoritesManager.hpp"
 #include "FilterSortDialog.hpp"
 #include "ThemeManager.hpp"
+#include "VirtualKeyboard.hpp"
 #include "../catalog/pc_catalog_manager.h"
 #include "../catalog/game_stats_manager.h"
 #include "../catalog/filter_manager.hpp"
@@ -13,25 +14,6 @@
 #include "../utils/log.h"
 #include "../config/config.h"
 #include <algorithm>
-
-#ifdef __SWITCH__
-#include <switch.h>
-static std::string showKeyboard(const char* hint) {
-    SwkbdConfig kbd;
-    swkbdCreate(&kbd, 0);
-    swkbdConfigMakePresetDefault(&kbd);
-    swkbdConfigSetGuideText(&kbd, hint);
-    char out[256] = {0};
-    Result rc = swkbdShow(&kbd, out, sizeof(out));
-    swkbdClose(&kbd);
-    if (R_FAILED(rc)) return "";
-    return std::string(out);
-}
-#else
-static std::string showKeyboard(const char* hint) {
-    return "";
-}
-#endif
 
 namespace ui {
 
@@ -167,7 +149,9 @@ PcCatalogView::PcCatalogView(const std::string& subforum_id,
       filterBadgeLabel_(filterBadgeLabel) {
 }
 
-PcCatalogView::~PcCatalogView() = default;
+PcCatalogView::~PcCatalogView() {
+    if (alive_) *alive_ = false;
+}
 
 void PcCatalogView::updateHeaderTitle() {
     if (!headerTitle) return;
@@ -180,11 +164,14 @@ void PcCatalogView::onContentAvailable() {
     if (headerTitle) {
         updateHeaderTitle();
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
-            std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
-            filterState_.searchQuery = query;
-            filterBadgeLabel_.clear();
-            updateHeaderTitle();
-            filterCatalog();
+            auto alive = alive_;
+            ui::openTextInput([this, alive](std::string query) {
+                if (!alive->load()) return;
+                filterState_.searchQuery = query;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
+                filterCatalog();
+            }, "app/actions/search"_i18n, "app/catalog/search_hint"_i18n, 64, filterState_.searchQuery);
         }));
     }
 
@@ -223,11 +210,14 @@ void PcCatalogView::onContentAvailable() {
 
     // Register search/filter action keys
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
-        std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
-        filterState_.searchQuery = query;
-        filterBadgeLabel_.clear();
-        updateHeaderTitle();
-        filterCatalog();
+        auto alive = alive_;
+        ui::openTextInput([this, alive](std::string query) {
+            if (!alive->load()) return;
+            filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
+            filterCatalog();
+        }, "app/actions/search"_i18n, "app/catalog/search_hint"_i18n, 64, filterState_.searchQuery);
         return true;
     });
 

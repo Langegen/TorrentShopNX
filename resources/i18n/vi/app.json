@@ -832,7 +832,9 @@
         "sec_catalog_update": "Danh mục game",
         "sound_effects_desc": "Tiếng nhấn nút, điều hướng và thông báo",
         "retro_folder_auto": "Tự động (Tico, Vita3K, Cemu)",
-        "retro_folder_hint": "Tự động: game lưu vào thư mục Tico (sdmc:/tico/roms/<hệ máy>), PS Vita vào Vita3K, Wii U vào Cemu. Thư mục tùy chỉnh: <thư mục>/<hệ máy>/ — thêm trong Tico tại Settings › General › Game folders."
+        "retro_folder_hint": "Tự động: game lưu vào thư mục Tico (sdmc:/tico/roms/<hệ máy>), PS Vita vào Vita3K, Wii U vào Cemu. Thư mục tùy chỉnh: <thư mục>/<hệ máy>/ — thêm trong Tico tại Settings › General › Game folders.",
+        "use_builtin_keyboard": "Bàn phím tích hợp",
+        "use_builtin_keyboard_hint": "Sử dụng bàn phím ảo tích hợp thay cho bàn phím hệ thống Nintendo Switch (hữu ích trên các firmware mà bàn phím hệ thống làm khởi động lại máy)."
     },
     "applet": {
         "title": "Không hỗ trợ chế độ Applet",
@@ -1601,5 +1603,19 @@
         "badge_portable": "Portable",
         "stats_hint": "Danh mục: {} game",
         "stats_hint_update": "[-] Cập nhật"
+    },
+    "keyboard": {
+        "space": "Dấu cách",
+        "clear": "Xóa hết",
+        "ok": "Xong",
+        "cancel": "Hủy",
+        "hint_type": "Nhập",
+        "hint_delete": "Xóa",
+        "hint_space": "Cách",
+        "hint_shift": "Shift",
+        "hint_layout": "Bố cục",
+        "hint_done": "Xong",
+        "hint_cancel": "Hủy",
+        "placeholder": "Nhập văn bản..."
     }
 }

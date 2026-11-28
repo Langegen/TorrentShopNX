@@ -807,7 +807,9 @@
         "sec_catalog_update": "遊戲目錄",
         "sound_effects_desc": "按鍵、選單導覽與提示音效",
         "retro_folder_auto": "自動（Tico、Vita3K、Cemu）",
-        "retro_folder_hint": "自動：遊戲會儲存至 Tico 資料夾（sdmc:/tico/roms/<主機>），PS Vita 至 Vita3K，Wii U 至 Cemu。自訂資料夾：<資料夾>/<主機>/ — 請在 Tico 的 設定 › 一般 › 遊戲資料夾 中加入。"
+        "retro_folder_hint": "自動：遊戲會儲存至 Tico 資料夾（sdmc:/tico/roms/<主機>），PS Vita 至 Vita3K，Wii U 至 Cemu。自訂資料夾：<資料夾>/<主機>/ — 請在 Tico 的 設定 › 一般 › 遊戲資料夾 中加入。",
+        "use_builtin_keyboard": "內建螢幕鍵盤",
+        "use_builtin_keyboard_hint": "使用應用程式內建的螢幕鍵盤代替 Nintendo Switch 系統鍵盤（適用於呼叫系統鍵盤會導致主機重新啟動的系統韌體）。"
     },
     "applet": {
         "title": "目前執行於 Applet 模式",
@@ -1601,5 +1603,19 @@
         "badge_portable": "免安裝版",
         "stats_hint": "總計：{} 款遊戲",
         "stats_hint_update": "[-] 更新"
+    },
+    "keyboard": {
+        "space": "空白鍵",
+        "clear": "清除",
+        "ok": "完成",
+        "cancel": "取消",
+        "hint_type": "輸入",
+        "hint_delete": "刪除",
+        "hint_space": "空白鍵",
+        "hint_shift": "大小寫",
+        "hint_layout": "切換配置",
+        "hint_done": "完成",
+        "hint_cancel": "取消",
+        "placeholder": "請輸入文字..."
     }
 }

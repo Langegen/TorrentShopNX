@@ -162,6 +162,9 @@ public:
     bool getRumbleEnabled() const; // default true
     void setRumbleEnabled(bool enabled);
 
+    bool getUseBuiltinKeyboard() const; // default false
+    void setUseBuiltinKeyboard(bool enabled);
+
 private:
     ConfigManager();
     ~ConfigManager() = default;
@@ -200,6 +203,7 @@ private:
     int font_scale_ = 0;
     bool sound_effects_enabled_ = true;
     bool rumble_enabled_ = true;
+    bool use_builtin_keyboard_ = false;
     std::string config_path_;
     std::string legacy_config_path_;
 

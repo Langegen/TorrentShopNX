@@ -4,6 +4,7 @@
 #include "ArchiveProgressDialog.hpp"
 #include "InstallProgressDialog.hpp"
 #include "TextViewerActivity.hpp"
+#include "VirtualKeyboard.hpp"
 #include "../utils/log.h"
 #include "../utils/archive_utils.h"
 #include "../utils/switch_utils.h"
@@ -1109,7 +1110,8 @@ void FileManagerView::showCreateArchiveDialog(const std::vector<std::string>& ta
     std::string promptTitle = brls::getStr("app/file_manager/create_archive_title");
     int actIdx = activePanel_;
 
-    brls::Application::getImeManager()->openForText([this, actIdx, targets](std::string fileName) {
+    ui::openTextInput([this, alive = alive_, actIdx, targets](std::string fileName) {
+        if (!alive->load()) return;
         if (fileName.empty()) return;
 
         if (fileName.size() < 4 || fileName.substr(fileName.size() - 4) != ".zip") {
@@ -1569,7 +1571,8 @@ void FileManagerView::showDeleteConfirmDialog() {
 
 void FileManagerView::showNewFolderDialog() {
     int actIdx = activePanel_;
-    brls::Application::getImeManager()->openForText([this, actIdx](std::string text) {
+    ui::openTextInput([this, alive = alive_, actIdx](std::string text) {
+        if (!alive->load()) return;
         if (text.empty()) return;
         std::string newPath = joinPath(panels_[actIdx].currentDir, text);
         std::string err;
@@ -1585,7 +1588,8 @@ void FileManagerView::showNewFolderDialog() {
 
 void FileManagerView::showRenameDialog(const util::FileItem& item) {
     int actIdx = activePanel_;
-    brls::Application::getImeManager()->openForText([this, actIdx, item](std::string text) {
+    ui::openTextInput([this, alive = alive_, actIdx, item](std::string text) {
+        if (!alive->load()) return;
         if (text.empty() || text == item.name) return;
         std::string err;
         if (util::renameItem(item.path, text, err)) {
