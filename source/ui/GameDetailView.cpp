@@ -1,5 +1,11 @@
 #include "GameDetailView.hpp"
+#include "CatalogView.hpp"
+#include "CollectionGamesView.hpp"
 #include "CompanionInstallDialog.hpp"
+#include "LibraryView.hpp"
+#include "PcCatalogView.hpp"
+#include "RetroCatalogView.hpp"
+#include "RetroEmulatorsView.hpp"
 #include "style/UiTokens.hpp"
 #include "../utils/string_utils.h"
 #include "../utils/metadata_locale.h"
@@ -11,6 +17,7 @@
 #include "ScreenshotViewer.hpp"
 #include "QrCodeView.hpp"
 #include "PortInstallFlow.hpp"
+#include "../catalog/collections_manager.h"
 #include "../catalog/filter_manager.hpp"
 #include "../catalog/retro_catalog_manager.h"
 #include "../catalog/installed_retro_games.h"
@@ -20,6 +27,7 @@
 #include "../config/config.h"
 #include "../installer/PortInstallPlanner.hpp"
 #include "../utils/file_ops.h"
+#include <yoga/Yoga.h>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -293,6 +301,10 @@ void GameDetailView::onContentAvailable() {
     }
     
     // Dynamic Badges (Console, Genres & Languages)
+    if (badgesBox) {
+        YGNodeStyleSetFlexWrap(badgesBox->getYGNode(), YGWrapWrap);
+    }
+
     if (!retro_console_id_.empty()) {
         const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
         brls::Box* cBadge = new brls::Box();
@@ -308,6 +320,11 @@ void GameDetailView::onContentAvailable() {
         cLabel->setFontSize(14);
         cLabel->setTextColor(nvgRGB(255, 255, 255));
         cBadge->addView(cLabel);
+        if (cInfo) {
+            attachBadgeTap(cBadge, [info = *cInfo]() {
+                brls::Application::pushActivity(new RetroCatalogView(info));
+            });
+        }
 
         badgesBox->addView(cBadge);
 
@@ -327,6 +344,9 @@ void GameDetailView::onContentAvailable() {
             emuLabel->setFontSize(14);
             emuLabel->setTextColor(nvgRGB(255, 255, 255));
             emuBadge->addView(emuLabel);
+            attachBadgeTap(emuBadge, []() {
+                brls::Application::pushActivity(new RetroEmulatorsView());
+            });
 
             badgesBox->addView(emuBadge);
         }
@@ -344,6 +364,13 @@ void GameDetailView::onContentAvailable() {
             setLabel->setFontSize(14);
             setLabel->setTextColor(nvgRGB(255, 255, 255));
             setBadge->addView(setLabel);
+            if (cInfo) {
+                catalog::FilterSortState st;
+                st.onlyRomsets = true;
+                attachBadgeTap(setBadge, [info = *cInfo, st]() {
+                    brls::Application::pushActivity(new RetroCatalogView(info, st, "app/retro/sec_romsets"_i18n));
+                });
+            }
 
             badgesBox->addView(setBadge);
 
@@ -370,9 +397,12 @@ void GameDetailView::onContentAvailable() {
         pcLabel->setFontSize(14);
         pcLabel->setTextColor(nvgRGB(255, 255, 255));
         pcBadge->addView(pcLabel);
+        attachBadgeTap(pcBadge, []() {
+            brls::Application::pushActivity(new PcCatalogView());
+        });
         badgesBox->addView(pcBadge);
 
-        if (game_.image_format == "Portable" || game_.title.find("[Portable]") != std::string::npos) {
+        if (isPortablePcGame(game_)) {
             brls::Box* portBadge = new brls::Box();
             portBadge->setPadding(5, 10, 5, 10);
             portBadge->setMarginRight(10);
@@ -385,6 +415,11 @@ void GameDetailView::onContentAvailable() {
             portLabel->setFontSize(14);
             portLabel->setTextColor(nvgRGB(255, 255, 255));
             portBadge->addView(portLabel);
+            catalog::FilterSortState st;
+            st.onlyPortable = true;
+            attachBadgeTap(portBadge, [this, st]() {
+                openFilteredCatalog(st, "app/pc/badge_portable"_i18n);
+            });
             badgesBox->addView(portBadge);
         }
     }
@@ -396,7 +431,7 @@ void GameDetailView::onContentAvailable() {
 
     // Add language badge
     // Same text and color as the catalog cards (RUS red, ENG blue, MULTI violet)
-    GameLangBadge langInfo = getGameLangBadge(game_.interface_lang, brls::Application::getLocale());
+    GameLangBadge langInfo = getGameLangBadge(game_.interface_lang, locale);
     if (!langInfo.text.empty()) {
         brls::Box* langBadge = new brls::Box();
         langBadge->setPadding(5, 10, 5, 10);
@@ -411,13 +446,24 @@ void GameDetailView::onContentAvailable() {
         langLabel->setTextColor(nvgRGB(255, 255, 255));
         langBadge->addView(langLabel);
 
+        const auto langFilter = catalog::languageFilterForBadge(game_.interface_lang, locale);
+        if (langFilter != catalog::LanguageFilter::ALL) {
+            catalog::FilterSortState st;
+            st.lang = langFilter;
+            st.langs = {langFilter};
+            const std::string headerLabel = catalog::languageFilterHeaderLabel(langFilter, langInfo.text);
+            attachBadgeTap(langBadge, [this, st, headerLabel]() {
+                openFilteredCatalog(st, headerLabel);
+            });
+        }
+
         badgesBox->addView(langBadge);
     }
     
     // Add genre badges
-    std::vector<std::string> displayBadges = catalog::getDisplayGenreBadges(game_.genre);
-    for (const auto& genreTag : displayBadges) {
-        if (util::isPlaceholderValue(genreTag)) continue;
+    std::vector<catalog::DisplayGenreBadge> displayBadges = catalog::getDisplayGenreBadgeItems(game_.genre);
+    for (const auto& badge : displayBadges) {
+        if (util::isPlaceholderValue(badge.label)) continue;
         brls::Box* gBadge = new brls::Box();
         gBadge->setPadding(5, 10, 5, 10);
         gBadge->setMarginRight(10);
@@ -428,10 +474,23 @@ void GameDetailView::onContentAvailable() {
         gBadge->setCornerRadius(6);
 
         brls::Label* gLabel = new brls::Label();
-        gLabel->setText(genreTag);
+        gLabel->setText(badge.label);
         gLabel->setFontSize(14);
         gLabel->setTextColor(ThemeManager::instance().getAccentColor());
         gBadge->addView(gLabel);
+
+        if (isHomebrewGame(game_) && !badge.isCanonical && catalog::isHomebrewGenreTag(badge.filterId)) {
+            attachBadgeTap(gBadge, [this]() {
+                openFilteredCatalog(catalog::FilterSortState{}, "");
+            });
+        } else {
+            catalog::FilterSortState st;
+            st.genre = badge.filterId;
+            st.genres = {badge.filterId};
+            attachBadgeTap(gBadge, [this, st, label = badge.label]() {
+                openFilteredCatalog(st, label);
+            });
+        }
 
         badgesBox->addView(gBadge);
     }
@@ -454,6 +513,19 @@ void GameDetailView::onContentAvailable() {
             mpLabel->setFontSize(14);
             mpLabel->setTextColor(style::textSecondary());
             mpBadge->addView(mpLabel);
+
+            const auto pf = catalog::playersFilterForMultiplayer(mp);
+            if (pf != catalog::PlayersFilter::ALL) {
+                catalog::FilterSortState st;
+                st.players = pf;
+                st.playersList = {pf};
+                const auto playerNames = catalog::getPlayerFilterNames();
+                const size_t pfIdx = static_cast<size_t>(pf);
+                const std::string mpHeader = (pfIdx < playerNames.size()) ? playerNames[pfIdx] : mp;
+                attachBadgeTap(mpBadge, [this, st, mpHeader]() {
+                    openFilteredCatalog(st, mpHeader);
+                });
+            }
 
             badgesBox->addView(mpBadge);
         }
@@ -753,6 +825,48 @@ void GameDetailView::checkInstalled() {
     });
 }
 
+void GameDetailView::attachBadgeTap(brls::Box* badge, std::function<void()> onTap) {
+    if (!badge || !onTap) return;
+    badge->setFocusable(false);
+    brls::TapGestureConfig cfg(true, brls::SOUND_NONE, brls::SOUND_NONE, brls::SOUND_CLICK);
+    auto alive = alive_;
+    badge->addGestureRecognizer(new brls::TapGestureRecognizer(badge, [this, alive, onTap = std::move(onTap)]() {
+        brls::sync([this, alive, onTap]() {
+            if (!alive || !*alive) return;
+            const auto& stack = brls::Application::getActivitiesStack();
+            if (stack.empty() || stack.back() != this) return;
+            util::triggerHapticFeedback(2);
+            onTap();
+        });
+    }, cfg));
+}
+
+void GameDetailView::openFilteredCatalog(const catalog::FilterSortState& state, const std::string& filterLabel) {
+    if (!retro_console_id_.empty()) {
+        const auto* cInfo = catalog::RetroCatalogManager::instance().getConsole(retro_console_id_);
+        if (cInfo) {
+            brls::Application::pushActivity(new RetroCatalogView(*cInfo, state, filterLabel));
+        }
+        return;
+    }
+    if (isPcRelease_) {
+        brls::Application::pushActivity(new PcCatalogView("", "", state, filterLabel));
+        return;
+    }
+    if (isHomebrewGame(game_)) {
+        catalog::CollectionInfo portsInfo{"ports_homebrew", "", ""};
+        for (const auto& info : catalog::CollectionsManager::instance().collections()) {
+            if (info.id == "ports_homebrew") {
+                portsInfo = info;
+                break;
+            }
+        }
+        brls::Application::pushActivity(new CollectionGamesView(portsInfo, state, filterLabel));
+        return;
+    }
+    brls::Application::pushActivity(new CatalogView(state, filterLabel));
+}
+
 void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info, uint64_t appId) {
     if (installedBadge_) {
         badgesBox->removeView(installedBadge_);
@@ -793,6 +907,9 @@ void GameDetailView::applyInstalledState(const util::InstalledGameInfo& info, ui
     badgeLabel->setFontSize(14);
     badgeLabel->setTextColor(style::stateOk());
     installedBadge_->addView(badgeLabel);
+    attachBadgeTap(installedBadge_, []() {
+        brls::Application::pushActivity(new LibraryView());
+    });
     badgesBox->addView(installedBadge_, 0);
 
     // Does this release carry something newer than what is installed?

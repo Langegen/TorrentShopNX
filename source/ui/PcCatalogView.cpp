@@ -157,18 +157,33 @@ private:
     PcCatalogView* parent_ = nullptr;
 };
 
-PcCatalogView::PcCatalogView(const std::string& subforum_id, const std::string& category_title)
-    : subforum_id_(subforum_id), category_title_(category_title) {
+PcCatalogView::PcCatalogView(const std::string& subforum_id,
+                             const std::string& category_title,
+                             const catalog::FilterSortState& initialFilter,
+                             const std::string& filterBadgeLabel)
+    : subforum_id_(subforum_id),
+      category_title_(category_title),
+      filterState_(initialFilter),
+      filterBadgeLabel_(filterBadgeLabel) {
 }
 
 PcCatalogView::~PcCatalogView() = default;
 
+void PcCatalogView::updateHeaderTitle() {
+    if (!headerTitle) return;
+    std::string base = !category_title_.empty() ? category_title_ : brls::getStr("app/pc/all_catalog");
+    headerTitle->setSingleLine(true);
+    headerTitle->setText(filterBadgeLabel_.empty() ? base : (base + " \xC2\xB7 " + filterBadgeLabel_));
+}
+
 void PcCatalogView::onContentAvailable() {
     if (headerTitle) {
-        headerTitle->setText(!category_title_.empty() ? category_title_ : brls::getStr("app/pc/all_catalog"));
+        updateHeaderTitle();
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
             std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
             filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             filterCatalog();
         }));
     }
@@ -186,7 +201,7 @@ void PcCatalogView::onContentAvailable() {
     }
 
     // Special case for "Новинки" (subforum 635): sort by date by default
-    if (subforum_id_ == "635") {
+    if (subforum_id_ == "635" && filterState_.sort == catalog::SortOption::DEFAULT) {
         filterState_.sort = catalog::SortOption::DATE_DESC;
     }
 
@@ -197,6 +212,8 @@ void PcCatalogView::onContentAvailable() {
             for (const auto* g : allGames_) copy.push_back(*g);
             FilterSortDialog::show(filterState_, copy, [this](const catalog::FilterSortState& newState) {
                 filterState_ = newState;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
                 filterCatalog();
             }, [this]() {
                 resetFilters();
@@ -208,6 +225,8 @@ void PcCatalogView::onContentAvailable() {
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
         filterState_.searchQuery = query;
+        filterBadgeLabel_.clear();
+        updateHeaderTitle();
         filterCatalog();
         return true;
     });
@@ -218,6 +237,8 @@ void PcCatalogView::onContentAvailable() {
         for (const auto* g : allGames_) copy.push_back(*g);
         FilterSortDialog::show(filterState_, copy, [this](const catalog::FilterSortState& newState) {
             filterState_ = newState;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             filterCatalog();
         }, [this]() {
             resetFilters();
@@ -359,6 +380,8 @@ void PcCatalogView::resetFilters() {
     if (subforum_id_ == "635") {
         filterState_.sort = catalog::SortOption::DATE_DESC;
     }
+    filterBadgeLabel_.clear();
+    updateHeaderTitle();
     filterCatalog();
 }
 

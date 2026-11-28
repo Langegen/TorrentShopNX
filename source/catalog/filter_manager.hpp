@@ -106,6 +106,8 @@ struct FilterSortState {
     LanguageFilter lang = LanguageFilter::ALL;
     std::vector<LanguageFilter> langs; // multiple language filters
     bool onlyFavorites = false;
+    bool onlyRomsets = false;     // Retro: only compilations / romsets
+    bool onlyPortable = false;    // PC: only Portable releases
     std::string year = "";        // empty means "All years"
     std::vector<std::string> years; // multiple year strings
     PlayersFilter players = PlayersFilter::ALL;
@@ -117,6 +119,7 @@ struct FilterSortState {
                genre.empty() && genres.empty() &&
                lang == LanguageFilter::ALL && langs.empty() &&
                !onlyFavorites &&
+               !onlyRomsets && !onlyPortable &&
                year.empty() && years.empty() &&
                players == PlayersFilter::ALL && playersList.empty() &&
                searchQuery.empty();
@@ -129,6 +132,8 @@ struct FilterSortState {
         lang = LanguageFilter::ALL;
         langs.clear();
         onlyFavorites = false;
+        onlyRomsets = false;
+        onlyPortable = false;
         year.clear();
         years.clear();
         players = PlayersFilter::ALL;
@@ -290,6 +295,59 @@ inline bool checkPlayersMatch(int maxP, PlayersFilter pf) {
     }
 }
 
+// Map a game's interface_lang (same priority as getGameLangBadge) to LanguageFilter.
+// Returns LanguageFilter::ALL when no dedicated filter exists (e.g. standalone KOR/HUN).
+inline LanguageFilter languageFilterForBadge(const std::string& interfaceLang, const std::string& appLocale = "") {
+    if (util::isPlaceholderValue(interfaceLang)) return LanguageFilter::ALL;
+
+    const auto mask = util::metadataLanguageMask(util::toLowerUtf8(interfaceLang));
+    if (!mask) return LanguageFilter::MULTI_ONLY;
+
+    const std::string locale = util::toLowerUtf8(appLocale);
+    const bool chineseUi = locale.rfind("zh", 0) == 0;
+    if (chineseUi && (mask & util::LangChinese)) return LanguageFilter::CHINESE_ONLY;
+    if (mask & util::LangRus)     return LanguageFilter::RUSSIAN_ONLY;
+    if (mask & util::LangEng)     return LanguageFilter::ENGLISH_ONLY;
+    if (mask & util::LangChinese) return LanguageFilter::CHINESE_ONLY;
+    if (mask & util::LangSpa)     return LanguageFilter::SPANISH_ONLY;
+    if (mask & util::LangFra)     return LanguageFilter::FRENCH_ONLY;
+    if (mask & util::LangGer)     return LanguageFilter::GERMAN_ONLY;
+    if (mask & util::LangIta)     return LanguageFilter::ITALIAN_ONLY;
+    if (mask & util::LangJpn)     return LanguageFilter::JAPANESE_ONLY;
+    if (mask & util::LangPor)     return LanguageFilter::PORTUGUESE_ONLY;
+    if (mask & util::LangAra)     return LanguageFilter::ARABIC_ONLY;
+    if (util::metadataIsMulti(mask)) return LanguageFilter::MULTI_ONLY;
+    return LanguageFilter::ALL;
+}
+
+// Short header label matching the active language badge filter (e.g. "RUS • MULTI" -> "RUS", "MULTI" -> "MULTI").
+inline std::string languageFilterHeaderLabel(LanguageFilter filter, const std::string& badgeText) {
+    if (filter == LanguageFilter::MULTI_ONLY) {
+        const size_t sep = badgeText.find(" \xE2\x80\xA2 ");
+        if (sep != std::string::npos) return badgeText.substr(sep + 5);
+        return badgeText.empty() ? "MULTI" : badgeText;
+    }
+    const size_t sep = badgeText.find(" \xE2\x80\xA2 ");
+    if (sep != std::string::npos) return badgeText.substr(0, sep);
+    return badgeText;
+}
+
+// Map multiplayer string to the matching PlayersFilter bucket.
+// Non-numeric strings (e.g. "Yes", "Coop") map to ANY_MULTI instead of exact TWO_PLAYERS.
+inline PlayersFilter playersFilterForMultiplayer(const std::string& multiplayer) {
+    if (util::isPlaceholderValue(multiplayer)) return PlayersFilter::ALL;
+    const int maxP = parseMaxPlayers(multiplayer);
+    if (maxP <= 1) return PlayersFilter::ALL;
+    bool hasDigit = false;
+    for (unsigned char c : multiplayer) {
+        if (std::isdigit(c)) { hasDigit = true; break; }
+    }
+    if (!hasDigit) return PlayersFilter::ANY_MULTI;
+    if (maxP == 2) return PlayersFilter::TWO_PLAYERS;
+    if (maxP <= 4) return PlayersFilter::THREE_FOUR;
+    return PlayersFilter::FIVE_PLUS;
+}
+
 namespace filter_detail {
 
 // matchesGameFilter() runs once per game (~7000) on every filter pass: the
@@ -333,6 +391,12 @@ inline const PreparedQuery& preparedQuery(const std::string& q) {
 inline bool matchesGameFilter(const Game& game, const FilterSortState& state, bool isFavorite) {
     // 1. Favorite filter
     if (state.onlyFavorites && !isFavorite) {
+        return false;
+    }
+    if (state.onlyRomsets && !isRomsetGame(game)) {
+        return false;
+    }
+    if (state.onlyPortable && !isPortablePcGame(game)) {
         return false;
     }
 

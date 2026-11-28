@@ -100,22 +100,36 @@ brls::View* CollectionGameRowCell::getDefaultFocus() {
 }
 
 // COLLECTIONGAMESVIEW IMPLEMENTATION
-CollectionGamesView::CollectionGamesView(const catalog::CollectionInfo& info)
-    : info_(info), alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
+CollectionGamesView::CollectionGamesView(const catalog::CollectionInfo& info,
+                                         const catalog::FilterSortState& initialFilter,
+                                         const std::string& filterBadgeLabel)
+    : info_(info),
+      filterState_(initialFilter),
+      filterBadgeLabel_(filterBadgeLabel),
+      alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
 }
 
 CollectionGamesView::~CollectionGamesView() {
     *alive_flag_ = false;
 }
 
+void CollectionGamesView::updateHeaderTitle() {
+    if (!headerTitle) return;
+    std::string base = brls::getStr("app/collections/collection_prefix", info_.getName());
+    headerTitle->setSingleLine(true);
+    headerTitle->setText(filterBadgeLabel_.empty() ? base : (base + " \xC2\xB7 " + filterBadgeLabel_));
+}
+
 void CollectionGamesView::onContentAvailable() {
-    headerTitle->setText(brls::getStr("app/collections/collection_prefix", info_.getName()));
+    updateHeaderTitle();
     statsHint->setText(brls::getStr("app/collections/games_count", "..."));
 
     if (headerTitle) {
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
             std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
             filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             rebuildDisplay();
         }));
     }
@@ -125,6 +139,8 @@ void CollectionGamesView::onContentAvailable() {
             auto catalog = getCatalogSnapshot();
             FilterSortDialog::show(filterState_, *catalog, [this](const catalog::FilterSortState& newState) {
                 filterState_ = newState;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
                 rebuildDisplay();
             }, [this]() {
                 resetFilters();
@@ -135,6 +151,8 @@ void CollectionGamesView::onContentAvailable() {
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         std::string query = showCollectionKeyboard("app/collections/search_hint"_i18n.c_str());
         filterState_.searchQuery = query;
+        filterBadgeLabel_.clear();
+        updateHeaderTitle();
         rebuildDisplay();
         return true;
     });
@@ -161,6 +179,8 @@ void CollectionGamesView::onContentAvailable() {
         auto catalog = getCatalogSnapshot();
         FilterSortDialog::show(filterState_, *catalog, [this](const catalog::FilterSortState& newState) {
             filterState_ = newState;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             rebuildDisplay();
         }, [this]() {
             resetFilters();
@@ -324,6 +344,8 @@ void CollectionGamesView::rebuildDisplay() {
 
 void CollectionGamesView::resetFilters() {
     filterState_.reset();
+    filterBadgeLabel_.clear();
+    updateHeaderTitle();
     rebuildDisplay();
     brls::Application::notify("app/catalog/filters_reset"_i18n);
 }

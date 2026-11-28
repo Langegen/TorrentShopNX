@@ -1,7 +1,9 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <functional>
 #include "../GameData.hpp"
+#include "../catalog/filter_manager.hpp"
 #include "../utils/switch_utils.h"
 
 namespace ui {
@@ -30,6 +32,8 @@ private:
     void applyInstalledState(const util::InstalledGameInfo& info, uint64_t appId);
     void updateModButtons(uint64_t appId = 0);
     void updateNavigationRoutes();
+    void attachBadgeTap(brls::Box* badge, std::function<void()> onTap);
+    void openFilteredCatalog(const catalog::FilterSortState& state, const std::string& filterLabel);
 
     Game game_;
     std::string retro_console_id_;

@@ -464,12 +464,17 @@ inline std::vector<GenreFilterItem> getGenreFilterItems(const std::vector<Game>&
     return items;
 }
 
-// Format genre badges for GameDetailView
-inline std::vector<std::string> getDisplayGenreBadges(const std::string& rawGenre) {
+struct DisplayGenreBadge {
+    std::string label;     // Localized display text shown on the badge
+    std::string filterId;  // Canonical genre ID (e.g. "rpg") or trimmed raw tag (e.g. "Cyberpunk")
+    bool isCanonical = false;
+};
+
+inline std::vector<DisplayGenreBadge> getDisplayGenreBadgeItems(const std::string& rawGenre) {
     if (rawGenre.empty()) return {};
 
-    std::vector<std::string> badges;
-    std::unordered_set<std::string> seenBadges;
+    std::vector<DisplayGenreBadge> badges;
+    std::unordered_set<std::string> seenLabels;
 
     std::string cur;
     auto processToken = [&](const std::string& t) {
@@ -480,14 +485,14 @@ inline std::vector<std::string> getDisplayGenreBadges(const std::string& rawGenr
         if (!canonicals.empty()) {
             for (const auto& cId : canonicals) {
                 std::string locName = getLocalizedGenreName(cId);
-                if (seenBadges.insert(locName).second) {
-                    badges.push_back(locName);
+                if (seenLabels.insert(locName).second) {
+                    badges.push_back({locName, cId, true});
                 }
             }
         } else {
             // Keep clean original tag (e.g. "Cyberpunk", "B&W")
-            if (seenBadges.insert(trimmed).second) {
-                badges.push_back(trimmed);
+            if (seenLabels.insert(trimmed).second) {
+                badges.push_back({trimmed, trimmed, false});
             }
         }
     };
@@ -506,6 +511,24 @@ inline std::vector<std::string> getDisplayGenreBadges(const std::string& rawGenr
     }
     processToken(cur);
 
+    return badges;
+}
+
+inline bool isHomebrewGenreTag(const std::string& tag) {
+    const std::string lower = toLowerUtf8(trimString(tag));
+    return lower.find("homebrew") != std::string::npos ||
+           lower.find("\xD1\x85\xD0\xBE\xD0\xBC\xD0\xB1\xD1\x80\xD1\x8E") != std::string::npos ||
+           lower.find("\xD1\x85\xD0\xBE\xD1\x83\xD0\xBC\xD0\xB1\xD1\x80\xD1\x8E") != std::string::npos;
+}
+
+// Format genre badges for GameDetailView
+inline std::vector<std::string> getDisplayGenreBadges(const std::string& rawGenre) {
+    auto items = getDisplayGenreBadgeItems(rawGenre);
+    std::vector<std::string> badges;
+    badges.reserve(items.size());
+    for (auto& item : items) {
+        badges.push_back(std::move(item.label));
+    }
     return badges;
 }
 

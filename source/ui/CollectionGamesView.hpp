@@ -92,7 +92,9 @@ class CollectionGamesView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("collection_games_view.xml");
 
-    CollectionGamesView(const catalog::CollectionInfo& info);
+    CollectionGamesView(const catalog::CollectionInfo& info,
+                        const catalog::FilterSortState& initialFilter = {},
+                        const std::string& filterBadgeLabel = "");
     ~CollectionGamesView() override;
     void onContentAvailable() override;
 
@@ -101,9 +103,11 @@ private:
     void rebuildDisplay();
     void ensureAllMatches();
     void resetFilters();
+    void updateHeaderTitle();
 
     catalog::CollectionInfo info_;
     catalog::FilterSortState filterState_;
+    std::string filterBadgeLabel_;
     std::shared_ptr<const std::vector<Game>> catalogSnapshot_;
     std::vector<catalog::CollectionEntry> entries_;
     std::vector<Game> matchedGames_;

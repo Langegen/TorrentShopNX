@@ -1748,6 +1748,10 @@ inline bool isPcGame(const Game& g) {
     return g.content_type == "pc" || g.content_type.rfind("pc:", 0) == 0;
 }
 
+inline bool isPortablePcGame(const Game& g) {
+    return g.image_format == "Portable" || g.title.find("[Portable]") != std::string::npos;
+}
+
 // Extract Rutracker subforum ID from PC game's content_type ("pc:<subforum_id>")
 inline std::string getPcSubforumId(const Game& g) {
     if (g.content_type.rfind("pc:", 0) == 0) {

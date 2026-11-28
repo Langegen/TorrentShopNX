@@ -115,7 +115,9 @@ class RetroCatalogView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("retro_catalog_view.xml");
 
-    RetroCatalogView(const catalog::RetroConsoleInfo& consoleInfo);
+    RetroCatalogView(const catalog::RetroConsoleInfo& consoleInfo,
+                     const catalog::FilterSortState& initialFilter = {},
+                     const std::string& filterBadgeLabel = "");
     ~RetroCatalogView() override;
 
     void onContentAvailable() override;
@@ -137,10 +139,12 @@ public:
     BRLS_BIND(brls::RecyclerFrame, recycler, "recycler");
 
 private:
+    void updateHeaderTitle();
     void updateEmulatorBadge();
     void triggerEmulatorAction();
     catalog::RetroConsoleInfo consoleInfo_;
     catalog::FilterSortState filterState_;
+    std::string filterBadgeLabel_;
     std::vector<Game> allGames_;
     std::vector<Game> filteredRomsets_;
     std::vector<Game> filteredStandalone_;

@@ -136,12 +136,25 @@ brls::View* RetroListRowCell::getDefaultFocus() {
 }
 
 // === RETRO CATALOG VIEW ===
-RetroCatalogView::RetroCatalogView(const catalog::RetroConsoleInfo& consoleInfo)
-    : consoleInfo_(consoleInfo), alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
+RetroCatalogView::RetroCatalogView(const catalog::RetroConsoleInfo& consoleInfo,
+                                   const catalog::FilterSortState& initialFilter,
+                                   const std::string& filterBadgeLabel)
+    : consoleInfo_(consoleInfo),
+      filterState_(initialFilter),
+      filterBadgeLabel_(filterBadgeLabel),
+      alive_flag_(std::make_shared<std::atomic<bool>>(true)) {
 }
 
 RetroCatalogView::~RetroCatalogView() {
     *alive_flag_ = false;
+}
+
+void RetroCatalogView::updateHeaderTitle() {
+    if (!titleLabel) return;
+    titleLabel->setSingleLine(true);
+    titleLabel->setText(filterBadgeLabel_.empty()
+        ? consoleInfo_.name
+        : (consoleInfo_.name + " \xC2\xB7 " + filterBadgeLabel_));
 }
 
 void RetroCatalogView::updateEmulatorBadge() {
@@ -247,10 +260,12 @@ void RetroCatalogView::triggerEmulatorAction() {
 
 void RetroCatalogView::onContentAvailable() {
     if (titleLabel) {
-        titleLabel->setText(consoleInfo_.name);
+        updateHeaderTitle();
         titleLabel->addGestureRecognizer(new brls::TapGestureRecognizer(titleLabel, [this]() {
             std::string query = showRetroKeyboard("app/retro/search_by_title"_i18n);
             filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             filterCatalog();
         }));
     }
@@ -259,6 +274,8 @@ void RetroCatalogView::onContentAvailable() {
         statsHint->addGestureRecognizer(new brls::TapGestureRecognizer(statsHint, [this]() {
             FilterSortDialog::show(filterState_, allGames_, [this](const catalog::FilterSortState& newState) {
                 filterState_ = newState;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
                 filterCatalog();
             }, [this]() {
                 resetFilters();
@@ -270,6 +287,8 @@ void RetroCatalogView::onContentAvailable() {
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         std::string query = showRetroKeyboard("app/retro/search_by_title"_i18n);
         filterState_.searchQuery = query;
+        filterBadgeLabel_.clear();
+        updateHeaderTitle();
         filterCatalog();
         return true;
     });
@@ -277,6 +296,8 @@ void RetroCatalogView::onContentAvailable() {
     this->registerAction("", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
         FilterSortDialog::show(filterState_, allGames_, [this](const catalog::FilterSortState& newState) {
             filterState_ = newState;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             filterCatalog();
         }, [this]() {
             resetFilters();
@@ -540,7 +561,9 @@ void RetroCatalogView::filterCatalog() {
         focusedGameIndex_ = 0;
         recycler->setDefaultCellFocus(brls::IndexPath(0, 0));
         recycler->reloadData();
-        brls::sync([this]() {
+        std::shared_ptr<std::atomic<bool>> flag = alive_flag_;
+        brls::sync([this, flag]() {
+            if (!flag->load()) return;
             if (recycler) {
                 brls::View* defFocus = recycler->getDefaultFocus();
                 if (defFocus) {
@@ -553,6 +576,8 @@ void RetroCatalogView::filterCatalog() {
 
 void RetroCatalogView::resetFilters() {
     filterState_.reset();
+    filterBadgeLabel_.clear();
+    updateHeaderTitle();
     filterCatalog();
     brls::Application::notify("app/catalog/filters_reset"_i18n);
 }

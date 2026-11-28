@@ -84,6 +84,7 @@ public:
     CONTENT_FROM_XML_RES("catalog_view.xml");
     
     CatalogView(const std::string& searchQuery = "");
+    CatalogView(const catalog::FilterSortState& initialFilter, const std::string& filterBadgeLabel = "");
     void onContentAvailable() override;
     void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
@@ -100,7 +101,10 @@ public:
     BRLS_BIND(brls::Label, statsHint, "statsHint");
 
 private:
+    void updateHeaderTitle();
+
     catalog::FilterSortState filterState_;
+    std::string filterBadgeLabel_;
     std::shared_ptr<const std::vector<Game>> catalogSnapshot_;
     std::vector<const Game*> filteredGames_;
     int focusedRow_ = 0;

@@ -113,36 +113,70 @@ CatalogView::CatalogView(const std::string& searchQuery) {
     }
 }
 
+CatalogView::CatalogView(const catalog::FilterSortState& initialFilter, const std::string& filterBadgeLabel)
+    : filterState_(initialFilter), filterBadgeLabel_(filterBadgeLabel) {
+    if (filterState_.sort == catalog::SortOption::DEFAULT) {
+        filterState_.sort = catalog::SortOption::TITLE_ASC;
+    }
+}
+
+void CatalogView::updateHeaderTitle() {
+    if (!headerTitle) return;
+    headerTitle->setSingleLine(true);
+    headerTitle->setText(filterBadgeLabel_.empty()
+        ? "app/catalog/title"_i18n
+        : ("app/catalog/title"_i18n + " \xC2\xB7 " + filterBadgeLabel_));
+}
+
 void CatalogView::onContentAvailable() {
     brls::Logger::info("CatalogView: onContentAvailable start");
 
+    updateHeaderTitle();
+
+    const bool hasFilters = !filterState_.searchQuery.empty() ||
+                            !filterState_.genre.empty() ||
+                            !filterState_.genres.empty() ||
+                            filterState_.lang != catalog::LanguageFilter::ALL ||
+                            !filterState_.langs.empty() ||
+                            filterState_.onlyFavorites ||
+                            filterState_.onlyRomsets ||
+                            filterState_.onlyPortable ||
+                            !filterState_.year.empty() ||
+                            !filterState_.years.empty() ||
+                            filterState_.players != catalog::PlayersFilter::ALL ||
+                            !filterState_.playersList.empty();
+
     catalogSnapshot_ = getCatalogSnapshot();
 
-    // Pre-populate filteredGames_ with non-homebrew games, sorted alphabetically by default
-    filteredGames_.clear();
-    filteredGames_.reserve(catalogSnapshot_->size());
-    for (const auto& g : *catalogSnapshot_) {
-        if (!isHomebrewGame(g)) {
-            filteredGames_.push_back(&g);
+    if (!hasFilters) {
+        // Pre-populate filteredGames_ with non-homebrew games, sorted alphabetically by default
+        filteredGames_.clear();
+        filteredGames_.reserve(catalogSnapshot_->size());
+        for (const auto& g : *catalogSnapshot_) {
+            if (!isHomebrewGame(g)) {
+                filteredGames_.push_back(&g);
+            }
         }
+
+        catalog::SortOption sortOpt = (filterState_.sort == catalog::SortOption::DEFAULT)
+            ? catalog::SortOption::TITLE_ASC
+            : filterState_.sort;
+
+        catalog::sortGamesBy(filteredGames_, sortOpt, [](const Game* g) { return g; });
+
+        std::string countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
+        statsHint->setText(ui::style::headerMeta(countStr, {
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT, "app/header_hint/jump_az"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n),
+            ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)}));
     }
-
-    catalog::SortOption sortOpt = (filterState_.sort == catalog::SortOption::DEFAULT)
-        ? catalog::SortOption::TITLE_ASC
-        : filterState_.sort;
-
-    catalog::sortGamesBy(filteredGames_, sortOpt, [](const Game* g) { return g; });
-
-    std::string countStr = brls::getStr("app/catalog/games_count", std::to_string(filteredGames_.size()));
-    statsHint->setText(ui::style::headerMeta(countStr, {
-        ui::style::buttonHint(brls::ControllerButton::BUTTON_LT, brls::ControllerButton::BUTTON_RT, "app/header_hint/jump_az"_i18n),
-        ui::style::buttonHint(brls::ControllerButton::BUTTON_LB, "app/header_hint/reset"_i18n),
-        ui::style::buttonHint(brls::ControllerButton::BUTTON_RB, "app/header_hint/filter"_i18n)}));
 
     if (headerTitle) {
         headerTitle->addGestureRecognizer(new brls::TapGestureRecognizer(headerTitle, [this]() {
             std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
             filterState_.searchQuery = query;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             filterCatalog();
         }));
     }
@@ -157,6 +191,8 @@ void CatalogView::onContentAvailable() {
             }
             FilterSortDialog::show(filterState_, officialGames, [this](const catalog::FilterSortState& newState) {
                 filterState_ = newState;
+                filterBadgeLabel_.clear();
+                updateHeaderTitle();
                 filterCatalog();
             }, [this]() {
                 resetFilters();
@@ -168,6 +204,8 @@ void CatalogView::onContentAvailable() {
     this->registerAction("app/actions/search"_i18n, brls::ControllerButton::BUTTON_X, [this](brls::View* view) {
         std::string query = showKeyboard("app/catalog/search_hint"_i18n.c_str());
         filterState_.searchQuery = query;
+        filterBadgeLabel_.clear();
+        updateHeaderTitle();
         filterCatalog();
         return true;
     });
@@ -181,6 +219,8 @@ void CatalogView::onContentAvailable() {
         }
         FilterSortDialog::show(filterState_, officialGames, [this](const catalog::FilterSortState& newState) {
             filterState_ = newState;
+            filterBadgeLabel_.clear();
+            updateHeaderTitle();
             filterCatalog();
         }, [this]() {
             resetFilters();
@@ -236,16 +276,6 @@ void CatalogView::onContentAvailable() {
     recycler->setDataSource(ds);
     brls::Logger::info("CatalogView: data source set, constructor done");
     // RecyclerFrame will call reloadData() on its first onLayout()
-    bool hasFilters = !filterState_.searchQuery.empty() ||
-                      !filterState_.genre.empty() ||
-                      !filterState_.genres.empty() ||
-                      filterState_.lang != catalog::LanguageFilter::ALL ||
-                      !filterState_.langs.empty() ||
-                      filterState_.onlyFavorites ||
-                      !filterState_.year.empty() ||
-                      !filterState_.years.empty() ||
-                      filterState_.players != catalog::PlayersFilter::ALL ||
-                      !filterState_.playersList.empty();
     if (hasFilters) {
         filterCatalog();
     }
@@ -322,6 +352,8 @@ void CatalogView::filterCatalog() {
 void CatalogView::resetFilters() {
     filterState_.reset();
     filterState_.sort = catalog::SortOption::TITLE_ASC;
+    filterBadgeLabel_.clear();
+    updateHeaderTitle();
     filterCatalog();
     brls::Application::notify("app/catalog/filters_reset"_i18n);
 }

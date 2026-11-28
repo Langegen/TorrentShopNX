@@ -65,11 +65,16 @@ void FilterSortDialog::show(const catalog::FilterSortState& currentState,
     auto updateGenreDetail = [genreCell, statePtr, genreItems]() {
         std::vector<std::string> names;
         for (const auto& id : statePtr->genres) {
+            bool found = false;
             for (const auto& item : genreItems) {
                 if (!item.id.empty() && item.id == id) {
                     names.push_back(catalog::getLocalizedGenreName(item.id));
+                    found = true;
                     break;
                 }
+            }
+            if (!found && !id.empty()) {
+                names.push_back(catalog::getLocalizedGenreName(id));
             }
         }
         genreCell->setDetailText(formatMultiSummary(names, "app/filter/all_genres"_i18n));

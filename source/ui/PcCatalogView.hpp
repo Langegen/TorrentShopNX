@@ -13,7 +13,10 @@ class PcCatalogView : public brls::Activity {
 public:
     CONTENT_FROM_XML_RES("catalog_view.xml");
 
-    PcCatalogView(const std::string& subforum_id = "", const std::string& category_title = "");
+    PcCatalogView(const std::string& subforum_id = "",
+                  const std::string& category_title = "",
+                  const catalog::FilterSortState& initialFilter = {},
+                  const std::string& filterBadgeLabel = "");
     ~PcCatalogView() override;
 
     void onContentAvailable() override;
@@ -36,10 +39,13 @@ public:
     std::vector<const Game*> filteredGames_;
 
 private:
+    void updateHeaderTitle();
+
     std::string subforum_id_;
     std::string category_title_;
     std::vector<const Game*> allGames_;
     catalog::FilterSortState filterState_;
+    std::string filterBadgeLabel_;
 };
 
 } // namespace ui
