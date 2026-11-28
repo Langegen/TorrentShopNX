@@ -1333,7 +1333,7 @@ static int add_peers_ex(torrentfs *t, const peer_addr *peers, const uint8_t *fla
         // Port 0/1 are never real listen ports: some DHT nodes store (and
         // happily serve) announce_peer entries with port 1 because jech/dht
         // only rejects port 0. Dialing them just burns the dial budget.
-        if (peers[i].port <= 1) continue;
+        if (peers[i].port <= 1 || torrent_is_self_peer(peers[i].ip, peers[i].port)) continue;
         bool dup = false;
         int j = pool_find(t, peers[i].ip, peers[i].port);
         if (j >= 0) {
@@ -2985,6 +2985,7 @@ static void handle_ext_handshake(torrentfs *t, sess *s, uint8_t *pl,
                           (a == 172 && (((ip >> 8) & 0xff) & 0xf0) == 16);
         if (!priv) {
             t->ext_ip = ip;
+            torrent_set_external_ip(ip);
             engine_log(ENGINE_LOG_INFO, "[net] external ip %u.%u.%u.%u (reported by a peer)",
                        ip & 0xff, (ip >> 8) & 0xff, (ip >> 16) & 0xff, (ip >> 24) & 0xff);
         }

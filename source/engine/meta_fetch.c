@@ -39,7 +39,7 @@
 #define META_EXTRA_PROGRESS_MS 15000
 #define META_TCP_CONN_MS      3000
 #define META_HS_WAIT_MS       3500
-#define META_UTP_CONN_MS      5000
+#define META_UTP_CONN_MS      9000
 #define META_EXT_HS_WAIT_MS   6000
 #define META_PEX_LINGER_MS    4000
 #define META_PIECE_REQ_MS     6000
@@ -56,9 +56,10 @@ enum {
 };
 
 enum {
-    DIAL_PLAIN = 0,
-    DIAL_MSE   = 1,
-    DIAL_UTP   = 2,
+    DIAL_PLAIN   = 0,
+    DIAL_MSE     = 1,
+    DIAL_UTP     = 2,
+    DIAL_UTP_MSE = 3,
 };
 
 typedef struct {
@@ -68,12 +69,15 @@ typedef struct {
     bool      tried_plain;
     bool      tried_mse;
     bool      tried_utp;
+    bool      tried_utp_mse;
     bool      need_mse;
     bool      need_plain;
     bool      need_utp;
+    bool      need_utp_mse;
     bool      busy;
     bool      bad;
     bool      counted_tried;
+    bool      ever_connected;
     bool      served_meta;
     uint8_t   mse_prio;    /* 0=none, 1=pre-hs timeout, 2=active close/RST */
     uint64_t  next_try_ms;
@@ -153,7 +157,7 @@ typedef struct {
 
     /* Scheduling & diagnostic stats */
     uint32_t             dial_seq;
-    int                  stat_dial[3];
+    int                  stat_dial[4];
     int                  stat_tcp_ok;
     int                  stat_bt_hs;
     int                  stat_ext_ok;
@@ -285,7 +289,8 @@ static void pool_add_locked(meta_ctx *ctx, const peer_addr *peers, int n,
                             uint8_t prio, const uint8_t *flags) {
     if (!peers || n <= 0) return;
     for (int i = 0; i < n; i++) {
-        if (peers[i].ip == 0 || peers[i].port <= 1) continue;
+        if (peers[i].ip == 0 || peers[i].port <= 1 ||
+            torrent_is_self_peer(peers[i].ip, peers[i].port)) continue;
         uint8_t f = flags ? (flags[i] & PEXF_ENCRYPT) : 0;
         int dup = -1;
         for (int j = 0; j < ctx->pool_count; j++) {
@@ -437,12 +442,17 @@ static void sess_close(meta_ctx *ctx, meta_sess *s, uint64_t now_ms, const char 
         if (!ctx->done) {
             if (!tcp_up && !was_utp) {
                 /* TCP dial never connected (refused / timeout / NAT): schedule uTP retry */
-                if (!p->tried_utp && utp_nb_fd() >= 0) {
-                    p->need_utp = true;
-                    p->next_try_ms = now_ms;
+                if (utp_nb_fd() >= 0) {
+                    if ((p->flags & PEXF_ENCRYPT) && !p->tried_utp_mse) {
+                        p->need_utp_mse = true;
+                        p->next_try_ms = now_ms;
+                    } else if (!p->tried_utp) {
+                        p->need_utp = true;
+                        p->next_try_ms = now_ms;
+                    }
                 }
-            } else if (!had_bt_hs && tcp_up) {
-                /* Connected at transport layer, closed before BT handshake completed */
+            } else if (!had_bt_hs && tcp_up && !was_utp) {
+                /* Connected over TCP, closed before BT handshake completed */
                 if (!was_mse && !p->tried_mse) {
                     /* Likely peer requiring MSE/PE encryption */
                     p->need_mse = true;
@@ -455,10 +465,25 @@ static void sess_close(meta_ctx *ctx, meta_sess *s, uint64_t now_ms, const char 
                     p->next_try_ms = now_ms;
                 }
                 /* Also schedule uTP fallback behind TUN/VPN or after TCP MSE failure */
-                if (!was_utp && !p->tried_utp && utp_nb_fd() >= 0 &&
-                    (pre_hs_to || was_mse || p->tried_mse)) {
-                    p->need_utp = true;
-                    p->next_try_ms = now_ms;
+                if (utp_nb_fd() >= 0 && (pre_hs_to || was_mse || p->tried_mse)) {
+                    if ((p->flags & PEXF_ENCRYPT) && !p->tried_utp_mse) {
+                        p->need_utp_mse = true;
+                        p->next_try_ms = now_ms;
+                    } else if (!p->tried_utp) {
+                        p->need_utp = true;
+                        p->next_try_ms = now_ms;
+                    }
+                }
+            } else if (!had_bt_hs && tcp_up && was_utp) {
+                /* Connected over uTP, closed before BT handshake completed: swap MSE/plaintext */
+                if (utp_nb_fd() >= 0) {
+                    if (!was_mse && !p->tried_utp_mse) {
+                        p->need_utp_mse = true;
+                        p->next_try_ms = now_ms;
+                    } else if (was_mse && !p->tried_utp) {
+                        p->need_utp = true;
+                        p->next_try_ms = now_ms;
+                    }
                 }
             }
             if (s->close_why[0]) {
@@ -597,6 +622,23 @@ static void handle_ext_msg(meta_ctx *ctx, meta_sess *s, const uint8_t *pl,
         }
         s->ext_received = true;
         ctx->stat_ext_ok++;
+        if (ei.yourip != 0) {
+            uint32_t prev = torrent_external_ip();
+            torrent_set_external_ip(ei.yourip);
+            uint32_t cur = torrent_external_ip();
+            if (cur != 0 && cur != prev) {
+                engine_log(ENGINE_LOG_INFO, "[meta_fetch] external ip %u.%u.%u.%u (reported by peer)",
+                           cur & 0xff, (cur >> 8) & 0xff, (cur >> 16) & 0xff, (cur >> 24) & 0xff);
+                mutexLock(&ctx->mu);
+                for (int i = 0; i < ctx->pool_count; i++) {
+                    if (!ctx->pool[i].busy &&
+                        torrent_is_self_peer(ctx->pool[i].addr.ip, ctx->pool[i].addr.port)) {
+                        ctx->pool[i].bad = true;
+                    }
+                }
+                mutexUnlock(&ctx->mu);
+            }
+        }
         s->pex_id = ei.pex_id;
         if (ei.meta_id > 0 && ei.meta_size > 0 && ei.meta_size <= META_MAX_SIZE) {
             s->meta_id = ei.meta_id;
@@ -834,6 +876,13 @@ static void drain_incoming(meta_ctx *ctx, uint64_t now_ms) {
     }
 }
 
+static void mark_pool_connected(meta_ctx *ctx, int pidx) {
+    if (pidx < 0) return;
+    mutexLock(&ctx->mu);
+    ctx->pool[pidx].ever_connected = true;
+    mutexUnlock(&ctx->mu);
+}
+
 static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int active_mse, int utp_dialing,
                           int *out_mode, peer_addr *out_addr) {
     int pick = -1;
@@ -854,13 +903,24 @@ static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int active_mse, int ut
     /* Pass 0b: interleaved uTP retry so NAT/TUN fallbacks don't wait behind all TCP */
     if (pick < 0 && utp_nb_fd() >= 0 && utp_dialing < META_UTP_MAX_DIAL &&
         (ctx->dial_seq & 3) == 3) {
-        for (int i = 0; i < ctx->pool_count; i++) {
+        for (int i = 0; i < ctx->pool_count && active_mse < mse_cap; i++) {
             meta_pool_entry *e = &ctx->pool[i];
-            if (e->busy || e->bad || !e->need_utp || e->tried_utp) continue;
+            if (e->busy || e->bad || !e->need_utp_mse || e->tried_utp_mse) continue;
             if (e->next_try_ms <= now_ms) {
                 pick = i;
-                pick_mode = DIAL_UTP;
+                pick_mode = DIAL_UTP_MSE;
                 break;
+            }
+        }
+        if (pick < 0) {
+            for (int i = 0; i < ctx->pool_count; i++) {
+                meta_pool_entry *e = &ctx->pool[i];
+                if (e->busy || e->bad || !e->need_utp || e->tried_utp) continue;
+                if (e->next_try_ms <= now_ms) {
+                    pick = i;
+                    pick_mode = DIAL_UTP;
+                    break;
+                }
             }
         }
     }
@@ -869,7 +929,8 @@ static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int active_mse, int ut
         int best_prio = -1;
         for (int i = 0; i < ctx->pool_count; i++) {
             meta_pool_entry *e = &ctx->pool[i];
-            if (e->busy || e->bad || e->tried_plain || e->tried_mse || e->tried_utp) continue;
+            if (e->busy || e->bad || e->tried_plain || e->tried_mse ||
+                e->tried_utp || e->tried_utp_mse) continue;
             if ((int)e->prio > best_prio) {
                 best_prio = (int)e->prio;
                 pick = i;
@@ -902,15 +963,26 @@ static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int active_mse, int ut
             }
         }
     }
-    /* Pass 4: uTP fallback for NAT / TCP-unreachable peers */
+    /* Pass 4: uTP fallback for NAT / TCP-unreachable peers (prefer uTP+MSE swap first) */
     if (pick < 0 && utp_nb_fd() >= 0 && utp_dialing < META_UTP_MAX_DIAL) {
         for (int i = 0; i < ctx->pool_count; i++) {
             meta_pool_entry *e = &ctx->pool[i];
-            if (e->busy || e->bad || !e->need_utp || e->tried_utp) continue;
+            if (e->busy || e->bad || !e->need_utp_mse || e->tried_utp_mse) continue;
             if (e->next_try_ms <= now_ms) {
                 pick = i;
-                pick_mode = DIAL_UTP;
+                pick_mode = DIAL_UTP_MSE;
                 break;
+            }
+        }
+        if (pick < 0) {
+            for (int i = 0; i < ctx->pool_count; i++) {
+                meta_pool_entry *e = &ctx->pool[i];
+                if (e->busy || e->bad || !e->need_utp || e->tried_utp) continue;
+                if (e->next_try_ms <= now_ms) {
+                    pick = i;
+                    pick_mode = DIAL_UTP;
+                    break;
+                }
             }
         }
     }
@@ -928,6 +1000,9 @@ static int take_next_peer(meta_ctx *ctx, uint64_t now_ms, int active_mse, int ut
         } else if (pick_mode == DIAL_MSE) {
             e->tried_mse = true;
             e->need_mse = false;
+        } else if (pick_mode == DIAL_UTP_MSE) {
+            e->tried_utp_mse = true;
+            e->need_utp_mse = false;
         } else {
             e->tried_utp = true;
             e->need_utp = false;
@@ -950,7 +1025,7 @@ static bool dial_peer(meta_ctx *ctx, int sid, int pidx, peer_addr pa, int mode, 
     s->started_ms = now_ms;
     s->last_rx_ms = now_ms;
 
-    if (mode == DIAL_UTP) {
+    if (mode == DIAL_UTP || mode == DIAL_UTP_MSE) {
         utp_nb_sess *us = utp_nb_connect(pa.ip, pa.port);
         if (!us || peer_nb_init_utp_cap(&s->nb, us, 0, META_RX_CAP) != 0) {
             if (us) utp_nb_close(us);
@@ -966,7 +1041,7 @@ static bool dial_peer(meta_ctx *ctx, int sid, int pidx, peer_addr pa, int mode, 
         s->active = true;
         s->connecting = true;
         s->use_utp = true;
-        s->use_mse = (ctx->pool[pidx].flags & PEXF_ENCRYPT) != 0;
+        s->use_mse = (mode == DIAL_UTP_MSE);
         s->conn_deadline_ms = now_ms + META_UTP_CONN_MS;
         return true;
     }
@@ -1014,9 +1089,14 @@ static bool dial_peer(meta_ctx *ctx, int sid, int pidx, peer_addr pa, int mode, 
         if (is_local) {
             if (mode == DIAL_PLAIN) ctx->pool[pidx].tried_plain = false;
             else ctx->pool[pidx].tried_mse = false;
-        } else if (utp_nb_fd() >= 0 && !ctx->pool[pidx].tried_utp) {
-            ctx->pool[pidx].need_utp = true;
-            ctx->pool[pidx].next_try_ms = now_ms;
+        } else if (utp_nb_fd() >= 0) {
+            if ((ctx->pool[pidx].flags & PEXF_ENCRYPT) && !ctx->pool[pidx].tried_utp_mse) {
+                ctx->pool[pidx].need_utp_mse = true;
+                ctx->pool[pidx].next_try_ms = now_ms;
+            } else if (!ctx->pool[pidx].tried_utp) {
+                ctx->pool[pidx].need_utp = true;
+                ctx->pool[pidx].next_try_ms = now_ms;
+            }
         }
         mutexUnlock(&ctx->mu);
         memset(s, 0, sizeof(*s));
@@ -1043,6 +1123,7 @@ static bool dial_peer(meta_ctx *ctx, int sid, int pidx, peer_addr pa, int mode, 
         s->connecting = false;
         s->tcp_connected = true;
         s->connected_ms = now_ms;
+        mark_pool_connected(ctx, s->pidx);
         ctx->stat_tcp_ok++;
         s->nb.mse_want = s->use_mse;
         torrent_meta_connected++;
@@ -1079,6 +1160,7 @@ static void tcp_connected(meta_ctx *ctx, meta_sess *s, uint64_t now_ms) {
     s->tcp_connected = true;
     s->connected_ms = now_ms;
     s->last_rx_ms = now_ms;
+    mark_pool_connected(ctx, s->pidx);
     ctx->stat_tcp_ok++;
     s->nb.mse_want = s->use_mse;
     torrent_meta_connected++;
@@ -1118,7 +1200,8 @@ int meta_fetch_run(const meta_fetch_opts *opts,
     }
 
     if (opts->seed_peers && opts->seed_count > 0) {
-        pool_add(ctx, opts->seed_peers, opts->seed_count, 2, NULL);
+        uint8_t seed_prio = ctx->announce_stub ? 1 : 2;
+        pool_add(ctx, opts->seed_peers, opts->seed_count, seed_prio, NULL);
     }
 
     reg_add(ctx);
@@ -1191,8 +1274,8 @@ int meta_fetch_run(const meta_fetch_opts *opts,
                 continue;
             }
             active_cnt++;
-            if (mode == DIAL_MSE) active_mse++;
-            if (mode == DIAL_UTP) utp_dialing++;
+            if (mode == DIAL_MSE || mode == DIAL_UTP_MSE) active_mse++;
+            if (mode == DIAL_UTP || mode == DIAL_UTP_MSE) utp_dialing++;
         }
         if (mf_cancelled(ctx)) {
             ctx->stop_disc = true;
@@ -1227,10 +1310,11 @@ int meta_fetch_run(const meta_fetch_opts *opts,
             for (int i = 0; i < ctx->pool_count; i++) {
                 meta_pool_entry *e = &ctx->pool[i];
                 if (e->bad) continue;
-                if ((!e->tried_plain && !e->tried_mse && !e->tried_utp) ||
+                if ((!e->tried_plain && !e->tried_mse && !e->tried_utp && !e->tried_utp_mse) ||
                     (e->need_mse && !e->tried_mse) ||
                     (e->need_plain && !e->tried_plain) ||
-                    (e->need_utp && !e->tried_utp)) {
+                    (e->need_utp && !e->tried_utp) ||
+                    (e->need_utp_mse && !e->tried_utp_mse)) {
                     any_pending = true;
                     break;
                 }
@@ -1320,6 +1404,7 @@ int meta_fetch_run(const meta_fetch_opts *opts,
                         s->tcp_connected = true;
                         s->connected_ms = now_ms;
                         s->last_rx_ms = now_ms;
+                        mark_pool_connected(ctx, s->pidx);
                         ctx->stat_tcp_ok++;
                         s->nb.mse_want = s->use_mse;
                         torrent_meta_connected++;
@@ -1383,33 +1468,40 @@ int meta_fetch_run(const meta_fetch_opts *opts,
     ctx->inc_n = 0;
 
     engine_log(ENGINE_LOG_INFO,
-               "[meta_fetch] done=%d cancel=%d %.1fs pool=%d dial=%d/%d/%d "
+               "[meta_fetch] done=%d cancel=%d %.1fs pool=%d dial=%d/%d/%d/%d "
                "tcp=%d hs=%d ext=%d to=%d nohs=%d pieces=%d/%d",
                ctx->done ? 1 : 0, mf_cancelled(ctx) ? 1 : 0,
                (double)(end_ms - start_ms) / 1000.0,
-               ctx->pool_count, ctx->stat_dial[0], ctx->stat_dial[1], ctx->stat_dial[2],
+               ctx->pool_count, ctx->stat_dial[0], ctx->stat_dial[1],
+               ctx->stat_dial[2], ctx->stat_dial[3],
                ctx->stat_tcp_ok, ctx->stat_bt_hs, ctx->stat_ext_ok,
                ctx->stat_hs_to, ctx->stat_no_hs,
                ctx->done_pieces, ctx->npieces);
+
+    if (out_peers && max_peers > 0 && out_peer_n && !mf_cancelled(ctx)) {
+        int out_c = 0;
+        /* Export discovered peers even on failure so retries accumulate the
+         * swarm instead of starting empty: metadata servers first, then peers
+         * that connected or were never reached, then remaining non-bad peers. */
+        for (int pass = 0; pass < 3 && out_c < max_peers; pass++) {
+            for (int i = 0; i < ctx->pool_count && out_c < max_peers; i++) {
+                meta_pool_entry *e = &ctx->pool[i];
+                if (e->bad || torrent_is_self_peer(e->addr.ip, e->addr.port)) continue;
+                bool untried = !e->tried_plain && !e->tried_mse &&
+                               !e->tried_utp && !e->tried_utp_mse;
+                int tier = e->served_meta ? 0 : ((e->ever_connected || untried) ? 1 : 2);
+                if (tier != pass) continue;
+                out_peers[out_c++] = e->addr;
+            }
+        }
+        *out_peer_n = out_c;
+    }
 
     int rc = -1;
     if (ctx->done && ctx->asm_buf && ctx->asm_size > 0) {
         *out_meta = ctx->asm_buf;
         *out_len = ctx->asm_size;
         ctx->asm_buf = NULL; /* transferred ownership to caller */
-
-        if (out_peers && max_peers > 0 && out_peer_n) {
-            int out_c = 0;
-            /* Prioritize peers that actually served metadata, then others */
-            for (int pass = 0; pass < 2 && out_c < max_peers; pass++) {
-                for (int i = 0; i < ctx->pool_count && out_c < max_peers; i++) {
-                    if (ctx->pool[i].bad) continue;
-                    if ((pass == 0) != ctx->pool[i].served_meta) continue;
-                    out_peers[out_c++] = ctx->pool[i].addr;
-                }
-            }
-            *out_peer_n = out_c;
-        }
         rc = 0;
     } else {
         if (mf_cancelled(ctx)) {

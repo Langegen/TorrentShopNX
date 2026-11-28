@@ -302,6 +302,40 @@ TEST(magnet_t_ru_mirrors) {
     magnet_free(&m);
 }
 
+TEST(default_trackers_and_self_peer_filter) {
+    torrent_meta t;
+    char err[256] = {0};
+    ASSERT(torrent_load(&t, "pctest/test.torrent", err, sizeof(err)) == 0);
+    ASSERT(has_tracker(&t, "udp://tracker.opentrackr.org:1337/announce"));
+    torrent_unload(&t);
+
+    int saved_port = torrent_announce_port();
+    torrent_clear_external_ip();
+
+    const char *ignored[] = {
+        "0.0.0.0", "10.0.0.1", "127.0.0.1", "169.254.1.1",
+        "172.16.0.1", "172.31.255.254", "192.168.1.104", "224.0.0.1"
+    };
+    for (size_t i = 0; i < sizeof(ignored) / sizeof(ignored[0]); i++) {
+        torrent_set_external_ip(inet_addr(ignored[i]));
+        ASSERT(torrent_external_ip() == 0);
+    }
+
+    uint32_t pub = inet_addr("95.27.161.169");
+    uint32_t other = inet_addr("95.27.161.170");
+    torrent_set_announce_port(6882);
+    torrent_set_external_ip(pub);
+    ASSERT(torrent_external_ip() == pub);
+
+    ASSERT(torrent_is_self_peer(pub, 6882));
+    ASSERT(!torrent_is_self_peer(pub, 6881));
+    ASSERT(!torrent_is_self_peer(other, 6882));
+    ASSERT(!torrent_is_self_peer(htonl(INADDR_LOOPBACK), 6882));
+
+    torrent_clear_external_ip();
+    torrent_set_announce_port(saved_port);
+}
+
 int main(void) {
     torrent_announce_mutex_init();
     printf("Running torrent_meta unit tests:\n");
@@ -313,6 +347,7 @@ int main(void) {
     RUN(meta_cache_has_check);
     RUN(tracker_cooldown_and_blackout);
     RUN(magnet_t_ru_mirrors);
+    RUN(default_trackers_and_self_peer_filter);
     printf("\n%d tests run, %d failed\n", tests_run, tests_failed);
     return tests_failed ? 1 : 0;
 }

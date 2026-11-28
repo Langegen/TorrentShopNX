@@ -15,6 +15,7 @@
 #include <mbedtls/sha1.h>
 
 #include "meta_fetch.h"
+#include "torrent_meta.h"
 #include "bt_peer.h"
 #include "mse_peer.h"
 #include "bencode.h"
@@ -990,6 +991,59 @@ TEST(active_close_mse_priority_over_untried) {
     free(meta);
 }
 
+TEST(preserve_peers_on_failure_and_filter_self) {
+    int saved_port = torrent_announce_port();
+    torrent_clear_external_ip();
+    torrent_set_announce_port(6882);
+
+    uint32_t pub = inet_addr("95.27.161.169");
+    torrent_set_external_ip(pub);
+
+    uint16_t dead_port = 0;
+    int dead_fd = bind_loopback_listener(&dead_port);
+    ASSERT(dead_fd >= 0);
+    close(dead_fd);
+
+    uint8_t ih[20], pid[20];
+    memset(ih, 0x42, sizeof(ih));
+    memcpy(pid, "-TS9999-testpreserve", 20);
+
+    peer_addr seeds[2];
+    seeds[0].ip = pub;
+    seeds[0].port = 6882;
+    seeds[1].ip = htonl(INADDR_LOOPBACK);
+    seeds[1].port = dead_port;
+
+    meta_fetch_opts opts = {0};
+    opts.info_hash = ih;
+    opts.peer_id = pid;
+    opts.seed_peers = seeds;
+    opts.seed_count = 2;
+    opts.budget_ms = 2000;
+
+    uint8_t *out = NULL;
+    size_t out_len = 0;
+    peer_addr out_peers[8];
+    int out_n = -1;
+    char err[128] = {0};
+
+    int rc = meta_fetch_run(&opts, &out, &out_len, out_peers, 8, &out_n, err, sizeof(err));
+    ASSERT(rc != 0);
+    ASSERT(out == NULL);
+    ASSERT(out_n == 1);
+    ASSERT(out_peers[0].ip == seeds[1].ip && out_peers[0].port == seeds[1].port);
+
+    volatile bool cancel = true;
+    opts.cancel = &cancel;
+    out_n = -1;
+    rc = meta_fetch_run(&opts, &out, &out_len, out_peers, 8, &out_n, err, sizeof(err));
+    ASSERT(rc != 0);
+    ASSERT(out_n == 0);
+
+    torrent_clear_external_ip();
+    torrent_set_announce_port(saved_port);
+}
+
 int main(void) {
     meta_fetch_init_early();
     printf("Running meta_fetch unit tests:\n");
@@ -1001,6 +1055,7 @@ int main(void) {
     RUN(fast_cancel);
     RUN(silent_peer_handshake_timeout);
     RUN(active_close_mse_priority_over_untried);
+    RUN(preserve_peers_on_failure_and_filter_self);
     printf("\n%d tests run, %d failed\n", tests_run, tests_failed);
     return tests_failed ? 1 : 0;
 }

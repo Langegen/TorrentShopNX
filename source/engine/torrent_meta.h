@@ -60,6 +60,15 @@ uint32_t torrent_announce_key(void);
 void torrent_set_announce_port(int port);
 int  torrent_announce_port(void);
 
+// Process-wide external IP learned from peers' BEP 10 "yourip" handshake
+// field (network byte order), used together with torrent_announce_port() to
+// avoid wasting dial slots connecting to ourselves. Private/loopback IPs are
+// ignored so LAN peers and local tests are never suppressed.
+void     torrent_set_external_ip(uint32_t ip_net);
+void     torrent_clear_external_ip(void);
+uint32_t torrent_external_ip(void);
+bool     torrent_is_self_peer(uint32_t ip_net, uint16_t port_host);
+
 // Explicitly initialise the announce serialisation mutex. Call once at engine
 // start, before any thread can announce. (On libnx a zeroed Mutex is valid on
 // its own; this keeps the PC compat shim's lazy path from ever racing.)

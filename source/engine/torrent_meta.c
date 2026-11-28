@@ -51,13 +51,44 @@ uint32_t torrent_announce_key(void) {
 // The port we tell trackers/DHT about. 6881 until a listener binds (and UPnP
 // possibly maps) a real one.
 static int s_announce_port = 6881;
+static uint32_t s_external_ip = 0;
 
 void torrent_set_announce_port(int port) {
-    if (port > 0 && port < 65536) s_announce_port = port;
+    if (port > 0 && port < 65536) {
+        __atomic_store_n(&s_announce_port, port, __ATOMIC_RELAXED);
+    }
 }
 
 int torrent_announce_port(void) {
-    return s_announce_port;
+    return __atomic_load_n(&s_announce_port, __ATOMIC_RELAXED);
+}
+
+void torrent_set_external_ip(uint32_t ip_net) {
+    uint8_t a = (uint8_t)(ip_net & 0xff);
+    uint8_t b = (uint8_t)((ip_net >> 8) & 0xff);
+    if (a == 0 || a == 10 || a == 127 || a >= 224 ||
+        (a == 169 && b == 254) ||
+        (a == 172 && (b & 0xf0) == 16) ||
+        (a == 192 && b == 168)) {
+        return;
+    }
+    __atomic_store_n(&s_external_ip, ip_net, __ATOMIC_RELAXED);
+}
+
+void torrent_clear_external_ip(void) {
+    __atomic_store_n(&s_external_ip, 0, __ATOMIC_RELAXED);
+}
+
+uint32_t torrent_external_ip(void) {
+    return __atomic_load_n(&s_external_ip, __ATOMIC_RELAXED);
+}
+
+bool torrent_is_self_peer(uint32_t ip_net, uint16_t port_host) {
+    if (ip_net == 0 || port_host == 0) return false;
+    uint32_t ext = __atomic_load_n(&s_external_ip, __ATOMIC_RELAXED);
+    if (ext == 0 || ip_net != ext) return false;
+    int p = __atomic_load_n(&s_announce_port, __ATOMIC_RELAXED);
+    return p > 0 && port_host == (uint16_t)p;
 }
 
 static void (*s_log_fn)(const char *) = NULL;
@@ -82,9 +113,10 @@ static void tlog(const char *fmt, ...) {
 // Полевой прогон 2026-08-18 (Switch, t-ru swarm): из ~25 дефолтных трекеров
 // живых оказалось четыре — остальные стабильно давали DNS-fail / timeout /
 // no connect reply (0/10 в обоих прогонах) и только жгли сокеты и шумели в
-// лог. Список почищен до подтверждённо живых. t-ru.org добавляется из
-// магнита раздачи, в дефолт не входит.
+// лог. Список почищен до подтверждённо живых (+ tracker.opentrackr.org:1337,
+// проверен 2026-11-28). t-ru.org добавляется из магнита раздачи, в дефолт не входит.
 static const char *DEFAULT_TRACKERS[] = {
+    "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",
     "udp://exodus.desync.com:6969/announce",
     "udp://tracker.dler.org:6969/announce",
@@ -178,7 +210,7 @@ bool torrent_meta_cache_has(const uint8_t info_hash[20]) {
 }
 
 #define PEER_CACHE_SLOTS 16
-#define PEER_CACHE_MAX   64
+#define PEER_CACHE_MAX   80
 
 typedef struct {
     bool      used;
@@ -592,8 +624,8 @@ int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
     uint8_t peer_id[20];
     torrent_peer_id(peer_id);
 
-    peer_addr cached_peers[64];
-    int cached_peer_n = torrent_meta_get_cached_peers(m.info_hash, cached_peers, 64);
+    peer_addr cached_peers[PEER_CACHE_MAX];
+    int cached_peer_n = torrent_meta_get_cached_peers(m.info_hash, cached_peers, PEER_CACHE_MAX);
 
     uint8_t *metadata = NULL;
     size_t meta_len = 0;
@@ -616,6 +648,9 @@ int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
     for (int i = stub_owned_start; i < stub.tracker_count; i++)
         free(stub.trackers[i]);
 
+    if (n > 0 && !(cancel && *cancel)) {
+        torrent_meta_cache_peers(m.info_hash, peers, n);
+    }
     if (mrc != 0 || !metadata) {
         magnet_free(&m);
         torrent_meta_state = META_FAIL;
@@ -624,7 +659,6 @@ int torrent_load_magnet_peers_cancel(torrent_meta *t, const char *magnet_uri,
     torrent_meta_state = META_BUILD;
 
     meta_cache_save(m.info_hash, metadata, meta_len);
-    if (n > 0) torrent_meta_cache_peers(m.info_hash, peers, n);
 
     if (out && max > 0 && out_n) {
         int c = n < max ? n : max;
@@ -818,6 +852,7 @@ static int merge_peers(peer_addr *dst, int *dn, int max,
                        const peer_addr *src, int sn) {
     int added = 0;
     for (int i = 0; i < sn && *dn < max; i++) {
+        if (torrent_is_self_peer(src[i].ip, src[i].port)) continue;
         bool dup = false;
         for (int j = 0; j < *dn; j++)
             if (dst[j].ip == src[i].ip && dst[j].port == src[i].port) {
