@@ -42,6 +42,10 @@
 // SO_RCVBUF of the shared UDP socket: every uTP session's packets queue here
 // between two netloop passes.
 #define UDP_RCVBUF (256 * 1024)
+// Bound UDP draining per utp_nb_service() call and throttle libutp timeout sweeps
+// so a burst of uTP packets cannot monopolize UTP_LOCK() or the netloop.
+#define UTP_SERVICE_MAX_PKTS 128
+#define UTP_TIMEOUT_INTERVAL_MS 25
 
 enum { ST_CONNECTING = 0, ST_CONNECTED = 1, ST_EOF = 2, ST_ERROR = 3 };
 
@@ -72,6 +76,7 @@ static int    g_udp = -1;
 static int    g_port = 0;
 static int    g_inited = 0;
 static int    g_accept = 1;
+static uint32_t g_last_timeout_ms = 0;
 static utp_nb_sess g_sess[SESS_MAX];
 
 static size_t rb_free(utp_nb_sess *c) { return RBUF_SIZE - c->rcount; }
@@ -293,6 +298,7 @@ int utp_nb_init(int port) {
     if (fl >= 0) fcntl(g_udp, F_SETFL, fl | O_NONBLOCK);
 
     memset(g_sess, 0, sizeof(g_sess));
+    g_last_timeout_ms = 0;
     g_inited = 1;
     engine_log(ENGINE_LOG_INFO, "[utp] udp port %d (wanted %d)", g_port, port);
     return 0;
@@ -316,6 +322,7 @@ void utp_nb_exit(void) {
     if (g_udp >= 0) close(g_udp);
     g_udp = -1;
     g_port = 0;
+    g_last_timeout_ms = 0;
     g_inited = 0;
 }
 
@@ -328,12 +335,13 @@ void utp_nb_set_accept(int on) {
     g_accept = on ? 1 : 0;
 }
 
-void utp_nb_service(void) {
+bool utp_nb_service(void) {
     UTP_LOCK();
-    if (!g_inited || g_udp < 0) return;
+    if (!g_inited || g_udp < 0) return false;
 
     uint8_t buf[4096];
-    for (;;) {
+    int pkts = 0;
+    while (pkts < UTP_SERVICE_MAX_PKTS) {
         struct sockaddr_in from;
         socklen_t fromlen = sizeof(from);
         ssize_t n = recvfrom(g_udp, (char *)buf, sizeof(buf), MSG_DONTWAIT,
@@ -343,19 +351,26 @@ void utp_nb_service(void) {
             break;
         }
         if (n == 0) break;
+        pkts++;
         UTP_IsIncomingUTP(cb_on_incoming, cb_send_to, NULL,
                           buf, (size_t)n, (struct sockaddr *)&from, fromlen);
     }
-    UTP_CheckTimeouts();
+    bool more = (pkts >= UTP_SERVICE_MAX_PKTS);
 
-    // Incoming connections nobody claimed: failed, or silent for too long.
     const uint32_t now = UTP_GetMilliseconds();
-    for (int i = 0; i < SESS_MAX; i++) {
-        utp_nb_sess *c = &g_sess[i];
-        if (!c->in_use || !c->incoming || c->claimed) continue;
-        if (c->state != ST_CONNECTED || (uint32_t)(now - c->born_ms) > ACCEPT_WAIT_MS)
-            close_locked(c);
+    if (g_last_timeout_ms == 0 || (uint32_t)(now - g_last_timeout_ms) >= UTP_TIMEOUT_INTERVAL_MS) {
+        g_last_timeout_ms = now;
+        UTP_CheckTimeouts();
+
+        // Incoming connections nobody claimed: failed, or silent for too long.
+        for (int i = 0; i < SESS_MAX; i++) {
+            utp_nb_sess *c = &g_sess[i];
+            if (!c->in_use || !c->incoming || c->claimed) continue;
+            if (c->state != ST_CONNECTED || (uint32_t)(now - c->born_ms) > ACCEPT_WAIT_MS)
+                close_locked(c);
+        }
     }
+    return more;
 }
 
 utp_nb_sess *utp_nb_connect(uint32_t ip_net, uint16_t port_host) {

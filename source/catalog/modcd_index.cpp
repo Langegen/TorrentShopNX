@@ -142,10 +142,11 @@ bool Index::refresh(bool force) {
     if (!force && loaded_.load() && last > 0 && now >= last && now - last < interval_) return true;
 
     const std::string fail_stamp_path = join(cache_dir_, kFailStampFile);
-    if (!force && !loaded_.load()) {
+    if (!force) {
         const long long last_fail = readStampFile(fail_stamp_path);
         if (last_fail > 0 && now >= last_fail && now - last_fail < kFailCooldownSec) {
-            return false;
+            if (!loaded_.load()) loadCached();
+            return loaded_.load();
         }
     }
 

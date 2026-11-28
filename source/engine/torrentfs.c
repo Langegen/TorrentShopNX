@@ -272,7 +272,11 @@ enum { PEER_FAIL_NONE = 0, PEER_FAIL_TIMEOUT = 1, PEER_FAIL_OTHER = 2,
 // one BSD pool (~13 MB on the console), which trackers, DHT, dials in flight
 // and HTTP share.
 #define RCVBUF_BASE_KB    128
+#ifdef __SWITCH__
+#define RCVBUF_BUDGET_KB  (5 * 1024)
+#else
 #define RCVBUF_BUDGET_KB  (10 * 1024)
+#endif
 #define RCVBUF_EVAL_SECS  2
 // Socket-pool pressure (ENOBUFS seen): for this long every window goes back
 // to the base, upgrades stop, the dial budget is halved and the session
@@ -365,8 +369,12 @@ int  torrentfs_ram_stream(void)       { return g_ram_stream; }
 // Netloop progress tracking & stall detection
 static volatile int g_netloop_step = 0;
 static volatile int g_netloop_info = 0;
-static volatile u64 g_netloop_step_tick = 0;
-#define NL_STEP(s, inf) do { g_netloop_step = (s); g_netloop_info = (inf); g_netloop_step_tick = armGetSystemTick(); } while (0)
+static u64 g_netloop_step_tick = 0;
+#define NL_STEP(s, inf) do { \
+    g_netloop_step = (s); \
+    g_netloop_info = (inf); \
+    __atomic_store_n(&g_netloop_step_tick, armGetSystemTick(), __ATOMIC_RELEASE); \
+} while (0)
 
 //-----------------------------------------------------------------------------
 // Types
@@ -800,7 +808,7 @@ enum { LAT_POLL = 0, LAT_RECV, LAT_SEND, LAT_WR, LAT_RD };
 enum { HB_NET = 0, HB_WRITER = 1, HB_READER = 2, HB_UI = 3 };
 
 static void hb_beat(torrentfs *t, int k) {
-    t->hb_tick[k] = armGetSystemTick();
+    __atomic_store_n(&t->hb_tick[k], armGetSystemTick(), __ATOMIC_RELEASE);
     t->hb_core[k] = (u8)svcGetCurrentProcessorNumber();
 }
 
@@ -1151,47 +1159,80 @@ static bool wq_has_room(const torrentfs *t) {
 
 static aq_entry *aq_alloc(torrentfs *t, int64_t idx) {
     aq_entry *a = NULL;
-    mutexLock(&t->lock);
-    if (!wq_has_room(t)) {           // backpressure: the writer is behind
-        t->st_wq_full++;
-        mutexUnlock(&t->lock);
-        return NULL;
-    }
-    for (int i = 0; i < t->n_aq; i++) {
-        aq_entry *c = &t->aq[i];
-        if (c->idx >= 0) continue;
-        if (!c->buf) {
-            if (t->aq_buf_pool_cnt > 0) {
+    uint8_t *new_buf = NULL;
+    int16_t *new_pf = NULL;
+
+    for (;;) {
+        bool need_buf = false;
+        bool need_pf = false;
+
+        mutexLock(&t->lock);
+        if (!wq_has_room(t)) {           // backpressure: the writer is behind
+            t->st_wq_full++;
+            mutexUnlock(&t->lock);
+            break;
+        }
+        int free_i = -1;
+        for (int i = 0; i < t->n_aq; i++) {
+            aq_entry *c = &t->aq[i];
+            if (c->idx >= 0) continue;
+            if (!c->buf && t->aq_buf_pool_cnt > 0) {
                 c->buf = t->aq_buf_pool[--t->aq_buf_pool_cnt];
-            } else {
-                c->buf = malloc((size_t)t->meta.piece_len);
             }
-        }
-        if (!c->buf) continue;
-        c->idx = idx;
-        t->n_active_aq++;
-        c->have_cnt = 0;
-        c->next_req = 0;
-        c->last_deliver = armGetSystemTick();
-        c->nblocks  =
-            (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
-        c->unreq_cnt = c->nblocks;
-        c->stall_check_at = 0;
-        memset(c->have, 0, (size_t)t->blocks_per_piece);
-        memset(c->req, 0, (size_t)t->blocks_per_piece);
-        memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
-        memset(c->req_by, 0, (size_t)t->blocks_per_piece * SESS_MASK_BYTES);
-        if (t->aq_of_piece) t->aq_of_piece[idx] = (int16_t)i;
-        if (!c->peer_from) {
-            c->peer_from = malloc((size_t)t->blocks_per_piece * sizeof(int16_t));
-        }
-        if (c->peer_from) {
+            if (!c->buf && new_buf) {
+                c->buf = new_buf;
+                new_buf = NULL;
+            }
+            if (!c->peer_from && new_pf) {
+                c->peer_from = new_pf;
+                new_pf = NULL;
+            }
+            if (!c->buf) {
+                need_buf = true;
+                free_i = i;
+                break;
+            }
+            if (!c->peer_from) {
+                need_pf = true;
+                free_i = i;
+                break;
+            }
+            free_i = i;
+            c->idx = idx;
+            t->n_active_aq++;
+            c->have_cnt = 0;
+            c->next_req = 0;
+            c->last_deliver = armGetSystemTick();
+            c->nblocks =
+                (int)((torrent_piece_len(&t->meta, idx) + BLOCK_LEN - 1) / BLOCK_LEN);
+            c->unreq_cnt = c->nblocks;
+            c->stall_check_at = 0;
+            memset(c->have, 0, (size_t)t->blocks_per_piece);
+            memset(c->req, 0, (size_t)t->blocks_per_piece);
+            memset(c->req_ts, 0, (size_t)t->blocks_per_piece * sizeof(uint64_t));
+            memset(c->req_by, 0, (size_t)t->blocks_per_piece * SESS_MASK_BYTES);
+            if (t->aq_of_piece) t->aq_of_piece[idx] = (int16_t)i;
             memset(c->peer_from, 0xFF, (size_t)t->blocks_per_piece * sizeof(int16_t));
+            a = c;
+            break;
         }
-        a = c;
-        break;
+        mutexUnlock(&t->lock);
+
+        if (a || free_i < 0 || (!need_buf && !need_pf)) break;
+
+        // Allocate outside t->lock so multi-MB malloc() never blocks the writer/reader.
+        if (need_buf && !new_buf) {
+            new_buf = malloc((size_t)t->meta.piece_len);
+            if (!new_buf) break;
+        }
+        if (need_pf && !new_pf) {
+            new_pf = malloc((size_t)t->blocks_per_piece * sizeof(int16_t));
+            if (!new_pf) break;
+        }
     }
-    mutexUnlock(&t->lock);
+
+    free(new_buf);
+    free(new_pf);
     return a;
 }
 
@@ -1859,6 +1900,8 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     bool had_conn = s->nb.handshaked;
     const bool tcp_up = !s->connecting;      // the TCP/uTP connection was established
     const bool was_mse = s->nb.mse_want;
+    const bool was_mse_active = s->nb.mse_active;
+    const bool was_mse_failed = s->nb.mse_failed;
     const bool was_choked = s->nb.choked;
     // In a scarce swarm every lost session matters: say why at INFO (in a
     // big swarm this would be hundreds of lines a minute).
@@ -1878,16 +1921,16 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
                    s->close_why ? s->close_why : (s->fail_kind == PEER_FAIL_CHOKE_ROTATE ? "rotate" : "other"),
                    s->close_err);
     }
-    // An encrypted handshake that did not finish: say where it stopped (MSE
-    // attempts are few; this is what tells a refusing peer from a bug).
+    // An encrypted handshake that did not finish: say where it stopped (INFO in
+    // scarce swarms, DEBUG otherwise so failed MSE churn doesn't flood engine.log).
     if (was_mse && tcp_up && !had_conn)
-        engine_log(ENGINE_LOG_INFO,
+        engine_log(t->st_live <= 3 ? ENGINE_LOG_INFO : ENGINE_LOG_DEBUG,
                    "[mse] sess %d %u.%u.%u.%u %s failed: phase=%d active=%d failed=%d "
                    "rx=%zu tx_left=%zu why=%s err=%d after %.1fs",
                    (int)(s - t->S), s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
                    (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff,
-                   s->nb.utp ? "utp" : "tcp", s->nb.mse.phase, s->nb.mse_active ? 1 : 0,
-                   s->nb.mse_failed ? 1 : 0, s->nb.rx_len - s->nb.rx_off,
+                   s->nb.utp ? "utp" : "tcp", s->nb.mse.phase, was_mse_active ? 1 : 0,
+                   was_mse_failed ? 1 : 0, s->nb.rx_len - s->nb.rx_off,
                    s->nb.tx_len - s->nb.tx_head,
                    s->close_why ? s->close_why : "other", s->close_err,
                    (double)(armGetSystemTick() - s->started) / (double)t->freq);
@@ -1930,7 +1973,7 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
     release_peer(t, s->pidx, failed, had_conn, kind);
     // A plaintext handshake that actually connected is proof the peer does
     // not need MSE; remember it so later dials skip the (wasted) attempt.
-    if (had_conn && !s->nb.mse_want && s->pidx >= 0) {
+    if (had_conn && !was_mse && s->pidx >= 0) {
         mutexLock(&t->lock);
         t->peer_mse_off[s->pidx] = 1;
         mutexUnlock(&t->lock);
@@ -1950,22 +1993,27 @@ static void sess_close(torrentfs *t, sess *s, bool failed) {
         }
         mutexUnlock(&t->lock);
     }
-    // MSE refused (or answered plaintext): the peer does not speak
-    // encryption. Flag the address so the next dial goes plaintext, and
-    // retry immediately -- this is a protocol mismatch, not a network
-    // failure, so it must not count into the backoff. A peer that closes
-    // the stream before the MSE handshake finished counts as refused too.
-    if (failed && !had_conn && s->nb.mse_want &&
-        (s->nb.mse_failed || !s->nb.mse_active) && s->pidx >= 0) {
+    // MSE refused (or answered plaintext / timed out): the peer does not speak
+    // encryption. Flag the address so future dials go plaintext. Only reset
+    // backoff for an immediate plaintext retry if we started with MSE from
+    // PEXF_ENCRYPT (!peer_mse_try) and the peer actively rejected MSE; peers
+    // that already failed plaintext or silently timed out keep their backoff.
+    if (failed && tcp_up && !had_conn && was_mse &&
+        (was_mse_failed || !was_mse_active) && s->pidx >= 0) {
+        bool immediate_plain = false;
         mutexLock(&t->lock);
         t->peer_mse_off[s->pidx] = 1;
-        t->peer_fails[s->pidx]   = 0;
-        t->peer_next_try[s->pidx] = armGetSystemTick();
+        immediate_plain = (!t->peer_mse_try[s->pidx] && was_mse_failed);
+        if (immediate_plain) {
+            t->peer_fails[s->pidx]    = 0;
+            t->peer_next_try[s->pidx] = armGetSystemTick();
+        }
         mutexUnlock(&t->lock);
         engine_log(ENGINE_LOG_DEBUG,
-                   "[sess %d] mse refused by %u.%u.%u.%u -> retry plaintext",
+                   "[sess %d] mse failed for %u.%u.%u.%u -> plaintext%s",
                    (int)(s - t->S), s->addr.ip & 0xff, (s->addr.ip >> 8) & 0xff,
-                   (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff);
+                   (s->addr.ip >> 16) & 0xff, (s->addr.ip >> 24) & 0xff,
+                   immediate_plain ? " (retry now)" : " (backoff)");
     }
     if (failed && !had_conn && was_tcp && s->pidx >= 0 &&
         utp_nb_fd() >= 0) {
@@ -3923,9 +3971,19 @@ static void rcvbuf_tick(torrentfs *t, u64 now) {
         if (s->nb.utp || s->rcvbuf_kb <= 0) continue;
         if (now - s->rcvbuf_eval < (u64)RCVBUF_EVAL_SECS * t->freq) continue;
         s->rcvbuf_eval = now;
-        if (s->nb.choked || s->slow || s->rx_total < SLOW_MIN_BYTES) continue;
+        if (s->nb.choked || s->slow) {
+            if (s->rcvbuf_kb > RCVBUF_BASE_KB) {
+                sess_set_rcvbuf(t, s, RCVBUF_BASE_KB);
+            }
+            continue;
+        }
+        if (s->rx_total < SLOW_MIN_BYTES) continue;
         int want = rcvbuf_tier_kb(sess_capability(t, s));
-        if (want <= s->rcvbuf_kb) continue;
+        if (want < s->rcvbuf_kb) {
+            sess_set_rcvbuf(t, s, want);
+            continue;
+        }
+        if (want == s->rcvbuf_kb) continue;
         // One step at a time: the next one is earned at the next evaluation.
         if (want > s->rcvbuf_kb * 2) want = s->rcvbuf_kb * 2;
         if (t->rcvbuf_total_kb + (want - s->rcvbuf_kb) > RCVBUF_BUDGET_KB) {
@@ -4581,8 +4639,11 @@ static void publish_snapshot(torrentfs *t) {
 static void netloop_main(void *arg) {
     torrentfs *t = arg;
     u64 last_upkeep = 0;
+    bool utp_more = false;
     engine_log(ENGINE_LOG_INFO, "[netloop] start");
     t->pf_tick = armGetSystemTick();
+    t->last_starve = t->pf_tick;
+    t->last_progress_tick = t->pf_tick;
     t->pf_bytes = t->st_bytes_recv;
     t->pf_dup = t->st_dup_bytes;
 
@@ -4700,6 +4761,8 @@ static void netloop_main(void *arg) {
                 if (!s->connecting && !s->nb.handshaked &&
                     now - s->started > (u64)PREHS_SECS * t->freq) {
                     t->st_hs_timeout++;
+                    s->close_why = "hs_to";
+                    s->fail_kind = PEER_FAIL_TIMEOUT;
                     engine_log(ENGINE_LOG_DEBUG, "[sess %d] close handshake timeout", i);
                     sess_close(t, s, true);
                     continue;
@@ -5254,8 +5317,9 @@ static void netloop_main(void *arg) {
         // returned immediately every time (~630 iterations/s measured), and
         // each pass cost a poll IPC plus recv IPCs for a few KB. 4 ms is
         // nothing next to RTT and 16 MB pieces, and the 128-512 KB receive
-        // windows absorb it.
-        {
+        // windows absorb it. Skip the sleep when uTP hit its per-pass packet
+        // cap so bursts drain immediately without adding latency.
+        if (!utp_more) {
             u64 min_gap = t->freq / 250;
             u64 since = armGetSystemTick() - t->last_poll_ret;
             if (t->last_poll_ret && since < min_gap) {
@@ -5265,6 +5329,7 @@ static void netloop_main(void *arg) {
             }
         }
 #endif
+        utp_more = false;
         u64 lt0 = armGetSystemTick();
         NL_STEP(12, n);
         int pr = poll(pfd, (nfds_t)n, 20);
@@ -5280,7 +5345,7 @@ static void netloop_main(void *arg) {
                 if (!pfd[k].revents) continue;
                 if (map[k] == -1) {
                     // Shared µTP socket: process packets and timeouts.
-                    utp_nb_service();
+                    utp_more = utp_nb_service();
                     utp_serviced = true;
                     continue;
                 }
@@ -5323,7 +5388,7 @@ static void netloop_main(void *arg) {
         // Service µTP sessions even if the UDP fd did not wake us, so libutp
         // timeouts and buffered data are handled on every loop iteration.
         NL_STEP(15, utp_fd);
-        if (!utp_serviced && utp_fd >= 0) utp_nb_service();
+        if (!utp_serviced && utp_fd >= 0) utp_more = utp_nb_service();
         for (int i = 0; i < MAX_SESS; i++) {
             NL_STEP(16, i);
             sess *s = &t->S[i];
@@ -5687,6 +5752,9 @@ static void torrentfs_apply_select_file(torrentfs *tfs, int file_index) {
     // Drop only in-flight requests that are outside the new file range and allowed lookahead window.
     // Retaining valid in-flight requests prevents peer stall during multi-file transitions.
     u64 now_sel = armGetSystemTick();
+    tfs->last_starve = now_sel;
+    tfs->last_progress_tick = now_sel;
+    tfs->starve_round = 0;
     for (int i = 0; i < MAX_SESS; i++) {
         if (tfs->S[i].active && tfs->S[i].nb.handshaked) {
             sess *s = &tfs->S[i];
@@ -5950,12 +6018,16 @@ int64_t torrentfs_read(torrentfs *tfs, int64_t offset, char *buf, int64_t nbytes
             if (stall_secs >= 20 && tfs->st_live == 0) {
                 tfs->announce_now = true;
             }
-            if (g_netloop_step_tick > 0) {
-                u64 nl_age_ms = (now - g_netloop_step_tick) * 1000 / tfs->freq;
-                if (nl_age_ms > 3000) {
-                    engine_log(ENGINE_LOG_WARN,
-                               "[watchdog] netloop STUCK for %llu ms at step %d (info=%d, live=%d)",
-                               (unsigned long long)nl_age_ms, g_netloop_step, g_netloop_info, tfs->st_live);
+            u64 step_tick = __atomic_load_n(&g_netloop_step_tick, __ATOMIC_ACQUIRE);
+            if (step_tick > 0) {
+                u64 wd_now = armGetSystemTick();
+                if (wd_now > step_tick) {
+                    u64 nl_age_ms = (wd_now - step_tick) * 1000 / tfs->freq;
+                    if (nl_age_ms > 3000) {
+                        engine_log(ENGINE_LOG_WARN,
+                                   "[watchdog] netloop STUCK for %llu ms at step %d (info=%d, live=%d)",
+                                   (unsigned long long)nl_age_ms, g_netloop_step, g_netloop_info, tfs->st_live);
+                    }
                 }
             }
             // Self-heal if the needed piece is stuck in PIECE_ACTIVE
@@ -6249,10 +6321,10 @@ void torrentfs_hb_ui(torrentfs *tfs) {
 
 void torrentfs_heartbeats(const torrentfs *tfs, uint32_t age_ms[4],
                           int core[4]) {
-    u64 now = armGetSystemTick();
     for (int i = 0; i < 4; i++) {
-        u64 tk    = tfs->hb_tick[i];
-        age_ms[i] = tk ? (uint32_t)((now - tk) * 1000 / tfs->freq) : 0;
+        u64 tk    = __atomic_load_n(&tfs->hb_tick[i], __ATOMIC_ACQUIRE);
+        u64 now   = armGetSystemTick();
+        age_ms[i] = (tk && now > tk) ? (uint32_t)((now - tk) * 1000 / tfs->freq) : 0;
         core[i]   = tfs->hb_core[i];
     }
 }

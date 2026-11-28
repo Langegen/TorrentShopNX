@@ -45,7 +45,9 @@ utp_nb_sess *utp_nb_accept(uint8_t hs68[68], uint32_t *ip_net, uint16_t *port_ho
 
 // Feed incoming UDP packets to libutp and tick its timeouts. Call after the
 // fd returned by utp_nb_fd() is readable, and also periodically on timeout.
-void utp_nb_service(void);
+// Returns true if the per-call packet cap was reached and more UDP packets may
+// still be queued on the socket.
+bool utp_nb_service(void);
 
 // Start an outgoing µTP connection. Returns NULL on immediate failure.
 utp_nb_sess *utp_nb_connect(uint32_t ip_net, uint16_t port_host);

@@ -100,5 +100,116 @@ int main(void) {
     free(u->file_unwanted);
     free(u);
     if (!la_ok) fails++;
+
+    // MSE sess_close() state handling: peer_nb_free() zeros s->nb before the
+    // MSE checks, so we must use the saved was_mse / was_mse_active / was_mse_failed
+    // flags to avoid infinite MSE retries or clearing MSE-capable peers.
+    {
+        torrentfs *m = calloc(1, sizeof(*m));
+        mutexInit(&m->lock);
+        m->freq = armGetSystemTickFreq();
+        m->meta.piece_count = 16;
+        m->meta.piece_len = 1 << 20;
+        m->file_first_piece = 0;
+        m->file_last_piece = 15;
+        peer_addr addrs[5];
+        for (int i = 0; i < 5; i++) {
+            addrs[i].ip = 0x0B000001u + (uint32_t)i;
+            addrs[i].port = 6881;
+        }
+        add_peers_src(m, addrs, 5, PEER_SRC_PEX);
+
+        // 0: PEXF_ENCRYPT peer actively rejected MSE -> peer_mse_off=1, immediate plaintext retry
+        m->peer_mse_try[0] = 0;
+        m->peer_fails[0] = 2;
+        sess *s0 = &m->S[0];
+        memset(s0, 0, sizeof(*s0));
+        s0->active = true;
+        s0->connecting = false;
+        s0->pidx = 0;
+        s0->addr = addrs[0];
+        s0->started = armGetSystemTick();
+        s0->nb.sock = -1;
+        s0->nb.mse_want = true;
+        s0->nb.mse_failed = true;
+        s0->nb.mse_active = false;
+        s0->nb.handshaked = false;
+        sess_close(m, s0, true);
+        bool c0 = (m->peer_mse_off[0] == 1 && m->peer_fails[0] == 0);
+
+        // 1: peer already failed plaintext (peer_mse_try=1) and silently timed out on MSE
+        // -> peer_mse_off=1 AND backoff preserved (peer_fails > 0, peer_next_try > now)
+        m->peer_mse_try[1] = 1;
+        m->peer_fails[1] = 1;
+        sess *s1 = &m->S[1];
+        memset(s1, 0, sizeof(*s1));
+        s1->active = true;
+        s1->connecting = false;
+        s1->pidx = 1;
+        s1->addr = addrs[1];
+        s1->started = armGetSystemTick();
+        s1->nb.sock = -1;
+        s1->nb.mse_want = true;
+        s1->nb.mse_failed = false;
+        s1->nb.mse_active = false;
+        s1->nb.handshaked = false;
+        s1->fail_kind = PEER_FAIL_TIMEOUT;
+        u64 before1 = armGetSystemTick();
+        sess_close(m, s1, true);
+        bool c1 = (m->peer_mse_off[1] == 1 && m->peer_fails[1] > 1 && m->peer_next_try[1] > before1);
+
+        // 2: peer succeeded with MSE -> must NOT get peer_mse_off=1
+        sess *s2 = &m->S[2];
+        memset(s2, 0, sizeof(*s2));
+        s2->active = true;
+        s2->connecting = false;
+        s2->pidx = 2;
+        s2->addr = addrs[2];
+        s2->started = armGetSystemTick();
+        s2->nb.sock = -1;
+        s2->nb.mse_want = true;
+        s2->nb.mse_active = true;
+        s2->nb.handshaked = true;
+        m->st_live = 1;
+        sess_close(m, s2, false);
+        bool c2 = (m->peer_mse_off[2] == 0);
+
+        // 3: peer succeeded with plaintext -> peer_mse_off=1
+        sess *s3 = &m->S[3];
+        memset(s3, 0, sizeof(*s3));
+        s3->active = true;
+        s3->connecting = false;
+        s3->pidx = 3;
+        s3->addr = addrs[3];
+        s3->started = armGetSystemTick();
+        s3->nb.sock = -1;
+        s3->nb.mse_want = false;
+        s3->nb.handshaked = true;
+        m->st_live = 1;
+        sess_close(m, s3, false);
+        bool c3 = (m->peer_mse_off[3] == 1);
+
+        // 4: connect timeout before TCP/uTP came up -> peer_mse_off must stay 0
+        sess *s4 = &m->S[4];
+        memset(s4, 0, sizeof(*s4));
+        s4->active = true;
+        s4->connecting = true;
+        s4->pidx = 4;
+        s4->addr = addrs[4];
+        s4->started = armGetSystemTick();
+        s4->nb.sock = -1;
+        s4->nb.mse_want = true;
+        s4->nb.handshaked = false;
+        m->st_connecting = 1;
+        sess_close(m, s4, true);
+        bool c4 = (m->peer_mse_off[4] == 0);
+
+        bool mse_ok = c0 && c1 && c2 && c3 && c4;
+        printf("mse sess_close: c0=%d c1=%d c2=%d c3=%d c4=%d %s\n",
+               c0, c1, c2, c3, c4, mse_ok ? "PASSED" : "FAILED");
+        free(m);
+        if (!mse_ok) fails++;
+    }
+
     return fails ? 1 : 0;
 }
